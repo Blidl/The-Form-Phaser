@@ -51,6 +51,7 @@ export class PfPlayer {
     private reboundWindowMs: number;
     private reboundJumpVelocity: number;
     private lastAirborneDownwardSpeed: number;
+    private frozenForRespawn: boolean;
 
     public constructor(scene: Scene, x: number, y: number) {
         this.state = { currentForm: PLAYER_START_FORM };
@@ -65,6 +66,7 @@ export class PfPlayer {
         this.reboundWindowMs = 0;
         this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
         this.lastAirborneDownwardSpeed = 0;
+        this.frozenForRespawn = false;
 
         this.sprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff);
         this.sprite.setStrokeStyle(2, 0xffffff);
@@ -88,7 +90,46 @@ export class PfPlayer {
         return this.sprite;
     }
 
+    public freezeForRespawn(): void {
+        this.frozenForRespawn = true;
+        this.physicsBody.setVelocity(0, 0);
+        this.physicsBody.setAcceleration(0, 0);
+        this.physicsBody.setAllowGravity(false);
+    }
+
+    public respawnAt(x: number, y: number): void {
+        this.state.currentForm = PLAYER_START_FORM;
+
+        this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
+        this.jumpCutConsumed = false;
+        this.boostCooldownMs = 0;
+        this.boostActive = false;
+        this.pendingBoostRequest = false;
+        this.wasGrounded = false;
+        this.lastMoveDirection = 1;
+        this.reboundWindowMs = 0;
+        this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
+        this.lastAirborneDownwardSpeed = 0;
+
+        clearJumpBuffer(this.timers);
+        clearCoyoteTime(this.timers);
+        this.timers.transformLockMs = 0;
+        this.timers.deathPauseMs = 0;
+
+        this.physicsBody.setAllowGravity(true);
+        this.physicsBody.setVelocity(0, 0);
+        this.physicsBody.setAcceleration(0, 0);
+        this.physicsBody.reset(x, y);
+
+        this.frozenForRespawn = false;
+    }
+
     public tick(deltaMs: number, input: PlayerInputSnapshot): void {
+        if (this.frozenForRespawn) {
+            this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
+            return;
+        }
+
         this.lastInput = input;
         const deltaSec = deltaMs / 1000;
 
