@@ -13,14 +13,21 @@ import {
     PLAYER_AIR_MOVE_ACCEL,
     PLAYER_AIR_MOVE_DECEL,
     PLAYER_AIR_MOVE_SPEED,
+    PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER,
+    PLAYER_AIR_WIND_MIN_DRIFT_RATIO,
+    PLAYER_AIR_WIND_RESPONSE,
     PLAYER_GROUND_MOVE_ACCEL,
     PLAYER_GROUND_MOVE_DECEL,
     PLAYER_GROUND_MOVE_SPEED,
     PLAYER_GRAVITY_Y,
     PLAYER_JUMP_CUT_MULTIPLIER,
     PLAYER_JUMP_VELOCITY,
+    PLAYER_FORM_SQUARE_SIZE,
+    PLAYER_FORM_TRIANGLE_HEIGHT,
+    PLAYER_FORM_TRIANGLE_WIDTH,
     PLAYER_PLACEHOLDER_RADIUS,
-    PLAYER_START_FORM
+    PLAYER_START_FORM,
+    PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS
 } from './player_constants';
 import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_input';
 import {
@@ -34,6 +41,7 @@ import {
     tickPlayerTimers,
     type PlayerTimers
 } from './player_timers';
+import { getNextPlayerForm, getPrevPlayerForm } from './player_form_switch';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 
 export class PfPlayer {
@@ -41,7 +49,10 @@ export class PfPlayer {
     private readonly timers: PlayerTimers;
     private lastInput: PlayerInputSnapshot;
     private readonly physicsBody: Physics.Arcade.Body;
-    private readonly sprite: GameObjects.Arc;
+    private readonly physicsSprite: GameObjects.Arc;
+    private readonly ballVisual: GameObjects.Arc;
+    private readonly triangleVisual: GameObjects.Triangle;
+    private readonly squareVisual: GameObjects.Rectangle;
     private jumpCutConsumed: boolean;
     private boostCooldownMs: number;
     private boostActive: boolean;
@@ -52,6 +63,7 @@ export class PfPlayer {
     private reboundJumpVelocity: number;
     private lastAirborneDownwardSpeed: number;
     private frozenForRespawn: boolean;
+    private airborneWindDriftX: number;
 
     public constructor(scene: Scene, x: number, y: number) {
         this.state = { currentForm: PLAYER_START_FORM };
@@ -67,19 +79,43 @@ export class PfPlayer {
         this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
         this.lastAirborneDownwardSpeed = 0;
         this.frozenForRespawn = false;
+        this.airborneWindDriftX = 0;
 
-        this.sprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff);
-        this.sprite.setStrokeStyle(2, 0xffffff);
-        this.sprite.setDepth(4500);
-        this.sprite.name = 'pf_player';
-        scene.physics.add.existing(this.sprite);
-        this.physicsBody = this.sprite.body as Physics.Arcade.Body;
+        this.physicsSprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0xffffff, 0.01);
+        this.physicsSprite.setDepth(4498);
+        this.physicsSprite.name = 'pf_player';
+        scene.physics.add.existing(this.physicsSprite);
+        this.physicsBody = this.physicsSprite.body as Physics.Arcade.Body;
         this.physicsBody.setCircle(PLAYER_PLACEHOLDER_RADIUS);
         this.physicsBody.setBounce(0);
         this.physicsBody.setDragX(2400);
         this.physicsBody.setMaxVelocity(Math.max(PLAYER_GROUND_MOVE_SPEED, PLAYER_AIR_MOVE_SPEED, PLAYER_BALL_BOOST_SPEED), 1200);
         this.physicsBody.setCollideWorldBounds(true);
         this.physicsBody.setGravityY(PLAYER_GRAVITY_Y);
+
+        this.ballVisual = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff)
+            .setStrokeStyle(2, 0xffffff)
+            .setDepth(4500);
+        this.triangleVisual = scene.add.triangle(
+            x,
+            y,
+            0,
+            PLAYER_FORM_TRIANGLE_HEIGHT,
+            PLAYER_FORM_TRIANGLE_WIDTH * 0.5,
+            0,
+            PLAYER_FORM_TRIANGLE_WIDTH,
+            PLAYER_FORM_TRIANGLE_HEIGHT,
+            0xffb74d
+        )
+            .setStrokeStyle(2, 0xffffff)
+            .setDepth(4500)
+            .setVisible(false);
+        this.squareVisual = scene.add.rectangle(x, y, PLAYER_FORM_SQUARE_SIZE, PLAYER_FORM_SQUARE_SIZE, 0xa5d6a7)
+            .setStrokeStyle(2, 0xffffff)
+            .setDepth(4500)
+            .setVisible(false);
+
+        this.applyCurrentFormVisual();
     }
 
     public get currentForm(): PlayerFormId {
@@ -87,11 +123,12 @@ export class PfPlayer {
     }
 
     public get arcadeBodyObject(): GameObjects.Arc {
-        return this.sprite;
+        return this.physicsSprite;
     }
 
     public freezeForRespawn(): void {
         this.frozenForRespawn = true;
+        this.airborneWindDriftX = 0;
         this.physicsBody.setVelocity(0, 0);
         this.physicsBody.setAcceleration(0, 0);
         this.physicsBody.setAllowGravity(false);
@@ -110,6 +147,7 @@ export class PfPlayer {
         this.reboundWindowMs = 0;
         this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
         this.lastAirborneDownwardSpeed = 0;
+        this.airborneWindDriftX = 0;
 
         clearJumpBuffer(this.timers);
         clearCoyoteTime(this.timers);
@@ -122,9 +160,11 @@ export class PfPlayer {
         this.physicsBody.reset(x, y);
 
         this.frozenForRespawn = false;
+        this.applyCurrentFormVisual();
+        this.syncVisualPosition();
     }
 
-    public tick(deltaMs: number, input: PlayerInputSnapshot): void {
+    public tick(deltaMs: number, input: PlayerInputSnapshot, externalHorizontalInfluenceX: number = 0): void {
         if (this.frozenForRespawn) {
             this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
             return;
@@ -132,6 +172,7 @@ export class PfPlayer {
 
         this.lastInput = input;
         const deltaSec = deltaMs / 1000;
+        this.tryHandleFormSwitch(input);
 
         const grounded = this.physicsBody.blocked.down || this.physicsBody.touching.down;
         const justLanded = grounded && !this.wasGrounded;
@@ -169,12 +210,22 @@ export class PfPlayer {
         }
 
         const hasBoostHold = this.boostActive && input.actionHeld;
+        const effectiveExternalInfluenceX = grounded
+            ? externalHorizontalInfluenceX
+            : externalHorizontalInfluenceX * PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER;
         const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
         const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
-        const targetVelocityX = horizontalDir * moveSpeed;
+        const targetVelocityX = (horizontalDir * moveSpeed) + (grounded ? effectiveExternalInfluenceX : 0);
         const currentVelocityX = this.physicsBody.velocity.x;
         const maxStepX = moveResponse * deltaSec;
-        const nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
+        let nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
+
+        if (grounded) {
+            this.airborneWindDriftX = 0;
+        } else {
+            nextVelocityX = this.applyAirborneWindDrift(nextVelocityX, effectiveExternalInfluenceX, deltaSec);
+        }
+
         this.physicsBody.setVelocityX(nextVelocityX);
 
         const canJump = grounded || hasCoyoteTime(this.timers);
@@ -213,6 +264,46 @@ export class PfPlayer {
         this.boostCooldownMs = Math.max(0, this.boostCooldownMs - deltaMs);
         tickPlayerTimers(this.timers, deltaMs);
         this.wasGrounded = grounded;
+        this.syncVisualPosition();
+    }
+
+    private tryHandleFormSwitch(input: PlayerInputSnapshot): void {
+        if (this.timers.transformLockMs > 0) {
+            return;
+        }
+
+        const wantsNextForm = input.nextFormPressed;
+        const wantsPrevForm = input.prevFormPressed;
+        if (wantsNextForm === wantsPrevForm) {
+            return;
+        }
+
+        const nextForm = wantsNextForm
+            ? getNextPlayerForm(this.state.currentForm)
+            : getPrevPlayerForm(this.state.currentForm);
+
+        if (nextForm === this.state.currentForm) {
+            return;
+        }
+
+        this.state.currentForm = nextForm;
+        this.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;
+        this.applyCurrentFormVisual();
+    }
+
+    private applyCurrentFormVisual(): void {
+        const currentForm = this.state.currentForm;
+        this.ballVisual.setVisible(currentForm === 'ball');
+        this.triangleVisual.setVisible(currentForm === 'triangle');
+        this.squareVisual.setVisible(currentForm === 'square');
+    }
+
+    private syncVisualPosition(): void {
+        const x = this.physicsSprite.x;
+        const y = this.physicsSprite.y;
+        this.ballVisual.setPosition(x, y);
+        this.triangleVisual.setPosition(x, y);
+        this.squareVisual.setPosition(x, y);
     }
 
     private resolveReboundJumpVelocity(approachSpeed: number): number | null {
@@ -267,7 +358,11 @@ export class PfPlayer {
         return target;
     }
 
-    private resolveMoveResponse(grounded: boolean, horizontalDir: number, hasBoostHold: boolean): number {
+    private resolveMoveResponse(
+        grounded: boolean,
+        horizontalDir: number,
+        hasBoostHold: boolean
+    ): number {
         if (hasBoostHold && horizontalDir !== 0) {
             return PLAYER_BALL_BOOST_HOLD_ACCEL;
         }
@@ -277,6 +372,28 @@ export class PfPlayer {
         }
 
         return horizontalDir === 0 ? PLAYER_AIR_MOVE_DECEL : PLAYER_AIR_MOVE_ACCEL;
+    }
+
+    private applyAirborneWindDrift(baseVelocityX: number, windInfluenceX: number, deltaSec: number): number {
+        const windStep = PLAYER_AIR_WIND_RESPONSE * deltaSec;
+        this.airborneWindDriftX = this.moveToward(this.airborneWindDriftX, windInfluenceX, windStep);
+
+        if (Math.abs(this.airborneWindDriftX) <= 0.001) {
+            return baseVelocityX;
+        }
+
+        let velocityWithDrift = baseVelocityX + this.airborneWindDriftX;
+        const minDriftMagnitude = Math.abs(this.airborneWindDriftX) * PLAYER_AIR_WIND_MIN_DRIFT_RATIO;
+        const windDirection = this.airborneWindDriftX > 0 ? 1 : -1;
+        const signedMinDrift = minDriftMagnitude * windDirection;
+
+        if (windDirection > 0 && velocityWithDrift < signedMinDrift) {
+            velocityWithDrift = signedMinDrift;
+        } else if (windDirection < 0 && velocityWithDrift > signedMinDrift) {
+            velocityWithDrift = signedMinDrift;
+        }
+
+        return velocityWithDrift;
     }
 
     private resolveMoveSpeed(grounded: boolean, hasBoostHold: boolean): number {

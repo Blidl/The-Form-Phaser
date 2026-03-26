@@ -1,4 +1,4 @@
-import { GameObjects, Scene } from 'phaser';
+import { GameObjects, Physics, Scene } from 'phaser';
 
 export interface HazardConfig {
     x: number;
@@ -17,6 +17,12 @@ export const createHazard = (scene: Scene, config: HazardConfig): HazardObject =
         .setDepth(4300);
 
     scene.physics.add.existing(trigger, true);
+    const triggerBody = trigger.body as Physics.Arcade.StaticBody;
+    triggerBody.checkCollision.none = false;
+    triggerBody.checkCollision.up = false;
+    triggerBody.checkCollision.down = false;
+    triggerBody.checkCollision.left = false;
+    triggerBody.checkCollision.right = false;
 
     return { trigger };
 };

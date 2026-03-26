@@ -1,4 +1,4 @@
-import { GameObjects, Scene } from 'phaser';
+import { GameObjects, Physics, Scene } from 'phaser';
 
 export interface CheckpointConfig {
     x: number;
@@ -29,6 +29,12 @@ export const createCheckpoint = (scene: Scene, config: CheckpointConfig): Checkp
         .setDepth(4101);
 
     scene.physics.add.existing(trigger, true);
+    const triggerBody = trigger.body as Physics.Arcade.StaticBody;
+    triggerBody.checkCollision.none = false;
+    triggerBody.checkCollision.up = false;
+    triggerBody.checkCollision.down = false;
+    triggerBody.checkCollision.left = false;
+    triggerBody.checkCollision.right = false;
 
     const setActive = (isActive: boolean): void => {
         const fillColor = isActive ? 0x66bb6a : 0x90caf9;

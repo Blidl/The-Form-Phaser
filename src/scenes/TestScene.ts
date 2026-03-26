@@ -7,6 +7,7 @@ import { createCheckpoint, type CheckpointObject } from '../game/world/checkpoin
 import { createHazard } from '../game/world/hazard';
 import { createMovingPlatform, type MovingPlatformObject } from '../game/world/moving_platform';
 import { createTriggerPlatform } from '../game/world/trigger_platform';
+import { createWindZone, type WindZoneObject } from '../game/world/wind_zone';
 
 const TEST_WORLD_WIDTH = 2200;
 const TEST_WORLD_HEIGHT = 900;
@@ -22,6 +23,7 @@ export class TestScene extends Scene {
     private playerInputKeys!: PlayerInputKeys;
     private checkpoints: CheckpointObject[] = [];
     private movingPlatforms: MovingPlatformObject[] = [];
+    private windZones: WindZoneObject[] = [];
     private currentRespawnPoint: RespawnPoint = { x: 220, y: 620 };
     private respawnInProgress: boolean = false;
 
@@ -74,7 +76,8 @@ export class TestScene extends Scene {
         });
 
         const input = pollPlayerInputSnapshot(this.playerInputKeys);
-        this.player.tick(delta, input);
+        const windInfluenceX = this.resolveWindInfluenceX();
+        this.player.tick(delta, input, windInfluenceX);
     }
 
     private setupWorldInteractionBaseline(): void {
@@ -141,6 +144,16 @@ export class TestScene extends Scene {
                 triggerPlatform.activate();
             }
         });
+
+        const windZone = createWindZone(this, {
+            x: 1080,
+            y: 640,
+            width: 260,
+            height: 170,
+            directionX: 1,
+            force: 160
+        });
+        this.windZones = [windZone];
     }
 
     private activateCheckpoint(index: number): void {
@@ -171,5 +184,22 @@ export class TestScene extends Scene {
             this.player.respawnAt(this.currentRespawnPoint.x, this.currentRespawnPoint.y);
             this.respawnInProgress = false;
         });
+    }
+
+    private resolveWindInfluenceX(): number {
+        if (this.windZones.length === 0) {
+            return 0;
+        }
+
+        const playerObject = this.player.arcadeBodyObject;
+        let horizontalInfluenceX = 0;
+
+        this.windZones.forEach((zone) => {
+            if (this.physics.overlap(playerObject, zone.trigger)) {
+                horizontalInfluenceX += zone.force * zone.directionX;
+            }
+        });
+
+        return horizontalInfluenceX;
     }
 }

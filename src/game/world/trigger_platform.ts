@@ -44,6 +44,13 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
     scene.physics.add.existing(triggerZone, true);
     scene.physics.add.existing(platformBodyObject, true);
 
+    const triggerBody = triggerZone.body as Physics.Arcade.StaticBody;
+    triggerBody.checkCollision.none = false;
+    triggerBody.checkCollision.up = false;
+    triggerBody.checkCollision.down = false;
+    triggerBody.checkCollision.left = false;
+    triggerBody.checkCollision.right = false;
+
     const platformBody = platformBodyObject.body as Physics.Arcade.StaticBody;
     platformBody.enable = false;
 
