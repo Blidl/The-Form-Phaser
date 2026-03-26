@@ -327,7 +327,7 @@ export class PfPlayer {
         const x = this.physicsSprite.x;
         const y = this.physicsSprite.y;
         this.ballVisual.setPosition(x, y);
-        this.triangleVisual.setPosition(x, y);
+        this.triangleVisual.setPosition(x, y + this.state.triangleShell.visualOffsetY);
         this.triangleVisual.setRotation(this.state.triangleShell.orientationRad);
         this.squareVisual.setPosition(x, y);
     }

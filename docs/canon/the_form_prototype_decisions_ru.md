@@ -1,4 +1,4 @@
-# The Form — Prototype Decisions
+﻿# The Form — Prototype Decisions
 
 Статус: canonical draft  
 Дата: 2026-03-25
@@ -152,10 +152,12 @@
 - Triangle должен в итоге ложиться на грань, а не оставаться на угле или в случайном наклоне.
 - в baseline visual/orientation shell:
   - на flat ground Triangle стоит на ребре, а не на угле;
-  - в grounded-состоянии Triangle держит стабильный edge-down resting pose;
+  - в grounded-состоянии Triangle имеет несколько валидных resting edge orientations (для текущего visual — три, по одному на каждое ребро);
+  - у Triangle нет одной заранее назначенной "правильной" нижней грани;
   - в grounded-состоянии `A/D` не вращают Triangle сами по себе;
   - rotation shell относится прежде всего к airborne-состоянию;
-  - после landing Triangle возвращается/садится в edge-down pose;
+  - после landing Triangle садится в ближайшую валидную grounded edge orientation (nearest valid edge pose), а не всегда в один и тот же угол;
+  - grounded movement не должен принудительно возвращать Triangle к одному каноническому "низу";
   - это shell-level этап без full Triangle gameplay physics.
 
 ### 8.2. Jump
@@ -314,3 +316,4 @@
   - скорость;
   - вес;
   - число зарядов/сегментов.
+

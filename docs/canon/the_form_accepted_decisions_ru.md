@@ -1,4 +1,4 @@
-# The Form — зафиксированные принятые решения по новому прототипу
+﻿# The Form — зафиксированные принятые решения по новому прототипу
 
 ## Статус документа
 Этот документ фиксирует решения, принятые пользователем в ходе уточняющего опроса по новому прототипу `The Form`.
@@ -176,10 +176,12 @@ Triangle — самая сложная и наиболее чувствител�
 
 ### Triangle baseline visual/orientation shell (до full gameplay-реализации)
 - На flat ground Triangle в baseline должен визуально стоять на ребре, а не на угле.
-- В grounded-состоянии у Triangle должен быть стабильный edge-down resting pose.
+- В grounded-состоянии у Triangle есть несколько валидных resting edge orientations (для текущего visual — три, по одному на каждое ребро).
+- У Triangle нет одной заранее назначенной "правильной" нижней грани.
 - В grounded-состоянии смена направления `A/D` не должна сама по себе вращать Triangle.
 - Rotation shell на этом этапе относится прежде всего к airborne-состоянию.
-- После landing на flat ground Triangle должен возвращаться/садиться в edge-down pose.
+- После landing на flat ground Triangle должен садиться в ближайшую валидную grounded edge orientation (nearest valid edge pose), а не всегда в один и тот же угол.
+- Grounded movement не должен принудительно возвращать Triangle к одному каноническому "низу".
 - Этот этап остаётся shell-level visual/orientation behavior и не является внедрением full Triangle physics/gameplay.
 
 ### Прыжок
@@ -390,3 +392,5 @@ Square — форма с `attach`, `trail-resource` и `rollover`.
 ### Rule
 Если scene runtime-path использует Arcade Physics API,
 Arcade Physics plugin обязан быть явно включён в game config.
+
+
