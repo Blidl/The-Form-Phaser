@@ -6,6 +6,7 @@ import { createPlayerInputKeys, pollPlayerInputSnapshot, type PlayerInputKeys } 
 import { createCheckpoint, type CheckpointObject } from '../game/world/checkpoint';
 import { createHazard } from '../game/world/hazard';
 import { createMovingPlatform, type MovingPlatformObject } from '../game/world/moving_platform';
+import { createTriggerPlatform } from '../game/world/trigger_platform';
 
 const TEST_WORLD_WIDTH = 2200;
 const TEST_WORLD_HEIGHT = 900;
@@ -122,6 +123,24 @@ export class TestScene extends Scene {
         this.movingPlatforms = [movingPlatform];
 
         this.physics.add.collider(this.player.arcadeBodyObject, movingPlatform.bodyObject);
+
+        const triggerPlatform = createTriggerPlatform(this, {
+            triggerX: 560,
+            triggerY: 692,
+            triggerWidth: 110,
+            triggerHeight: 84,
+            platformX: 760,
+            platformY: 470,
+            platformWidth: 180,
+            platformHeight: 22
+        });
+
+        this.physics.add.collider(this.player.arcadeBodyObject, triggerPlatform.platformBodyObject);
+        this.physics.add.overlap(this.player.arcadeBodyObject, triggerPlatform.triggerZone, () => {
+            if (!triggerPlatform.isActivated()) {
+                triggerPlatform.activate();
+            }
+        });
     }
 
     private activateCheckpoint(index: number): void {
