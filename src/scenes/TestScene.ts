@@ -5,6 +5,7 @@ import { PfPlayer } from '../game/player/PfPlayer';
 import { createPlayerInputKeys, pollPlayerInputSnapshot, type PlayerInputKeys } from '../game/player/player_input';
 import { createCheckpoint, type CheckpointObject } from '../game/world/checkpoint';
 import { createHazard } from '../game/world/hazard';
+import { createMovingPlatform, type MovingPlatformObject } from '../game/world/moving_platform';
 
 const TEST_WORLD_WIDTH = 2200;
 const TEST_WORLD_HEIGHT = 900;
@@ -19,6 +20,7 @@ export class TestScene extends Scene {
     private player!: PfPlayer;
     private playerInputKeys!: PlayerInputKeys;
     private checkpoints: CheckpointObject[] = [];
+    private movingPlatforms: MovingPlatformObject[] = [];
     private currentRespawnPoint: RespawnPoint = { x: 220, y: 620 };
     private respawnInProgress: boolean = false;
 
@@ -66,6 +68,10 @@ export class TestScene extends Scene {
     }
 
     public update(_time: number, delta: number): void {
+        this.movingPlatforms.forEach((platform) => {
+            platform.update();
+        });
+
         const input = pollPlayerInputSnapshot(this.playerInputKeys);
         this.player.tick(delta, input);
     }
@@ -103,6 +109,19 @@ export class TestScene extends Scene {
         this.physics.add.overlap(this.player.arcadeBodyObject, hazard.trigger, () => {
             this.handlePlayerDefeat();
         });
+
+        const movingPlatform = createMovingPlatform(this, {
+            x: 980,
+            y: 555,
+            width: 180,
+            height: 20,
+            axis: 'horizontal',
+            travelDistance: 200,
+            speed: 120
+        });
+        this.movingPlatforms = [movingPlatform];
+
+        this.physics.add.collider(this.player.arcadeBodyObject, movingPlatform.bodyObject);
     }
 
     private activateCheckpoint(index: number): void {
