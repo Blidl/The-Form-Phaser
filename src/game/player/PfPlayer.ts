@@ -1,9 +1,14 @@
-import { GameObjects, Physics, Scene } from 'phaser';
+import { GameObjects, Math as PhaserMath, Physics, Scene } from 'phaser';
 import {
     PLAYER_BALL_BOOST_COOLDOWN_MS,
     PLAYER_BALL_BOOST_HOLD_ACCEL,
     PLAYER_BALL_BOOST_HOLD_AIR_MOVE_SPEED,
     PLAYER_BALL_BOOST_HOLD_MOVE_SPEED,
+    PLAYER_BALL_REBOUND_FULL_APPROACH_SPEED,
+    PLAYER_BALL_REBOUND_LANDING_WINDOW_MS,
+    PLAYER_BALL_REBOUND_MAX_JUMP_VELOCITY,
+    PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED,
+    PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY,
     PLAYER_BALL_BOOST_SPEED,
     PLAYER_AIR_MOVE_ACCEL,
     PLAYER_AIR_MOVE_DECEL,
@@ -43,6 +48,9 @@ export class PfPlayer {
     private pendingBoostRequest: boolean;
     private wasGrounded: boolean;
     private lastMoveDirection: -1 | 1;
+    private reboundWindowMs: number;
+    private reboundJumpVelocity: number;
+    private lastAirborneDownwardSpeed: number;
 
     public constructor(scene: Scene, x: number, y: number) {
         this.state = { currentForm: PLAYER_START_FORM };
@@ -54,6 +62,9 @@ export class PfPlayer {
         this.pendingBoostRequest = false;
         this.wasGrounded = false;
         this.lastMoveDirection = 1;
+        this.reboundWindowMs = 0;
+        this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
+        this.lastAirborneDownwardSpeed = 0;
 
         this.sprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff);
         this.sprite.setStrokeStyle(2, 0xffffff);
@@ -86,6 +97,20 @@ export class PfPlayer {
         if (grounded) {
             refreshCoyoteTime(this.timers);
             this.jumpCutConsumed = false;
+        } else if (this.physicsBody.velocity.y > 0) {
+            this.lastAirborneDownwardSpeed = Math.max(this.lastAirborneDownwardSpeed, this.physicsBody.velocity.y);
+        }
+
+        if (justLanded) {
+            const reboundVelocity = this.resolveReboundJumpVelocity(this.lastAirborneDownwardSpeed);
+            if (reboundVelocity !== null) {
+                this.reboundJumpVelocity = reboundVelocity;
+                this.reboundWindowMs = PLAYER_BALL_REBOUND_LANDING_WINDOW_MS;
+            } else {
+                this.reboundWindowMs = 0;
+            }
+
+            this.lastAirborneDownwardSpeed = 0;
         }
 
         if (!input.actionHeld) {
@@ -113,10 +138,14 @@ export class PfPlayer {
 
         const canJump = grounded || hasCoyoteTime(this.timers);
         if (canJump && hasJumpBuffer(this.timers)) {
-            this.physicsBody.setVelocityY(PLAYER_JUMP_VELOCITY);
+            const hasReboundJump = grounded && this.reboundWindowMs > 0;
+            const jumpVelocity = hasReboundJump ? this.reboundJumpVelocity : PLAYER_JUMP_VELOCITY;
+            this.physicsBody.setVelocityY(jumpVelocity);
             clearJumpBuffer(this.timers);
             clearCoyoteTime(this.timers);
-            this.jumpCutConsumed = false;
+            this.jumpCutConsumed = hasReboundJump;
+            this.reboundWindowMs = 0;
+            this.lastAirborneDownwardSpeed = 0;
         }
 
         if (!input.jumpHeld && !this.jumpCutConsumed && this.physicsBody.velocity.y < 0) {
@@ -139,9 +168,27 @@ export class PfPlayer {
             }
         }
 
+        this.reboundWindowMs = Math.max(0, this.reboundWindowMs - deltaMs);
         this.boostCooldownMs = Math.max(0, this.boostCooldownMs - deltaMs);
         tickPlayerTimers(this.timers, deltaMs);
         this.wasGrounded = grounded;
+    }
+
+    private resolveReboundJumpVelocity(approachSpeed: number): number | null {
+        if (approachSpeed < PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED) {
+            return null;
+        }
+
+        const range = PLAYER_BALL_REBOUND_FULL_APPROACH_SPEED - PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED;
+        const clampedAlpha = range <= 0
+            ? 1
+            : PhaserMath.Clamp((approachSpeed - PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED) / range, 0, 1);
+
+        return PhaserMath.Linear(
+            PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY,
+            PLAYER_BALL_REBOUND_MAX_JUMP_VELOCITY,
+            clampedAlpha
+        );
     }
 
     private tryApplyBoost(grounded: boolean, horizontalDir: number, ignoreCooldown: boolean = false): void {
