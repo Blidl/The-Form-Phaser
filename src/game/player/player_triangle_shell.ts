@@ -2,9 +2,11 @@ import type { PlayerTriangleShellState } from './player_types';
 import {
     PLAYER_FORM_TRIANGLE_HEIGHT,
     PLAYER_FORM_TRIANGLE_WIDTH,
-    PLAYER_TRIANGLE_AIRBORNE_SPIN_BASE_RAD_PER_SEC,
+    PLAYER_TRIANGLE_AIRBORNE_CONTROLLED_SPIN_RAD_PER_SEC,
     PLAYER_TRIANGLE_AIRBORNE_SPIN_MAX_RAD_PER_SEC,
-    PLAYER_TRIANGLE_AIRBORNE_SPIN_SPEED_FROM_VELOCITY,
+    PLAYER_TRIANGLE_AIRBORNE_PASSIVE_SPIN_RAD_PER_SEC,
+    PLAYER_TRIANGLE_AIRBORNE_SPIN_ACCEL_RAD_PER_SEC_SQ,
+    PLAYER_TRIANGLE_AIRBORNE_SPIN_DECEL_RAD_PER_SEC_SQ,
     PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
     PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD,
     PLAYER_TRIANGLE_GROUNDED_SETTLE_LERP_SPEED
@@ -15,7 +17,8 @@ export const createTriangleShellState = (initialSpinDirection: -1 | 1): PlayerTr
         orientationRad: PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
         groundedOrientationRad: PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
         visualOffsetY: 0,
-        airborneSpinDirection: initialSpinDirection
+        airborneSpinDirection: initialSpinDirection,
+        airborneAngularVelocityRadPerSec: 0
     };
 };
 
@@ -27,6 +30,7 @@ export const resetTriangleShellState = (
     triangleShell.groundedOrientationRad = PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD;
     triangleShell.visualOffsetY = 0;
     triangleShell.airborneSpinDirection = spinDirection;
+    triangleShell.airborneAngularVelocityRadPerSec = 0;
 };
 
 export const tickTriangleShellOrientation = (
@@ -53,23 +57,37 @@ export const tickTriangleShellOrientation = (
         );
         const groundedOffsetY = resolveGroundedVisualOffsetY(triangleShell.groundedOrientationRad);
         triangleShell.visualOffsetY = triangleShell.visualOffsetY + ((groundedOffsetY - triangleShell.visualOffsetY) * settleT);
+        triangleShell.airborneAngularVelocityRadPerSec = 0;
 
         return;
     }
 
     if (horizontalMoveDir !== 0) {
         triangleShell.airborneSpinDirection = horizontalMoveDir > 0 ? 1 : -1;
-    } else if (Math.abs(horizontalVelocityX) > 1) {
+    } else if (Math.abs(horizontalVelocityX) > 14) {
         triangleShell.airborneSpinDirection = horizontalVelocityX > 0 ? 1 : -1;
     }
 
-    const spinSpeedFromVelocity = Math.abs(horizontalVelocityX) * PLAYER_TRIANGLE_AIRBORNE_SPIN_SPEED_FROM_VELOCITY;
-    const spinRadPerSec = Math.min(
-        PLAYER_TRIANGLE_AIRBORNE_SPIN_MAX_RAD_PER_SEC,
-        PLAYER_TRIANGLE_AIRBORNE_SPIN_BASE_RAD_PER_SEC + spinSpeedFromVelocity
+    const targetSpinRadPerSec = horizontalMoveDir === 0
+        ? triangleShell.airborneSpinDirection * PLAYER_TRIANGLE_AIRBORNE_PASSIVE_SPIN_RAD_PER_SEC
+        : triangleShell.airborneSpinDirection * PLAYER_TRIANGLE_AIRBORNE_CONTROLLED_SPIN_RAD_PER_SEC;
+    const spinResponse = horizontalMoveDir === 0
+        ? PLAYER_TRIANGLE_AIRBORNE_SPIN_DECEL_RAD_PER_SEC_SQ
+        : PLAYER_TRIANGLE_AIRBORNE_SPIN_ACCEL_RAD_PER_SEC_SQ;
+    const maxSpinStep = spinResponse * deltaSec;
+
+    triangleShell.airborneAngularVelocityRadPerSec = moveToward(
+        triangleShell.airborneAngularVelocityRadPerSec,
+        targetSpinRadPerSec,
+        maxSpinStep
+    );
+    const spinRadPerSec = clamp(
+        triangleShell.airborneAngularVelocityRadPerSec,
+        -PLAYER_TRIANGLE_AIRBORNE_SPIN_MAX_RAD_PER_SEC,
+        PLAYER_TRIANGLE_AIRBORNE_SPIN_MAX_RAD_PER_SEC
     );
     triangleShell.orientationRad = normalizeAngle(
-        triangleShell.orientationRad + (triangleShell.airborneSpinDirection * spinRadPerSec * deltaSec)
+        triangleShell.orientationRad + (spinRadPerSec * deltaSec)
     );
 };
 
@@ -80,6 +98,30 @@ const lerpAngle = (from: number, to: number, t: number): number => {
 
 const normalizeAngle = (angle: number): number => {
     return Math.atan2(Math.sin(angle), Math.cos(angle));
+};
+
+const moveToward = (current: number, target: number, maxDelta: number): number => {
+    if (current < target) {
+        return Math.min(current + maxDelta, target);
+    }
+
+    if (current > target) {
+        return Math.max(current - maxDelta, target);
+    }
+
+    return target;
+};
+
+const clamp = (value: number, min: number, max: number): number => {
+    if (value < min) {
+        return min;
+    }
+
+    if (value > max) {
+        return max;
+    }
+
+    return value;
 };
 
 const findNearestGroundedOrientation = (angle: number): number => {

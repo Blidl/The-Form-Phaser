@@ -5,6 +5,7 @@ export interface PlayerTriangleShellState {
     groundedOrientationRad: number;
     visualOffsetY: number;
     airborneSpinDirection: -1 | 1;
+    airborneAngularVelocityRadPerSec: number;
 }
 
 export interface PlayerShellState {
