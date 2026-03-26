@@ -10,6 +10,7 @@ export interface PlayerInputSnapshot {
     nextFormPressed: boolean;
     prevFormPressed: boolean;
     actionPressed: boolean;
+    actionHeld: boolean;
 }
 
 export interface PlayerInputKeys {
@@ -32,7 +33,8 @@ export const EMPTY_PLAYER_INPUT_SNAPSHOT: PlayerInputSnapshot = {
     jumpHeld: false,
     nextFormPressed: false,
     prevFormPressed: false,
-    actionPressed: false
+    actionPressed: false,
+    actionHeld: false
 };
 
 export const createPlayerInputKeys = (scene: Scene): PlayerInputKeys => {
@@ -63,6 +65,7 @@ export const pollPlayerInputSnapshot = (keys: PlayerInputKeys): PlayerInputSnaps
         jumpHeld: keys.jump.isDown,
         nextFormPressed: Input.Keyboard.JustDown(keys.nextForm),
         prevFormPressed: Input.Keyboard.JustDown(keys.prevForm),
-        actionPressed: Input.Keyboard.JustDown(keys.action)
+        actionPressed: Input.Keyboard.JustDown(keys.action),
+        actionHeld: keys.action.isDown
     };
 };

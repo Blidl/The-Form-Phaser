@@ -1,9 +1,10 @@
 import { GameObjects, Physics, Scene } from 'phaser';
 import {
     PLAYER_BALL_BOOST_COOLDOWN_MS,
+    PLAYER_BALL_BOOST_HOLD_ACCEL,
+    PLAYER_BALL_BOOST_HOLD_AIR_MOVE_SPEED,
+    PLAYER_BALL_BOOST_HOLD_MOVE_SPEED,
     PLAYER_BALL_BOOST_SPEED,
-    PLAYER_BALL_BOOST_SUSTAIN_MOVE_SPEED,
-    PLAYER_BALL_BOOST_SUSTAIN_MS,
     PLAYER_AIR_MOVE_ACCEL,
     PLAYER_AIR_MOVE_DECEL,
     PLAYER_AIR_MOVE_SPEED,
@@ -38,7 +39,9 @@ export class PfPlayer {
     private readonly sprite: GameObjects.Arc;
     private jumpCutConsumed: boolean;
     private boostCooldownMs: number;
-    private boostSustainMs: number;
+    private boostActive: boolean;
+    private pendingBoostRequest: boolean;
+    private wasGrounded: boolean;
     private lastMoveDirection: -1 | 1;
 
     public constructor(scene: Scene, x: number, y: number) {
@@ -47,7 +50,9 @@ export class PfPlayer {
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
         this.jumpCutConsumed = false;
         this.boostCooldownMs = 0;
-        this.boostSustainMs = 0;
+        this.boostActive = false;
+        this.pendingBoostRequest = false;
+        this.wasGrounded = false;
         this.lastMoveDirection = 1;
 
         this.sprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff);
@@ -77,9 +82,15 @@ export class PfPlayer {
         const deltaSec = deltaMs / 1000;
 
         const grounded = this.physicsBody.blocked.down || this.physicsBody.touching.down;
+        const justLanded = grounded && !this.wasGrounded;
         if (grounded) {
             refreshCoyoteTime(this.timers);
             this.jumpCutConsumed = false;
+        }
+
+        if (!input.actionHeld) {
+            this.boostActive = false;
+            this.pendingBoostRequest = false;
         }
 
         if (input.jumpPressed) {
@@ -91,11 +102,9 @@ export class PfPlayer {
             this.lastMoveDirection = horizontalDir > 0 ? 1 : -1;
         }
 
-        const hasBoostSustain = grounded && this.boostSustainMs > 0;
-        const moveSpeed = grounded
-            ? (hasBoostSustain ? PLAYER_BALL_BOOST_SUSTAIN_MOVE_SPEED : PLAYER_GROUND_MOVE_SPEED)
-            : PLAYER_AIR_MOVE_SPEED;
-        const moveResponse = this.resolveMoveResponse(grounded, horizontalDir);
+        const hasBoostHold = this.boostActive && input.actionHeld;
+        const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
+        const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
         const targetVelocityX = horizontalDir * moveSpeed;
         const currentVelocityX = this.physicsBody.velocity.x;
         const maxStepX = moveResponse * deltaSec;
@@ -116,23 +125,34 @@ export class PfPlayer {
         }
 
         if (input.actionPressed) {
-            this.tryApplyBoost(grounded, horizontalDir);
+            if (grounded) {
+                this.tryApplyBoost(grounded, horizontalDir);
+            } else {
+                this.pendingBoostRequest = true;
+            }
+        }
+
+        if (justLanded && this.pendingBoostRequest && input.actionHeld) {
+            this.tryApplyBoost(grounded, horizontalDir, true);
+            if (this.boostActive) {
+                this.pendingBoostRequest = false;
+            }
         }
 
         this.boostCooldownMs = Math.max(0, this.boostCooldownMs - deltaMs);
-        this.boostSustainMs = Math.max(0, this.boostSustainMs - deltaMs);
         tickPlayerTimers(this.timers, deltaMs);
+        this.wasGrounded = grounded;
     }
 
-    private tryApplyBoost(grounded: boolean, horizontalDir: number): void {
-        if (!grounded || this.boostCooldownMs > 0) {
+    private tryApplyBoost(grounded: boolean, horizontalDir: number, ignoreCooldown: boolean = false): void {
+        if (!grounded || (!ignoreCooldown && this.boostCooldownMs > 0)) {
             return;
         }
 
         const boostDirection = this.resolveBoostDirection(horizontalDir);
         this.physicsBody.setVelocityX(boostDirection * PLAYER_BALL_BOOST_SPEED);
         this.boostCooldownMs = PLAYER_BALL_BOOST_COOLDOWN_MS;
-        this.boostSustainMs = PLAYER_BALL_BOOST_SUSTAIN_MS;
+        this.boostActive = true;
     }
 
     private resolveBoostDirection(horizontalDir: number): -1 | 1 {
@@ -159,11 +179,23 @@ export class PfPlayer {
         return target;
     }
 
-    private resolveMoveResponse(grounded: boolean, horizontalDir: number): number {
+    private resolveMoveResponse(grounded: boolean, horizontalDir: number, hasBoostHold: boolean): number {
+        if (hasBoostHold && horizontalDir !== 0) {
+            return PLAYER_BALL_BOOST_HOLD_ACCEL;
+        }
+
         if (grounded) {
             return horizontalDir === 0 ? PLAYER_GROUND_MOVE_DECEL : PLAYER_GROUND_MOVE_ACCEL;
         }
 
         return horizontalDir === 0 ? PLAYER_AIR_MOVE_DECEL : PLAYER_AIR_MOVE_ACCEL;
+    }
+
+    private resolveMoveSpeed(grounded: boolean, hasBoostHold: boolean): number {
+        if (!hasBoostHold) {
+            return grounded ? PLAYER_GROUND_MOVE_SPEED : PLAYER_AIR_MOVE_SPEED;
+        }
+
+        return grounded ? PLAYER_BALL_BOOST_HOLD_MOVE_SPEED : PLAYER_BALL_BOOST_HOLD_AIR_MOVE_SPEED;
     }
 }
