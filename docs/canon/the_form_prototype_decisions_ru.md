@@ -150,6 +150,13 @@
 - ориентация Triangle реально влияет на поведение и коллизию;
 - каждая грань может быть опорной;
 - Triangle должен в итоге ложиться на грань, а не оставаться на угле или в случайном наклоне.
+- в baseline visual/orientation shell:
+  - на flat ground Triangle стоит на ребре, а не на угле;
+  - в grounded-состоянии Triangle держит стабильный edge-down resting pose;
+  - в grounded-состоянии `A/D` не вращают Triangle сами по себе;
+  - rotation shell относится прежде всего к airborne-состоянию;
+  - после landing Triangle возвращается/садится в edge-down pose;
+  - это shell-level этап без full Triangle gameplay physics.
 
 ### 8.2. Jump
 Принято:

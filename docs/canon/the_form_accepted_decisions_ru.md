@@ -174,6 +174,14 @@ Triangle — самая сложная и наиболее чувствител�
 - Каждая грань Triangle может быть опорной поверхностью для движения.
 - После падения/столкновения Triangle должен в итоге лечь полноценно на грань, а не зависнуть на угле или под случайным наклоном.
 
+### Triangle baseline visual/orientation shell (до full gameplay-реализации)
+- На flat ground Triangle в baseline должен визуально стоять на ребре, а не на угле.
+- В grounded-состоянии у Triangle должен быть стабильный edge-down resting pose.
+- В grounded-состоянии смена направления `A/D` не должна сама по себе вращать Triangle.
+- Rotation shell на этом этапе относится прежде всего к airborne-состоянию.
+- После landing на flat ground Triangle должен возвращаться/садиться в edge-down pose.
+- Этот этап остаётся shell-level visual/orientation behavior и не является внедрением full Triangle physics/gameplay.
+
 ### Прыжок
 - У Triangle нет обычного jump в том же виде, что у Ball и Square.
 - Его стартовый прыжок — отдельная специальная механика:

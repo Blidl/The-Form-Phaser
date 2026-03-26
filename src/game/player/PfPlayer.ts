@@ -27,7 +27,8 @@ import {
     PLAYER_FORM_TRIANGLE_WIDTH,
     PLAYER_PLACEHOLDER_RADIUS,
     PLAYER_START_FORM,
-    PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS
+    PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS,
+    PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD
 } from './player_constants';
 import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_input';
 import {
@@ -42,6 +43,11 @@ import {
     type PlayerTimers
 } from './player_timers';
 import { getNextPlayerForm, getPrevPlayerForm } from './player_form_switch';
+import {
+    createTriangleShellState,
+    resetTriangleShellState,
+    tickTriangleShellOrientation
+} from './player_triangle_shell';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 
 export class PfPlayer {
@@ -66,7 +72,10 @@ export class PfPlayer {
     private airborneWindDriftX: number;
 
     public constructor(scene: Scene, x: number, y: number) {
-        this.state = { currentForm: PLAYER_START_FORM };
+        this.state = {
+            currentForm: PLAYER_START_FORM,
+            triangleShell: createTriangleShellState(1)
+        };
         this.timers = createPlayerTimers();
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
         this.jumpCutConsumed = false;
@@ -109,7 +118,8 @@ export class PfPlayer {
         )
             .setStrokeStyle(2, 0xffffff)
             .setDepth(4500)
-            .setVisible(false);
+            .setVisible(false)
+            .setRotation(PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD);
         this.squareVisual = scene.add.rectangle(x, y, PLAYER_FORM_SQUARE_SIZE, PLAYER_FORM_SQUARE_SIZE, 0xa5d6a7)
             .setStrokeStyle(2, 0xffffff)
             .setDepth(4500)
@@ -136,6 +146,7 @@ export class PfPlayer {
 
     public respawnAt(x: number, y: number): void {
         this.state.currentForm = PLAYER_START_FORM;
+        resetTriangleShellState(this.state.triangleShell, 1);
 
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
         this.jumpCutConsumed = false;
@@ -228,6 +239,17 @@ export class PfPlayer {
 
         this.physicsBody.setVelocityX(nextVelocityX);
 
+        if (this.state.currentForm === 'triangle') {
+            tickTriangleShellOrientation(
+                this.state.triangleShell,
+                grounded,
+                justLanded,
+                horizontalDir,
+                this.physicsBody.velocity.x,
+                deltaSec
+            );
+        }
+
         const canJump = grounded || hasCoyoteTime(this.timers);
         if (canJump && hasJumpBuffer(this.timers)) {
             const hasReboundJump = grounded && this.reboundWindowMs > 0;
@@ -288,6 +310,9 @@ export class PfPlayer {
 
         this.state.currentForm = nextForm;
         this.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;
+        if (nextForm === 'triangle') {
+            resetTriangleShellState(this.state.triangleShell, this.lastMoveDirection);
+        }
         this.applyCurrentFormVisual();
     }
 
@@ -303,6 +328,7 @@ export class PfPlayer {
         const y = this.physicsSprite.y;
         this.ballVisual.setPosition(x, y);
         this.triangleVisual.setPosition(x, y);
+        this.triangleVisual.setRotation(this.state.triangleShell.orientationRad);
         this.squareVisual.setPosition(x, y);
     }
 
