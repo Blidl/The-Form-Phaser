@@ -1,7 +1,7 @@
-import StartGame from './game/main';
+import { Game } from 'phaser';
+import { createGameConfig } from './boot/game_config';
 
 document.addEventListener('DOMContentLoaded', () => {
-
-    StartGame('game-container');
+    new Game(createGameConfig('game-container'));
 
 });
