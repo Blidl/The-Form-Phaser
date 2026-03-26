@@ -9,6 +9,13 @@ export const createGameConfig = (parent: string): Types.Core.GameConfig => {
         height: 768,
         parent,
         backgroundColor: '#101820',
+        physics: {
+            default: 'arcade',
+            arcade: {
+                gravity: { x: 0, y: 0 },
+                debug: false
+            }
+        },
         scene: [BootScene, TestScene]
     };
 };

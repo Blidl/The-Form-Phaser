@@ -361,3 +361,18 @@ Square — форма с `attach`, `trail-resource` и `rollover`.
   - `outdated`,
   - `historical`,
   - `open question`.
+
+## Incident note — 2026-03-26 (runtime blank scene after gameplay integration)
+### Root cause
+В runtime-path был добавлен Phaser Arcade Physics API
+(`this.physics`, `physics.add.existing`, `physics.add.collider`, `world.setBounds`),
+но в `src/boot/game_config.ts` не был включён physics config с `default: 'arcade'`.
+Это приводило к runtime crash в `sc_test` / `pf_player` path во время `create()` и визуальному симптому “сцена пустая, виден только фон”.
+
+### Fix
+В `src/boot/game_config.ts` явно включён Arcade Physics.
+После этого diagnostic objects и gameplay objects снова стали отображаться.
+
+### Rule
+Если scene runtime-path использует Arcade Physics API,
+Arcade Physics plugin обязан быть явно включён в game config.

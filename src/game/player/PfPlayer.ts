@@ -1,68 +1,123 @@
-import { GameObjects, Scene } from 'phaser';
+import { GameObjects, Physics, Scene } from 'phaser';
 import {
-    PLAYER_PLACEHOLDER_FILL_COLOR,
+    PLAYER_AIR_MOVE_ACCEL,
+    PLAYER_AIR_MOVE_DECEL,
+    PLAYER_AIR_MOVE_SPEED,
+    PLAYER_GROUND_MOVE_ACCEL,
+    PLAYER_GROUND_MOVE_DECEL,
+    PLAYER_GROUND_MOVE_SPEED,
+    PLAYER_GRAVITY_Y,
+    PLAYER_JUMP_CUT_MULTIPLIER,
+    PLAYER_JUMP_VELOCITY,
     PLAYER_PLACEHOLDER_RADIUS,
-    PLAYER_PLACEHOLDER_STROKE_COLOR,
     PLAYER_START_FORM
 } from './player_constants';
 import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_input';
-import { createPlayerTimers, updatePlayerTimers, type PlayerTimers } from './player_timers';
+import {
+    clearCoyoteTime,
+    clearJumpBuffer,
+    createPlayerTimers,
+    hasCoyoteTime,
+    hasJumpBuffer,
+    pushJumpBuffer,
+    refreshCoyoteTime,
+    tickPlayerTimers,
+    type PlayerTimers
+} from './player_timers';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 
-export class PfPlayer extends GameObjects.Container {
+export class PfPlayer {
     public readonly state: PlayerShellState;
     private readonly timers: PlayerTimers;
     private lastInput: PlayerInputSnapshot;
-    private readonly formLabel: GameObjects.Text;
+    private readonly physicsBody: Physics.Arcade.Body;
+    private readonly sprite: GameObjects.Arc;
+    private jumpCutConsumed: boolean;
 
     public constructor(scene: Scene, x: number, y: number) {
-        super(scene, x, y);
-
-        this.name = 'pf_player';
         this.state = { currentForm: PLAYER_START_FORM };
         this.timers = createPlayerTimers();
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
+        this.jumpCutConsumed = false;
 
-        const body = scene.add.circle(0, 0, PLAYER_PLACEHOLDER_RADIUS, PLAYER_PLACEHOLDER_FILL_COLOR);
-        body.setStrokeStyle(2, PLAYER_PLACEHOLDER_STROKE_COLOR);
-
-        this.formLabel = scene.add.text(0, PLAYER_PLACEHOLDER_RADIUS + 10, this.state.currentForm, {
-            color: '#ffffff',
-            fontFamily: 'monospace',
-            fontSize: '12px'
-        });
-        this.formLabel.setOrigin(0.5, 0);
-
-        this.add([body, this.formLabel]);
-        this.setSize(PLAYER_PLACEHOLDER_RADIUS * 2, PLAYER_PLACEHOLDER_RADIUS * 2);
-
-        scene.add.existing(this);
+        this.sprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff);
+        this.sprite.setStrokeStyle(2, 0xffffff);
+        this.sprite.setDepth(4500);
+        this.sprite.name = 'pf_player';
+        scene.physics.add.existing(this.sprite);
+        this.physicsBody = this.sprite.body as Physics.Arcade.Body;
+        this.physicsBody.setCircle(PLAYER_PLACEHOLDER_RADIUS);
+        this.physicsBody.setBounce(0);
+        this.physicsBody.setDragX(2400);
+        this.physicsBody.setMaxVelocity(Math.max(PLAYER_GROUND_MOVE_SPEED, PLAYER_AIR_MOVE_SPEED), 1200);
+        this.physicsBody.setCollideWorldBounds(true);
+        this.physicsBody.setGravityY(PLAYER_GRAVITY_Y);
     }
 
     public get currentForm(): PlayerFormId {
         return this.state.currentForm;
     }
 
-    public tick(deltaMs: number, input: PlayerInputSnapshot): void {
-        updatePlayerTimers(this.timers, deltaMs);
-        this.lastInput = input;
-
-        const activeInputs = this.buildActiveInputsLabel(this.lastInput);
-        this.formLabel.setText(`${this.state.currentForm} ${activeInputs}`);
+    public get arcadeBodyObject(): GameObjects.Arc {
+        return this.sprite;
     }
 
-    private buildActiveInputsLabel(input: PlayerInputSnapshot): string {
-        const tags: string[] = [];
+    public tick(deltaMs: number, input: PlayerInputSnapshot): void {
+        this.lastInput = input;
+        const deltaSec = deltaMs / 1000;
 
-        if (input.moveLeft) tags.push('L');
-        if (input.moveRight) tags.push('R');
-        if (input.moveUp) tags.push('U');
-        if (input.moveDown) tags.push('D');
-        if (input.jumpPressed) tags.push('J');
-        if (input.nextFormPressed) tags.push('E');
-        if (input.prevFormPressed) tags.push('Q');
-        if (input.actionPressed) tags.push('K');
+        const grounded = this.physicsBody.blocked.down || this.physicsBody.touching.down;
+        if (grounded) {
+            refreshCoyoteTime(this.timers);
+            this.jumpCutConsumed = false;
+        }
 
-        return tags.length > 0 ? `[${tags.join(',')}]` : '[idle]';
+        if (input.jumpPressed) {
+            pushJumpBuffer(this.timers);
+        }
+
+        const horizontalDir = (input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0);
+        const moveSpeed = grounded ? PLAYER_GROUND_MOVE_SPEED : PLAYER_AIR_MOVE_SPEED;
+        const moveResponse = this.resolveMoveResponse(grounded, horizontalDir);
+        const targetVelocityX = horizontalDir * moveSpeed;
+        const currentVelocityX = this.physicsBody.velocity.x;
+        const maxStepX = moveResponse * deltaSec;
+        const nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
+        this.physicsBody.setVelocityX(nextVelocityX);
+
+        const canJump = grounded || hasCoyoteTime(this.timers);
+        if (canJump && hasJumpBuffer(this.timers)) {
+            this.physicsBody.setVelocityY(PLAYER_JUMP_VELOCITY);
+            clearJumpBuffer(this.timers);
+            clearCoyoteTime(this.timers);
+            this.jumpCutConsumed = false;
+        }
+
+        if (!input.jumpHeld && !this.jumpCutConsumed && this.physicsBody.velocity.y < 0) {
+            this.physicsBody.setVelocityY(this.physicsBody.velocity.y * PLAYER_JUMP_CUT_MULTIPLIER);
+            this.jumpCutConsumed = true;
+        }
+
+        tickPlayerTimers(this.timers, deltaMs);
+    }
+
+    private moveToward(current: number, target: number, maxDelta: number): number {
+        if (current < target) {
+            return Math.min(current + maxDelta, target);
+        }
+
+        if (current > target) {
+            return Math.max(current - maxDelta, target);
+        }
+
+        return target;
+    }
+
+    private resolveMoveResponse(grounded: boolean, horizontalDir: number): number {
+        if (grounded) {
+            return horizontalDir === 0 ? PLAYER_GROUND_MOVE_DECEL : PLAYER_GROUND_MOVE_ACCEL;
+        }
+
+        return horizontalDir === 0 ? PLAYER_AIR_MOVE_DECEL : PLAYER_AIR_MOVE_ACCEL;
     }
 }

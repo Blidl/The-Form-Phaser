@@ -46,6 +46,15 @@ Codex должен получать только:
 8. **Acceptance criteria**
 9. **Формат ответа Codex**
 
+### 3.2. Обязательный acceptance для gameplay slice
+Для gameplay slice недостаточно только успешной сборки (`npm run build`).
+
+Обязателен visual runtime acceptance в `sc_test`:
+- нужная сцена реально стартует;
+- diagnostic markers / scene objects реально видны;
+- player реально виден;
+- physics path реально работает, если slice его использует.
+
 ---
 
 ## 4. Рекомендуемый компактный шаблон prompt
@@ -206,3 +215,12 @@ Codex не должен:
 6. После этого начинается следующий slice.
 
 Это и есть каноническая рабочая модель Phaser-версии документации `The Form`.
+
+## 12. Короткий diagnostic protocol для симптома "blank scene"
+Если после gameplay changes сцена выглядит пустой:
+
+1. подтвердить реальный runtime-path (какая сцена реально стартует);
+2. добавить diagnostic text + primitive shapes без physics;
+3. проверить browser console на runtime exception;
+4. проверить physics plugin/config в `game_config`, если затронут physics API;
+5. только после этого разбирать player/world/render specifics.

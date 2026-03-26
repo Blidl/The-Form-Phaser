@@ -135,6 +135,15 @@ Scene/config/data wiring приоритетно использовать для:
 
 Для этих зон канонически допускается узкий `TypeScript`.
 
+### 5.3. Runtime physics plugin contract (Arcade)
+Если runtime-path сцены использует Phaser Arcade Physics API
+(`this.physics`, `physics.add.existing`, `physics.add.collider`, `world.setBounds`),
+то в `src/boot/game_config.ts` **обязательно** должен быть явно включён physics config с `default: 'arcade'`.
+
+Симптом вида “виден только фон / сцена пустая” после gameplay integration
+в первую очередь трактуется как возможный `config/plugin/runtime crash`,
+а не как доказанный render bug.
+
 ---
 
 ## 6. Правило по TypeScript

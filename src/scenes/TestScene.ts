@@ -15,21 +15,25 @@ export class TestScene extends Scene {
         const camera = this.cameras.main;
         camera.setBackgroundColor('#263238');
 
-        const { width, height } = this.scale;
+        const worldWidth = camera.width;
+        const worldHeight = camera.height;
+        this.physics.world.setBounds(0, 0, worldWidth, worldHeight);
 
-        this.add.rectangle(width * 0.5, height * 0.78, width * 0.7, 44, 0x90a4ae).setStrokeStyle(2, 0xcfd8dc);
-        this.add.circle(width * 0.25, height * 0.62, 26, 0x4fc3f7);
-        this.add.rectangle(width * 0.6, height * 0.5, 64, 64, 0xffca28).setAngle(12);
-        this.add.triangle(width * 0.78, height * 0.62, 0, 54, 34, 0, 68, 54, 0x81c784);
+        const ground = this.add.rectangle(420, 620, 700, 48, 0x90a4ae).setStrokeStyle(2, 0xcfd8dc).setDepth(4200);
+        const testPlatform = this.add.rectangle(520, 460, 220, 24, 0xb0bec5).setStrokeStyle(2, 0xeceff1).setDepth(4200);
+        this.physics.add.existing(ground, true);
+        this.physics.add.existing(testPlatform, true);
 
-        this.player = new PfPlayer(this, width * 0.5, height * 0.78 - 24);
+        this.player = new PfPlayer(this, 250, 200);
         this.playerInputKeys = createPlayerInputKeys(this);
+        this.physics.add.collider(this.player.arcadeBodyObject, ground);
+        this.physics.add.collider(this.player.arcadeBodyObject, testPlatform);
 
         this.add.text(24, 24, 'sc_test', {
             color: '#ffffff',
             fontFamily: 'monospace',
             fontSize: '24px'
-        });
+        }).setDepth(5000);
     }
 
     public update(_time: number, delta: number): void {
