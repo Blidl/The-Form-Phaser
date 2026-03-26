@@ -78,8 +78,9 @@
 
 ### 5.2. Dynamic jump height
 Принято:
-- dynamic jump height действует только у обычного jump `Ball` и `Square`;
-- у `Triangle` jump отдельный, с собственным контрактом.
+- dynamic jump height действует у обычного jump `Ball` и `Square`;
+- у `Triangle` jump остаётся отдельным, с собственным контрактом и отдельными параметрами;
+- `Triangle` также поддерживает variable jump height через удержание `Jump`, без merge в `Ball` jump contract.
 
 ### 5.3. Visual marker / точка приложения
 Принято:

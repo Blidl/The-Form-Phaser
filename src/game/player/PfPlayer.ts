@@ -28,7 +28,8 @@ import {
     PLAYER_PLACEHOLDER_RADIUS,
     PLAYER_START_FORM,
     PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS,
-    PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD
+    PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
+    PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER
 } from './player_constants';
 import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_input';
 import {
@@ -48,6 +49,7 @@ import {
     resetTriangleShellState,
     tickTriangleShellOrientation
 } from './player_triangle_shell';
+import { applyTriangleSpecialJump } from './player_triangle_jump';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 
 export class PfPlayer {
@@ -252,18 +254,33 @@ export class PfPlayer {
 
         const canJump = grounded || hasCoyoteTime(this.timers);
         if (canJump && hasJumpBuffer(this.timers)) {
-            const hasReboundJump = grounded && this.reboundWindowMs > 0;
-            const jumpVelocity = hasReboundJump ? this.reboundJumpVelocity : PLAYER_JUMP_VELOCITY;
-            this.physicsBody.setVelocityY(jumpVelocity);
+            if (this.state.currentForm === 'triangle') {
+                const triangleJumpLaunch = applyTriangleSpecialJump(
+                    this.state.triangleShell,
+                    horizontalDir,
+                    this.lastMoveDirection
+                );
+                this.physicsBody.setVelocityY(triangleJumpLaunch.velocityY);
+                this.jumpCutConsumed = false;
+                this.reboundWindowMs = 0;
+            } else {
+                const hasReboundJump = grounded && this.reboundWindowMs > 0;
+                const jumpVelocity = hasReboundJump ? this.reboundJumpVelocity : PLAYER_JUMP_VELOCITY;
+                this.physicsBody.setVelocityY(jumpVelocity);
+                this.jumpCutConsumed = hasReboundJump;
+                this.reboundWindowMs = 0;
+            }
+
             clearJumpBuffer(this.timers);
             clearCoyoteTime(this.timers);
-            this.jumpCutConsumed = hasReboundJump;
-            this.reboundWindowMs = 0;
             this.lastAirborneDownwardSpeed = 0;
         }
 
         if (!input.jumpHeld && !this.jumpCutConsumed && this.physicsBody.velocity.y < 0) {
-            this.physicsBody.setVelocityY(this.physicsBody.velocity.y * PLAYER_JUMP_CUT_MULTIPLIER);
+            const jumpCutMultiplier = this.state.currentForm === 'triangle'
+                ? PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER
+                : PLAYER_JUMP_CUT_MULTIPLIER;
+            this.physicsBody.setVelocityY(this.physicsBody.velocity.y * jumpCutMultiplier);
             this.jumpCutConsumed = true;
         }
 
