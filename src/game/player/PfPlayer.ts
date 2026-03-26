@@ -1,5 +1,9 @@
 import { GameObjects, Physics, Scene } from 'phaser';
 import {
+    PLAYER_BALL_BOOST_COOLDOWN_MS,
+    PLAYER_BALL_BOOST_SPEED,
+    PLAYER_BALL_BOOST_SUSTAIN_MOVE_SPEED,
+    PLAYER_BALL_BOOST_SUSTAIN_MS,
     PLAYER_AIR_MOVE_ACCEL,
     PLAYER_AIR_MOVE_DECEL,
     PLAYER_AIR_MOVE_SPEED,
@@ -33,12 +37,18 @@ export class PfPlayer {
     private readonly physicsBody: Physics.Arcade.Body;
     private readonly sprite: GameObjects.Arc;
     private jumpCutConsumed: boolean;
+    private boostCooldownMs: number;
+    private boostSustainMs: number;
+    private lastMoveDirection: -1 | 1;
 
     public constructor(scene: Scene, x: number, y: number) {
         this.state = { currentForm: PLAYER_START_FORM };
         this.timers = createPlayerTimers();
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
         this.jumpCutConsumed = false;
+        this.boostCooldownMs = 0;
+        this.boostSustainMs = 0;
+        this.lastMoveDirection = 1;
 
         this.sprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff);
         this.sprite.setStrokeStyle(2, 0xffffff);
@@ -49,7 +59,7 @@ export class PfPlayer {
         this.physicsBody.setCircle(PLAYER_PLACEHOLDER_RADIUS);
         this.physicsBody.setBounce(0);
         this.physicsBody.setDragX(2400);
-        this.physicsBody.setMaxVelocity(Math.max(PLAYER_GROUND_MOVE_SPEED, PLAYER_AIR_MOVE_SPEED), 1200);
+        this.physicsBody.setMaxVelocity(Math.max(PLAYER_GROUND_MOVE_SPEED, PLAYER_AIR_MOVE_SPEED, PLAYER_BALL_BOOST_SPEED), 1200);
         this.physicsBody.setCollideWorldBounds(true);
         this.physicsBody.setGravityY(PLAYER_GRAVITY_Y);
     }
@@ -77,7 +87,14 @@ export class PfPlayer {
         }
 
         const horizontalDir = (input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0);
-        const moveSpeed = grounded ? PLAYER_GROUND_MOVE_SPEED : PLAYER_AIR_MOVE_SPEED;
+        if (horizontalDir !== 0) {
+            this.lastMoveDirection = horizontalDir > 0 ? 1 : -1;
+        }
+
+        const hasBoostSustain = grounded && this.boostSustainMs > 0;
+        const moveSpeed = grounded
+            ? (hasBoostSustain ? PLAYER_BALL_BOOST_SUSTAIN_MOVE_SPEED : PLAYER_GROUND_MOVE_SPEED)
+            : PLAYER_AIR_MOVE_SPEED;
         const moveResponse = this.resolveMoveResponse(grounded, horizontalDir);
         const targetVelocityX = horizontalDir * moveSpeed;
         const currentVelocityX = this.physicsBody.velocity.x;
@@ -98,7 +115,36 @@ export class PfPlayer {
             this.jumpCutConsumed = true;
         }
 
+        if (input.actionPressed) {
+            this.tryApplyBoost(grounded, horizontalDir);
+        }
+
+        this.boostCooldownMs = Math.max(0, this.boostCooldownMs - deltaMs);
+        this.boostSustainMs = Math.max(0, this.boostSustainMs - deltaMs);
         tickPlayerTimers(this.timers, deltaMs);
+    }
+
+    private tryApplyBoost(grounded: boolean, horizontalDir: number): void {
+        if (!grounded || this.boostCooldownMs > 0) {
+            return;
+        }
+
+        const boostDirection = this.resolveBoostDirection(horizontalDir);
+        this.physicsBody.setVelocityX(boostDirection * PLAYER_BALL_BOOST_SPEED);
+        this.boostCooldownMs = PLAYER_BALL_BOOST_COOLDOWN_MS;
+        this.boostSustainMs = PLAYER_BALL_BOOST_SUSTAIN_MS;
+    }
+
+    private resolveBoostDirection(horizontalDir: number): -1 | 1 {
+        if (horizontalDir < 0) {
+            return -1;
+        }
+
+        if (horizontalDir > 0) {
+            return 1;
+        }
+
+        return this.lastMoveDirection;
     }
 
     private moveToward(current: number, target: number, maxDelta: number): number {
