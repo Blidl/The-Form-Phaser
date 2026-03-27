@@ -24,6 +24,7 @@ import {
     PLAYER_JUMP_VELOCITY,
     PLAYER_FORM_SQUARE_SIZE,
     PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED,
+    PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED,
     PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
     PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR,
     PLAYER_SQUARE_VISUAL_STROKE_COLOR,
@@ -73,6 +74,7 @@ import {
     tickSquareAttachState,
     tryEnterSquareAttach
 } from './player_square_attach';
+import { resolveSquareAttachSurfaceVelocity } from './player_square_surface_move';
 import { applyTriangleSpecialJump } from './player_triangle_jump';
 import {
     createTriangleDashState,
@@ -421,9 +423,14 @@ export class PfPlayer {
                 triangleDash.directionY * PLAYER_TRIANGLE_DASH_SPEED
             );
         } else if (isSquareAttached) {
-            const holdVelocityX = -this.state.squareShell.attachNormalX * PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED;
-            const holdVelocityY = -this.state.squareShell.attachNormalY * PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED;
-            this.physicsBody.setVelocity(holdVelocityX, holdVelocityY);
+            const attachVelocity = resolveSquareAttachSurfaceVelocity(
+                this.state.squareShell.attachNormalX,
+                this.state.squareShell.attachNormalY,
+                input,
+                PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED,
+                PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED
+            );
+            this.physicsBody.setVelocity(attachVelocity.velocityX, attachVelocity.velocityY);
             this.physicsBody.setAcceleration(0, 0);
         } else {
             const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
