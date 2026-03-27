@@ -14,6 +14,8 @@ export interface PlayerTriangleDashState {
     cooldownMs: number;
     directionX: number;
     directionY: number;
+    leadingCornerIndex: 0 | 1 | 2;
+    lockedOrientationRad: number;
 }
 
 export interface PlayerShellState {

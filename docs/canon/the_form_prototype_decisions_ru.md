@@ -176,6 +176,12 @@
 ### 8.4. Dash
 Принято:
 - `K` запускает dash;
+- во время dash Triangle не вращается (orientation lock до конца dash);
+- направление dash определяется через leading corner / leading angle logic, а не как абстрактный рывок по текущему spin;
+- точка приложения силы (force application point) определяет выбор leading corner;
+- базовый force-bias для выбора leading corner берётся из `A/D`, при нейтральном вводе используется предсказуемый fallback по последнему горизонтальному направлению;
+- в grounded-состоянии leading corner выбирается только из углов, не соприкасающихся с полом;
+- visual highlight leading corner вынесен в отдельный следующий slice;
 - dash тратит заряд;
 - зарядов: `3`;
 - dash возможен:

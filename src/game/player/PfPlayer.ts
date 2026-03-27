@@ -248,6 +248,7 @@ export class PfPlayer {
         this.physicsBody.setAllowGravity(!isTriangleDashActive);
 
         if (isTriangleDashActive) {
+            this.state.triangleShell.orientationRad = triangleDash.lockedOrientationRad;
             this.physicsBody.setVelocity(
                 triangleDash.directionX * PLAYER_TRIANGLE_DASH_SPEED,
                 triangleDash.directionY * PLAYER_TRIANGLE_DASH_SPEED
@@ -269,7 +270,7 @@ export class PfPlayer {
             this.physicsBody.setVelocityX(nextVelocityX);
         }
 
-        if (isTriangleForm) {
+        if (isTriangleForm && !isTriangleDashActive) {
             tickTriangleShellOrientation(
                 this.state.triangleShell,
                 grounded,
@@ -320,7 +321,7 @@ export class PfPlayer {
                     this.pendingBoostRequest = true;
                 }
             } else if (isTriangleForm) {
-                this.tryApplyTriangleDash(horizontalDir);
+                this.tryApplyTriangleDash(horizontalDir, grounded);
             }
         }
 
@@ -421,7 +422,7 @@ export class PfPlayer {
         this.boostActive = true;
     }
 
-    private tryApplyTriangleDash(horizontalDir: number): void {
+    private tryApplyTriangleDash(horizontalDir: number, grounded: boolean): void {
         if (this.state.currentForm !== 'triangle') {
             return;
         }
@@ -430,7 +431,8 @@ export class PfPlayer {
             this.state.triangleDash,
             this.state.triangleShell,
             horizontalDir,
-            this.lastMoveDirection
+            this.lastMoveDirection,
+            grounded
         );
 
         if (dashLaunch === null) {
@@ -438,6 +440,7 @@ export class PfPlayer {
         }
 
         this.jumpCutConsumed = false;
+        this.state.triangleShell.orientationRad = dashLaunch.lockedOrientationRad;
         this.physicsBody.setAllowGravity(false);
         this.physicsBody.setVelocity(dashLaunch.velocityX, dashLaunch.velocityY);
     }
