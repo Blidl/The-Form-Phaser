@@ -7,6 +7,7 @@ export interface PlayerInputSnapshot {
     moveDown: boolean;
     forcePointX: -1 | 0 | 1;
     forcePointY: -1 | 0 | 1;
+    forcePointActive: boolean;
     jumpPressed: boolean;
     jumpHeld: boolean;
     nextFormPressed: boolean;
@@ -35,6 +36,7 @@ export const EMPTY_PLAYER_INPUT_SNAPSHOT: PlayerInputSnapshot = {
     moveDown: false,
     forcePointX: 0,
     forcePointY: 0,
+    forcePointActive: false,
     jumpPressed: false,
     jumpHeld: false,
     nextFormPressed: false,
@@ -66,6 +68,7 @@ export const createPlayerInputKeys = (scene: Scene): PlayerInputKeys => {
 export const pollPlayerInputSnapshot = (keys: PlayerInputKeys): PlayerInputSnapshot => {
     const forcePointX = ((keys.right.isDown ? 1 : 0) - (keys.left.isDown ? 1 : 0)) as -1 | 0 | 1;
     const forcePointY = ((keys.down.isDown ? 1 : 0) - (keys.up.isDown ? 1 : 0)) as -1 | 0 | 1;
+    const forcePointActive = forcePointX !== 0 || forcePointY !== 0;
 
     return {
         moveLeft: keys.left.isDown,
@@ -74,6 +77,7 @@ export const pollPlayerInputSnapshot = (keys: PlayerInputKeys): PlayerInputSnaps
         moveDown: keys.down.isDown,
         forcePointX,
         forcePointY,
+        forcePointActive,
         jumpPressed: Input.Keyboard.JustDown(keys.jump),
         jumpHeld: keys.jump.isDown,
         nextFormPressed: Input.Keyboard.JustDown(keys.nextForm),

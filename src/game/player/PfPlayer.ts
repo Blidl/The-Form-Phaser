@@ -78,6 +78,13 @@ import {
 } from './player_triangle_charges';
 import { resolveTriangleLeadingCornerMarkerOffset } from './player_triangle_leading_corner_visual';
 import type { PlayerFormId, PlayerShellState } from './player_types';
+import {
+    resolvePlayerFormAnchor,
+    resolvePlayerHazardHitShape,
+    resolvePlayerLocomotionBodyConfig,
+    type PlayerFormAnchor,
+    type PlayerHazardHitShape
+} from './player_form_collision_shapes';
 
 export class PfPlayer {
     public readonly state: PlayerShellState;
@@ -161,7 +168,7 @@ export class PfPlayer {
             .setDepth(4501)
             .setVisible(false)
             .setAlpha(PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA);
-
+        this.applyCurrentFormCollisionBody();
         this.applyCurrentFormVisual();
     }
 
@@ -171,6 +178,28 @@ export class PfPlayer {
 
     public get arcadeBodyObject(): GameObjects.Arc {
         return this.physicsSprite;
+    }
+
+    public get hazardHitShape(): PlayerHazardHitShape {
+        return resolvePlayerHazardHitShape(
+            this.state.currentForm,
+            this.physicsSprite.x,
+            this.physicsSprite.y,
+            this.state.triangleShell
+        );
+    }
+
+    public get formAnchor(): PlayerFormAnchor {
+        return resolvePlayerFormAnchor(
+            this.state.currentForm,
+            this.physicsSprite.x,
+            this.physicsSprite.y,
+            this.state.triangleShell
+        );
+    }
+
+    public get triangleVisualObject(): GameObjects.Triangle {
+        return this.triangleVisual;
     }
 
     public freezeForRespawn(): void {
@@ -211,6 +240,7 @@ export class PfPlayer {
         this.physicsBody.reset(x, y);
 
         this.frozenForRespawn = false;
+        this.applyCurrentFormCollisionBody();
         this.applyCurrentFormVisual();
         this.syncVisualPosition();
         this.updateTriangleLeadingCornerVisual(false, EMPTY_PLAYER_INPUT_SNAPSHOT);
@@ -292,6 +322,7 @@ export class PfPlayer {
                 this.state.triangleShell,
                 input.forcePointX,
                 input.forcePointY,
+                input.forcePointActive,
                 dashSelectionGrounded
             );
         }
@@ -345,6 +376,7 @@ export class PfPlayer {
                     this.state.triangleShell,
                     input.forcePointX,
                     input.forcePointY,
+                    input.forcePointActive,
                     grounded
                 );
             }
@@ -441,6 +473,7 @@ export class PfPlayer {
             stopTriangleDash(this.state.triangleDash);
         }
         this.physicsBody.setAllowGravity(true);
+        this.applyCurrentFormCollisionBody();
         this.applyCurrentFormVisual();
     }
 
@@ -455,10 +488,34 @@ export class PfPlayer {
     private syncVisualPosition(): void {
         const x = this.physicsSprite.x;
         const y = this.physicsSprite.y;
+        this.applyCurrentFormCollisionBody();
+        const formAnchor = this.formAnchor;
         this.ballVisual.setPosition(x, y);
-        this.triangleVisual.setPosition(x, y + this.state.triangleShell.visualOffsetY);
+        this.triangleVisual.setPosition(formAnchor.x, formAnchor.y);
         this.triangleVisual.setRotation(this.state.triangleShell.orientationRad);
         this.squareVisual.setPosition(x, y);
+    }
+
+    private applyCurrentFormCollisionBody(): void {
+        const bodyConfig = resolvePlayerLocomotionBodyConfig(this.state.currentForm, this.state.triangleShell);
+        const spriteWidth = this.physicsSprite.displayWidth;
+        const spriteHeight = this.physicsSprite.displayHeight;
+
+        if (bodyConfig.kind === 'circle') {
+            const diameter = bodyConfig.radius * 2;
+            this.physicsBody.setCircle(bodyConfig.radius);
+            this.physicsBody.setOffset(
+                ((spriteWidth - diameter) * 0.5) + bodyConfig.centerOffset.x,
+                ((spriteHeight - diameter) * 0.5) + bodyConfig.centerOffset.y
+            );
+            return;
+        }
+
+        this.physicsBody.setSize(bodyConfig.width, bodyConfig.height, false);
+        this.physicsBody.setOffset(
+            ((spriteWidth - bodyConfig.width) * 0.5) + bodyConfig.centerOffset.x,
+            ((spriteHeight - bodyConfig.height) * 0.5) + bodyConfig.centerOffset.y
+        );
     }
 
     private updateTriangleLeadingCornerVisual(

@@ -1,10 +1,11 @@
-import { Scene } from 'phaser';
+import { GameObjects, Physics, Scene } from 'phaser';
 import { setupBaselineFollowCamera } from '../game/camera/follow_camera';
 import { PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS } from '../game/player/player_constants';
 import { PfPlayer } from '../game/player/PfPlayer';
+import type { PlayerHazardHitShape } from '../game/player/player_form_collision_shapes';
 import { createPlayerInputKeys, pollPlayerInputSnapshot, type PlayerInputKeys } from '../game/player/player_input';
 import { createCheckpoint, type CheckpointObject } from '../game/world/checkpoint';
-import { createHazard } from '../game/world/hazard';
+import { createHazard, doesHazardOverlapPlayerShape, type HazardObject } from '../game/world/hazard';
 import { createMovingPlatform, type MovingPlatformObject } from '../game/world/moving_platform';
 import { createTriggerPlatform } from '../game/world/trigger_platform';
 import { createWindZone, type WindZoneObject } from '../game/world/wind_zone';
@@ -24,8 +25,10 @@ export class TestScene extends Scene {
     private checkpoints: CheckpointObject[] = [];
     private movingPlatforms: MovingPlatformObject[] = [];
     private windZones: WindZoneObject[] = [];
+    private hazards: HazardObject[] = [];
     private currentRespawnPoint: RespawnPoint = { x: 220, y: 620 };
     private respawnInProgress: boolean = false;
+    private debugOverlay!: GameObjects.Graphics;
 
     public constructor() {
         super(TestScene.KEY);
@@ -57,6 +60,7 @@ export class TestScene extends Scene {
         this.physics.add.collider(this.player.arcadeBodyObject, highPlatform);
 
         this.setupWorldInteractionBaseline();
+        this.debugOverlay = this.add.graphics().setDepth(6000);
 
         setupBaselineFollowCamera(this, this.player.arcadeBodyObject, {
             width: TEST_WORLD_WIDTH,
@@ -78,6 +82,8 @@ export class TestScene extends Scene {
         const input = pollPlayerInputSnapshot(this.playerInputKeys);
         const windInfluenceX = this.resolveWindInfluenceX();
         this.player.tick(delta, input, windInfluenceX);
+        this.evaluateHazardOverlap();
+        this.renderCollisionDebugOverlay();
     }
 
     private setupWorldInteractionBaseline(): void {
@@ -109,10 +115,7 @@ export class TestScene extends Scene {
             width: 180,
             height: 20
         });
-
-        this.physics.add.overlap(this.player.arcadeBodyObject, hazard.trigger, () => {
-            this.handlePlayerDefeat();
-        });
+        this.hazards = [hazard];
 
         const movingPlatform = createMovingPlatform(this, {
             x: 980,
@@ -201,5 +204,88 @@ export class TestScene extends Scene {
         });
 
         return horizontalInfluenceX;
+    }
+
+    private evaluateHazardOverlap(): void {
+        if (this.respawnInProgress) {
+            return;
+        }
+
+        const playerHazardShape = this.player.hazardHitShape;
+        const isTouchingHazard = this.hazards.some((hazard) => {
+            return doesHazardOverlapPlayerShape(hazard, playerHazardShape);
+        });
+
+        if (isTouchingHazard) {
+            this.handlePlayerDefeat();
+        }
+    }
+
+    private renderCollisionDebugOverlay(): void {
+        this.debugOverlay.clear();
+
+        if (this.player.currentForm !== 'triangle') {
+            this.drawBodyOutline(this.player.arcadeBodyObject.body as Physics.Arcade.Body, 0x4fc3f7);
+        }
+        this.drawHazardHitShape(this.player.hazardHitShape, 0xffd54f);
+        if (this.player.currentForm !== 'triangle') {
+            this.drawPlayerAnchor(this.player.formAnchor.x, this.player.formAnchor.y, 0xffffff);
+        }
+
+        this.hazards.forEach((hazard) => {
+            const hazardBody = hazard.trigger.body as Physics.Arcade.StaticBody;
+            this.debugOverlay.lineStyle(2, 0xef5350, 1);
+            this.debugOverlay.strokeRect(hazardBody.x, hazardBody.y, hazardBody.width, hazardBody.height);
+        });
+    }
+
+    private drawHazardHitShape(shape: PlayerHazardHitShape, color: number): void {
+        this.debugOverlay.lineStyle(2, color, 1);
+
+        if (shape.kind === 'circle') {
+            this.debugOverlay.strokeCircle(shape.centerX, shape.centerY, shape.radius);
+            return;
+        }
+
+        if (shape.kind === 'box') {
+            this.debugOverlay.strokeRect(
+                shape.centerX - (shape.width * 0.5),
+                shape.centerY - (shape.height * 0.5),
+                shape.width,
+                shape.height
+            );
+            return;
+        }
+
+        const points = shape.points;
+        this.debugOverlay.beginPath();
+        this.debugOverlay.moveTo(points[0].x, points[0].y);
+        this.debugOverlay.lineTo(points[1].x, points[1].y);
+        this.debugOverlay.lineTo(points[2].x, points[2].y);
+        this.debugOverlay.closePath();
+        this.debugOverlay.strokePath();
+    }
+
+    private drawBodyOutline(body: Physics.Arcade.Body, color: number): void {
+        this.debugOverlay.lineStyle(2, color, 1);
+
+        if (body.isCircle) {
+            const radius = body.width * 0.5;
+            this.debugOverlay.strokeCircle(body.x + radius, body.y + radius, radius);
+            return;
+        }
+
+        this.debugOverlay.strokeRect(body.x, body.y, body.width, body.height);
+    }
+
+    private drawPlayerAnchor(x: number, y: number, color: number): void {
+        const markerHalfSize = 4;
+        this.debugOverlay.lineStyle(2, color, 1);
+        this.debugOverlay.beginPath();
+        this.debugOverlay.moveTo(x - markerHalfSize, y);
+        this.debugOverlay.lineTo(x + markerHalfSize, y);
+        this.debugOverlay.moveTo(x, y - markerHalfSize);
+        this.debugOverlay.lineTo(x, y + markerHalfSize);
+        this.debugOverlay.strokePath();
     }
 }

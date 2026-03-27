@@ -2,7 +2,6 @@ import type { PlayerTriangleDashState, PlayerTriangleShellState, TriangleCornerI
 import {
     PLAYER_TRIANGLE_DASH_COOLDOWN_MS,
     PLAYER_TRIANGLE_DASH_DURATION_MS,
-    PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON,
     PLAYER_TRIANGLE_DASH_SPEED,
     PLAYER_FORM_TRIANGLE_HEIGHT,
     PLAYER_FORM_TRIANGLE_WIDTH
@@ -113,39 +112,27 @@ export const updateTriangleDashSelectedLeadingCorner = (
     triangleShell: PlayerTriangleShellState,
     forcePointX: -1 | 0 | 1,
     forcePointY: -1 | 0 | 1,
+    forcePointActive: boolean,
     grounded: boolean
 ): void => {
     const lockedOrientationRad = grounded
         ? triangleShell.groundedOrientationRad
         : triangleShell.orientationRad;
     const corners = getRotatedCorners(lockedOrientationRad);
-    updateForcePointIntent(triangleDash, forcePointX, forcePointY);
+    updateForcePointIntent(triangleDash, forcePointX, forcePointY, forcePointActive);
+    const candidates = TRIANGLE_CORNER_INDICES;
 
     if (grounded) {
-        triangleDash.selectedLeadingCornerIndex = resolveGroundedLeadingCornerIndex(
-            corners,
-            triangleDash.forcePointIntentX,
-            triangleDash.forcePointIntentY
-        );
+        triangleDash.selectedLeadingCornerIndex = pickMostUpwardCorner(candidates, corners);
         return;
     }
 
-    if (hasForcePointInput(forcePointX, forcePointY)) {
-        triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndexByForcePoint(
-            TRIANGLE_CORNER_INDICES,
-            corners,
-            triangleDash.forcePointIntentX,
-            triangleDash.forcePointIntentY
-        );
-        return;
-    }
-
-    if (isSelectedCornerValid(triangleDash.selectedLeadingCornerIndex, corners, grounded)) {
+    if (!forcePointActive && candidates.includes(triangleDash.selectedLeadingCornerIndex)) {
         return;
     }
 
     triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndexByForcePoint(
-        TRIANGLE_CORNER_INDICES,
+        candidates,
         corners,
         triangleDash.forcePointIntentX,
         triangleDash.forcePointIntentY
@@ -177,14 +164,6 @@ const getRotatedCorners = (orientationRad: number): CornerPoint[] => {
             y: (corner.x * sin) + (corner.y * cos)
         };
     });
-};
-
-const resolveGroundContactCorners = (corners: CornerPoint[]): TriangleCornerIndex[] => {
-    const maxY = Math.max(corners[0]?.y ?? -Infinity, corners[1]?.y ?? -Infinity, corners[2]?.y ?? -Infinity);
-    return [0, 1, 2].filter((index) => {
-        const cornerY = corners[index]?.y ?? -Infinity;
-        return Math.abs(maxY - cornerY) <= PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON;
-    }) as TriangleCornerIndex[];
 };
 
 const pickMostUpwardCorner = (
@@ -240,24 +219,22 @@ const getTriangleDashSelectedLeadingCornerPreview = (
         ? triangleShell.groundedOrientationRad
         : triangleShell.orientationRad;
     const corners = getRotatedCorners(lockedOrientationRad);
-    let leadingCornerIndex = triangleDash.selectedLeadingCornerIndex;
+    const candidates = TRIANGLE_CORNER_INDICES;
 
     if (grounded) {
-        leadingCornerIndex = resolveGroundedLeadingCornerIndex(
-            corners,
-            triangleDash.forcePointIntentX,
-            triangleDash.forcePointIntentY
-        );
-        triangleDash.selectedLeadingCornerIndex = leadingCornerIndex;
+        const topVertex = pickMostUpwardCorner(candidates, corners);
+        triangleDash.selectedLeadingCornerIndex = topVertex;
         return {
-            leadingCornerIndex,
+            leadingCornerIndex: topVertex,
             lockedOrientationRad
         };
     }
 
-    if (!isSelectedCornerValid(leadingCornerIndex, corners, grounded)) {
+    let leadingCornerIndex = triangleDash.selectedLeadingCornerIndex;
+
+    if (!candidates.includes(leadingCornerIndex)) {
         leadingCornerIndex = resolveLeadingCornerIndexByForcePoint(
-            TRIANGLE_CORNER_INDICES,
+            candidates,
             corners,
             triangleDash.forcePointIntentX,
             triangleDash.forcePointIntentY
@@ -269,37 +246,6 @@ const getTriangleDashSelectedLeadingCornerPreview = (
         leadingCornerIndex,
         lockedOrientationRad
     };
-};
-
-const isSelectedCornerValid = (
-    cornerIndex: TriangleCornerIndex,
-    corners: CornerPoint[],
-    grounded: boolean
-): boolean => {
-    if (!grounded) {
-        return true;
-    }
-
-    return cornerIndex === resolveGroundedLeadingCornerIndex(corners, 0, -1);
-};
-
-const resolveGroundedLeadingCornerIndex = (
-    corners: CornerPoint[],
-    forcePointX: -1 | 0 | 1,
-    forcePointY: -1 | 0 | 1
-): TriangleCornerIndex => {
-    const groundedContactCorners = resolveGroundContactCorners(corners);
-    const nonGroundedCorners = TRIANGLE_CORNER_INDICES.filter((index) => !groundedContactCorners.includes(index)) as TriangleCornerIndex[];
-
-    if (groundedContactCorners.length === 2 && nonGroundedCorners.length === 1) {
-        return nonGroundedCorners[0];
-    }
-
-    if (nonGroundedCorners.length > 0) {
-        return resolveLeadingCornerIndexByForcePoint(nonGroundedCorners, corners, forcePointX, forcePointY);
-    }
-
-    return pickMostUpwardCorner(TRIANGLE_CORNER_INDICES, corners);
 };
 
 const resolveLeadingCornerIndexByForcePoint = (
@@ -352,9 +298,10 @@ const hasForcePointInput = (
 const updateForcePointIntent = (
     triangleDash: PlayerTriangleDashState,
     forcePointX: -1 | 0 | 1,
-    forcePointY: -1 | 0 | 1
+    forcePointY: -1 | 0 | 1,
+    forcePointActive: boolean
 ): void => {
-    if (!hasForcePointInput(forcePointX, forcePointY)) {
+    if (!forcePointActive) {
         return;
     }
 
