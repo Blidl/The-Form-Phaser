@@ -269,6 +269,14 @@ Square — форма с `attach`, `trail-resource` и `rollover`.
 - Вне контакта Square сохраняет стабильную ориентацию до будущих slice с attach/rollover.
 - Contact-aligned ориентация Square обновляется только от реального контакта с поверхностью.
 
+### Текущий baseline slice (Square attach-entry shell only)
+- Для `Square` кнопка `K` в этом slice используется как вход в attach/contact state.
+- Attach entry разрешён только при реальном текущем контакте с поверхностью (floor/wall/ceiling по actual contact flags).
+- Без фактического контакта attach entry не запускается.
+- Пока Square в attach-entry state, состояние удерживается только при `K held` и сохранении фактического контакта.
+- Exit baseline: отпускание `K` или потеря фактического контакта.
+- В этом slice не внедряются trail, rollover, corner capture и полноценное движение Square вдоль поверхности.
+
 ### Коллизия и поворот
 - Коллайдер Square всегда квадратный.
 - Реальный поворот Square учитывается.

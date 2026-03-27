@@ -23,7 +23,10 @@ import {
     PLAYER_JUMP_CUT_MULTIPLIER,
     PLAYER_JUMP_VELOCITY,
     PLAYER_FORM_SQUARE_SIZE,
+    PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED,
     PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
+    PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR,
+    PLAYER_SQUARE_VISUAL_STROKE_COLOR,
     PLAYER_FORM_TRIANGLE_HEIGHT,
     PLAYER_FORM_TRIANGLE_WIDTH,
     PLAYER_PLACEHOLDER_RADIUS,
@@ -62,6 +65,11 @@ import {
     resetSquareShellState,
     tickSquareShellOrientation
 } from './player_square_shell';
+import {
+    clearSquareAttach,
+    tickSquareAttachState,
+    tryEnterSquareAttach
+} from './player_square_attach';
 import { applyTriangleSpecialJump } from './player_triangle_jump';
 import {
     createTriangleDashState,
@@ -168,7 +176,7 @@ export class PfPlayer {
             .setVisible(false)
             .setRotation(PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD);
         this.squareVisual = scene.add.rectangle(x, y, PLAYER_FORM_SQUARE_SIZE, PLAYER_FORM_SQUARE_SIZE, 0xa5d6a7)
-            .setStrokeStyle(2, 0xffffff)
+            .setStrokeStyle(2, PLAYER_SQUARE_VISUAL_STROKE_COLOR)
             .setDepth(4500)
             .setVisible(false)
             .setRotation(PLAYER_SQUARE_EDGE_DOWN_POSE_RAD);
@@ -273,6 +281,7 @@ export class PfPlayer {
         this.tryHandleFormSwitch(input);
         const isTriangleForm = this.state.currentForm === 'triangle';
         const isBallForm = this.state.currentForm === 'ball';
+        const isSquareForm = this.state.currentForm === 'square';
         const triangleDash = this.state.triangleDash;
         const triangleCharges = this.state.triangleCharges;
         tickTriangleDashCooldown(triangleDash, deltaMs);
@@ -343,7 +352,7 @@ export class PfPlayer {
             );
         }
 
-        if (this.state.currentForm === 'square') {
+        if (isSquareForm) {
             const squareContact = this.resolveSquareContactNormal();
             tickSquareShellOrientation(
                 this.state.squareShell,
@@ -351,6 +360,26 @@ export class PfPlayer {
                 squareContact.normalX,
                 squareContact.normalY,
                 squareContact.hasContact
+            );
+
+            if (input.actionPressed) {
+                const attachStarted = tryEnterSquareAttach(
+                    this.state.squareShell,
+                    squareContact.hasContact,
+                    squareContact.normalX,
+                    squareContact.normalY
+                );
+                if (attachStarted) {
+                    clearJumpBuffer(this.timers);
+                }
+            }
+
+            tickSquareAttachState(
+                this.state.squareShell,
+                input.actionHeld,
+                squareContact.hasContact,
+                squareContact.normalX,
+                squareContact.normalY
             );
         }
         if (input.actionPressed && isTriangleForm && !isTriangleDashActive) {
@@ -362,7 +391,8 @@ export class PfPlayer {
         const effectiveExternalInfluenceX = grounded
             ? externalHorizontalInfluenceX
             : externalHorizontalInfluenceX * PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER;
-        this.physicsBody.setAllowGravity(!isTriangleDashActive);
+        const isSquareAttached = isSquareForm && this.state.squareShell.isAttached;
+        this.physicsBody.setAllowGravity(!isTriangleDashActive && !isSquareAttached);
 
         if (isTriangleDashActive) {
             this.state.triangleShell.orientationRad = triangleDash.lockedOrientationRad;
@@ -370,6 +400,11 @@ export class PfPlayer {
                 triangleDash.directionX * PLAYER_TRIANGLE_DASH_SPEED,
                 triangleDash.directionY * PLAYER_TRIANGLE_DASH_SPEED
             );
+        } else if (isSquareAttached) {
+            const holdVelocityX = -this.state.squareShell.attachNormalX * PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED;
+            const holdVelocityY = -this.state.squareShell.attachNormalY * PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED;
+            this.physicsBody.setVelocity(holdVelocityX, holdVelocityY);
+            this.physicsBody.setAcceleration(0, 0);
         } else {
             const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
             const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
@@ -410,7 +445,7 @@ export class PfPlayer {
         }
 
         const canJump = grounded || hasCoyoteTime(this.timers);
-        if (!isTriangleDashActive && canJump && hasJumpBuffer(this.timers)) {
+        if (!isTriangleDashActive && !isSquareAttached && canJump && hasJumpBuffer(this.timers)) {
             if (this.state.currentForm === 'triangle') {
                 const triangleJumpLaunch = applyTriangleSpecialJump(
                     this.state.triangleShell,
@@ -433,7 +468,7 @@ export class PfPlayer {
             this.lastAirborneDownwardSpeed = 0;
         }
 
-        if (!isTriangleDashActive && !input.jumpHeld && !this.jumpCutConsumed && this.physicsBody.velocity.y < 0) {
+        if (!isTriangleDashActive && !isSquareAttached && !input.jumpHeld && !this.jumpCutConsumed && this.physicsBody.velocity.y < 0) {
             const jumpCutMultiplier = this.state.currentForm === 'triangle'
                 ? PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER
                 : PLAYER_JUMP_CUT_MULTIPLIER;
@@ -498,6 +533,8 @@ export class PfPlayer {
             stopTriangleDash(this.state.triangleDash);
         } else if (nextForm === 'square') {
             resetSquareShellState(this.state.squareShell);
+        } else if (previousForm === 'square') {
+            clearSquareAttach(this.state.squareShell);
         } else if (previousForm === 'triangle') {
             stopTriangleDash(this.state.triangleDash);
         }
@@ -513,6 +550,7 @@ export class PfPlayer {
         this.squareVisual.setVisible(currentForm === 'square');
         this.squareContactMarker.setVisible(currentForm === 'square' && this.state.squareShell.hasContact);
         this.triangleLeadingCornerMarker.setVisible(currentForm === 'triangle');
+        this.updateSquareAttachVisualState();
     }
 
     private syncVisualPosition(): void {
@@ -525,6 +563,7 @@ export class PfPlayer {
         this.triangleVisual.setRotation(this.state.triangleShell.orientationRad);
         this.squareVisual.setPosition(x, y);
         this.squareVisual.setRotation(this.state.squareShell.orientationRad);
+        this.updateSquareAttachVisualState();
         this.updateSquareContactVisual(x, y);
     }
 
@@ -630,6 +669,14 @@ export class PfPlayer {
         this.squareContactMarker.setVisible(true);
         this.squareContactMarker.setPosition(playerX, playerY);
         this.squareContactMarker.setTo(0, 0, normalX * markerLength, normalY * markerLength);
+    }
+
+    private updateSquareAttachVisualState(): void {
+        const isAttached = this.state.currentForm === 'square' && this.state.squareShell.isAttached;
+        this.squareVisual.setStrokeStyle(
+            2,
+            isAttached ? PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR : PLAYER_SQUARE_VISUAL_STROKE_COLOR
+        );
     }
 
     private resolveReboundJumpVelocity(approachSpeed: number): number | null {

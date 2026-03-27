@@ -11,7 +11,10 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         groundedOrientationRad: PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
         contactNormalX: 0,
         contactNormalY: -1,
-        hasContact: false
+        hasContact: false,
+        isAttached: false,
+        attachNormalX: 0,
+        attachNormalY: -1
     };
 };
 
@@ -23,6 +26,9 @@ export const resetSquareShellState = (
     squareShell.contactNormalX = 0;
     squareShell.contactNormalY = -1;
     squareShell.hasContact = false;
+    squareShell.isAttached = false;
+    squareShell.attachNormalX = 0;
+    squareShell.attachNormalY = -1;
 };
 
 export const tickSquareShellOrientation = (

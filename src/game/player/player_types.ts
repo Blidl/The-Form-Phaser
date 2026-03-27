@@ -15,6 +15,9 @@ export interface PlayerSquareShellState {
     contactNormalX: -1 | 0 | 1;
     contactNormalY: -1 | 0 | 1;
     hasContact: boolean;
+    isAttached: boolean;
+    attachNormalX: -1 | 0 | 1;
+    attachNormalY: -1 | 0 | 1;
 }
 
 export interface PlayerTriangleDashState {
