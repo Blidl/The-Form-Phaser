@@ -18,6 +18,7 @@ export interface PlayerSquareShellState {
     isAttached: boolean;
     attachNormalX: -1 | 0 | 1;
     attachNormalY: -1 | 0 | 1;
+    attachContactGraceMs: number;
 }
 
 export interface PlayerTriangleDashState {

@@ -46,10 +46,13 @@ import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_
 import {
     clearCoyoteTime,
     clearJumpBuffer,
+    clearSquareAttachEntryBuffer,
     createPlayerTimers,
     hasCoyoteTime,
     hasJumpBuffer,
+    hasSquareAttachEntryBuffer,
     pushJumpBuffer,
+    pushSquareAttachEntryBuffer,
     refreshCoyoteTime,
     tickPlayerTimers,
     type PlayerTimers
@@ -254,6 +257,7 @@ export class PfPlayer {
         this.airborneWindDriftX = 0;
 
         clearJumpBuffer(this.timers);
+        clearSquareAttachEntryBuffer(this.timers);
         clearCoyoteTime(this.timers);
         this.timers.transformLockMs = 0;
         this.timers.deathPauseMs = 0;
@@ -333,6 +337,14 @@ export class PfPlayer {
             pushJumpBuffer(this.timers);
         }
 
+        if (input.actionPressed && isSquareForm) {
+            pushSquareAttachEntryBuffer(this.timers);
+        }
+
+        if (!input.actionHeld || !isSquareForm) {
+            clearSquareAttachEntryBuffer(this.timers);
+        }
+
         const horizontalDir = (input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0);
         if (horizontalDir !== 0) {
             this.lastMoveDirection = horizontalDir > 0 ? 1 : -1;
@@ -353,7 +365,13 @@ export class PfPlayer {
         }
 
         if (isSquareForm) {
-            const squareContact = this.resolveSquareContactNormal();
+            const attachedNormalX = this.state.squareShell.isAttached
+                ? this.state.squareShell.attachNormalX
+                : undefined;
+            const attachedNormalY = this.state.squareShell.isAttached
+                ? this.state.squareShell.attachNormalY
+                : undefined;
+            const squareContact = this.resolveSquareContactNormal(attachedNormalX, attachedNormalY);
             tickSquareShellOrientation(
                 this.state.squareShell,
                 deltaSec,
@@ -362,7 +380,7 @@ export class PfPlayer {
                 squareContact.hasContact
             );
 
-            if (input.actionPressed) {
+            if (!this.state.squareShell.isAttached && input.actionHeld && hasSquareAttachEntryBuffer(this.timers)) {
                 const attachStarted = tryEnterSquareAttach(
                     this.state.squareShell,
                     squareContact.hasContact,
@@ -371,11 +389,13 @@ export class PfPlayer {
                 );
                 if (attachStarted) {
                     clearJumpBuffer(this.timers);
+                    clearSquareAttachEntryBuffer(this.timers);
                 }
             }
 
             tickSquareAttachState(
                 this.state.squareShell,
+                deltaMs,
                 input.actionHeld,
                 squareContact.hasContact,
                 squareContact.normalX,
@@ -634,23 +654,46 @@ export class PfPlayer {
         );
     }
 
-    private resolveSquareContactNormal(): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; hasContact: boolean } {
+    private resolveSquareContactNormal(
+        preferredNormalX?: -1 | 0 | 1,
+        preferredNormalY?: -1 | 0 | 1
+    ): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; hasContact: boolean } {
         const blocked = this.physicsBody.blocked;
         const touching = this.physicsBody.touching;
+        const hasDownContact = blocked.down || touching.down;
+        const hasUpContact = blocked.up || touching.up;
+        const hasLeftContact = blocked.left || touching.left;
+        const hasRightContact = blocked.right || touching.right;
 
-        if (blocked.down || touching.down) {
+        if (preferredNormalX === 0 && preferredNormalY === -1 && hasDownContact) {
             return { normalX: 0, normalY: -1, hasContact: true };
         }
 
-        if (blocked.up || touching.up) {
+        if (preferredNormalX === 0 && preferredNormalY === 1 && hasUpContact) {
             return { normalX: 0, normalY: 1, hasContact: true };
         }
 
-        if (blocked.left || touching.left) {
+        if (preferredNormalX === 1 && preferredNormalY === 0 && hasLeftContact) {
             return { normalX: 1, normalY: 0, hasContact: true };
         }
 
-        if (blocked.right || touching.right) {
+        if (preferredNormalX === -1 && preferredNormalY === 0 && hasRightContact) {
+            return { normalX: -1, normalY: 0, hasContact: true };
+        }
+
+        if (hasDownContact) {
+            return { normalX: 0, normalY: -1, hasContact: true };
+        }
+
+        if (hasUpContact) {
+            return { normalX: 0, normalY: 1, hasContact: true };
+        }
+
+        if (hasLeftContact) {
+            return { normalX: 1, normalY: 0, hasContact: true };
+        }
+
+        if (hasRightContact) {
             return { normalX: -1, normalY: 0, hasContact: true };
         }
 

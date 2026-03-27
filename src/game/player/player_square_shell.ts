@@ -14,7 +14,8 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         hasContact: false,
         isAttached: false,
         attachNormalX: 0,
-        attachNormalY: -1
+        attachNormalY: -1,
+        attachContactGraceMs: 0
     };
 };
 
@@ -29,6 +30,7 @@ export const resetSquareShellState = (
     squareShell.isAttached = false;
     squareShell.attachNormalX = 0;
     squareShell.attachNormalY = -1;
+    squareShell.attachContactGraceMs = 0;
 };
 
 export const tickSquareShellOrientation = (
