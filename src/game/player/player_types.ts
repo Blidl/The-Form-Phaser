@@ -1,4 +1,5 @@
 export type PlayerFormId = 'ball' | 'triangle' | 'square';
+export type TriangleCornerIndex = 0 | 1 | 2;
 
 export interface PlayerTriangleShellState {
     orientationRad: number;
@@ -15,7 +16,8 @@ export interface PlayerTriangleDashState {
     directionX: number;
     directionY: number;
     forceBiasX: -1 | 1;
-    leadingCornerIndex: 0 | 1 | 2;
+    selectedLeadingCornerIndex: TriangleCornerIndex;
+    leadingCornerIndex: TriangleCornerIndex;
     lockedOrientationRad: number;
 }
 

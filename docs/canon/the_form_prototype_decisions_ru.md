@@ -180,6 +180,10 @@
 - направление dash определяется через leading corner / leading angle logic, а не как абстрактный рывок по текущему spin;
 - точка приложения силы (force application point) определяет выбор leading corner;
 - базовый force-bias для выбора leading corner берётся из `A/D`, при нейтральном вводе используется предсказуемый fallback по последнему горизонтальному направлению;
+- leading corner хранится как persistent selected state;
+- до появления полной force-application-point системы используется baseline substitute: `A/D` меняют selected leading corner;
+- без нового релевантного input выбранный leading corner не пересчитывается и не меняется каждый кадр;
+- neutral fallback используется только для initial selection / invalidation recovery, а не как постоянный every-frame override;
 - в grounded-состоянии leading corner выбирается только из углов, не соприкасающихся с полом;
 - visual highlight leading corner вынесен в отдельный следующий slice;
 - dash тратит заряд;

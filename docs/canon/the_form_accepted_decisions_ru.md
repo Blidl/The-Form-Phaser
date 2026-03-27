@@ -205,6 +205,10 @@ Triangle — самая сложная и наиболее чувствител�
 - Dash direction выбирается через leading corner / leading angle logic.
 - Точка приложения силы (force application point) определяет ведущий угол.
 - Базовый force-bias берётся из `A/D`; при нейтральном вводе используется предсказуемый fallback по последнему горизонтальному направлению.
+- Leading corner хранится как persistent selected state.
+- Пока полной force-application-point системы нет, baseline substitute такой: `A/D` меняют selected leading corner.
+- Без нового релевантного input selected leading corner не должен автоматически переопределяться каждый кадр.
+- Neutral fallback допустим только для initial selection / invalidation recovery.
 - В grounded-состоянии ведущий угол выбирается только из углов, не соприкасающихся с полом.
 - Grounded baseline для выбора leading corner:
   - текущая опорная грань определяется по grounded pose (контактные углы у пола);

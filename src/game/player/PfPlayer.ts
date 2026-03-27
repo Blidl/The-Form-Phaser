@@ -30,7 +30,13 @@ import {
     PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS,
     PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
     PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER,
-    PLAYER_TRIANGLE_DASH_SPEED
+    PLAYER_TRIANGLE_DASH_SPEED,
+    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_ALPHA,
+    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE,
+    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA,
+    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE,
+    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_OUTWARD_OFFSET,
+    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS
 } from './player_constants';
 import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_input';
 import {
@@ -53,12 +59,15 @@ import {
 import { applyTriangleSpecialJump } from './player_triangle_jump';
 import {
     createTriangleDashState,
+    resolveTriangleDashLeadingCornerPreview,
     resetTriangleDashState,
     stopTriangleDash,
     tickTriangleDashActive,
     tickTriangleDashCooldown,
+    updateTriangleDashSelectedLeadingCorner,
     tryStartTriangleDash
 } from './player_triangle_dash';
+import { resolveTriangleLeadingCornerMarkerOffset } from './player_triangle_leading_corner_visual';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 
 export class PfPlayer {
@@ -70,6 +79,7 @@ export class PfPlayer {
     private readonly ballVisual: GameObjects.Arc;
     private readonly triangleVisual: GameObjects.Triangle;
     private readonly squareVisual: GameObjects.Rectangle;
+    private readonly triangleLeadingCornerMarker: GameObjects.Arc;
     private jumpCutConsumed: boolean;
     private boostCooldownMs: number;
     private boostActive: boolean;
@@ -136,6 +146,11 @@ export class PfPlayer {
             .setStrokeStyle(2, 0xffffff)
             .setDepth(4500)
             .setVisible(false);
+        this.triangleLeadingCornerMarker = scene.add.circle(x, y, PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS, 0xffffff)
+            .setStrokeStyle(2, 0xffb74d)
+            .setDepth(4501)
+            .setVisible(false)
+            .setAlpha(PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA);
 
         this.applyCurrentFormVisual();
     }
@@ -150,6 +165,7 @@ export class PfPlayer {
 
     public freezeForRespawn(): void {
         this.frozenForRespawn = true;
+        this.triangleLeadingCornerMarker.setVisible(false);
         this.airborneWindDriftX = 0;
         this.physicsBody.setVelocity(0, 0);
         this.physicsBody.setAcceleration(0, 0);
@@ -186,6 +202,7 @@ export class PfPlayer {
         this.frozenForRespawn = false;
         this.applyCurrentFormVisual();
         this.syncVisualPosition();
+        this.updateTriangleLeadingCornerVisual(false, EMPTY_PLAYER_INPUT_SNAPSHOT);
     }
 
     public tick(deltaMs: number, input: PlayerInputSnapshot, externalHorizontalInfluenceX: number = 0): void {
@@ -241,8 +258,19 @@ export class PfPlayer {
         }
 
         let isTriangleDashActive = isTriangleForm && triangleDash.isActive;
+        let dashStartedThisFrame = false;
+        if (isTriangleForm && !isTriangleDashActive) {
+            updateTriangleDashSelectedLeadingCorner(
+                triangleDash,
+                this.state.triangleShell,
+                horizontalDir,
+                this.lastMoveDirection,
+                grounded
+            );
+        }
         if (input.actionPressed && isTriangleForm && !isTriangleDashActive) {
-            isTriangleDashActive = this.tryApplyTriangleDash(horizontalDir, grounded);
+            dashStartedThisFrame = this.tryApplyTriangleDash(grounded);
+            isTriangleDashActive = dashStartedThisFrame;
         }
 
         const hasBoostHold = this.boostActive && input.actionHeld;
@@ -283,6 +311,16 @@ export class PfPlayer {
                 this.physicsBody.velocity.x,
                 deltaSec
             );
+
+            if (grounded && justLanded) {
+                updateTriangleDashSelectedLeadingCorner(
+                    triangleDash,
+                    this.state.triangleShell,
+                    horizontalDir,
+                    this.lastMoveDirection,
+                    grounded
+                );
+            }
         }
 
         const canJump = grounded || hasCoyoteTime(this.timers);
@@ -332,7 +370,7 @@ export class PfPlayer {
             }
         }
 
-        if (triangleDash.isActive) {
+        if (triangleDash.isActive && !dashStartedThisFrame) {
             tickTriangleDashActive(triangleDash, deltaMs);
             if (!triangleDash.isActive) {
                 this.physicsBody.setAllowGravity(true);
@@ -344,6 +382,7 @@ export class PfPlayer {
         tickPlayerTimers(this.timers, deltaMs);
         this.wasGrounded = grounded;
         this.syncVisualPosition();
+        this.updateTriangleLeadingCornerVisual(grounded, input);
     }
 
     private tryHandleFormSwitch(input: PlayerInputSnapshot): void {
@@ -383,6 +422,7 @@ export class PfPlayer {
         this.ballVisual.setVisible(currentForm === 'ball');
         this.triangleVisual.setVisible(currentForm === 'triangle');
         this.squareVisual.setVisible(currentForm === 'square');
+        this.triangleLeadingCornerMarker.setVisible(currentForm === 'triangle');
     }
 
     private syncVisualPosition(): void {
@@ -392,6 +432,51 @@ export class PfPlayer {
         this.triangleVisual.setPosition(x, y + this.state.triangleShell.visualOffsetY);
         this.triangleVisual.setRotation(this.state.triangleShell.orientationRad);
         this.squareVisual.setPosition(x, y);
+    }
+
+    private updateTriangleLeadingCornerVisual(
+        grounded: boolean,
+        input: PlayerInputSnapshot
+    ): void {
+        if (this.state.currentForm !== 'triangle') {
+            this.triangleLeadingCornerMarker.setVisible(false);
+            return;
+        }
+
+        const triangleDash = this.state.triangleDash;
+        const dashPreview = triangleDash.isActive
+            ? {
+                leadingCornerIndex: triangleDash.leadingCornerIndex,
+                lockedOrientationRad: triangleDash.lockedOrientationRad
+            }
+            : resolveTriangleDashLeadingCornerPreview(
+                triangleDash,
+                this.state.triangleShell,
+                grounded
+            );
+        const markerOffset = resolveTriangleLeadingCornerMarkerOffset(
+            dashPreview.leadingCornerIndex,
+            dashPreview.lockedOrientationRad,
+            PLAYER_TRIANGLE_LEADING_CORNER_MARKER_OUTWARD_OFFSET
+        );
+        const markerBaseY = this.physicsSprite.y + this.state.triangleShell.visualOffsetY;
+        const isDashRelevant = input.actionHeld || input.actionPressed || triangleDash.isActive;
+
+        this.triangleLeadingCornerMarker.setVisible(true);
+        this.triangleLeadingCornerMarker.setPosition(
+            this.physicsSprite.x + markerOffset.x,
+            markerBaseY + markerOffset.y
+        );
+        this.triangleLeadingCornerMarker.setAlpha(
+            isDashRelevant
+                ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_ALPHA
+                : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA
+        );
+        this.triangleLeadingCornerMarker.setScale(
+            isDashRelevant
+                ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE
+                : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE
+        );
     }
 
     private resolveReboundJumpVelocity(approachSpeed: number): number | null {
@@ -422,7 +507,7 @@ export class PfPlayer {
         this.boostActive = true;
     }
 
-    private tryApplyTriangleDash(horizontalDir: number, grounded: boolean): boolean {
+    private tryApplyTriangleDash(grounded: boolean): boolean {
         if (this.state.currentForm !== 'triangle') {
             return false;
         }
@@ -430,8 +515,6 @@ export class PfPlayer {
         const dashLaunch = tryStartTriangleDash(
             this.state.triangleDash,
             this.state.triangleShell,
-            horizontalDir,
-            this.lastMoveDirection,
             grounded
         );
 

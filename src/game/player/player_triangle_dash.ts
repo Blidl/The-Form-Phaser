@@ -1,4 +1,4 @@
-import type { PlayerTriangleDashState, PlayerTriangleShellState } from './player_types';
+import type { PlayerTriangleDashState, PlayerTriangleShellState, TriangleCornerIndex } from './player_types';
 import {
     PLAYER_TRIANGLE_DASH_COOLDOWN_MS,
     PLAYER_TRIANGLE_DASH_DURATION_MS,
@@ -11,7 +11,12 @@ import {
 export interface TriangleDashLaunch {
     velocityX: number;
     velocityY: number;
-    leadingCornerIndex: 0 | 1 | 2;
+    leadingCornerIndex: TriangleCornerIndex;
+    lockedOrientationRad: number;
+}
+
+export interface TriangleDashLeadingCornerPreview {
+    leadingCornerIndex: TriangleCornerIndex;
     lockedOrientationRad: number;
 }
 
@@ -23,6 +28,7 @@ export const createTriangleDashState = (): PlayerTriangleDashState => {
         directionX: 0,
         directionY: 0,
         forceBiasX: 1,
+        selectedLeadingCornerIndex: 1,
         leadingCornerIndex: 1,
         lockedOrientationRad: 0
     };
@@ -35,6 +41,7 @@ export const resetTriangleDashState = (triangleDash: PlayerTriangleDashState): v
     triangleDash.directionX = 0;
     triangleDash.directionY = 0;
     triangleDash.forceBiasX = 1;
+    triangleDash.selectedLeadingCornerIndex = 1;
     triangleDash.leadingCornerIndex = 1;
     triangleDash.lockedOrientationRad = 0;
 };
@@ -57,38 +64,73 @@ export const tickTriangleDashActive = (triangleDash: PlayerTriangleDashState, de
 export const tryStartTriangleDash = (
     triangleDash: PlayerTriangleDashState,
     triangleShell: PlayerTriangleShellState,
-    horizontalMoveDir: number,
-    fallbackFacingDirection: -1 | 1,
     grounded: boolean
 ): TriangleDashLaunch | null => {
     if (triangleDash.isActive || triangleDash.cooldownMs > 0) {
         return null;
     }
 
-    const lockedOrientationRad = grounded
-        ? triangleShell.groundedOrientationRad
-        : triangleShell.orientationRad;
-    const corners = getRotatedCorners(lockedOrientationRad);
-    const forceBias = resolveForceBias(horizontalMoveDir, fallbackFacingDirection);
-    const hasHorizontalInput = horizontalMoveDir !== 0;
-    const leadingCornerIndex = resolveLeadingCornerIndex(corners, forceBias, grounded, hasHorizontalInput);
-    const direction = resolveDashDirectionFromCorner(corners[leadingCornerIndex], forceBias);
+    const preview = getTriangleDashSelectedLeadingCornerPreview(
+        triangleDash,
+        triangleShell,
+        grounded
+    );
+    const corners = getRotatedCorners(preview.lockedOrientationRad);
+    const leadingCornerIndex = preview.leadingCornerIndex;
+    const direction = resolveDashDirectionFromCorner(corners[leadingCornerIndex], triangleDash.forceBiasX);
 
     triangleDash.isActive = true;
     triangleDash.remainingMs = PLAYER_TRIANGLE_DASH_DURATION_MS;
     triangleDash.cooldownMs = PLAYER_TRIANGLE_DASH_COOLDOWN_MS;
     triangleDash.directionX = direction.x;
     triangleDash.directionY = direction.y;
-    triangleDash.forceBiasX = forceBias;
+    triangleDash.selectedLeadingCornerIndex = leadingCornerIndex;
     triangleDash.leadingCornerIndex = leadingCornerIndex;
-    triangleDash.lockedOrientationRad = lockedOrientationRad;
+    triangleDash.lockedOrientationRad = preview.lockedOrientationRad;
 
     return {
         velocityX: direction.x * PLAYER_TRIANGLE_DASH_SPEED,
         velocityY: direction.y * PLAYER_TRIANGLE_DASH_SPEED,
         leadingCornerIndex,
-        lockedOrientationRad
+        lockedOrientationRad: preview.lockedOrientationRad
     };
+};
+
+export const resolveTriangleDashLeadingCornerPreview = (
+    triangleDash: PlayerTriangleDashState,
+    triangleShell: PlayerTriangleShellState,
+    grounded: boolean
+): TriangleDashLeadingCornerPreview => {
+    return getTriangleDashSelectedLeadingCornerPreview(triangleDash, triangleShell, grounded);
+};
+
+export const updateTriangleDashSelectedLeadingCorner = (
+    triangleDash: PlayerTriangleDashState,
+    triangleShell: PlayerTriangleShellState,
+    horizontalMoveDir: number,
+    fallbackFacingDirection: -1 | 1,
+    grounded: boolean
+): void => {
+    const lockedOrientationRad = grounded
+        ? triangleShell.groundedOrientationRad
+        : triangleShell.orientationRad;
+    const corners = getRotatedCorners(lockedOrientationRad);
+    const hasSelectionInput = horizontalMoveDir !== 0;
+
+    if (hasSelectionInput) {
+        const forceBias = resolveForceBias(horizontalMoveDir, fallbackFacingDirection);
+        triangleDash.forceBiasX = forceBias;
+        triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndex(corners, forceBias, grounded, true);
+        return;
+    }
+
+    if (isSelectedCornerValid(triangleDash.selectedLeadingCornerIndex, corners, grounded)) {
+        return;
+    }
+
+    const recoveryBias = resolveForceBias(0, fallbackFacingDirection);
+    triangleDash.forceBiasX = recoveryBias;
+    triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndex(corners, recoveryBias, grounded, false);
 };
 
 export const stopTriangleDash = (triangleDash: PlayerTriangleDashState): void => {
@@ -96,7 +138,6 @@ export const stopTriangleDash = (triangleDash: PlayerTriangleDashState): void =>
     triangleDash.remainingMs = 0;
 };
 
-type CornerIndex = 0 | 1 | 2;
 type CornerPoint = { x: number; y: number };
 
 const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
@@ -134,14 +175,14 @@ const resolveLeadingCornerIndex = (
     forceBias: -1 | 1,
     grounded: boolean,
     hasHorizontalInput: boolean
-): CornerIndex => {
-    const allCorners: CornerIndex[] = [0, 1, 2];
+): TriangleCornerIndex => {
+    const allCorners: TriangleCornerIndex[] = [0, 1, 2];
     if (!grounded) {
         return pickCornerByBias(allCorners, corners, forceBias);
     }
 
     const groundedContactCorners = resolveGroundContactCorners(corners);
-    const nonGroundedCorners = allCorners.filter((index) => !groundedContactCorners.includes(index)) as CornerIndex[];
+    const nonGroundedCorners = allCorners.filter((index) => !groundedContactCorners.includes(index)) as TriangleCornerIndex[];
     if (nonGroundedCorners.length === 0) {
         return pickCornerByBias(allCorners, corners, forceBias);
     }
@@ -153,19 +194,19 @@ const resolveLeadingCornerIndex = (
     return pickCornerByBias(nonGroundedCorners, corners, forceBias);
 };
 
-const resolveGroundContactCorners = (corners: CornerPoint[]): CornerIndex[] => {
+const resolveGroundContactCorners = (corners: CornerPoint[]): TriangleCornerIndex[] => {
     const maxY = Math.max(corners[0]?.y ?? -Infinity, corners[1]?.y ?? -Infinity, corners[2]?.y ?? -Infinity);
     return [0, 1, 2].filter((index) => {
         const cornerY = corners[index]?.y ?? -Infinity;
         return Math.abs(maxY - cornerY) <= PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON;
-    }) as CornerIndex[];
+    }) as TriangleCornerIndex[];
 };
 
 const pickCornerByBias = (
-    candidates: CornerIndex[],
+    candidates: TriangleCornerIndex[],
     corners: CornerPoint[],
     forceBias: -1 | 1
-): CornerIndex => {
+): TriangleCornerIndex => {
     let selected = candidates[0] ?? 1;
     let selectedX = corners[selected]?.x ?? 0;
 
@@ -184,9 +225,9 @@ const pickCornerByBias = (
 };
 
 const pickMostUpwardCorner = (
-    candidates: CornerIndex[],
+    candidates: TriangleCornerIndex[],
     corners: CornerPoint[]
-): CornerIndex => {
+): TriangleCornerIndex => {
     let selected = candidates[0] ?? 1;
     let selectedY = corners[selected]?.y ?? 0;
     let selectedAbsX = Math.abs(corners[selected]?.x ?? 0);
@@ -225,4 +266,39 @@ const resolveDashDirectionFromCorner = (
         x: corner.x / length,
         y: corner.y / length
     };
+};
+
+const getTriangleDashSelectedLeadingCornerPreview = (
+    triangleDash: PlayerTriangleDashState,
+    triangleShell: PlayerTriangleShellState,
+    grounded: boolean
+): TriangleDashLeadingCornerPreview => {
+    const lockedOrientationRad = grounded
+        ? triangleShell.groundedOrientationRad
+        : triangleShell.orientationRad;
+    const corners = getRotatedCorners(lockedOrientationRad);
+    let leadingCornerIndex = triangleDash.selectedLeadingCornerIndex;
+
+    if (!isSelectedCornerValid(leadingCornerIndex, corners, grounded)) {
+        leadingCornerIndex = resolveLeadingCornerIndex(corners, triangleDash.forceBiasX, grounded, false);
+        triangleDash.selectedLeadingCornerIndex = leadingCornerIndex;
+    }
+
+    return {
+        leadingCornerIndex,
+        lockedOrientationRad
+    };
+};
+
+const isSelectedCornerValid = (
+    cornerIndex: TriangleCornerIndex,
+    corners: CornerPoint[],
+    grounded: boolean
+): boolean => {
+    if (!grounded) {
+        return true;
+    }
+
+    const groundedContactCorners = resolveGroundContactCorners(corners);
+    return !groundedContactCorners.includes(cornerIndex);
 };
