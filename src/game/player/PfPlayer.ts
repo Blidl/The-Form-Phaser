@@ -373,7 +373,13 @@ export class PfPlayer {
             const attachedNormalY = this.state.squareShell.isAttached
                 ? this.state.squareShell.attachNormalY
                 : undefined;
-            const squareContact = this.resolveSquareContactNormal(attachedNormalX, attachedNormalY);
+            const verticalDir = (input.moveDown ? 1 : 0) - (input.moveUp ? 1 : 0);
+            const squareContact = this.resolveSquareContactNormal(
+                attachedNormalX,
+                attachedNormalY,
+                horizontalDir as -1 | 0 | 1,
+                verticalDir as -1 | 0 | 1
+            );
             tickSquareShellOrientation(
                 this.state.squareShell,
                 deltaSec,
@@ -663,7 +669,9 @@ export class PfPlayer {
 
     private resolveSquareContactNormal(
         preferredNormalX?: -1 | 0 | 1,
-        preferredNormalY?: -1 | 0 | 1
+        preferredNormalY?: -1 | 0 | 1,
+        moveIntentX: -1 | 0 | 1 = 0,
+        moveIntentY: -1 | 0 | 1 = 0
     ): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; hasContact: boolean } {
         const blocked = this.physicsBody.blocked;
         const touching = this.physicsBody.touching;
@@ -671,6 +679,24 @@ export class PfPlayer {
         const hasUpContact = blocked.up || touching.up;
         const hasLeftContact = blocked.left || touching.left;
         const hasRightContact = blocked.right || touching.right;
+
+        const rolloverCandidate = this.resolveSquareOrthogonalCornerContact(
+            preferredNormalX,
+            preferredNormalY,
+            moveIntentX,
+            moveIntentY,
+            hasDownContact,
+            hasUpContact,
+            hasLeftContact,
+            hasRightContact
+        );
+        if (rolloverCandidate !== null) {
+            return {
+                normalX: rolloverCandidate.normalX,
+                normalY: rolloverCandidate.normalY,
+                hasContact: true
+            };
+        }
 
         if (preferredNormalX === 0 && preferredNormalY === -1 && hasDownContact) {
             return { normalX: 0, normalY: -1, hasContact: true };
@@ -705,6 +731,59 @@ export class PfPlayer {
         }
 
         return { normalX: 0, normalY: -1, hasContact: false };
+    }
+
+    private resolveSquareOrthogonalCornerContact(
+        preferredNormalX: -1 | 0 | 1 | undefined,
+        preferredNormalY: -1 | 0 | 1 | undefined,
+        moveIntentX: -1 | 0 | 1,
+        moveIntentY: -1 | 0 | 1,
+        hasDownContact: boolean,
+        hasUpContact: boolean,
+        hasLeftContact: boolean,
+        hasRightContact: boolean
+    ): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1 } | null {
+        if (preferredNormalX === 0 && preferredNormalY !== undefined && preferredNormalY !== 0) {
+            if (moveIntentX > 0 && hasRightContact) {
+                return { normalX: -1, normalY: 0 };
+            }
+
+            if (moveIntentX < 0 && hasLeftContact) {
+                return { normalX: 1, normalY: 0 };
+            }
+
+            if (moveIntentX === 0) {
+                if (hasRightContact && !hasLeftContact) {
+                    return { normalX: -1, normalY: 0 };
+                }
+
+                if (hasLeftContact && !hasRightContact) {
+                    return { normalX: 1, normalY: 0 };
+                }
+            }
+        }
+
+        if (preferredNormalY === 0 && preferredNormalX !== undefined && preferredNormalX !== 0) {
+            if (moveIntentY < 0 && hasUpContact) {
+                return { normalX: 0, normalY: 1 };
+            }
+
+            if (moveIntentY > 0 && hasDownContact) {
+                return { normalX: 0, normalY: -1 };
+            }
+
+            if (moveIntentY === 0) {
+                if (hasUpContact && !hasDownContact) {
+                    return { normalX: 0, normalY: 1 };
+                }
+
+                if (hasDownContact && !hasUpContact) {
+                    return { normalX: 0, normalY: -1 };
+                }
+            }
+        }
+
+        return null;
     }
 
     private updateSquareContactVisual(playerX: number, playerY: number): void {

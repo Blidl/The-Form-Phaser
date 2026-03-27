@@ -1,5 +1,6 @@
 import type { PlayerSquareShellState } from './player_types';
 import { PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS } from './player_constants';
+import { resolveSquareRollover } from './player_square_rollover';
 
 export const tryEnterSquareAttach = (
     squareShell: PlayerSquareShellState,
@@ -36,13 +37,27 @@ export const tickSquareAttachState = (
     }
 
     if (hasContact) {
+        const rollover = resolveSquareRollover(
+            squareShell.attachNormalX,
+            squareShell.attachNormalY,
+            contactNormalX,
+            contactNormalY
+        );
+
+        if (rollover.shouldDetach) {
+            clearSquareAttach(squareShell);
+            return;
+        }
+
+        if (rollover.transitioned) {
+            squareShell.attachNormalX = rollover.nextNormalX;
+            squareShell.attachNormalY = rollover.nextNormalY;
+        }
+
         if (isSameNormal(squareShell, contactNormalX, contactNormalY)) {
             squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
             return;
         }
-
-        clearSquareAttach(squareShell);
-        return;
     }
 
     squareShell.attachContactGraceMs = Math.max(0, squareShell.attachContactGraceMs - deltaMs);
