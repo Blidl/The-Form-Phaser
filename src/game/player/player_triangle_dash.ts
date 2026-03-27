@@ -22,6 +22,7 @@ export const createTriangleDashState = (): PlayerTriangleDashState => {
         cooldownMs: 0,
         directionX: 0,
         directionY: 0,
+        forceBiasX: 1,
         leadingCornerIndex: 1,
         lockedOrientationRad: 0
     };
@@ -33,6 +34,7 @@ export const resetTriangleDashState = (triangleDash: PlayerTriangleDashState): v
     triangleDash.cooldownMs = 0;
     triangleDash.directionX = 0;
     triangleDash.directionY = 0;
+    triangleDash.forceBiasX = 1;
     triangleDash.leadingCornerIndex = 1;
     triangleDash.lockedOrientationRad = 0;
 };
@@ -63,10 +65,13 @@ export const tryStartTriangleDash = (
         return null;
     }
 
-    const lockedOrientationRad = triangleShell.orientationRad;
+    const lockedOrientationRad = grounded
+        ? triangleShell.groundedOrientationRad
+        : triangleShell.orientationRad;
     const corners = getRotatedCorners(lockedOrientationRad);
     const forceBias = resolveForceBias(horizontalMoveDir, fallbackFacingDirection);
-    const leadingCornerIndex = resolveLeadingCornerIndex(corners, forceBias, grounded);
+    const hasHorizontalInput = horizontalMoveDir !== 0;
+    const leadingCornerIndex = resolveLeadingCornerIndex(corners, forceBias, grounded, hasHorizontalInput);
     const direction = resolveDashDirectionFromCorner(corners[leadingCornerIndex], forceBias);
 
     triangleDash.isActive = true;
@@ -74,6 +79,7 @@ export const tryStartTriangleDash = (
     triangleDash.cooldownMs = PLAYER_TRIANGLE_DASH_COOLDOWN_MS;
     triangleDash.directionX = direction.x;
     triangleDash.directionY = direction.y;
+    triangleDash.forceBiasX = forceBias;
     triangleDash.leadingCornerIndex = leadingCornerIndex;
     triangleDash.lockedOrientationRad = lockedOrientationRad;
 
@@ -126,38 +132,33 @@ const resolveForceBias = (
 const resolveLeadingCornerIndex = (
     corners: CornerPoint[],
     forceBias: -1 | 1,
-    grounded: boolean
+    grounded: boolean,
+    hasHorizontalInput: boolean
 ): CornerIndex => {
     const allCorners: CornerIndex[] = [0, 1, 2];
     if (!grounded) {
         return pickCornerByBias(allCorners, corners, forceBias);
     }
 
-    const supportCorner = resolveGroundSupportCorner(corners, forceBias);
-    const nonGroundedCorners = allCorners.filter((index) => index !== supportCorner) as CornerIndex[];
+    const groundedContactCorners = resolveGroundContactCorners(corners);
+    const nonGroundedCorners = allCorners.filter((index) => !groundedContactCorners.includes(index)) as CornerIndex[];
+    if (nonGroundedCorners.length === 0) {
+        return pickCornerByBias(allCorners, corners, forceBias);
+    }
+
+    if (!hasHorizontalInput) {
+        return pickMostUpwardCorner(nonGroundedCorners, corners);
+    }
+
     return pickCornerByBias(nonGroundedCorners, corners, forceBias);
 };
 
-const resolveGroundSupportCorner = (
-    corners: CornerPoint[],
-    forceBias: -1 | 1
-): CornerIndex => {
+const resolveGroundContactCorners = (corners: CornerPoint[]): CornerIndex[] => {
     const maxY = Math.max(corners[0]?.y ?? -Infinity, corners[1]?.y ?? -Infinity, corners[2]?.y ?? -Infinity);
-    const touchingCandidates: CornerIndex[] = [0, 1, 2].filter((index) => {
+    return [0, 1, 2].filter((index) => {
         const cornerY = corners[index]?.y ?? -Infinity;
         return Math.abs(maxY - cornerY) <= PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON;
     }) as CornerIndex[];
-
-    if (touchingCandidates.length === 1) {
-        return touchingCandidates[0];
-    }
-
-    if (touchingCandidates.length > 1) {
-        const oppositeBias: -1 | 1 = forceBias > 0 ? -1 : 1;
-        return pickCornerByBias(touchingCandidates, corners, oppositeBias);
-    }
-
-    return 0;
 };
 
 const pickCornerByBias = (
@@ -176,6 +177,31 @@ const pickCornerByBias = (
         if (better) {
             selected = candidate;
             selectedX = candidateX;
+        }
+    });
+
+    return selected;
+};
+
+const pickMostUpwardCorner = (
+    candidates: CornerIndex[],
+    corners: CornerPoint[]
+): CornerIndex => {
+    let selected = candidates[0] ?? 1;
+    let selectedY = corners[selected]?.y ?? 0;
+    let selectedAbsX = Math.abs(corners[selected]?.x ?? 0);
+
+    candidates.forEach((candidate) => {
+        const candidatePoint = corners[candidate];
+        const candidateY = candidatePoint?.y ?? 0;
+        const candidateAbsX = Math.abs(candidatePoint?.x ?? 0);
+        const isMoreUpward = candidateY < selectedY;
+        const isSameHeightMoreCentered = candidateY === selectedY && candidateAbsX < selectedAbsX;
+
+        if (isMoreUpward || isSameHeightMoreCentered) {
+            selected = candidate;
+            selectedY = candidateY;
+            selectedAbsX = candidateAbsX;
         }
     });
 

@@ -240,11 +240,15 @@ export class PfPlayer {
             this.lastMoveDirection = horizontalDir > 0 ? 1 : -1;
         }
 
+        let isTriangleDashActive = isTriangleForm && triangleDash.isActive;
+        if (input.actionPressed && isTriangleForm && !isTriangleDashActive) {
+            isTriangleDashActive = this.tryApplyTriangleDash(horizontalDir, grounded);
+        }
+
         const hasBoostHold = this.boostActive && input.actionHeld;
         const effectiveExternalInfluenceX = grounded
             ? externalHorizontalInfluenceX
             : externalHorizontalInfluenceX * PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER;
-        const isTriangleDashActive = isTriangleForm && triangleDash.isActive;
         this.physicsBody.setAllowGravity(!isTriangleDashActive);
 
         if (isTriangleDashActive) {
@@ -313,15 +317,11 @@ export class PfPlayer {
             this.jumpCutConsumed = true;
         }
 
-        if (input.actionPressed) {
-            if (isBallForm) {
-                if (grounded) {
-                    this.tryApplyBoost(grounded, horizontalDir);
-                } else {
-                    this.pendingBoostRequest = true;
-                }
-            } else if (isTriangleForm) {
-                this.tryApplyTriangleDash(horizontalDir, grounded);
+        if (input.actionPressed && isBallForm) {
+            if (grounded) {
+                this.tryApplyBoost(grounded, horizontalDir);
+            } else {
+                this.pendingBoostRequest = true;
             }
         }
 
@@ -332,7 +332,7 @@ export class PfPlayer {
             }
         }
 
-        if (isTriangleDashActive) {
+        if (triangleDash.isActive) {
             tickTriangleDashActive(triangleDash, deltaMs);
             if (!triangleDash.isActive) {
                 this.physicsBody.setAllowGravity(true);
@@ -422,9 +422,9 @@ export class PfPlayer {
         this.boostActive = true;
     }
 
-    private tryApplyTriangleDash(horizontalDir: number, grounded: boolean): void {
+    private tryApplyTriangleDash(horizontalDir: number, grounded: boolean): boolean {
         if (this.state.currentForm !== 'triangle') {
-            return;
+            return false;
         }
 
         const dashLaunch = tryStartTriangleDash(
@@ -436,13 +436,14 @@ export class PfPlayer {
         );
 
         if (dashLaunch === null) {
-            return;
+            return false;
         }
 
         this.jumpCutConsumed = false;
         this.state.triangleShell.orientationRad = dashLaunch.lockedOrientationRad;
         this.physicsBody.setAllowGravity(false);
         this.physicsBody.setVelocity(dashLaunch.velocityX, dashLaunch.velocityY);
+        return true;
     }
 
     private resolveBoostDirection(horizontalDir: number): -1 | 1 {
