@@ -1,6 +1,12 @@
 import { GameObjects, Physics, Scene } from 'phaser';
 import { setupBaselineFollowCamera } from '../game/camera/follow_camera';
-import { PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS } from '../game/player/player_constants';
+import {
+    PLAYER_SQUARE_TRAIL_BAR_HEIGHT,
+    PLAYER_SQUARE_TRAIL_BAR_SCREEN_X,
+    PLAYER_SQUARE_TRAIL_BAR_SCREEN_Y,
+    PLAYER_SQUARE_TRAIL_BAR_WIDTH,
+    PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS
+} from '../game/player/player_constants';
 import { PfPlayer } from '../game/player/PfPlayer';
 import type { PlayerHazardHitShape } from '../game/player/player_form_collision_shapes';
 import { createPlayerInputKeys, pollPlayerInputSnapshot, type PlayerInputKeys } from '../game/player/player_input';
@@ -29,6 +35,9 @@ export class TestScene extends Scene {
     private currentRespawnPoint: RespawnPoint = { x: 220, y: 620 };
     private respawnInProgress: boolean = false;
     private debugOverlay!: GameObjects.Graphics;
+    private squareTrailBarTrack!: GameObjects.Rectangle;
+    private squareTrailBarFill!: GameObjects.Rectangle;
+    private squareTrailBarLabel!: GameObjects.Text;
 
     public constructor() {
         super(TestScene.KEY);
@@ -72,6 +81,7 @@ export class TestScene extends Scene {
             fontFamily: 'monospace',
             fontSize: '24px'
         }).setDepth(5000).setScrollFactor(0);
+        this.createSquareTrailResourceBar();
     }
 
     public update(_time: number, delta: number): void {
@@ -84,6 +94,64 @@ export class TestScene extends Scene {
         this.player.tick(delta, input, windInfluenceX);
         this.evaluateHazardOverlap();
         this.renderCollisionDebugOverlay();
+        this.updateSquareTrailResourceBar();
+    }
+
+    private createSquareTrailResourceBar(): void {
+        this.squareTrailBarLabel = this.add.text(
+            PLAYER_SQUARE_TRAIL_BAR_SCREEN_X,
+            PLAYER_SQUARE_TRAIL_BAR_SCREEN_Y - 18,
+            'Square trail',
+            {
+                color: '#d9f2ff',
+                fontFamily: 'monospace',
+                fontSize: '14px'
+            }
+        ).setDepth(5000).setScrollFactor(0);
+
+        this.squareTrailBarTrack = this.add.rectangle(
+            PLAYER_SQUARE_TRAIL_BAR_SCREEN_X,
+            PLAYER_SQUARE_TRAIL_BAR_SCREEN_Y,
+            PLAYER_SQUARE_TRAIL_BAR_WIDTH,
+            PLAYER_SQUARE_TRAIL_BAR_HEIGHT,
+            0x122026,
+            0.92
+        )
+            .setStrokeStyle(1, 0xd9f2ff, 0.85)
+            .setOrigin(0, 0)
+            .setDepth(5000)
+            .setScrollFactor(0);
+
+        this.squareTrailBarFill = this.add.rectangle(
+            PLAYER_SQUARE_TRAIL_BAR_SCREEN_X,
+            PLAYER_SQUARE_TRAIL_BAR_SCREEN_Y,
+            PLAYER_SQUARE_TRAIL_BAR_WIDTH,
+            PLAYER_SQUARE_TRAIL_BAR_HEIGHT,
+            0x7dd3fc,
+            1
+        )
+            .setOrigin(0, 0)
+            .setDepth(5001)
+            .setScrollFactor(0);
+
+        this.updateSquareTrailResourceBar();
+    }
+
+    private updateSquareTrailResourceBar(): void {
+        if (!this.squareTrailBarFill || !this.squareTrailBarTrack || !this.squareTrailBarLabel) {
+            return;
+        }
+
+        const ratio = this.player.squareTrailResourceRatio;
+        const current = Math.max(0, this.player.squareTrailResourceCurrent);
+        const max = Math.max(0, this.player.squareTrailResourceMax);
+        this.squareTrailBarFill.width = PLAYER_SQUARE_TRAIL_BAR_WIDTH * ratio;
+        const isSquareForm = this.player.currentForm === 'square';
+        const activeAlpha = isSquareForm ? 1 : 0.55;
+        this.squareTrailBarFill.setAlpha(activeAlpha);
+        this.squareTrailBarTrack.setAlpha(activeAlpha);
+        this.squareTrailBarLabel.setAlpha(activeAlpha);
+        this.squareTrailBarLabel.setText(`Square trail ${Math.round(current)}/${Math.round(max)}`);
     }
 
     private setupWorldInteractionBaseline(): void {

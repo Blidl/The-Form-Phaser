@@ -2,7 +2,8 @@ import type { PlayerSquareShellState } from './player_types';
 import {
     PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
     PLAYER_SQUARE_GROUNDED_ORIENTATIONS_RAD,
-    PLAYER_SQUARE_GROUNDED_SETTLE_LERP_SPEED
+    PLAYER_SQUARE_GROUNDED_SETTLE_LERP_SPEED,
+    PLAYER_SQUARE_TRAIL_RESOURCE_MAX
 } from './player_constants';
 
 export const createSquareShellState = (): PlayerSquareShellState => {
@@ -17,6 +18,8 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         attachNormalY: -1,
         attachContactGraceMs: 0,
         trailSegments: [],
+        trailResourceCurrent: PLAYER_SQUARE_TRAIL_RESOURCE_MAX,
+        trailResourceMax: PLAYER_SQUARE_TRAIL_RESOURCE_MAX,
         trailAnchorActive: false,
         trailAnchorX: 0,
         trailAnchorY: 0,
@@ -43,6 +46,8 @@ export const resetSquareShellState = (
     squareShell.attachNormalY = -1;
     squareShell.attachContactGraceMs = 0;
     squareShell.trailSegments.length = 0;
+    squareShell.trailResourceMax = PLAYER_SQUARE_TRAIL_RESOURCE_MAX;
+    squareShell.trailResourceCurrent = squareShell.trailResourceMax;
     squareShell.trailAnchorActive = false;
     squareShell.trailAnchorX = 0;
     squareShell.trailAnchorY = 0;

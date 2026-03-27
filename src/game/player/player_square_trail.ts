@@ -1,5 +1,6 @@
 import {
     PLAYER_SQUARE_TRAIL_MAX_SEGMENTS,
+    PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT,
     PLAYER_SQUARE_TRAIL_MIN_SEGMENT_LENGTH,
     PLAYER_SQUARE_TRAIL_REATTACH_SNAP_DISTANCE
 } from './player_constants';
@@ -122,6 +123,20 @@ export const tickSquareTrailPaint = (
     if (distanceAlongSurface < PLAYER_SQUARE_TRAIL_MIN_SEGMENT_LENGTH) {
         return;
     }
+    const maxPaintDistance = squareShell.trailResourceCurrent / PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT;
+    const paintDistance = Math.min(distanceAlongSurface, Math.max(0, maxPaintDistance));
+    if (paintDistance <= 0) {
+        setTrailAnchorToCurrentSurface(squareShell, currentSurfaceLocal, effectiveSupportOwner, normalX, normalY);
+        return;
+    }
+
+    const paintAlpha = paintDistance / distanceAlongSurface;
+    const paintTargetLocal = paintAlpha >= 1
+        ? currentSurfaceLocal
+        : {
+            x: squareShell.trailAnchorLocalX + (localDx * paintAlpha),
+            y: squareShell.trailAnchorLocalY + (localDy * paintAlpha)
+        };
 
     appendOrMergeSweptLocalInterval(
         squareShell,
@@ -129,16 +144,36 @@ export const tickSquareTrailPaint = (
             x: squareShell.trailAnchorLocalX,
             y: squareShell.trailAnchorLocalY
         },
-        currentSurfaceLocal,
+        paintTargetLocal,
         effectiveSupportOwner,
         normalX,
         normalY
     );
+    squareShell.trailResourceCurrent = Math.max(
+        0,
+        squareShell.trailResourceCurrent - (paintDistance * PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT)
+    );
 
-    squareShell.trailAnchorX = surfaceX;
-    squareShell.trailAnchorY = surfaceY;
+    setTrailAnchorToCurrentSurface(squareShell, currentSurfaceLocal, effectiveSupportOwner, normalX, normalY);
+};
+
+const setTrailAnchorToCurrentSurface = (
+    squareShell: PlayerSquareShellState,
+    currentSurfaceLocal: { x: number; y: number },
+    supportOwner: PlayerSquareTrailSupportOwner,
+    normalX: -1 | 0 | 1,
+    normalY: -1 | 0 | 1
+): void => {
+    const anchorWorld = ownerLocalToWorld(currentSurfaceLocal.x, currentSurfaceLocal.y, supportOwner);
+    squareShell.trailAnchorX = anchorWorld.x;
+    squareShell.trailAnchorY = anchorWorld.y;
     squareShell.trailAnchorLocalX = currentSurfaceLocal.x;
     squareShell.trailAnchorLocalY = currentSurfaceLocal.y;
+    squareShell.trailAnchorSupportBody = supportOwner.body;
+    squareShell.trailAnchorSupportOriginX = supportOwner.originX;
+    squareShell.trailAnchorSupportOriginY = supportOwner.originY;
+    squareShell.trailAnchorNormalX = normalX;
+    squareShell.trailAnchorNormalY = normalY;
 };
 
 export const resolveSquareTrailSegmentWorldLine = (

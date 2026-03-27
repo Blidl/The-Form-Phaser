@@ -217,6 +217,23 @@ export class PfPlayer {
         return this.state.currentForm;
     }
 
+    public get squareTrailResourceCurrent(): number {
+        return this.state.squareShell.trailResourceCurrent;
+    }
+
+    public get squareTrailResourceMax(): number {
+        return this.state.squareShell.trailResourceMax;
+    }
+
+    public get squareTrailResourceRatio(): number {
+        const maxResource = this.state.squareShell.trailResourceMax;
+        if (maxResource <= 0) {
+            return 0;
+        }
+
+        return PhaserMath.Clamp(this.state.squareShell.trailResourceCurrent / maxResource, 0, 1);
+    }
+
     public get arcadeBodyObject(): GameObjects.Arc {
         return this.physicsSprite;
     }

@@ -22,6 +22,8 @@ export interface PlayerSquareShellState {
     attachNormalY: -1 | 0 | 1;
     attachContactGraceMs: number;
     trailSegments: PlayerSquareTrailSegment[];
+    trailResourceCurrent: number;
+    trailResourceMax: number;
     trailAnchorActive: boolean;
     trailAnchorX: number;
     trailAnchorY: number;
