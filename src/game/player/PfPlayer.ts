@@ -67,6 +67,12 @@ import {
     updateTriangleDashSelectedLeadingCorner,
     tryStartTriangleDash
 } from './player_triangle_dash';
+import {
+    createTriangleChargesState,
+    hasTriangleDashCharges,
+    resetTriangleChargesState,
+    tryConsumeTriangleDashCharge
+} from './player_triangle_charges';
 import { resolveTriangleLeadingCornerMarkerOffset } from './player_triangle_leading_corner_visual';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 
@@ -96,7 +102,8 @@ export class PfPlayer {
         this.state = {
             currentForm: PLAYER_START_FORM,
             triangleShell: createTriangleShellState(1),
-            triangleDash: createTriangleDashState()
+            triangleDash: createTriangleDashState(),
+            triangleCharges: createTriangleChargesState()
         };
         this.timers = createPlayerTimers();
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
@@ -176,6 +183,7 @@ export class PfPlayer {
         this.state.currentForm = PLAYER_START_FORM;
         resetTriangleShellState(this.state.triangleShell, 1);
         resetTriangleDashState(this.state.triangleDash);
+        resetTriangleChargesState(this.state.triangleCharges);
 
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
         this.jumpCutConsumed = false;
@@ -229,6 +237,7 @@ export class PfPlayer {
         }
 
         if (justLanded) {
+            resetTriangleChargesState(this.state.triangleCharges);
             const reboundVelocity = this.resolveReboundJumpVelocity(this.lastAirborneDownwardSpeed);
             if (reboundVelocity !== null) {
                 this.reboundJumpVelocity = reboundVelocity;
@@ -512,6 +521,10 @@ export class PfPlayer {
             return false;
         }
 
+        if (!hasTriangleDashCharges(this.state.triangleCharges)) {
+            return false;
+        }
+
         const dashLaunch = tryStartTriangleDash(
             this.state.triangleDash,
             this.state.triangleShell,
@@ -522,6 +535,7 @@ export class PfPlayer {
             return false;
         }
 
+        tryConsumeTriangleDashCharge(this.state.triangleCharges);
         this.jumpCutConsumed = false;
         this.state.triangleShell.orientationRad = dashLaunch.lockedOrientationRad;
         this.physicsBody.setAllowGravity(false);

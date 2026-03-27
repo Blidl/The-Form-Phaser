@@ -21,8 +21,14 @@ export interface PlayerTriangleDashState {
     lockedOrientationRad: number;
 }
 
+export interface PlayerTriangleChargesState {
+    currentCharges: number;
+    maxCharges: number;
+}
+
 export interface PlayerShellState {
     currentForm: PlayerFormId;
     triangleShell: PlayerTriangleShellState;
     triangleDash: PlayerTriangleDashState;
+    triangleCharges: PlayerTriangleChargesState;
 }
