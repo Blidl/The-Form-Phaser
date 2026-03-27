@@ -948,7 +948,8 @@ export class PfPlayer {
         ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
 
         let bestInterval: { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null = null;
-        let bestDistance = Infinity;
+        let bestFaceGap = Infinity;
+        let bestTangentDistance = Infinity;
 
         overlapBodies.forEach((candidateBody) => {
             if (candidateBody === this.physicsBody) {
@@ -959,6 +960,21 @@ export class PfPlayer {
             const candidateTop = candidateBody.y;
             const candidateRight = candidateLeft + candidateBody.width;
             const candidateBottom = candidateTop + candidateBody.height;
+            const faceGap = this.resolveSquareSupportFaceGap(
+                normalX,
+                normalY,
+                bodyLeft,
+                bodyTop,
+                bodyRight,
+                bodyBottom,
+                candidateLeft,
+                candidateTop,
+                candidateRight,
+                candidateBottom
+            );
+            if (faceGap === null) {
+                return;
+            }
 
             if (useXAxisAsTangent) {
                 const overlapsPlayerSpan = candidateRight > bodyLeft && candidateLeft < bodyRight;
@@ -966,9 +982,12 @@ export class PfPlayer {
                     return;
                 }
 
-                const distance = this.distanceToInterval(tangentValue, candidateLeft, candidateRight);
-                if (distance < bestDistance) {
-                    bestDistance = distance;
+                const tangentDistance = this.distanceToInterval(tangentValue, candidateLeft, candidateRight);
+                const hasBetterFaceGap = faceGap < (bestFaceGap - 0.001);
+                const hasEqualFaceGap = Math.abs(faceGap - bestFaceGap) <= 0.001;
+                if (hasBetterFaceGap || (hasEqualFaceGap && tangentDistance < bestTangentDistance)) {
+                    bestFaceGap = faceGap;
+                    bestTangentDistance = tangentDistance;
                     bestInterval = {
                         min: candidateLeft,
                         max: candidateRight,
@@ -983,9 +1002,12 @@ export class PfPlayer {
                 return;
             }
 
-            const distance = this.distanceToInterval(tangentValue, candidateTop, candidateBottom);
-            if (distance < bestDistance) {
-                bestDistance = distance;
+            const tangentDistance = this.distanceToInterval(tangentValue, candidateTop, candidateBottom);
+            const hasBetterFaceGap = faceGap < (bestFaceGap - 0.001);
+            const hasEqualFaceGap = Math.abs(faceGap - bestFaceGap) <= 0.001;
+            if (hasBetterFaceGap || (hasEqualFaceGap && tangentDistance < bestTangentDistance)) {
+                bestFaceGap = faceGap;
+                bestTangentDistance = tangentDistance;
                 bestInterval = {
                     min: candidateTop,
                     max: candidateBottom,
@@ -1014,6 +1036,21 @@ export class PfPlayer {
         const candidateTop = knownSupportBody.y;
         const candidateRight = candidateLeft + knownSupportBody.width;
         const candidateBottom = candidateTop + knownSupportBody.height;
+        const isFaceCompatible = this.resolveSquareSupportFaceGap(
+            normalX,
+            normalY,
+            bodyLeft,
+            bodyTop,
+            bodyRight,
+            bodyBottom,
+            candidateLeft,
+            candidateTop,
+            candidateRight,
+            candidateBottom
+        ) !== null;
+        if (!isFaceCompatible) {
+            return null;
+        }
 
         if (normalX === 0 && normalY !== 0) {
             const overlapsPlayerSpan = candidateRight > bodyLeft && candidateLeft < bodyRight;
@@ -1038,6 +1075,39 @@ export class PfPlayer {
             max: candidateBottom,
             ownerBody: knownSupportBody
         };
+    }
+
+    private resolveSquareSupportFaceGap(
+        normalX: -1 | 0 | 1,
+        normalY: -1 | 0 | 1,
+        bodyLeft: number,
+        bodyTop: number,
+        bodyRight: number,
+        bodyBottom: number,
+        candidateLeft: number,
+        candidateTop: number,
+        candidateRight: number,
+        candidateBottom: number
+    ): number | null {
+        const faceAlignmentTolerance = 6;
+
+        if (normalX === 0 && normalY === -1) {
+            const faceGap = Math.abs(candidateTop - bodyBottom);
+            return faceGap <= faceAlignmentTolerance ? faceGap : null;
+        }
+
+        if (normalX === 0 && normalY === 1) {
+            const faceGap = Math.abs(candidateBottom - bodyTop);
+            return faceGap <= faceAlignmentTolerance ? faceGap : null;
+        }
+
+        if (normalX === 1 && normalY === 0) {
+            const faceGap = Math.abs(candidateRight - bodyLeft);
+            return faceGap <= faceAlignmentTolerance ? faceGap : null;
+        }
+
+        const faceGap = Math.abs(candidateLeft - bodyRight);
+        return faceGap <= faceAlignmentTolerance ? faceGap : null;
     }
 
     private distanceToInterval(value: number, min: number, max: number): number {
