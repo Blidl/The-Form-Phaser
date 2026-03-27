@@ -71,6 +71,8 @@ export const clearSquareAttach = (squareShell: PlayerSquareShellState): void => 
     squareShell.attachNormalX = 0;
     squareShell.attachNormalY = -1;
     squareShell.attachContactGraceMs = 0;
+    squareShell.trailAnchorActive = false;
+    squareShell.trailAnchorSupportBody = null;
 };
 
 const isSameNormal = (

@@ -1,3 +1,5 @@
+import type { Physics } from 'phaser';
+
 export type PlayerFormId = 'ball' | 'triangle' | 'square';
 export type TriangleCornerIndex = 0 | 1 | 2;
 
@@ -19,6 +21,39 @@ export interface PlayerSquareShellState {
     attachNormalX: -1 | 0 | 1;
     attachNormalY: -1 | 0 | 1;
     attachContactGraceMs: number;
+    trailSegments: PlayerSquareTrailSegment[];
+    trailAnchorActive: boolean;
+    trailAnchorX: number;
+    trailAnchorY: number;
+    trailAnchorLocalX: number;
+    trailAnchorLocalY: number;
+    trailAnchorSupportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
+    trailAnchorSupportOriginX: number;
+    trailAnchorSupportOriginY: number;
+    trailAnchorNormalX: -1 | 0 | 1;
+    trailAnchorNormalY: -1 | 0 | 1;
+}
+
+export interface PlayerSquareTrailSegment {
+    startX: number;
+    startY: number;
+    endX: number;
+    endY: number;
+    startLocalX: number;
+    startLocalY: number;
+    endLocalX: number;
+    endLocalY: number;
+    supportOriginX: number;
+    supportOriginY: number;
+    supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
+    normalX: -1 | 0 | 1;
+    normalY: -1 | 0 | 1;
+}
+
+export interface PlayerSquareTrailSupportOwner {
+    body: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
+    originX: number;
+    originY: number;
 }
 
 export interface PlayerTriangleDashState {

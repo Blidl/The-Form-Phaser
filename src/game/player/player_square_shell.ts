@@ -15,7 +15,18 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         isAttached: false,
         attachNormalX: 0,
         attachNormalY: -1,
-        attachContactGraceMs: 0
+        attachContactGraceMs: 0,
+        trailSegments: [],
+        trailAnchorActive: false,
+        trailAnchorX: 0,
+        trailAnchorY: 0,
+        trailAnchorLocalX: 0,
+        trailAnchorLocalY: 0,
+        trailAnchorSupportBody: null,
+        trailAnchorSupportOriginX: 0,
+        trailAnchorSupportOriginY: 0,
+        trailAnchorNormalX: 0,
+        trailAnchorNormalY: -1
     };
 };
 
@@ -31,6 +42,17 @@ export const resetSquareShellState = (
     squareShell.attachNormalX = 0;
     squareShell.attachNormalY = -1;
     squareShell.attachContactGraceMs = 0;
+    squareShell.trailSegments.length = 0;
+    squareShell.trailAnchorActive = false;
+    squareShell.trailAnchorX = 0;
+    squareShell.trailAnchorY = 0;
+    squareShell.trailAnchorLocalX = 0;
+    squareShell.trailAnchorLocalY = 0;
+    squareShell.trailAnchorSupportBody = null;
+    squareShell.trailAnchorSupportOriginX = 0;
+    squareShell.trailAnchorSupportOriginY = 0;
+    squareShell.trailAnchorNormalX = 0;
+    squareShell.trailAnchorNormalY = -1;
 };
 
 export const tickSquareShellOrientation = (

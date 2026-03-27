@@ -25,6 +25,9 @@ import {
     PLAYER_FORM_SQUARE_SIZE,
     PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED,
     PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED,
+    PLAYER_SQUARE_TRAIL_STROKE_ALPHA,
+    PLAYER_SQUARE_TRAIL_STROKE_COLOR,
+    PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
     PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
     PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR,
     PLAYER_SQUARE_VISUAL_STROKE_COLOR,
@@ -74,6 +77,11 @@ import {
     tickSquareAttachState,
     tryEnterSquareAttach
 } from './player_square_attach';
+import {
+    beginSquareTrailAnchor,
+    resolveSquareTrailSegmentWorldLine,
+    tickSquareTrailPaint
+} from './player_square_trail';
 import { resolveSquareAttachSurfaceVelocity } from './player_square_surface_move';
 import { applyTriangleSpecialJump } from './player_triangle_jump';
 import {
@@ -96,7 +104,11 @@ import {
     tryConsumeTriangleDashCharge
 } from './player_triangle_charges';
 import { resolveTriangleLeadingCornerMarkerOffset } from './player_triangle_leading_corner_visual';
-import type { PlayerFormId, PlayerShellState } from './player_types';
+import type {
+    PlayerFormId,
+    PlayerShellState,
+    PlayerSquareTrailSupportOwner
+} from './player_types';
 import {
     resolvePlayerFormAnchor,
     resolvePlayerHazardHitShape,
@@ -115,6 +127,7 @@ export class PfPlayer {
     private readonly triangleVisual: GameObjects.Triangle;
     private readonly squareVisual: GameObjects.Rectangle;
     private readonly squareContactMarker: GameObjects.Line;
+    private readonly squareTrailGraphics: GameObjects.Graphics;
     private readonly triangleLeadingCornerMarker: GameObjects.Arc;
     private jumpCutConsumed: boolean;
     private boostCooldownMs: number;
@@ -190,6 +203,7 @@ export class PfPlayer {
             .setDepth(4501)
             .setVisible(false)
             .setOrigin(0.5, 0.5);
+        this.squareTrailGraphics = scene.add.graphics().setDepth(4400);
         this.triangleLeadingCornerMarker = scene.add.circle(x, y, PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS, 0xffffff)
             .setStrokeStyle(2, 0xffb74d)
             .setDepth(4501)
@@ -396,6 +410,16 @@ export class PfPlayer {
                     squareContact.normalY
                 );
                 if (attachStarted) {
+                    const surfacePoint = this.resolveSquareTrailSurfacePoint(
+                        this.state.squareShell.attachNormalX,
+                        this.state.squareShell.attachNormalY
+                    );
+                    beginSquareTrailAnchor(
+                        this.state.squareShell,
+                        surfacePoint.x,
+                        surfacePoint.y,
+                        surfacePoint.supportOwner
+                    );
                     clearJumpBuffer(this.timers);
                     clearSquareAttachEntryBuffer(this.timers);
                 }
@@ -408,6 +432,17 @@ export class PfPlayer {
                 squareContact.hasContact,
                 squareContact.normalX,
                 squareContact.normalY
+            );
+            const trailSurfacePoint = this.resolveSquareTrailSurfacePoint(
+                this.state.squareShell.attachNormalX,
+                this.state.squareShell.attachNormalY
+            );
+            tickSquareTrailPaint(
+                this.state.squareShell,
+                trailSurfacePoint.x,
+                trailSurfacePoint.y,
+                trailSurfacePoint.supportOwner,
+                this.state.squareShell.hasContact
             );
         }
         if (input.actionPressed && isTriangleForm && !isTriangleDashActive) {
@@ -598,6 +633,7 @@ export class PfPlayer {
         this.squareVisual.setRotation(this.state.squareShell.orientationRad);
         this.updateSquareAttachVisualState();
         this.updateSquareContactVisual(x, y);
+        this.renderSquareTrail();
     }
 
     private applyCurrentFormCollisionBody(): void {
@@ -806,6 +842,304 @@ export class PfPlayer {
             2,
             isAttached ? PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR : PLAYER_SQUARE_VISUAL_STROKE_COLOR
         );
+    }
+
+    private resolveSquareTrailSurfacePoint(
+        normalX: -1 | 0 | 1,
+        normalY: -1 | 0 | 1
+    ): { x: number; y: number; supportOwner: PlayerSquareTrailSupportOwner } {
+        const bodyLeft = this.physicsBody.x;
+        const bodyTop = this.physicsBody.y;
+        const bodyRight = bodyLeft + this.physicsBody.width;
+        const bodyBottom = bodyTop + this.physicsBody.height;
+        const centerX = bodyLeft + (this.physicsBody.width * 0.5);
+        const centerY = bodyTop + (this.physicsBody.height * 0.5);
+        const supportInterval = this.resolveSquareSupportInterval(normalX, normalY, bodyLeft, bodyTop, bodyRight, bodyBottom)
+            ?? this.resolveSquareSupportIntervalFromKnownBody(
+                this.state.squareShell.trailAnchorSupportBody,
+                normalX,
+                normalY,
+                bodyLeft,
+                bodyTop,
+                bodyRight,
+                bodyBottom
+            );
+        const supportOwner = supportInterval !== null
+            ? this.resolveTrailSupportOwner(supportInterval.ownerBody)
+            : this.resolveTrailSupportOwner(null);
+
+        if (normalX === 0 && normalY === -1) {
+            return {
+                x: supportInterval !== null ? PhaserMath.Clamp(centerX, supportInterval.min, supportInterval.max) : centerX,
+                y: bodyBottom,
+                supportOwner
+            };
+        }
+
+        if (normalX === 0 && normalY === 1) {
+            return {
+                x: supportInterval !== null ? PhaserMath.Clamp(centerX, supportInterval.min, supportInterval.max) : centerX,
+                y: bodyTop,
+                supportOwner
+            };
+        }
+
+        if (normalX === 1 && normalY === 0) {
+            return {
+                x: bodyLeft,
+                y: supportInterval !== null ? PhaserMath.Clamp(centerY, supportInterval.min, supportInterval.max) : centerY,
+                supportOwner
+            };
+        }
+
+        return {
+            x: bodyRight,
+            y: supportInterval !== null ? PhaserMath.Clamp(centerY, supportInterval.min, supportInterval.max) : centerY,
+            supportOwner
+        };
+    }
+
+    private resolveSquareSupportInterval(
+        normalX: -1 | 0 | 1,
+        normalY: -1 | 0 | 1,
+        bodyLeft: number,
+        bodyTop: number,
+        bodyRight: number,
+        bodyBottom: number
+    ): { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null {
+        const probeThickness = 4;
+        const probePadding = 2;
+        let probeX = bodyLeft - probePadding;
+        let probeY = bodyTop - probePadding;
+        let probeWidth = (bodyRight - bodyLeft) + (probePadding * 2);
+        let probeHeight = (bodyBottom - bodyTop) + (probePadding * 2);
+        let tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
+        let useXAxisAsTangent = true;
+
+        if (normalX === 0 && normalY === -1) {
+            probeY = bodyBottom - (probeThickness * 0.5);
+            probeHeight = probeThickness;
+            tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
+            useXAxisAsTangent = true;
+        } else if (normalX === 0 && normalY === 1) {
+            probeY = bodyTop - (probeThickness * 0.5);
+            probeHeight = probeThickness;
+            tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
+            useXAxisAsTangent = true;
+        } else if (normalX === 1 && normalY === 0) {
+            probeX = bodyLeft - (probeThickness * 0.5);
+            probeWidth = probeThickness;
+            tangentValue = bodyTop + ((bodyBottom - bodyTop) * 0.5);
+            useXAxisAsTangent = false;
+        } else if (normalX === -1 && normalY === 0) {
+            probeX = bodyRight - (probeThickness * 0.5);
+            probeWidth = probeThickness;
+            tangentValue = bodyTop + ((bodyBottom - bodyTop) * 0.5);
+            useXAxisAsTangent = false;
+        }
+
+        const overlapBodies = this.physicsSprite.scene.physics.overlapRect(
+            probeX,
+            probeY,
+            probeWidth,
+            probeHeight,
+            true,
+            true
+        ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
+
+        let bestInterval: { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null = null;
+        let bestDistance = Infinity;
+
+        overlapBodies.forEach((candidateBody) => {
+            if (candidateBody === this.physicsBody) {
+                return;
+            }
+
+            const candidateLeft = candidateBody.x;
+            const candidateTop = candidateBody.y;
+            const candidateRight = candidateLeft + candidateBody.width;
+            const candidateBottom = candidateTop + candidateBody.height;
+
+            if (useXAxisAsTangent) {
+                const overlapsPlayerSpan = candidateRight > bodyLeft && candidateLeft < bodyRight;
+                if (!overlapsPlayerSpan) {
+                    return;
+                }
+
+                const distance = this.distanceToInterval(tangentValue, candidateLeft, candidateRight);
+                if (distance < bestDistance) {
+                    bestDistance = distance;
+                    bestInterval = {
+                        min: candidateLeft,
+                        max: candidateRight,
+                        ownerBody: candidateBody
+                    };
+                }
+                return;
+            }
+
+            const overlapsPlayerSpan = candidateBottom > bodyTop && candidateTop < bodyBottom;
+            if (!overlapsPlayerSpan) {
+                return;
+            }
+
+            const distance = this.distanceToInterval(tangentValue, candidateTop, candidateBottom);
+            if (distance < bestDistance) {
+                bestDistance = distance;
+                bestInterval = {
+                    min: candidateTop,
+                    max: candidateBottom,
+                    ownerBody: candidateBody
+                };
+            }
+        });
+
+        return bestInterval;
+    }
+
+    private resolveSquareSupportIntervalFromKnownBody(
+        knownSupportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
+        normalX: -1 | 0 | 1,
+        normalY: -1 | 0 | 1,
+        bodyLeft: number,
+        bodyTop: number,
+        bodyRight: number,
+        bodyBottom: number
+    ): { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null {
+        if (knownSupportBody === null || knownSupportBody === this.physicsBody) {
+            return null;
+        }
+
+        const candidateLeft = knownSupportBody.x;
+        const candidateTop = knownSupportBody.y;
+        const candidateRight = candidateLeft + knownSupportBody.width;
+        const candidateBottom = candidateTop + knownSupportBody.height;
+
+        if (normalX === 0 && normalY !== 0) {
+            const overlapsPlayerSpan = candidateRight > bodyLeft && candidateLeft < bodyRight;
+            if (!overlapsPlayerSpan) {
+                return null;
+            }
+
+            return {
+                min: candidateLeft,
+                max: candidateRight,
+                ownerBody: knownSupportBody
+            };
+        }
+
+        const overlapsPlayerSpan = candidateBottom > bodyTop && candidateTop < bodyBottom;
+        if (!overlapsPlayerSpan) {
+            return null;
+        }
+
+        return {
+            min: candidateTop,
+            max: candidateBottom,
+            ownerBody: knownSupportBody
+        };
+    }
+
+    private distanceToInterval(value: number, min: number, max: number): number {
+        if (value < min) {
+            return min - value;
+        }
+
+        if (value > max) {
+            return value - max;
+        }
+
+        return 0;
+    }
+
+    private renderSquareTrail(): void {
+        this.squareTrailGraphics.clear();
+        if (this.state.squareShell.trailSegments.length === 0) {
+            return;
+        }
+
+        this.squareTrailGraphics.lineStyle(
+            PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
+            PLAYER_SQUARE_TRAIL_STROKE_COLOR,
+            PLAYER_SQUARE_TRAIL_STROKE_ALPHA
+        );
+        this.state.squareShell.trailSegments.forEach((segment) => {
+            const worldLine = resolveSquareTrailSegmentWorldLine(segment);
+            const clippedWorldLine = this.clipTrailLineToSupportBounds(segment, worldLine);
+            if (clippedWorldLine === null) {
+                return;
+            }
+            this.squareTrailGraphics.beginPath();
+            this.squareTrailGraphics.moveTo(clippedWorldLine.startX, clippedWorldLine.startY);
+            this.squareTrailGraphics.lineTo(clippedWorldLine.endX, clippedWorldLine.endY);
+            this.squareTrailGraphics.strokePath();
+        });
+    }
+
+    private resolveTrailSupportOwner(
+        supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+    ): PlayerSquareTrailSupportOwner {
+        if (supportBody === null) {
+            return {
+                body: null,
+                originX: 0,
+                originY: 0
+            };
+        }
+
+        return {
+            body: supportBody,
+            // Keep owner-local space stable across owner movement.
+            originX: 0,
+            originY: 0
+        };
+    }
+
+    private clipTrailLineToSupportBounds(
+        segment: {
+            supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
+            normalX: -1 | 0 | 1;
+            normalY: -1 | 0 | 1;
+        },
+        worldLine: { startX: number; startY: number; endX: number; endY: number }
+    ): { startX: number; startY: number; endX: number; endY: number } | null {
+        const supportBody = segment.supportBody;
+        if (supportBody === null) {
+            return worldLine;
+        }
+
+        const bodyMinX = supportBody.x;
+        const bodyMaxX = supportBody.x + supportBody.width;
+        const bodyMinY = supportBody.y;
+        const bodyMaxY = supportBody.y + supportBody.height;
+
+        if (segment.normalX === 0) {
+            const clampedStartX = PhaserMath.Clamp(worldLine.startX, bodyMinX, bodyMaxX);
+            const clampedEndX = PhaserMath.Clamp(worldLine.endX, bodyMinX, bodyMaxX);
+            if (Math.abs(clampedEndX - clampedStartX) <= 0.001) {
+                return null;
+            }
+
+            return {
+                startX: clampedStartX,
+                startY: worldLine.startY,
+                endX: clampedEndX,
+                endY: worldLine.endY
+            };
+        }
+
+        const clampedStartY = PhaserMath.Clamp(worldLine.startY, bodyMinY, bodyMaxY);
+        const clampedEndY = PhaserMath.Clamp(worldLine.endY, bodyMinY, bodyMaxY);
+        if (Math.abs(clampedEndY - clampedStartY) <= 0.001) {
+            return null;
+        }
+
+        return {
+            startX: worldLine.startX,
+            startY: clampedStartY,
+            endX: worldLine.endX,
+            endY: clampedEndY
+        };
     }
 
     private resolveReboundJumpVelocity(approachSpeed: number): number | null {
