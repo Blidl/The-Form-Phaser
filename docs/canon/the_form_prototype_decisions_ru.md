@@ -182,10 +182,11 @@
 - leading corner хранится как persistent selected state;
 - в текущем grounded baseline на flat ground у Triangle две вершины контактируют с полом, а валидный leading corner ровно один — единственная non-contact вершина;
 - в grounded-состоянии leading corner определяется только через текущие grounded contact corners;
-- в grounded-состоянии `A/D`, lastMoveDirection и другие surrogate-правила не должны менять leading corner;
+- source of truth выбора leading corner — дискретный force-application-point intent из `WASD`;
+- surrogate-выбор через `lastMoveDirection` запрещён;
+- на flat ground `A/D` не дают визуально нового выбора leading corner, потому что валидный non-contact угол там единственный;
 - marker на земле и grounded dash используют этот же единственный non-contact corner;
-- если point-of-force / force-application-point control через WASD будет добавлен, это отдельный future slice;
-- в air-состоянии baseline force-bias по `A/D` и fallback по последнему горизонтальному направлению сохраняются;
+- в air-состоянии тот же force-application-point intent влияет на выбор leading corner;
 - visual highlight leading corner вынесен в отдельный следующий slice;
 - dash тратит заряд;
 - зарядов: `3`;

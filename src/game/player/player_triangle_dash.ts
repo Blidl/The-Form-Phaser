@@ -28,6 +28,8 @@ export const createTriangleDashState = (): PlayerTriangleDashState => {
         directionX: 0,
         directionY: 0,
         forceBiasX: 1,
+        forcePointIntentX: 0,
+        forcePointIntentY: -1,
         selectedLeadingCornerIndex: 1,
         leadingCornerIndex: 1,
         lockedOrientationRad: 0
@@ -41,6 +43,8 @@ export const resetTriangleDashState = (triangleDash: PlayerTriangleDashState): v
     triangleDash.directionX = 0;
     triangleDash.directionY = 0;
     triangleDash.forceBiasX = 1;
+    triangleDash.forcePointIntentX = 0;
+    triangleDash.forcePointIntentY = -1;
     triangleDash.selectedLeadingCornerIndex = 1;
     triangleDash.leadingCornerIndex = 1;
     triangleDash.lockedOrientationRad = 0;
@@ -107,26 +111,32 @@ export const resolveTriangleDashLeadingCornerPreview = (
 export const updateTriangleDashSelectedLeadingCorner = (
     triangleDash: PlayerTriangleDashState,
     triangleShell: PlayerTriangleShellState,
-    horizontalMoveDir: number,
-    fallbackFacingDirection: -1 | 1,
+    forcePointX: -1 | 0 | 1,
+    forcePointY: -1 | 0 | 1,
     grounded: boolean
 ): void => {
     const lockedOrientationRad = grounded
         ? triangleShell.groundedOrientationRad
         : triangleShell.orientationRad;
     const corners = getRotatedCorners(lockedOrientationRad);
+    updateForcePointIntent(triangleDash, forcePointX, forcePointY);
 
     if (grounded) {
-        triangleDash.selectedLeadingCornerIndex = resolveGroundedLeadingCornerIndex(corners);
+        triangleDash.selectedLeadingCornerIndex = resolveGroundedLeadingCornerIndex(
+            corners,
+            triangleDash.forcePointIntentX,
+            triangleDash.forcePointIntentY
+        );
         return;
     }
 
-    const hasSelectionInput = horizontalMoveDir !== 0;
-
-    if (hasSelectionInput) {
-        const forceBias = resolveForceBias(horizontalMoveDir, fallbackFacingDirection);
-        triangleDash.forceBiasX = forceBias;
-        triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndex(corners, forceBias);
+    if (hasForcePointInput(forcePointX, forcePointY)) {
+        triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndexByForcePoint(
+            TRIANGLE_CORNER_INDICES,
+            corners,
+            triangleDash.forcePointIntentX,
+            triangleDash.forcePointIntentY
+        );
         return;
     }
 
@@ -134,9 +144,12 @@ export const updateTriangleDashSelectedLeadingCorner = (
         return;
     }
 
-    const recoveryBias = resolveForceBias(0, fallbackFacingDirection);
-    triangleDash.forceBiasX = recoveryBias;
-    triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndex(corners, recoveryBias);
+    triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndexByForcePoint(
+        TRIANGLE_CORNER_INDICES,
+        corners,
+        triangleDash.forcePointIntentX,
+        triangleDash.forcePointIntentY
+    );
 };
 
 export const stopTriangleDash = (triangleDash: PlayerTriangleDashState): void => {
@@ -166,52 +179,12 @@ const getRotatedCorners = (orientationRad: number): CornerPoint[] => {
     });
 };
 
-const resolveForceBias = (
-    horizontalMoveDir: number,
-    fallbackFacingDirection: -1 | 1
-): -1 | 1 => {
-    const inputDirection = horizontalMoveDir === 0
-        ? fallbackFacingDirection
-        : (horizontalMoveDir > 0 ? 1 : -1);
-
-    return inputDirection;
-};
-
-const resolveLeadingCornerIndex = (
-    corners: CornerPoint[],
-    forceBias: -1 | 1
-): TriangleCornerIndex => {
-    return pickCornerByBias(TRIANGLE_CORNER_INDICES, corners, forceBias);
-};
-
 const resolveGroundContactCorners = (corners: CornerPoint[]): TriangleCornerIndex[] => {
     const maxY = Math.max(corners[0]?.y ?? -Infinity, corners[1]?.y ?? -Infinity, corners[2]?.y ?? -Infinity);
     return [0, 1, 2].filter((index) => {
         const cornerY = corners[index]?.y ?? -Infinity;
         return Math.abs(maxY - cornerY) <= PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON;
     }) as TriangleCornerIndex[];
-};
-
-const pickCornerByBias = (
-    candidates: TriangleCornerIndex[],
-    corners: CornerPoint[],
-    forceBias: -1 | 1
-): TriangleCornerIndex => {
-    let selected = candidates[0] ?? 1;
-    let selectedX = corners[selected]?.x ?? 0;
-
-    candidates.forEach((candidate) => {
-        const candidateX = corners[candidate]?.x ?? 0;
-        const better = forceBias > 0
-            ? candidateX > selectedX
-            : candidateX < selectedX;
-        if (better) {
-            selected = candidate;
-            selectedX = candidateX;
-        }
-    });
-
-    return selected;
 };
 
 const pickMostUpwardCorner = (
@@ -270,7 +243,11 @@ const getTriangleDashSelectedLeadingCornerPreview = (
     let leadingCornerIndex = triangleDash.selectedLeadingCornerIndex;
 
     if (grounded) {
-        leadingCornerIndex = resolveGroundedLeadingCornerIndex(corners);
+        leadingCornerIndex = resolveGroundedLeadingCornerIndex(
+            corners,
+            triangleDash.forcePointIntentX,
+            triangleDash.forcePointIntentY
+        );
         triangleDash.selectedLeadingCornerIndex = leadingCornerIndex;
         return {
             leadingCornerIndex,
@@ -279,7 +256,12 @@ const getTriangleDashSelectedLeadingCornerPreview = (
     }
 
     if (!isSelectedCornerValid(leadingCornerIndex, corners, grounded)) {
-        leadingCornerIndex = resolveLeadingCornerIndex(corners, triangleDash.forceBiasX);
+        leadingCornerIndex = resolveLeadingCornerIndexByForcePoint(
+            TRIANGLE_CORNER_INDICES,
+            corners,
+            triangleDash.forcePointIntentX,
+            triangleDash.forcePointIntentY
+        );
         triangleDash.selectedLeadingCornerIndex = leadingCornerIndex;
     }
 
@@ -298,11 +280,13 @@ const isSelectedCornerValid = (
         return true;
     }
 
-    return cornerIndex === resolveGroundedLeadingCornerIndex(corners);
+    return cornerIndex === resolveGroundedLeadingCornerIndex(corners, 0, -1);
 };
 
 const resolveGroundedLeadingCornerIndex = (
-    corners: CornerPoint[]
+    corners: CornerPoint[],
+    forcePointX: -1 | 0 | 1,
+    forcePointY: -1 | 0 | 1
 ): TriangleCornerIndex => {
     const groundedContactCorners = resolveGroundContactCorners(corners);
     const nonGroundedCorners = TRIANGLE_CORNER_INDICES.filter((index) => !groundedContactCorners.includes(index)) as TriangleCornerIndex[];
@@ -312,8 +296,73 @@ const resolveGroundedLeadingCornerIndex = (
     }
 
     if (nonGroundedCorners.length > 0) {
-        return pickMostUpwardCorner(nonGroundedCorners, corners);
+        return resolveLeadingCornerIndexByForcePoint(nonGroundedCorners, corners, forcePointX, forcePointY);
     }
 
     return pickMostUpwardCorner(TRIANGLE_CORNER_INDICES, corners);
+};
+
+const resolveLeadingCornerIndexByForcePoint = (
+    candidates: TriangleCornerIndex[],
+    corners: CornerPoint[],
+    forcePointX: -1 | 0 | 1,
+    forcePointY: -1 | 0 | 1
+): TriangleCornerIndex => {
+    if (!hasForcePointInput(forcePointX, forcePointY)) {
+        return pickMostUpwardCorner(candidates, corners);
+    }
+
+    let selected = candidates[0] ?? 1;
+    let selectedScore = dot(corners[selected], forcePointX, forcePointY);
+    let selectedY = corners[selected]?.y ?? 0;
+
+    candidates.forEach((candidate) => {
+        const candidateScore = dot(corners[candidate], forcePointX, forcePointY);
+        const candidateY = corners[candidate]?.y ?? 0;
+        const isBetterScore = candidateScore > selectedScore;
+        const isEqualScoreMoreUpward = candidateScore === selectedScore && candidateY < selectedY;
+
+        if (isBetterScore || isEqualScoreMoreUpward) {
+            selected = candidate;
+            selectedScore = candidateScore;
+            selectedY = candidateY;
+        }
+    });
+
+    return selected;
+};
+
+const dot = (
+    corner: CornerPoint | undefined,
+    forcePointX: -1 | 0 | 1,
+    forcePointY: -1 | 0 | 1
+): number => {
+    const cornerX = corner?.x ?? 0;
+    const cornerY = corner?.y ?? 0;
+    return (cornerX * forcePointX) + (cornerY * forcePointY);
+};
+
+const hasForcePointInput = (
+    forcePointX: -1 | 0 | 1,
+    forcePointY: -1 | 0 | 1
+): boolean => {
+    return forcePointX !== 0 || forcePointY !== 0;
+};
+
+const updateForcePointIntent = (
+    triangleDash: PlayerTriangleDashState,
+    forcePointX: -1 | 0 | 1,
+    forcePointY: -1 | 0 | 1
+): void => {
+    if (!hasForcePointInput(forcePointX, forcePointY)) {
+        return;
+    }
+
+    triangleDash.forcePointIntentX = forcePointX;
+    triangleDash.forcePointIntentY = forcePointY;
+    if (forcePointX < 0) {
+        triangleDash.forceBiasX = -1;
+    } else if (forcePointX > 0) {
+        triangleDash.forceBiasX = 1;
+    }
 };

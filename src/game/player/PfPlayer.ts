@@ -290,8 +290,8 @@ export class PfPlayer {
             updateTriangleDashSelectedLeadingCorner(
                 triangleDash,
                 this.state.triangleShell,
-                horizontalDir,
-                this.lastMoveDirection,
+                input.forcePointX,
+                input.forcePointY,
                 dashSelectionGrounded
             );
         }
@@ -343,8 +343,8 @@ export class PfPlayer {
                 updateTriangleDashSelectedLeadingCorner(
                     triangleDash,
                     this.state.triangleShell,
-                    horizontalDir,
-                    this.lastMoveDirection,
+                    input.forcePointX,
+                    input.forcePointY,
                     grounded
                 );
             }

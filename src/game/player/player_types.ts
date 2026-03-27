@@ -16,6 +16,8 @@ export interface PlayerTriangleDashState {
     directionX: number;
     directionY: number;
     forceBiasX: -1 | 1;
+    forcePointIntentX: -1 | 0 | 1;
+    forcePointIntentY: -1 | 0 | 1;
     selectedLeadingCornerIndex: TriangleCornerIndex;
     leadingCornerIndex: TriangleCornerIndex;
     lockedOrientationRad: number;

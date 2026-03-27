@@ -207,13 +207,15 @@ Triangle — самая сложная и наиболее чувствител�
 - Leading corner хранится как persistent selected state.
 - В текущем grounded baseline на flat ground Triangle стоит на ребре: две вершины контактируют с полом, и ровно одна вершина остаётся non-contact.
 - В grounded-состоянии valid leading corner ровно один: эта единственная non-contact вершина.
-- В grounded-состоянии `A/D`, lastMoveDirection и другие surrogate-правила не меняют leading corner.
+- Source of truth для leading corner — дискретный force-application-point intent из `WASD`.
+- Surrogate-выбор через `lastMoveDirection` не используется.
+- На flat ground `A/D` не дают визуально нового выбора leading corner, потому что валидный non-contact угол единственный.
 - Marker на земле и grounded dash используют тот же единственный valid non-contact corner.
 - Если contact-тест временно даёт небазовую картину, fallback должен оставаться предсказуемым и не выбирать контактный угол.
-- Полная point-of-force / force-application-point система через WASD отложена в отдельный future slice.
+- Full analog/continuous force-application-point система остаётся deferred.
 - Air baseline для выбора leading corner:
 - dash остаётся доступным;
-- ведущий угол выбирается из текущей ориентации Triangle по force-bias (по `A/D` и fallback), без grounded-фильтра.
+- ведущий угол выбирается из текущей ориентации Triangle по тому же дискретному force-application-point intent (`WASD`), без grounded-фильтра.
 - Visual highlight ведущего угла отложен в отдельный следующий slice.
 - Dash можно сделать:
   - с пола, если один из углов расположен перпендикулярно опорной поверхности;
