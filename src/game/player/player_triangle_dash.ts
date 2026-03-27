@@ -115,12 +115,18 @@ export const updateTriangleDashSelectedLeadingCorner = (
         ? triangleShell.groundedOrientationRad
         : triangleShell.orientationRad;
     const corners = getRotatedCorners(lockedOrientationRad);
+
+    if (grounded) {
+        triangleDash.selectedLeadingCornerIndex = resolveGroundedLeadingCornerIndex(corners);
+        return;
+    }
+
     const hasSelectionInput = horizontalMoveDir !== 0;
 
     if (hasSelectionInput) {
         const forceBias = resolveForceBias(horizontalMoveDir, fallbackFacingDirection);
         triangleDash.forceBiasX = forceBias;
-        triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndex(corners, forceBias, grounded, true);
+        triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndex(corners, forceBias);
         return;
     }
 
@@ -130,7 +136,7 @@ export const updateTriangleDashSelectedLeadingCorner = (
 
     const recoveryBias = resolveForceBias(0, fallbackFacingDirection);
     triangleDash.forceBiasX = recoveryBias;
-    triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndex(corners, recoveryBias, grounded, false);
+    triangleDash.selectedLeadingCornerIndex = resolveLeadingCornerIndex(corners, recoveryBias);
 };
 
 export const stopTriangleDash = (triangleDash: PlayerTriangleDashState): void => {
@@ -147,6 +153,7 @@ const TRIANGLE_LOCAL_CORNERS: ReadonlyArray<CornerPoint> = [
     { x: 0, y: -TRIANGLE_HALF_HEIGHT },
     { x: TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT }
 ] as const;
+const TRIANGLE_CORNER_INDICES: TriangleCornerIndex[] = [0, 1, 2];
 
 const getRotatedCorners = (orientationRad: number): CornerPoint[] => {
     const sin = Math.sin(orientationRad);
@@ -172,26 +179,9 @@ const resolveForceBias = (
 
 const resolveLeadingCornerIndex = (
     corners: CornerPoint[],
-    forceBias: -1 | 1,
-    grounded: boolean,
-    hasHorizontalInput: boolean
+    forceBias: -1 | 1
 ): TriangleCornerIndex => {
-    const allCorners: TriangleCornerIndex[] = [0, 1, 2];
-    if (!grounded) {
-        return pickCornerByBias(allCorners, corners, forceBias);
-    }
-
-    const groundedContactCorners = resolveGroundContactCorners(corners);
-    const nonGroundedCorners = allCorners.filter((index) => !groundedContactCorners.includes(index)) as TriangleCornerIndex[];
-    if (nonGroundedCorners.length === 0) {
-        return pickCornerByBias(allCorners, corners, forceBias);
-    }
-
-    if (!hasHorizontalInput) {
-        return pickMostUpwardCorner(nonGroundedCorners, corners);
-    }
-
-    return pickCornerByBias(nonGroundedCorners, corners, forceBias);
+    return pickCornerByBias(TRIANGLE_CORNER_INDICES, corners, forceBias);
 };
 
 const resolveGroundContactCorners = (corners: CornerPoint[]): TriangleCornerIndex[] => {
@@ -279,8 +269,17 @@ const getTriangleDashSelectedLeadingCornerPreview = (
     const corners = getRotatedCorners(lockedOrientationRad);
     let leadingCornerIndex = triangleDash.selectedLeadingCornerIndex;
 
+    if (grounded) {
+        leadingCornerIndex = resolveGroundedLeadingCornerIndex(corners);
+        triangleDash.selectedLeadingCornerIndex = leadingCornerIndex;
+        return {
+            leadingCornerIndex,
+            lockedOrientationRad
+        };
+    }
+
     if (!isSelectedCornerValid(leadingCornerIndex, corners, grounded)) {
-        leadingCornerIndex = resolveLeadingCornerIndex(corners, triangleDash.forceBiasX, grounded, false);
+        leadingCornerIndex = resolveLeadingCornerIndex(corners, triangleDash.forceBiasX);
         triangleDash.selectedLeadingCornerIndex = leadingCornerIndex;
     }
 
@@ -299,6 +298,22 @@ const isSelectedCornerValid = (
         return true;
     }
 
+    return cornerIndex === resolveGroundedLeadingCornerIndex(corners);
+};
+
+const resolveGroundedLeadingCornerIndex = (
+    corners: CornerPoint[]
+): TriangleCornerIndex => {
     const groundedContactCorners = resolveGroundContactCorners(corners);
-    return !groundedContactCorners.includes(cornerIndex);
+    const nonGroundedCorners = TRIANGLE_CORNER_INDICES.filter((index) => !groundedContactCorners.includes(index)) as TriangleCornerIndex[];
+
+    if (groundedContactCorners.length === 2 && nonGroundedCorners.length === 1) {
+        return nonGroundedCorners[0];
+    }
+
+    if (nonGroundedCorners.length > 0) {
+        return pickMostUpwardCorner(nonGroundedCorners, corners);
+    }
+
+    return pickMostUpwardCorner(TRIANGLE_CORNER_INDICES, corners);
 };

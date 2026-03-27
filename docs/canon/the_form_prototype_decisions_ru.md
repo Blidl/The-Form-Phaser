@@ -179,12 +179,13 @@
 - во время dash Triangle не вращается (orientation lock до конца dash);
 - направление dash определяется через leading corner / leading angle logic, а не как абстрактный рывок по текущему spin;
 - точка приложения силы (force application point) определяет выбор leading corner;
-- базовый force-bias для выбора leading corner берётся из `A/D`, при нейтральном вводе используется предсказуемый fallback по последнему горизонтальному направлению;
 - leading corner хранится как persistent selected state;
-- до появления полной force-application-point системы используется baseline substitute: `A/D` меняют selected leading corner;
-- без нового релевантного input выбранный leading corner не пересчитывается и не меняется каждый кадр;
-- neutral fallback используется только для initial selection / invalidation recovery, а не как постоянный every-frame override;
-- в grounded-состоянии leading corner выбирается только из углов, не соприкасающихся с полом;
+- в текущем grounded baseline на flat ground у Triangle две вершины контактируют с полом, а валидный leading corner ровно один — единственная non-contact вершина;
+- в grounded-состоянии leading corner определяется только через текущие grounded contact corners;
+- в grounded-состоянии `A/D`, lastMoveDirection и другие surrogate-правила не должны менять leading corner;
+- marker на земле и grounded dash используют этот же единственный non-contact corner;
+- если point-of-force / force-application-point control через WASD будет добавлен, это отдельный future slice;
+- в air-состоянии baseline force-bias по `A/D` и fallback по последнему горизонтальному направлению сохраняются;
 - visual highlight leading corner вынесен в отдельный следующий slice;
 - dash тратит заряд;
 - зарядов: `3`;

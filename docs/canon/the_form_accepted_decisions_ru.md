@@ -204,19 +204,16 @@ Triangle — самая сложная и наиболее чувствител�
 - Во время dash Triangle не вращается: orientation фиксируется на весь dash.
 - Dash direction выбирается через leading corner / leading angle logic.
 - Точка приложения силы (force application point) определяет ведущий угол.
-- Базовый force-bias берётся из `A/D`; при нейтральном вводе используется предсказуемый fallback по последнему горизонтальному направлению.
 - Leading corner хранится как persistent selected state.
-- Пока полной force-application-point системы нет, baseline substitute такой: `A/D` меняют selected leading corner.
-- Без нового релевантного input selected leading corner не должен автоматически переопределяться каждый кадр.
-- Neutral fallback допустим только для initial selection / invalidation recovery.
-- В grounded-состоянии ведущий угол выбирается только из углов, не соприкасающихся с полом.
-- Grounded baseline для выбора leading corner:
-  - текущая опорная грань определяется по grounded pose (контактные углы у пола);
-  - кандидаты на leading corner — только non-grounded углы;
-  - force-bias выбирает один из этих кандидатов.
+- В текущем grounded baseline на flat ground Triangle стоит на ребре: две вершины контактируют с полом, и ровно одна вершина остаётся non-contact.
+- В grounded-состоянии valid leading corner ровно один: эта единственная non-contact вершина.
+- В grounded-состоянии `A/D`, lastMoveDirection и другие surrogate-правила не меняют leading corner.
+- Marker на земле и grounded dash используют тот же единственный valid non-contact corner.
+- Если contact-тест временно даёт небазовую картину, fallback должен оставаться предсказуемым и не выбирать контактный угол.
+- Полная point-of-force / force-application-point система через WASD отложена в отдельный future slice.
 - Air baseline для выбора leading corner:
-  - dash остаётся доступным;
-  - ведущий угол выбирается из текущей ориентации Triangle по force-bias, без grounded-фильтра.
+- dash остаётся доступным;
+- ведущий угол выбирается из текущей ориентации Triangle по force-bias (по `A/D` и fallback), без grounded-фильтра.
 - Visual highlight ведущего угла отложен в отдельный следующий slice.
 - Dash можно сделать:
   - с пола, если один из углов расположен перпендикулярно опорной поверхности;

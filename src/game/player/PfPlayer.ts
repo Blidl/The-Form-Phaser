@@ -68,9 +68,12 @@ import {
     tryStartTriangleDash
 } from './player_triangle_dash';
 import {
+    cancelTriangleChargesRestore,
     createTriangleChargesState,
     hasTriangleDashCharges,
     resetTriangleChargesState,
+    tickTriangleChargesRestore,
+    tryStartTriangleChargesRestore,
     tryConsumeTriangleDashCharge
 } from './player_triangle_charges';
 import { resolveTriangleLeadingCornerMarkerOffset } from './player_triangle_leading_corner_visual';
@@ -225,6 +228,7 @@ export class PfPlayer {
         const isTriangleForm = this.state.currentForm === 'triangle';
         const isBallForm = this.state.currentForm === 'ball';
         const triangleDash = this.state.triangleDash;
+        const triangleCharges = this.state.triangleCharges;
         tickTriangleDashCooldown(triangleDash, deltaMs);
 
         const grounded = this.physicsBody.blocked.down || this.physicsBody.touching.down;
@@ -237,7 +241,6 @@ export class PfPlayer {
         }
 
         if (justLanded) {
-            resetTriangleChargesState(this.state.triangleCharges);
             const reboundVelocity = this.resolveReboundJumpVelocity(this.lastAirborneDownwardSpeed);
             if (reboundVelocity !== null) {
                 this.reboundJumpVelocity = reboundVelocity;
@@ -247,6 +250,20 @@ export class PfPlayer {
             }
 
             this.lastAirborneDownwardSpeed = 0;
+        }
+
+        if (isTriangleForm) {
+            if (input.regenPressed) {
+                tryStartTriangleChargesRestore(triangleCharges, grounded);
+            }
+
+            if (!grounded) {
+                cancelTriangleChargesRestore(triangleCharges);
+            } else {
+                tickTriangleChargesRestore(triangleCharges, deltaMs);
+            }
+        } else {
+            cancelTriangleChargesRestore(triangleCharges);
         }
 
         if (isBallForm && !input.actionHeld) {
@@ -269,16 +286,17 @@ export class PfPlayer {
         let isTriangleDashActive = isTriangleForm && triangleDash.isActive;
         let dashStartedThisFrame = false;
         if (isTriangleForm && !isTriangleDashActive) {
+            const dashSelectionGrounded = this.isCurrentlyGrounded();
             updateTriangleDashSelectedLeadingCorner(
                 triangleDash,
                 this.state.triangleShell,
                 horizontalDir,
                 this.lastMoveDirection,
-                grounded
+                dashSelectionGrounded
             );
         }
         if (input.actionPressed && isTriangleForm && !isTriangleDashActive) {
-            dashStartedThisFrame = this.tryApplyTriangleDash(grounded);
+            dashStartedThisFrame = this.tryApplyTriangleDash();
             isTriangleDashActive = dashStartedThisFrame;
         }
 
@@ -321,7 +339,7 @@ export class PfPlayer {
                 deltaSec
             );
 
-            if (grounded && justLanded) {
+            if (grounded) {
                 updateTriangleDashSelectedLeadingCorner(
                     triangleDash,
                     this.state.triangleShell,
@@ -391,7 +409,7 @@ export class PfPlayer {
         tickPlayerTimers(this.timers, deltaMs);
         this.wasGrounded = grounded;
         this.syncVisualPosition();
-        this.updateTriangleLeadingCornerVisual(grounded, input);
+        this.updateTriangleLeadingCornerVisual(this.isCurrentlyGrounded(), input);
     }
 
     private tryHandleFormSwitch(input: PlayerInputSnapshot): void {
@@ -516,7 +534,7 @@ export class PfPlayer {
         this.boostActive = true;
     }
 
-    private tryApplyTriangleDash(grounded: boolean): boolean {
+    private tryApplyTriangleDash(): boolean {
         if (this.state.currentForm !== 'triangle') {
             return false;
         }
@@ -525,6 +543,7 @@ export class PfPlayer {
             return false;
         }
 
+        const grounded = this.isCurrentlyGrounded();
         const dashLaunch = tryStartTriangleDash(
             this.state.triangleDash,
             this.state.triangleShell,
@@ -611,5 +630,9 @@ export class PfPlayer {
         }
 
         return grounded ? PLAYER_BALL_BOOST_HOLD_MOVE_SPEED : PLAYER_BALL_BOOST_HOLD_AIR_MOVE_SPEED;
+    }
+
+    private isCurrentlyGrounded(): boolean {
+        return this.physicsBody.blocked.down || this.physicsBody.touching.down;
     }
 }

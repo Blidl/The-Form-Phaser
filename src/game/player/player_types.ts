@@ -24,6 +24,7 @@ export interface PlayerTriangleDashState {
 export interface PlayerTriangleChargesState {
     currentCharges: number;
     maxCharges: number;
+    restorePendingMs: number;
 }
 
 export interface PlayerShellState {
