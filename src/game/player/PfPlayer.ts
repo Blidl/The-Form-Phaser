@@ -29,7 +29,8 @@ import {
     PLAYER_START_FORM,
     PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS,
     PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
-    PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER
+    PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER,
+    PLAYER_TRIANGLE_DASH_SPEED
 } from './player_constants';
 import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_input';
 import {
@@ -50,6 +51,14 @@ import {
     tickTriangleShellOrientation
 } from './player_triangle_shell';
 import { applyTriangleSpecialJump } from './player_triangle_jump';
+import {
+    createTriangleDashState,
+    resetTriangleDashState,
+    stopTriangleDash,
+    tickTriangleDashActive,
+    tickTriangleDashCooldown,
+    tryStartTriangleDash
+} from './player_triangle_dash';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 
 export class PfPlayer {
@@ -76,7 +85,8 @@ export class PfPlayer {
     public constructor(scene: Scene, x: number, y: number) {
         this.state = {
             currentForm: PLAYER_START_FORM,
-            triangleShell: createTriangleShellState(1)
+            triangleShell: createTriangleShellState(1),
+            triangleDash: createTriangleDashState()
         };
         this.timers = createPlayerTimers();
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
@@ -149,6 +159,7 @@ export class PfPlayer {
     public respawnAt(x: number, y: number): void {
         this.state.currentForm = PLAYER_START_FORM;
         resetTriangleShellState(this.state.triangleShell, 1);
+        resetTriangleDashState(this.state.triangleDash);
 
         this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
         this.jumpCutConsumed = false;
@@ -186,6 +197,10 @@ export class PfPlayer {
         this.lastInput = input;
         const deltaSec = deltaMs / 1000;
         this.tryHandleFormSwitch(input);
+        const isTriangleForm = this.state.currentForm === 'triangle';
+        const isBallForm = this.state.currentForm === 'ball';
+        const triangleDash = this.state.triangleDash;
+        tickTriangleDashCooldown(triangleDash, deltaMs);
 
         const grounded = this.physicsBody.blocked.down || this.physicsBody.touching.down;
         const justLanded = grounded && !this.wasGrounded;
@@ -208,7 +223,10 @@ export class PfPlayer {
             this.lastAirborneDownwardSpeed = 0;
         }
 
-        if (!input.actionHeld) {
+        if (isBallForm && !input.actionHeld) {
+            this.boostActive = false;
+            this.pendingBoostRequest = false;
+        } else if (!isBallForm) {
             this.boostActive = false;
             this.pendingBoostRequest = false;
         }
@@ -226,22 +244,32 @@ export class PfPlayer {
         const effectiveExternalInfluenceX = grounded
             ? externalHorizontalInfluenceX
             : externalHorizontalInfluenceX * PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER;
-        const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
-        const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
-        const targetVelocityX = (horizontalDir * moveSpeed) + (grounded ? effectiveExternalInfluenceX : 0);
-        const currentVelocityX = this.physicsBody.velocity.x;
-        const maxStepX = moveResponse * deltaSec;
-        let nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
+        const isTriangleDashActive = isTriangleForm && triangleDash.isActive;
+        this.physicsBody.setAllowGravity(!isTriangleDashActive);
 
-        if (grounded) {
-            this.airborneWindDriftX = 0;
+        if (isTriangleDashActive) {
+            this.physicsBody.setVelocity(
+                triangleDash.directionX * PLAYER_TRIANGLE_DASH_SPEED,
+                triangleDash.directionY * PLAYER_TRIANGLE_DASH_SPEED
+            );
         } else {
-            nextVelocityX = this.applyAirborneWindDrift(nextVelocityX, effectiveExternalInfluenceX, deltaSec);
+            const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
+            const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
+            const targetVelocityX = (horizontalDir * moveSpeed) + (grounded ? effectiveExternalInfluenceX : 0);
+            const currentVelocityX = this.physicsBody.velocity.x;
+            const maxStepX = moveResponse * deltaSec;
+            let nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
+
+            if (grounded) {
+                this.airborneWindDriftX = 0;
+            } else {
+                nextVelocityX = this.applyAirborneWindDrift(nextVelocityX, effectiveExternalInfluenceX, deltaSec);
+            }
+
+            this.physicsBody.setVelocityX(nextVelocityX);
         }
 
-        this.physicsBody.setVelocityX(nextVelocityX);
-
-        if (this.state.currentForm === 'triangle') {
+        if (isTriangleForm) {
             tickTriangleShellOrientation(
                 this.state.triangleShell,
                 grounded,
@@ -253,7 +281,7 @@ export class PfPlayer {
         }
 
         const canJump = grounded || hasCoyoteTime(this.timers);
-        if (canJump && hasJumpBuffer(this.timers)) {
+        if (!isTriangleDashActive && canJump && hasJumpBuffer(this.timers)) {
             if (this.state.currentForm === 'triangle') {
                 const triangleJumpLaunch = applyTriangleSpecialJump(
                     this.state.triangleShell,
@@ -276,7 +304,7 @@ export class PfPlayer {
             this.lastAirborneDownwardSpeed = 0;
         }
 
-        if (!input.jumpHeld && !this.jumpCutConsumed && this.physicsBody.velocity.y < 0) {
+        if (!isTriangleDashActive && !input.jumpHeld && !this.jumpCutConsumed && this.physicsBody.velocity.y < 0) {
             const jumpCutMultiplier = this.state.currentForm === 'triangle'
                 ? PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER
                 : PLAYER_JUMP_CUT_MULTIPLIER;
@@ -285,17 +313,28 @@ export class PfPlayer {
         }
 
         if (input.actionPressed) {
-            if (grounded) {
-                this.tryApplyBoost(grounded, horizontalDir);
-            } else {
-                this.pendingBoostRequest = true;
+            if (isBallForm) {
+                if (grounded) {
+                    this.tryApplyBoost(grounded, horizontalDir);
+                } else {
+                    this.pendingBoostRequest = true;
+                }
+            } else if (isTriangleForm) {
+                this.tryApplyTriangleDash(horizontalDir);
             }
         }
 
-        if (justLanded && this.pendingBoostRequest && input.actionHeld) {
+        if (isBallForm && justLanded && this.pendingBoostRequest && input.actionHeld) {
             this.tryApplyBoost(grounded, horizontalDir, true);
             if (this.boostActive) {
                 this.pendingBoostRequest = false;
+            }
+        }
+
+        if (isTriangleDashActive) {
+            tickTriangleDashActive(triangleDash, deltaMs);
+            if (!triangleDash.isActive) {
+                this.physicsBody.setAllowGravity(true);
             }
         }
 
@@ -325,11 +364,16 @@ export class PfPlayer {
             return;
         }
 
+        const previousForm = this.state.currentForm;
         this.state.currentForm = nextForm;
         this.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;
         if (nextForm === 'triangle') {
             resetTriangleShellState(this.state.triangleShell, this.lastMoveDirection);
+            stopTriangleDash(this.state.triangleDash);
+        } else if (previousForm === 'triangle') {
+            stopTriangleDash(this.state.triangleDash);
         }
+        this.physicsBody.setAllowGravity(true);
         this.applyCurrentFormVisual();
     }
 
@@ -375,6 +419,27 @@ export class PfPlayer {
         this.physicsBody.setVelocityX(boostDirection * PLAYER_BALL_BOOST_SPEED);
         this.boostCooldownMs = PLAYER_BALL_BOOST_COOLDOWN_MS;
         this.boostActive = true;
+    }
+
+    private tryApplyTriangleDash(horizontalDir: number): void {
+        if (this.state.currentForm !== 'triangle') {
+            return;
+        }
+
+        const dashLaunch = tryStartTriangleDash(
+            this.state.triangleDash,
+            this.state.triangleShell,
+            horizontalDir,
+            this.lastMoveDirection
+        );
+
+        if (dashLaunch === null) {
+            return;
+        }
+
+        this.jumpCutConsumed = false;
+        this.physicsBody.setAllowGravity(false);
+        this.physicsBody.setVelocity(dashLaunch.velocityX, dashLaunch.velocityY);
     }
 
     private resolveBoostDirection(horizontalDir: number): -1 | 1 {

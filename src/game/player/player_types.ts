@@ -8,7 +8,16 @@ export interface PlayerTriangleShellState {
     airborneAngularVelocityRadPerSec: number;
 }
 
+export interface PlayerTriangleDashState {
+    isActive: boolean;
+    remainingMs: number;
+    cooldownMs: number;
+    directionX: number;
+    directionY: number;
+}
+
 export interface PlayerShellState {
     currentForm: PlayerFormId;
     triangleShell: PlayerTriangleShellState;
+    triangleDash: PlayerTriangleDashState;
 }
