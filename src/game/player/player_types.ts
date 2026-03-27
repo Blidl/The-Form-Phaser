@@ -9,6 +9,14 @@ export interface PlayerTriangleShellState {
     airborneAngularVelocityRadPerSec: number;
 }
 
+export interface PlayerSquareShellState {
+    orientationRad: number;
+    groundedOrientationRad: number;
+    contactNormalX: -1 | 0 | 1;
+    contactNormalY: -1 | 0 | 1;
+    hasContact: boolean;
+}
+
 export interface PlayerTriangleDashState {
     isActive: boolean;
     remainingMs: number;
@@ -32,6 +40,7 @@ export interface PlayerTriangleChargesState {
 export interface PlayerShellState {
     currentForm: PlayerFormId;
     triangleShell: PlayerTriangleShellState;
+    squareShell: PlayerSquareShellState;
     triangleDash: PlayerTriangleDashState;
     triangleCharges: PlayerTriangleChargesState;
 }

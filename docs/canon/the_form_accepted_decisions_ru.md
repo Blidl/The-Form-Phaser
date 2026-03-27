@@ -257,6 +257,18 @@ Triangle — самая сложная и наиболее чувствител�
 ### Базовая роль формы
 Square — форма с `attach`, `trail-resource` и `rollover`.
 
+### Текущий baseline slice (Square contact shell only)
+- На текущем baseline-этапе Square реализован как `contact shell`, а не как rotation gameplay shell.
+- В grounded shell у Square несколько валидных resting face orientations (4 осевые позы, по одной на каждую грань).
+- У Square нет заранее назначенной единственной "нижней" грани.
+- После landing/settle Square выбирает ближайшую валидную grounded face orientation.
+- Выбранная nearest orientation становится текущей опорной grounded-orientation.
+- Grounded movement не должен принудительно возвращать Square к одному каноническому "низу".
+- В этом slice Square не вращается в воздухе сам по себе.
+- Прыжок Square не запускает passive spin и не включает move-direction spin.
+- Вне контакта Square сохраняет стабильную ориентацию до будущих slice с attach/rollover.
+- Contact-aligned ориентация Square обновляется только от реального контакта с поверхностью.
+
 ### Коллизия и поворот
 - Коллайдер Square всегда квадратный.
 - Реальный поворот Square учитывается.

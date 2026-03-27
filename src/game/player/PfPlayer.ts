@@ -23,6 +23,7 @@ import {
     PLAYER_JUMP_CUT_MULTIPLIER,
     PLAYER_JUMP_VELOCITY,
     PLAYER_FORM_SQUARE_SIZE,
+    PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
     PLAYER_FORM_TRIANGLE_HEIGHT,
     PLAYER_FORM_TRIANGLE_WIDTH,
     PLAYER_PLACEHOLDER_RADIUS,
@@ -56,6 +57,11 @@ import {
     resetTriangleShellState,
     tickTriangleShellOrientation
 } from './player_triangle_shell';
+import {
+    createSquareShellState,
+    resetSquareShellState,
+    tickSquareShellOrientation
+} from './player_square_shell';
 import { applyTriangleSpecialJump } from './player_triangle_jump';
 import {
     createTriangleDashState,
@@ -95,6 +101,7 @@ export class PfPlayer {
     private readonly ballVisual: GameObjects.Arc;
     private readonly triangleVisual: GameObjects.Triangle;
     private readonly squareVisual: GameObjects.Rectangle;
+    private readonly squareContactMarker: GameObjects.Line;
     private readonly triangleLeadingCornerMarker: GameObjects.Arc;
     private jumpCutConsumed: boolean;
     private boostCooldownMs: number;
@@ -112,6 +119,7 @@ export class PfPlayer {
         this.state = {
             currentForm: PLAYER_START_FORM,
             triangleShell: createTriangleShellState(1),
+            squareShell: createSquareShellState(),
             triangleDash: createTriangleDashState(),
             triangleCharges: createTriangleChargesState()
         };
@@ -162,7 +170,13 @@ export class PfPlayer {
         this.squareVisual = scene.add.rectangle(x, y, PLAYER_FORM_SQUARE_SIZE, PLAYER_FORM_SQUARE_SIZE, 0xa5d6a7)
             .setStrokeStyle(2, 0xffffff)
             .setDepth(4500)
-            .setVisible(false);
+            .setVisible(false)
+            .setRotation(PLAYER_SQUARE_EDGE_DOWN_POSE_RAD);
+        this.squareContactMarker = scene.add.line(x, y, 0, 0, 0, 12, 0xffffff)
+            .setLineWidth(2, 2)
+            .setDepth(4501)
+            .setVisible(false)
+            .setOrigin(0.5, 0.5);
         this.triangleLeadingCornerMarker = scene.add.circle(x, y, PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS, 0xffffff)
             .setStrokeStyle(2, 0xffb74d)
             .setDepth(4501)
@@ -205,6 +219,7 @@ export class PfPlayer {
     public freezeForRespawn(): void {
         this.frozenForRespawn = true;
         this.triangleLeadingCornerMarker.setVisible(false);
+        this.squareContactMarker.setVisible(false);
         this.airborneWindDriftX = 0;
         this.physicsBody.setVelocity(0, 0);
         this.physicsBody.setAcceleration(0, 0);
@@ -214,6 +229,7 @@ export class PfPlayer {
     public respawnAt(x: number, y: number): void {
         this.state.currentForm = PLAYER_START_FORM;
         resetTriangleShellState(this.state.triangleShell, 1);
+        resetSquareShellState(this.state.squareShell);
         resetTriangleDashState(this.state.triangleDash);
         resetTriangleChargesState(this.state.triangleCharges);
 
@@ -324,6 +340,17 @@ export class PfPlayer {
                 input.forcePointY,
                 input.forcePointActive,
                 dashSelectionGrounded
+            );
+        }
+
+        if (this.state.currentForm === 'square') {
+            const squareContact = this.resolveSquareContactNormal();
+            tickSquareShellOrientation(
+                this.state.squareShell,
+                deltaSec,
+                squareContact.normalX,
+                squareContact.normalY,
+                squareContact.hasContact
             );
         }
         if (input.actionPressed && isTriangleForm && !isTriangleDashActive) {
@@ -469,6 +496,8 @@ export class PfPlayer {
         if (nextForm === 'triangle') {
             resetTriangleShellState(this.state.triangleShell, this.lastMoveDirection);
             stopTriangleDash(this.state.triangleDash);
+        } else if (nextForm === 'square') {
+            resetSquareShellState(this.state.squareShell);
         } else if (previousForm === 'triangle') {
             stopTriangleDash(this.state.triangleDash);
         }
@@ -482,6 +511,7 @@ export class PfPlayer {
         this.ballVisual.setVisible(currentForm === 'ball');
         this.triangleVisual.setVisible(currentForm === 'triangle');
         this.squareVisual.setVisible(currentForm === 'square');
+        this.squareContactMarker.setVisible(currentForm === 'square' && this.state.squareShell.hasContact);
         this.triangleLeadingCornerMarker.setVisible(currentForm === 'triangle');
     }
 
@@ -494,6 +524,8 @@ export class PfPlayer {
         this.triangleVisual.setPosition(formAnchor.x, formAnchor.y);
         this.triangleVisual.setRotation(this.state.triangleShell.orientationRad);
         this.squareVisual.setPosition(x, y);
+        this.squareVisual.setRotation(this.state.squareShell.orientationRad);
+        this.updateSquareContactVisual(x, y);
     }
 
     private applyCurrentFormCollisionBody(): void {
@@ -561,6 +593,43 @@ export class PfPlayer {
                 ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE
                 : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE
         );
+    }
+
+    private resolveSquareContactNormal(): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; hasContact: boolean } {
+        const blocked = this.physicsBody.blocked;
+        const touching = this.physicsBody.touching;
+
+        if (blocked.down || touching.down) {
+            return { normalX: 0, normalY: -1, hasContact: true };
+        }
+
+        if (blocked.up || touching.up) {
+            return { normalX: 0, normalY: 1, hasContact: true };
+        }
+
+        if (blocked.left || touching.left) {
+            return { normalX: 1, normalY: 0, hasContact: true };
+        }
+
+        if (blocked.right || touching.right) {
+            return { normalX: -1, normalY: 0, hasContact: true };
+        }
+
+        return { normalX: 0, normalY: -1, hasContact: false };
+    }
+
+    private updateSquareContactVisual(playerX: number, playerY: number): void {
+        if (this.state.currentForm !== 'square' || !this.state.squareShell.hasContact) {
+            this.squareContactMarker.setVisible(false);
+            return;
+        }
+
+        const markerLength = (PLAYER_FORM_SQUARE_SIZE * 0.5) + 10;
+        const normalX = this.state.squareShell.contactNormalX;
+        const normalY = this.state.squareShell.contactNormalY;
+        this.squareContactMarker.setVisible(true);
+        this.squareContactMarker.setPosition(playerX, playerY);
+        this.squareContactMarker.setTo(0, 0, normalX * markerLength, normalY * markerLength);
     }
 
     private resolveReboundJumpVelocity(approachSpeed: number): number | null {
