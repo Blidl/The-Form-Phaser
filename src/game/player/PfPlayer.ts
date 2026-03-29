@@ -12,6 +12,9 @@ import {
     PLAYER_BALL_BOOST_SPEED,
     PLAYER_AIR_MOVE_ACCEL,
     PLAYER_AIR_MOVE_DECEL,
+    PLAYER_BALL_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC,
+    PLAYER_TRIANGLE_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC,
+    PLAYER_SQUARE_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC,
     PLAYER_AIR_MOVE_SPEED,
     PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER,
     PLAYER_AIR_WIND_MIN_DRIFT_RATIO,
@@ -150,6 +153,7 @@ export class PfPlayer {
     private readonly ballReboundRuntime: BallReboundRuntimeState;
     private frozenForRespawn: boolean;
     private airborneWindDriftX: number;
+    private readonly groundedDragX: number;
 
     public constructor(scene: Scene, x: number, y: number) {
         this.state = {
@@ -180,7 +184,8 @@ export class PfPlayer {
         this.physicsBody = this.physicsSprite.body as Physics.Arcade.Body;
         this.physicsBody.setCircle(PLAYER_PLACEHOLDER_RADIUS);
         this.physicsBody.setBounce(0);
-        this.physicsBody.setDragX(2400);
+        this.groundedDragX = 2400;
+        this.physicsBody.setDragX(this.groundedDragX);
         this.physicsBody.setMaxVelocity(Math.max(PLAYER_GROUND_MOVE_SPEED, PLAYER_AIR_MOVE_SPEED, PLAYER_BALL_BOOST_SPEED), 1200);
         this.physicsBody.setCollideWorldBounds(true);
         this.physicsBody.setGravityY(PLAYER_GRAVITY_Y);
@@ -344,6 +349,7 @@ export class PfPlayer {
         tickTriangleDashCooldown(triangleDash, deltaMs);
 
         const grounded = this.physicsBody.blocked.down || this.physicsBody.touching.down;
+        this.physicsBody.setDragX(grounded ? this.groundedDragX : 0);
         const justLanded = grounded && !this.wasGrounded;
         if (grounded) {
             refreshCoyoteTime(this.timers);
@@ -590,12 +596,21 @@ export class PfPlayer {
             } else {
                 const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
                 const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
-                const targetVelocityX = (horizontalDir * moveSpeed) + (grounded ? effectiveExternalInfluenceX : 0);
+                const targetVelocityX = this.resolveTargetVelocityX(
+                    currentVelocityX,
+                    grounded,
+                    horizontalDir,
+                    moveSpeed,
+                    effectiveExternalInfluenceX
+                );
                 const maxStepX = moveResponse * deltaSec;
                 nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
                 if (grounded) {
                     this.airborneWindDriftX = 0;
                 } else {
+                    if (horizontalDir === 0) {
+                        nextVelocityX = this.applyAirborneNoInputInertiaDamping(nextVelocityX, deltaSec, this.state.currentForm);
+                    }
                     nextVelocityX = this.applyAirborneWindDrift(nextVelocityX, effectiveExternalInfluenceX, deltaSec);
                 }
             }
@@ -944,6 +959,20 @@ export class PfPlayer {
         return horizontalDir === 0 ? PLAYER_AIR_MOVE_DECEL : PLAYER_AIR_MOVE_ACCEL;
     }
 
+    private resolveTargetVelocityX(
+        currentVelocityX: number,
+        grounded: boolean,
+        horizontalDir: number,
+        moveSpeed: number,
+        externalInfluenceX: number
+    ): number {
+        if (!grounded && horizontalDir === 0) {
+            return currentVelocityX;
+        }
+
+        return (horizontalDir * moveSpeed) + (grounded ? externalInfluenceX : 0);
+    }
+
     private applyAirborneWindDrift(baseVelocityX: number, windInfluenceX: number, deltaSec: number): number {
         const windStep = PLAYER_AIR_WIND_RESPONSE * deltaSec;
         this.airborneWindDriftX = this.moveToward(this.airborneWindDriftX, windInfluenceX, windStep);
@@ -964,6 +993,28 @@ export class PfPlayer {
         }
 
         return velocityWithDrift;
+    }
+
+    private applyAirborneNoInputInertiaDamping(
+        velocityX: number,
+        deltaSec: number,
+        form: PlayerFormId
+    ): number {
+        const dampingPerSec = this.resolveAirNoInputInertiaDampingPerSec(form);
+        const dampingFactor = Math.max(0, 1 - (dampingPerSec * deltaSec));
+        return velocityX * dampingFactor;
+    }
+
+    private resolveAirNoInputInertiaDampingPerSec(form: PlayerFormId): number {
+        if (form === 'square') {
+            return PLAYER_SQUARE_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC;
+        }
+
+        if (form === 'triangle') {
+            return PLAYER_TRIANGLE_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC;
+        }
+
+        return PLAYER_BALL_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC;
     }
 
     private resolveMoveSpeed(grounded: boolean, hasBoostHold: boolean): number {
