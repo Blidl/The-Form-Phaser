@@ -22,29 +22,13 @@ import {
     PLAYER_GRAVITY_Y,
     PLAYER_JUMP_CUT_MULTIPLIER,
     PLAYER_JUMP_VELOCITY,
-    PLAYER_FORM_SQUARE_SIZE,
     PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED,
     PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED,
-    PLAYER_SQUARE_TRAIL_STROKE_ALPHA,
-    PLAYER_SQUARE_TRAIL_STROKE_COLOR,
-    PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
-    PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
-    PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR,
-    PLAYER_SQUARE_VISUAL_STROKE_COLOR,
-    PLAYER_FORM_TRIANGLE_HEIGHT,
-    PLAYER_FORM_TRIANGLE_WIDTH,
     PLAYER_PLACEHOLDER_RADIUS,
     PLAYER_START_FORM,
     PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS,
-    PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
     PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER,
-    PLAYER_TRIANGLE_DASH_SPEED,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_ALPHA,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_OUTWARD_OFFSET,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS
+    PLAYER_TRIANGLE_DASH_SPEED
 } from './player_constants';
 import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_input';
 import {
@@ -79,7 +63,6 @@ import {
 } from './player_square_attach';
 import {
     beginSquareTrailAnchor,
-    resolveSquareTrailSegmentWorldLine,
     tickSquareTrailDetachedLifecycle,
     tickSquareTrailPaint
 } from './player_square_trail';
@@ -87,7 +70,6 @@ import { resolveSquareAttachSurfaceVelocity } from './player_square_surface_move
 import { applyTriangleSpecialJump } from './player_triangle_jump';
 import {
     createTriangleDashState,
-    resolveTriangleDashLeadingCornerPreview,
     resetTriangleDashState,
     stopTriangleDash,
     tickTriangleDashActive,
@@ -104,32 +86,46 @@ import {
     tryStartTriangleChargesRestore,
     tryConsumeTriangleDashCharge
 } from './player_triangle_charges';
-import { resolveTriangleLeadingCornerMarkerOffset } from './player_triangle_leading_corner_visual';
 import type {
     PlayerFormId,
-    PlayerShellState,
-    PlayerSquareTrailSupportOwner
+    PlayerShellState
 } from './player_types';
 import {
-    resolvePlayerFormAnchor,
+    createPlayerRectSnapshot,
+    resolveArcadeAxisContactSnapshot,
     resolvePlayerHazardHitShape,
     resolvePlayerLocomotionBodyConfig,
-    type PlayerFormAnchor,
-    type PlayerHazardHitShape
-} from './player_form_collision_shapes';
+    resolvePlayerFormAnchor,
+    resolveSquareContactNormal,
+    resolveSquareSupportIntervalFromKnownBody,
+    resolveSquareSupportIntervalFromOverlap,
+    resolveSquareSupportProbe,
+    resolveSquareTrailSurfacePoint
+} from './geometry/player_geometry_queries';
+import type {
+    PlayerFormAnchor,
+    PlayerHazardHitShape,
+    PlayerSquareTrailSurfacePoint
+} from './geometry/player_geometry_types';
+import { PlayerView } from './view/player_view';
+import {
+    resolveFormSwitchDecision,
+    resolveFormTransitionResetDirective,
+    resolveFreezeResetDirective,
+    resolveInvalidFormStateCombinationFlags,
+    resolveRespawnResetDirective,
+    resolveSquareAttachEntryBufferDirective,
+    resolveSquareAttachHoldDecision,
+    resolveSquareAttachStartDecision,
+    resolveTriangleDashStartDecision
+} from './state/player_form_state_guards';
 
 export class PfPlayer {
     public readonly state: PlayerShellState;
     private readonly timers: PlayerTimers;
-    private lastInput: PlayerInputSnapshot;
     private readonly physicsBody: Physics.Arcade.Body;
     private readonly physicsSprite: GameObjects.Arc;
-    private readonly ballVisual: GameObjects.Arc;
-    private readonly triangleVisual: GameObjects.Triangle;
-    private readonly squareVisual: GameObjects.Rectangle;
-    private readonly squareContactMarker: GameObjects.Line;
-    private readonly squareTrailGraphics: GameObjects.Graphics;
-    private readonly triangleLeadingCornerMarker: GameObjects.Arc;
+    private readonly view: PlayerView;
     private jumpCutConsumed: boolean;
     private boostCooldownMs: number;
     private boostActive: boolean;
@@ -151,7 +147,6 @@ export class PfPlayer {
             triangleCharges: createTriangleChargesState()
         };
         this.timers = createPlayerTimers();
-        this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
         this.jumpCutConsumed = false;
         this.boostCooldownMs = 0;
         this.boostActive = false;
@@ -176,40 +171,7 @@ export class PfPlayer {
         this.physicsBody.setCollideWorldBounds(true);
         this.physicsBody.setGravityY(PLAYER_GRAVITY_Y);
 
-        this.ballVisual = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff)
-            .setStrokeStyle(2, 0xffffff)
-            .setDepth(4500);
-        this.triangleVisual = scene.add.triangle(
-            x,
-            y,
-            0,
-            PLAYER_FORM_TRIANGLE_HEIGHT,
-            PLAYER_FORM_TRIANGLE_WIDTH * 0.5,
-            0,
-            PLAYER_FORM_TRIANGLE_WIDTH,
-            PLAYER_FORM_TRIANGLE_HEIGHT,
-            0xffb74d
-        )
-            .setStrokeStyle(2, 0xffffff)
-            .setDepth(4500)
-            .setVisible(false)
-            .setRotation(PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD);
-        this.squareVisual = scene.add.rectangle(x, y, PLAYER_FORM_SQUARE_SIZE, PLAYER_FORM_SQUARE_SIZE, 0xa5d6a7)
-            .setStrokeStyle(2, PLAYER_SQUARE_VISUAL_STROKE_COLOR)
-            .setDepth(4500)
-            .setVisible(false)
-            .setRotation(PLAYER_SQUARE_EDGE_DOWN_POSE_RAD);
-        this.squareContactMarker = scene.add.line(x, y, 0, 0, 0, 12, 0xffffff)
-            .setLineWidth(2, 2)
-            .setDepth(4501)
-            .setVisible(false)
-            .setOrigin(0.5, 0.5);
-        this.squareTrailGraphics = scene.add.graphics().setDepth(4400);
-        this.triangleLeadingCornerMarker = scene.add.circle(x, y, PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS, 0xffffff)
-            .setStrokeStyle(2, 0xffb74d)
-            .setDepth(4501)
-            .setVisible(false)
-            .setAlpha(PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA);
+        this.view = new PlayerView(scene, x, y);
         this.applyCurrentFormCollisionBody();
         this.applyCurrentFormVisual();
     }
@@ -240,68 +202,111 @@ export class PfPlayer {
     }
 
     public get hazardHitShape(): PlayerHazardHitShape {
-        return resolvePlayerHazardHitShape(
-            this.state.currentForm,
-            this.physicsSprite.x,
-            this.physicsSprite.y,
-            this.state.triangleShell
-        );
+        return resolvePlayerHazardHitShape({
+            form: this.state.currentForm,
+            playerX: this.physicsSprite.x,
+            playerY: this.physicsSprite.y,
+            triangleShell: this.state.triangleShell
+        });
     }
 
     public get formAnchor(): PlayerFormAnchor {
-        return resolvePlayerFormAnchor(
-            this.state.currentForm,
-            this.physicsSprite.x,
-            this.physicsSprite.y,
-            this.state.triangleShell
-        );
+        return resolvePlayerFormAnchor({
+            form: this.state.currentForm,
+            playerX: this.physicsSprite.x,
+            playerY: this.physicsSprite.y,
+            triangleShell: this.state.triangleShell
+        });
     }
 
     public get triangleVisualObject(): GameObjects.Triangle {
-        return this.triangleVisual;
+        return this.view.triangleVisualObject;
     }
 
     public freezeForRespawn(): void {
-        this.frozenForRespawn = true;
-        this.triangleLeadingCornerMarker.setVisible(false);
-        this.squareContactMarker.setVisible(false);
-        this.airborneWindDriftX = 0;
+        const freezeDirective = resolveFreezeResetDirective();
+        this.frozenForRespawn = freezeDirective.shouldFreezeRespawnState;
+        this.view.hideTransientMarkers();
+        if (freezeDirective.shouldResetTriangleDash) {
+            resetTriangleDashState(this.state.triangleDash);
+        }
+        if (freezeDirective.shouldClearAirborneWindDrift) {
+            this.airborneWindDriftX = 0;
+        }
         this.physicsBody.setVelocity(0, 0);
         this.physicsBody.setAcceleration(0, 0);
         this.physicsBody.setAllowGravity(false);
     }
 
     public respawnAt(x: number, y: number): void {
-        this.state.currentForm = PLAYER_START_FORM;
-        resetTriangleShellState(this.state.triangleShell, 1);
-        resetSquareShellState(this.state.squareShell);
-        resetTriangleDashState(this.state.triangleDash);
-        resetTriangleChargesState(this.state.triangleCharges);
+        const respawnDirective = resolveRespawnResetDirective(PLAYER_START_FORM);
+        this.state.currentForm = respawnDirective.nextForm;
+        if (respawnDirective.resetTriangleShell) {
+            resetTriangleShellState(this.state.triangleShell, 1);
+        }
+        if (respawnDirective.resetSquareShell) {
+            resetSquareShellState(this.state.squareShell);
+        }
+        if (respawnDirective.resetTriangleDash) {
+            resetTriangleDashState(this.state.triangleDash);
+        }
+        if (respawnDirective.resetTriangleCharges) {
+            resetTriangleChargesState(this.state.triangleCharges);
+        }
 
-        this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
-        this.jumpCutConsumed = false;
-        this.boostCooldownMs = 0;
-        this.boostActive = false;
-        this.pendingBoostRequest = false;
-        this.wasGrounded = false;
-        this.lastMoveDirection = 1;
-        this.reboundWindowMs = 0;
-        this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
-        this.lastAirborneDownwardSpeed = 0;
-        this.airborneWindDriftX = 0;
+        if (respawnDirective.resetJumpCutConsumed) {
+            this.jumpCutConsumed = false;
+        }
+        if (respawnDirective.resetBoostCooldown) {
+            this.boostCooldownMs = 0;
+        }
+        if (respawnDirective.resetBoostActive) {
+            this.boostActive = false;
+        }
+        if (respawnDirective.resetPendingBoostRequest) {
+            this.pendingBoostRequest = false;
+        }
+        if (respawnDirective.resetWasGrounded) {
+            this.wasGrounded = false;
+        }
+        if (respawnDirective.resetLastMoveDirection) {
+            this.lastMoveDirection = 1;
+        }
+        if (respawnDirective.resetReboundWindow) {
+            this.reboundWindowMs = 0;
+        }
+        if (respawnDirective.resetReboundJumpVelocity) {
+            this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
+        }
+        if (respawnDirective.resetLastAirborneDownwardSpeed) {
+            this.lastAirborneDownwardSpeed = 0;
+        }
+        if (respawnDirective.resetAirborneWindDrift) {
+            this.airborneWindDriftX = 0;
+        }
 
-        clearJumpBuffer(this.timers);
-        clearSquareAttachEntryBuffer(this.timers);
-        clearCoyoteTime(this.timers);
-        this.timers.transformLockMs = 0;
-        this.timers.deathPauseMs = 0;
+        if (respawnDirective.clearJumpBuffer) {
+            clearJumpBuffer(this.timers);
+        }
+        if (respawnDirective.clearSquareAttachEntryBuffer) {
+            clearSquareAttachEntryBuffer(this.timers);
+        }
+        if (respawnDirective.clearCoyoteTime) {
+            clearCoyoteTime(this.timers);
+        }
+        if (respawnDirective.resetTransformLock) {
+            this.timers.transformLockMs = 0;
+        }
+        if (respawnDirective.resetDeathPause) {
+            this.timers.deathPauseMs = 0;
+        }
 
         this.physicsBody.setAllowGravity(true);
         this.physicsBody.setVelocity(0, 0);
         this.physicsBody.setAcceleration(0, 0);
         this.physicsBody.reset(x, y);
 
-        this.frozenForRespawn = false;
+        this.frozenForRespawn = !respawnDirective.unfreezeRespawnState;
         this.applyCurrentFormCollisionBody();
         this.applyCurrentFormVisual();
         this.syncVisualPosition();
@@ -310,11 +315,9 @@ export class PfPlayer {
 
     public tick(deltaMs: number, input: PlayerInputSnapshot, externalHorizontalInfluenceX: number = 0): void {
         if (this.frozenForRespawn) {
-            this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
             return;
         }
 
-        this.lastInput = input;
         const deltaSec = deltaMs / 1000;
         this.tryHandleFormSwitch(input);
         const isTriangleForm = this.state.currentForm === 'triangle';
@@ -371,11 +374,15 @@ export class PfPlayer {
             pushJumpBuffer(this.timers);
         }
 
-        if (input.actionPressed && isSquareForm) {
+        const squareAttachEntryBufferDirective = resolveSquareAttachEntryBufferDirective({
+            currentForm: this.state.currentForm,
+            actionPressed: input.actionPressed,
+            actionHeld: input.actionHeld
+        });
+        if (squareAttachEntryBufferDirective.shouldPushEntryBuffer) {
             pushSquareAttachEntryBuffer(this.timers);
         }
-
-        if (!input.actionHeld || !isSquareForm) {
+        if (squareAttachEntryBufferDirective.shouldClearEntryBuffer) {
             clearSquareAttachEntryBuffer(this.timers);
         }
 
@@ -406,7 +413,12 @@ export class PfPlayer {
                 ? this.state.squareShell.attachNormalY
                 : undefined;
             const verticalDir = (input.moveDown ? 1 : 0) - (input.moveUp ? 1 : 0);
-            const squareContact = this.resolveSquareContactNormal(
+            const contactSnapshot = resolveArcadeAxisContactSnapshot(
+                this.physicsBody.blocked,
+                this.physicsBody.touching
+            );
+            const squareContact = resolveSquareContactNormal(
+                contactSnapshot,
                 attachedNormalX,
                 attachedNormalY,
                 horizontalDir as -1 | 0 | 1,
@@ -420,7 +432,14 @@ export class PfPlayer {
                 squareContact.hasContact
             );
 
-            if (!this.state.squareShell.isAttached && input.actionHeld && hasSquareAttachEntryBuffer(this.timers)) {
+            const squareAttachStartDecision = resolveSquareAttachStartDecision({
+                currentForm: this.state.currentForm,
+                actionHeld: input.actionHeld,
+                hasEntryBuffer: hasSquareAttachEntryBuffer(this.timers),
+                isAttached: this.state.squareShell.isAttached,
+                hasContact: squareContact.hasContact
+            });
+            if (squareAttachStartDecision.canStart) {
                 const attachStarted = tryEnterSquareAttach(
                     this.state.squareShell,
                     squareContact.hasContact,
@@ -443,10 +462,15 @@ export class PfPlayer {
                 }
             }
 
+            const squareAttachHoldDecision = resolveSquareAttachHoldDecision({
+                currentForm: this.state.currentForm,
+                isAttached: this.state.squareShell.isAttached,
+                actionHeld: input.actionHeld
+            });
             tickSquareAttachState(
                 this.state.squareShell,
                 deltaMs,
-                input.actionHeld,
+                squareAttachHoldDecision.shouldKeepAttachHold,
                 squareContact.hasContact,
                 squareContact.normalX,
                 squareContact.normalY
@@ -463,7 +487,14 @@ export class PfPlayer {
                 this.state.squareShell.hasContact
             );
         }
-        if (input.actionPressed && isTriangleForm && !isTriangleDashActive) {
+        const triangleDashStartDecision = resolveTriangleDashStartDecision({
+            currentForm: this.state.currentForm,
+            actionPressed: input.actionPressed,
+            isDashActive: isTriangleDashActive,
+            dashCooldownMs: triangleDash.cooldownMs,
+            hasDashCharges: hasTriangleDashCharges(this.state.triangleCharges)
+        });
+        if (triangleDashStartDecision.canStart) {
             dashStartedThisFrame = this.tryApplyTriangleDash();
             isTriangleDashActive = dashStartedThisFrame;
         }
@@ -472,7 +503,15 @@ export class PfPlayer {
         const effectiveExternalInfluenceX = grounded
             ? externalHorizontalInfluenceX
             : externalHorizontalInfluenceX * PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER;
-        const isSquareAttached = isSquareForm && this.state.squareShell.isAttached;
+        const invalidFormStateFlags = resolveInvalidFormStateCombinationFlags({
+            currentForm: this.state.currentForm,
+            triangleDashActive: this.state.triangleDash.isActive,
+            squareAttached: this.state.squareShell.isAttached
+        });
+        if (invalidFormStateFlags.triangleDashOutsideTriangle) {
+            resetTriangleDashState(this.state.triangleDash);
+        }
+        const isSquareAttached = isSquareForm && !invalidFormStateFlags.squareAttachOutsideSquare && this.state.squareShell.isAttached;
         this.physicsBody.setAllowGravity(!isTriangleDashActive && !isSquareAttached);
 
         if (isTriangleDashActive) {
@@ -601,36 +640,37 @@ export class PfPlayer {
     }
 
     private tryHandleFormSwitch(input: PlayerInputSnapshot): void {
-        if (this.timers.transformLockMs > 0) {
-            return;
-        }
-
-        const wantsNextForm = input.nextFormPressed;
-        const wantsPrevForm = input.prevFormPressed;
-        if (wantsNextForm === wantsPrevForm) {
-            return;
-        }
-
-        const nextForm = wantsNextForm
-            ? getNextPlayerForm(this.state.currentForm)
-            : getPrevPlayerForm(this.state.currentForm);
-
-        if (nextForm === this.state.currentForm) {
+        const switchDecision = resolveFormSwitchDecision({
+            currentForm: this.state.currentForm,
+            transformLockMs: this.timers.transformLockMs,
+            wantsNextForm: input.nextFormPressed,
+            wantsPrevForm: input.prevFormPressed,
+            nextForm: getNextPlayerForm(this.state.currentForm),
+            prevForm: getPrevPlayerForm(this.state.currentForm)
+        });
+        if (!switchDecision.shouldSwitch) {
             return;
         }
 
         const previousForm = this.state.currentForm;
-        this.state.currentForm = nextForm;
-        this.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;
-        if (nextForm === 'triangle') {
+        this.state.currentForm = switchDecision.targetForm;
+        if (switchDecision.shouldApplyTransformLock) {
+            this.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;
+        }
+        const transitionReset = resolveFormTransitionResetDirective(previousForm, switchDecision.targetForm);
+        if (transitionReset.resetTriangleShell) {
             resetTriangleShellState(this.state.triangleShell, this.lastMoveDirection);
+        }
+        if (transitionReset.resetTriangleDash) {
+            resetTriangleDashState(this.state.triangleDash);
+        } else if (transitionReset.stopTriangleDash) {
             stopTriangleDash(this.state.triangleDash);
-        } else if (nextForm === 'square') {
+        }
+        if (transitionReset.resetSquareShell) {
             resetSquareShellState(this.state.squareShell);
-        } else if (previousForm === 'square') {
+        }
+        if (transitionReset.clearSquareAttach) {
             clearSquareAttach(this.state.squareShell);
-        } else if (previousForm === 'triangle') {
-            stopTriangleDash(this.state.triangleDash);
         }
         this.physicsBody.setAllowGravity(true);
         this.applyCurrentFormCollisionBody();
@@ -638,13 +678,7 @@ export class PfPlayer {
     }
 
     private applyCurrentFormVisual(): void {
-        const currentForm = this.state.currentForm;
-        this.ballVisual.setVisible(currentForm === 'ball');
-        this.triangleVisual.setVisible(currentForm === 'triangle');
-        this.squareVisual.setVisible(currentForm === 'square');
-        this.squareContactMarker.setVisible(currentForm === 'square' && this.state.squareShell.hasContact);
-        this.triangleLeadingCornerMarker.setVisible(currentForm === 'triangle');
-        this.updateSquareAttachVisualState();
+        this.view.applyCurrentFormVisibility(this.state.currentForm, this.state.squareShell);
     }
 
     private syncVisualPosition(): void {
@@ -652,14 +686,14 @@ export class PfPlayer {
         const y = this.physicsSprite.y;
         this.applyCurrentFormCollisionBody();
         const formAnchor = this.formAnchor;
-        this.ballVisual.setPosition(x, y);
-        this.triangleVisual.setPosition(formAnchor.x, formAnchor.y);
-        this.triangleVisual.setRotation(this.state.triangleShell.orientationRad);
-        this.squareVisual.setPosition(x, y);
-        this.squareVisual.setRotation(this.state.squareShell.orientationRad);
-        this.updateSquareAttachVisualState();
-        this.updateSquareContactVisual(x, y);
-        this.renderSquareTrail();
+        this.view.syncVisualPosition(
+            x,
+            y,
+            formAnchor,
+            this.state.currentForm,
+            this.state.triangleShell,
+            this.state.squareShell
+        );
     }
 
     private applyCurrentFormCollisionBody(): void {
@@ -688,561 +722,58 @@ export class PfPlayer {
         grounded: boolean,
         input: PlayerInputSnapshot
     ): void {
-        if (this.state.currentForm !== 'triangle') {
-            this.triangleLeadingCornerMarker.setVisible(false);
-            return;
-        }
-
-        const triangleDash = this.state.triangleDash;
-        const dashPreview = triangleDash.isActive
-            ? {
-                leadingCornerIndex: triangleDash.leadingCornerIndex,
-                lockedOrientationRad: triangleDash.lockedOrientationRad
-            }
-            : resolveTriangleDashLeadingCornerPreview(
-                triangleDash,
-                this.state.triangleShell,
-                grounded
-            );
-        const markerOffset = resolveTriangleLeadingCornerMarkerOffset(
-            dashPreview.leadingCornerIndex,
-            dashPreview.lockedOrientationRad,
-            PLAYER_TRIANGLE_LEADING_CORNER_MARKER_OUTWARD_OFFSET
-        );
-        const markerBaseY = this.physicsSprite.y + this.state.triangleShell.visualOffsetY;
-        const isDashRelevant = input.actionHeld || input.actionPressed || triangleDash.isActive;
-
-        this.triangleLeadingCornerMarker.setVisible(true);
-        this.triangleLeadingCornerMarker.setPosition(
-            this.physicsSprite.x + markerOffset.x,
-            markerBaseY + markerOffset.y
-        );
-        this.triangleLeadingCornerMarker.setAlpha(
-            isDashRelevant
-                ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_ALPHA
-                : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA
-        );
-        this.triangleLeadingCornerMarker.setScale(
-            isDashRelevant
-                ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE
-                : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE
-        );
-    }
-
-    private resolveSquareContactNormal(
-        preferredNormalX?: -1 | 0 | 1,
-        preferredNormalY?: -1 | 0 | 1,
-        moveIntentX: -1 | 0 | 1 = 0,
-        moveIntentY: -1 | 0 | 1 = 0
-    ): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; hasContact: boolean } {
-        const blocked = this.physicsBody.blocked;
-        const touching = this.physicsBody.touching;
-        const hasDownContact = blocked.down || touching.down;
-        const hasUpContact = blocked.up || touching.up;
-        const hasLeftContact = blocked.left || touching.left;
-        const hasRightContact = blocked.right || touching.right;
-
-        const rolloverCandidate = this.resolveSquareOrthogonalCornerContact(
-            preferredNormalX,
-            preferredNormalY,
-            moveIntentX,
-            moveIntentY,
-            hasDownContact,
-            hasUpContact,
-            hasLeftContact,
-            hasRightContact
-        );
-        if (rolloverCandidate !== null) {
-            return {
-                normalX: rolloverCandidate.normalX,
-                normalY: rolloverCandidate.normalY,
-                hasContact: true
-            };
-        }
-
-        if (preferredNormalX === 0 && preferredNormalY === -1 && hasDownContact) {
-            return { normalX: 0, normalY: -1, hasContact: true };
-        }
-
-        if (preferredNormalX === 0 && preferredNormalY === 1 && hasUpContact) {
-            return { normalX: 0, normalY: 1, hasContact: true };
-        }
-
-        if (preferredNormalX === 1 && preferredNormalY === 0 && hasLeftContact) {
-            return { normalX: 1, normalY: 0, hasContact: true };
-        }
-
-        if (preferredNormalX === -1 && preferredNormalY === 0 && hasRightContact) {
-            return { normalX: -1, normalY: 0, hasContact: true };
-        }
-
-        if (hasDownContact) {
-            return { normalX: 0, normalY: -1, hasContact: true };
-        }
-
-        if (hasUpContact) {
-            return { normalX: 0, normalY: 1, hasContact: true };
-        }
-
-        if (hasLeftContact) {
-            return { normalX: 1, normalY: 0, hasContact: true };
-        }
-
-        if (hasRightContact) {
-            return { normalX: -1, normalY: 0, hasContact: true };
-        }
-
-        return { normalX: 0, normalY: -1, hasContact: false };
-    }
-
-    private resolveSquareOrthogonalCornerContact(
-        preferredNormalX: -1 | 0 | 1 | undefined,
-        preferredNormalY: -1 | 0 | 1 | undefined,
-        moveIntentX: -1 | 0 | 1,
-        moveIntentY: -1 | 0 | 1,
-        hasDownContact: boolean,
-        hasUpContact: boolean,
-        hasLeftContact: boolean,
-        hasRightContact: boolean
-    ): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1 } | null {
-        if (preferredNormalX === 0 && preferredNormalY !== undefined && preferredNormalY !== 0) {
-            if (moveIntentX > 0 && hasRightContact) {
-                return { normalX: -1, normalY: 0 };
-            }
-
-            if (moveIntentX < 0 && hasLeftContact) {
-                return { normalX: 1, normalY: 0 };
-            }
-
-            if (moveIntentX === 0) {
-                if (hasRightContact && !hasLeftContact) {
-                    return { normalX: -1, normalY: 0 };
-                }
-
-                if (hasLeftContact && !hasRightContact) {
-                    return { normalX: 1, normalY: 0 };
-                }
-            }
-        }
-
-        if (preferredNormalY === 0 && preferredNormalX !== undefined && preferredNormalX !== 0) {
-            if (moveIntentY < 0 && hasUpContact) {
-                return { normalX: 0, normalY: 1 };
-            }
-
-            if (moveIntentY > 0 && hasDownContact) {
-                return { normalX: 0, normalY: -1 };
-            }
-
-            if (moveIntentY === 0) {
-                if (hasUpContact && !hasDownContact) {
-                    return { normalX: 0, normalY: 1 };
-                }
-
-                if (hasDownContact && !hasUpContact) {
-                    return { normalX: 0, normalY: -1 };
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private updateSquareContactVisual(playerX: number, playerY: number): void {
-        if (this.state.currentForm !== 'square' || !this.state.squareShell.hasContact) {
-            this.squareContactMarker.setVisible(false);
-            return;
-        }
-
-        const markerLength = (PLAYER_FORM_SQUARE_SIZE * 0.5) + 10;
-        const normalX = this.state.squareShell.contactNormalX;
-        const normalY = this.state.squareShell.contactNormalY;
-        this.squareContactMarker.setVisible(true);
-        this.squareContactMarker.setPosition(playerX, playerY);
-        this.squareContactMarker.setTo(0, 0, normalX * markerLength, normalY * markerLength);
-    }
-
-    private updateSquareAttachVisualState(): void {
-        const isAttached = this.state.currentForm === 'square' && this.state.squareShell.isAttached;
-        this.squareVisual.setStrokeStyle(
-            2,
-            isAttached ? PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR : PLAYER_SQUARE_VISUAL_STROKE_COLOR
+        this.view.updateTriangleLeadingCornerMarker(
+            this.state.currentForm,
+            this.physicsSprite.x,
+            this.physicsSprite.y,
+            this.state.triangleShell,
+            this.state.triangleDash,
+            grounded,
+            input
         );
     }
 
     private resolveSquareTrailSurfacePoint(
         normalX: -1 | 0 | 1,
         normalY: -1 | 0 | 1
-    ): { x: number; y: number; supportOwner: PlayerSquareTrailSupportOwner } {
-        const bodyLeft = this.physicsBody.x;
-        const bodyTop = this.physicsBody.y;
-        const bodyRight = bodyLeft + this.physicsBody.width;
-        const bodyBottom = bodyTop + this.physicsBody.height;
-        const centerX = bodyLeft + (this.physicsBody.width * 0.5);
-        const centerY = bodyTop + (this.physicsBody.height * 0.5);
-        const supportInterval = this.resolveSquareSupportInterval(normalX, normalY, bodyLeft, bodyTop, bodyRight, bodyBottom)
-            ?? this.resolveSquareSupportIntervalFromKnownBody(
-                this.state.squareShell.trailAnchorSupportBody,
-                normalX,
-                normalY,
-                bodyLeft,
-                bodyTop,
-                bodyRight,
-                bodyBottom
-            );
-        const supportOwner = supportInterval !== null
-            ? this.resolveTrailSupportOwner(supportInterval.ownerBody)
-            : this.resolveTrailSupportOwner(null);
-
-        if (normalX === 0 && normalY === -1) {
-            return {
-                x: supportInterval !== null ? PhaserMath.Clamp(centerX, supportInterval.min, supportInterval.max) : centerX,
-                y: bodyBottom,
-                supportOwner
-            };
-        }
-
-        if (normalX === 0 && normalY === 1) {
-            return {
-                x: supportInterval !== null ? PhaserMath.Clamp(centerX, supportInterval.min, supportInterval.max) : centerX,
-                y: bodyTop,
-                supportOwner
-            };
-        }
-
-        if (normalX === 1 && normalY === 0) {
-            return {
-                x: bodyLeft,
-                y: supportInterval !== null ? PhaserMath.Clamp(centerY, supportInterval.min, supportInterval.max) : centerY,
-                supportOwner
-            };
-        }
-
-        return {
-            x: bodyRight,
-            y: supportInterval !== null ? PhaserMath.Clamp(centerY, supportInterval.min, supportInterval.max) : centerY,
-            supportOwner
-        };
-    }
-
-    private resolveSquareSupportInterval(
-        normalX: -1 | 0 | 1,
-        normalY: -1 | 0 | 1,
-        bodyLeft: number,
-        bodyTop: number,
-        bodyRight: number,
-        bodyBottom: number
-    ): { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null {
-        const probeThickness = 4;
-        const probePadding = 2;
-        let probeX = bodyLeft - probePadding;
-        let probeY = bodyTop - probePadding;
-        let probeWidth = (bodyRight - bodyLeft) + (probePadding * 2);
-        let probeHeight = (bodyBottom - bodyTop) + (probePadding * 2);
-        let tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
-        let useXAxisAsTangent = true;
-
-        if (normalX === 0 && normalY === -1) {
-            probeY = bodyBottom - (probeThickness * 0.5);
-            probeHeight = probeThickness;
-            tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
-            useXAxisAsTangent = true;
-        } else if (normalX === 0 && normalY === 1) {
-            probeY = bodyTop - (probeThickness * 0.5);
-            probeHeight = probeThickness;
-            tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
-            useXAxisAsTangent = true;
-        } else if (normalX === 1 && normalY === 0) {
-            probeX = bodyLeft - (probeThickness * 0.5);
-            probeWidth = probeThickness;
-            tangentValue = bodyTop + ((bodyBottom - bodyTop) * 0.5);
-            useXAxisAsTangent = false;
-        } else if (normalX === -1 && normalY === 0) {
-            probeX = bodyRight - (probeThickness * 0.5);
-            probeWidth = probeThickness;
-            tangentValue = bodyTop + ((bodyBottom - bodyTop) * 0.5);
-            useXAxisAsTangent = false;
-        }
-
+    ): PlayerSquareTrailSurfacePoint {
+        const playerRect = createPlayerRectSnapshot(
+            this.physicsBody.x,
+            this.physicsBody.y,
+            this.physicsBody.width,
+            this.physicsBody.height
+        );
+        const probe = resolveSquareSupportProbe(normalX, normalY, playerRect);
         const overlapBodies = this.physicsSprite.scene.physics.overlapRect(
-            probeX,
-            probeY,
-            probeWidth,
-            probeHeight,
+            probe.x,
+            probe.y,
+            probe.width,
+            probe.height,
             true,
             true
         ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
-
-        let bestInterval: { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null = null;
-        let bestFaceGap = Infinity;
-        let bestTangentDistance = Infinity;
-
-        overlapBodies.forEach((candidateBody) => {
-            if (candidateBody === this.physicsBody) {
-                return;
-            }
-
-            const candidateLeft = candidateBody.x;
-            const candidateTop = candidateBody.y;
-            const candidateRight = candidateLeft + candidateBody.width;
-            const candidateBottom = candidateTop + candidateBody.height;
-            const faceGap = this.resolveSquareSupportFaceGap(
-                normalX,
-                normalY,
-                bodyLeft,
-                bodyTop,
-                bodyRight,
-                bodyBottom,
-                candidateLeft,
-                candidateTop,
-                candidateRight,
-                candidateBottom
-            );
-            if (faceGap === null) {
-                return;
-            }
-
-            if (useXAxisAsTangent) {
-                const overlapsPlayerSpan = candidateRight > bodyLeft && candidateLeft < bodyRight;
-                if (!overlapsPlayerSpan) {
-                    return;
-                }
-
-                const tangentDistance = this.distanceToInterval(tangentValue, candidateLeft, candidateRight);
-                const hasBetterFaceGap = faceGap < (bestFaceGap - 0.001);
-                const hasEqualFaceGap = Math.abs(faceGap - bestFaceGap) <= 0.001;
-                if (hasBetterFaceGap || (hasEqualFaceGap && tangentDistance < bestTangentDistance)) {
-                    bestFaceGap = faceGap;
-                    bestTangentDistance = tangentDistance;
-                    bestInterval = {
-                        min: candidateLeft,
-                        max: candidateRight,
-                        ownerBody: candidateBody
-                    };
-                }
-                return;
-            }
-
-            const overlapsPlayerSpan = candidateBottom > bodyTop && candidateTop < bodyBottom;
-            if (!overlapsPlayerSpan) {
-                return;
-            }
-
-            const tangentDistance = this.distanceToInterval(tangentValue, candidateTop, candidateBottom);
-            const hasBetterFaceGap = faceGap < (bestFaceGap - 0.001);
-            const hasEqualFaceGap = Math.abs(faceGap - bestFaceGap) <= 0.001;
-            if (hasBetterFaceGap || (hasEqualFaceGap && tangentDistance < bestTangentDistance)) {
-                bestFaceGap = faceGap;
-                bestTangentDistance = tangentDistance;
-                bestInterval = {
-                    min: candidateTop,
-                    max: candidateBottom,
-                    ownerBody: candidateBody
-                };
-            }
-        });
-
-        return bestInterval;
-    }
-
-    private resolveSquareSupportIntervalFromKnownBody(
-        knownSupportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
-        normalX: -1 | 0 | 1,
-        normalY: -1 | 0 | 1,
-        bodyLeft: number,
-        bodyTop: number,
-        bodyRight: number,
-        bodyBottom: number
-    ): { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null {
-        if (knownSupportBody === null || knownSupportBody === this.physicsBody) {
-            return null;
-        }
-
-        const candidateLeft = knownSupportBody.x;
-        const candidateTop = knownSupportBody.y;
-        const candidateRight = candidateLeft + knownSupportBody.width;
-        const candidateBottom = candidateTop + knownSupportBody.height;
-        const isFaceCompatible = this.resolveSquareSupportFaceGap(
+        const supportInterval = resolveSquareSupportIntervalFromOverlap(
+            overlapBodies,
+            this.physicsBody,
             normalX,
             normalY,
-            bodyLeft,
-            bodyTop,
-            bodyRight,
-            bodyBottom,
-            candidateLeft,
-            candidateTop,
-            candidateRight,
-            candidateBottom
-        ) !== null;
-        if (!isFaceCompatible) {
-            return null;
-        }
+            playerRect,
+            probe
+        ) ?? resolveSquareSupportIntervalFromKnownBody(
+            this.state.squareShell.trailAnchorSupportBody,
+            this.physicsBody,
+            normalX,
+            normalY,
+            playerRect
+        );
 
-        if (normalX === 0 && normalY !== 0) {
-            const overlapsPlayerSpan = candidateRight > bodyLeft && candidateLeft < bodyRight;
-            if (!overlapsPlayerSpan) {
-                return null;
-            }
-
-            return {
-                min: candidateLeft,
-                max: candidateRight,
-                ownerBody: knownSupportBody
-            };
-        }
-
-        const overlapsPlayerSpan = candidateBottom > bodyTop && candidateTop < bodyBottom;
-        if (!overlapsPlayerSpan) {
-            return null;
-        }
-
-        return {
-            min: candidateTop,
-            max: candidateBottom,
-            ownerBody: knownSupportBody
-        };
-    }
-
-    private resolveSquareSupportFaceGap(
-        normalX: -1 | 0 | 1,
-        normalY: -1 | 0 | 1,
-        bodyLeft: number,
-        bodyTop: number,
-        bodyRight: number,
-        bodyBottom: number,
-        candidateLeft: number,
-        candidateTop: number,
-        candidateRight: number,
-        candidateBottom: number
-    ): number | null {
-        const faceAlignmentTolerance = 6;
-
-        if (normalX === 0 && normalY === -1) {
-            const faceGap = Math.abs(candidateTop - bodyBottom);
-            return faceGap <= faceAlignmentTolerance ? faceGap : null;
-        }
-
-        if (normalX === 0 && normalY === 1) {
-            const faceGap = Math.abs(candidateBottom - bodyTop);
-            return faceGap <= faceAlignmentTolerance ? faceGap : null;
-        }
-
-        if (normalX === 1 && normalY === 0) {
-            const faceGap = Math.abs(candidateRight - bodyLeft);
-            return faceGap <= faceAlignmentTolerance ? faceGap : null;
-        }
-
-        const faceGap = Math.abs(candidateLeft - bodyRight);
-        return faceGap <= faceAlignmentTolerance ? faceGap : null;
-    }
-
-    private distanceToInterval(value: number, min: number, max: number): number {
-        if (value < min) {
-            return min - value;
-        }
-
-        if (value > max) {
-            return value - max;
-        }
-
-        return 0;
-    }
-
-    private renderSquareTrail(): void {
-        this.squareTrailGraphics.clear();
-        if (this.state.squareShell.trailSegments.length === 0) {
-            return;
-        }
-
-        this.state.squareShell.trailSegments.forEach((segment) => {
-            const worldLine = resolveSquareTrailSegmentWorldLine(segment);
-            const clippedWorldLine = segment.isDetached
-                ? worldLine
-                : this.clipTrailLineToSupportBounds(segment, worldLine);
-            if (clippedWorldLine === null) {
-                return;
-            }
-            const segmentAlpha = PhaserMath.Clamp(
-                PLAYER_SQUARE_TRAIL_STROKE_ALPHA * (segment.isDetached ? segment.detachedAlpha : 1),
-                0,
-                1
-            );
-            this.squareTrailGraphics.lineStyle(
-                PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
-                PLAYER_SQUARE_TRAIL_STROKE_COLOR,
-                segmentAlpha
-            );
-            this.squareTrailGraphics.beginPath();
-            this.squareTrailGraphics.moveTo(clippedWorldLine.startX, clippedWorldLine.startY);
-            this.squareTrailGraphics.lineTo(clippedWorldLine.endX, clippedWorldLine.endY);
-            this.squareTrailGraphics.strokePath();
-        });
-    }
-
-    private resolveTrailSupportOwner(
-        supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
-    ): PlayerSquareTrailSupportOwner {
-        if (supportBody === null) {
-            return {
-                body: null,
-                originX: 0,
-                originY: 0
-            };
-        }
-
-        return {
-            body: supportBody,
-            // Keep owner-local space stable across owner movement.
-            originX: 0,
-            originY: 0
-        };
-    }
-
-    private clipTrailLineToSupportBounds(
-        segment: {
-            supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
-            normalX: -1 | 0 | 1;
-            normalY: -1 | 0 | 1;
-        },
-        worldLine: { startX: number; startY: number; endX: number; endY: number }
-    ): { startX: number; startY: number; endX: number; endY: number } | null {
-        const supportBody = segment.supportBody;
-        if (supportBody === null) {
-            return worldLine;
-        }
-
-        const bodyMinX = supportBody.x;
-        const bodyMaxX = supportBody.x + supportBody.width;
-        const bodyMinY = supportBody.y;
-        const bodyMaxY = supportBody.y + supportBody.height;
-
-        if (segment.normalX === 0) {
-            const clampedStartX = PhaserMath.Clamp(worldLine.startX, bodyMinX, bodyMaxX);
-            const clampedEndX = PhaserMath.Clamp(worldLine.endX, bodyMinX, bodyMaxX);
-            if (Math.abs(clampedEndX - clampedStartX) <= 0.001) {
-                return null;
-            }
-
-            return {
-                startX: clampedStartX,
-                startY: worldLine.startY,
-                endX: clampedEndX,
-                endY: worldLine.endY
-            };
-        }
-
-        const clampedStartY = PhaserMath.Clamp(worldLine.startY, bodyMinY, bodyMaxY);
-        const clampedEndY = PhaserMath.Clamp(worldLine.endY, bodyMinY, bodyMaxY);
-        if (Math.abs(clampedEndY - clampedStartY) <= 0.001) {
-            return null;
-        }
-
-        return {
-            startX: worldLine.startX,
-            startY: clampedStartY,
-            endX: worldLine.endX,
-            endY: clampedEndY
-        };
+        return resolveSquareTrailSurfacePoint(
+            normalX,
+            normalY,
+            playerRect,
+            supportInterval,
+            null
+        );
     }
 
     private resolveReboundJumpVelocity(approachSpeed: number): number | null {

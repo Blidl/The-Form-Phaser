@@ -2,10 +2,10 @@ import type { PlayerTriangleDashState, PlayerTriangleShellState, TriangleCornerI
 import {
     PLAYER_TRIANGLE_DASH_COOLDOWN_MS,
     PLAYER_TRIANGLE_DASH_DURATION_MS,
-    PLAYER_TRIANGLE_DASH_SPEED,
-    PLAYER_FORM_TRIANGLE_HEIGHT,
-    PLAYER_FORM_TRIANGLE_WIDTH
+    PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON,
+    PLAYER_TRIANGLE_DASH_SPEED
 } from './player_constants';
+import { resolveTriangleWorldPoints } from './geometry/player_geometry_queries';
 
 export interface TriangleDashLaunch {
     velocityX: number;
@@ -60,7 +60,7 @@ export const tickTriangleDashActive = (triangleDash: PlayerTriangleDashState, de
 
     triangleDash.remainingMs = Math.max(0, triangleDash.remainingMs - deltaMs);
     if (triangleDash.remainingMs === 0) {
-        triangleDash.isActive = false;
+        stopTriangleDash(triangleDash);
     }
 };
 
@@ -80,7 +80,11 @@ export const tryStartTriangleDash = (
     );
     const corners = getRotatedCorners(preview.lockedOrientationRad);
     const leadingCornerIndex = preview.leadingCornerIndex;
-    const direction = resolveDashDirectionFromCorner(corners[leadingCornerIndex], triangleDash.forceBiasX);
+    const direction = resolveDashDirectionFromCorner(
+        corners[leadingCornerIndex],
+        triangleDash.forceBiasX,
+        grounded
+    );
 
     triangleDash.isActive = true;
     triangleDash.remainingMs = PLAYER_TRIANGLE_DASH_DURATION_MS;
@@ -142,26 +146,19 @@ export const updateTriangleDashSelectedLeadingCorner = (
 export const stopTriangleDash = (triangleDash: PlayerTriangleDashState): void => {
     triangleDash.isActive = false;
     triangleDash.remainingMs = 0;
+    triangleDash.directionX = 0;
+    triangleDash.directionY = 0;
 };
 
 type CornerPoint = { x: number; y: number };
 
-const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
-const TRIANGLE_HALF_HEIGHT = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
-const TRIANGLE_LOCAL_CORNERS: ReadonlyArray<CornerPoint> = [
-    { x: -TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT },
-    { x: 0, y: -TRIANGLE_HALF_HEIGHT },
-    { x: TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT }
-] as const;
 const TRIANGLE_CORNER_INDICES: TriangleCornerIndex[] = [0, 1, 2];
 
 const getRotatedCorners = (orientationRad: number): CornerPoint[] => {
-    const sin = Math.sin(orientationRad);
-    const cos = Math.cos(orientationRad);
-    return TRIANGLE_LOCAL_CORNERS.map((corner) => {
+    return resolveTriangleWorldPoints(0, 0, orientationRad).map((corner) => {
         return {
-            x: (corner.x * cos) - (corner.y * sin),
-            y: (corner.x * sin) + (corner.y * cos)
+            x: corner.x,
+            y: corner.y
         };
     });
 };
@@ -193,21 +190,59 @@ const pickMostUpwardCorner = (
 
 const resolveDashDirectionFromCorner = (
     corner: CornerPoint | undefined,
-    forceBias: -1 | 1
+    forceBias: -1 | 1,
+    grounded: boolean
 ): { x: number; y: number } => {
     if (!corner) {
-        return { x: forceBias, y: 0 };
+        return grounded
+            ? normalizeDashDirection(forceBias, -PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON, forceBias)
+            : { x: forceBias, y: 0 };
     }
 
     const length = Math.hypot(corner.x, corner.y);
     if (length <= 0.0001) {
-        return { x: forceBias, y: 0 };
+        return grounded
+            ? normalizeDashDirection(forceBias, -PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON, forceBias)
+            : { x: forceBias, y: 0 };
     }
 
-    return {
+    const direction = {
         x: corner.x / length,
         y: corner.y / length
     };
+
+    if (!grounded) {
+        return direction;
+    }
+
+    const groundedMinUpwardY = -Math.max(0, Math.min(1, PLAYER_TRIANGLE_DASH_GROUND_CONTACT_EPSILON));
+    if (direction.y <= groundedMinUpwardY) {
+        return direction;
+    }
+
+    const preferredXSign = Math.abs(direction.x) > 0.0001
+        ? (direction.x > 0 ? 1 : -1)
+        : forceBias;
+    return normalizeDashDirection(direction.x, groundedMinUpwardY, preferredXSign);
+};
+
+const normalizeDashDirection = (
+    x: number,
+    y: number,
+    fallbackXSign: -1 | 1
+): { x: number; y: number } => {
+    const rawLength = Math.hypot(x, y);
+    if (rawLength <= 0.0001) {
+        return { x: fallbackXSign, y: 0 };
+    }
+
+    const nx = x / rawLength;
+    const ny = y / rawLength;
+    if (Math.abs(ny) >= 0.9999) {
+        return { x: 0, y: ny > 0 ? 1 : -1 };
+    }
+
+    return { x: nx, y: ny };
 };
 
 const getTriangleDashSelectedLeadingCornerPreview = (
