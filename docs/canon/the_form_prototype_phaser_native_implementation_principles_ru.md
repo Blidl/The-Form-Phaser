@@ -127,7 +127,7 @@ Scene/config/data wiring приоритетно использовать для:
 Ожидаемо сложными зонами являются:
 
 - real orientation логика `Triangle`;
-- `Ball` bounce / rebound / chain logic;
+- `Ball` floor rebound / wall rebound contracts;
 - `Square` attach / trail / rollover;
 - нестандартная геометрия и rotated contacts;
 - точный player state contract;
@@ -135,7 +135,14 @@ Scene/config/data wiring приоритетно использовать для:
 
 Для этих зон канонически допускается узкий `TypeScript`.
 
-### 5.3. Runtime physics plugin contract (Arcade)
+### 5.3. Ball rebound: canonical split
+- `Ball floor rebound` — отдельный контракт. Текущие правила floor rebound и распрыгивания на полу не меняются и не переопределяются в рамках обновлений wall rebound.
+- `Ball wall rebound` — отдельный контракт. Он не требует стартовой скорости в сторону стены и не требует удержания направления в сторону стены.
+- Для `Ball wall rebound` достаточно, чтобы `Ball` был в воздухе, имел контакт со стеной или находился в коротком `wall-coyote` окне, и был нажат `jump`.
+- Результат `Ball wall rebound`: импульс вверх и от стены.
+- После старта `Ball wall rebound` не допускаются искусственные ограничения или cooldown между такими отпрыгиваниями.
+
+### 5.4. Runtime physics plugin contract (Arcade)
 Если runtime-path сцены использует Phaser Arcade Physics API
 (`this.physics`, `physics.add.existing`, `physics.add.collider`, `world.setBounds`),
 то в `src/boot/game_config.ts` **обязательно** должен быть явно включён physics config с `default: 'arcade'`.

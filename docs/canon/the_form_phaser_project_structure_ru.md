@@ -265,6 +265,8 @@ the-form/
 - common timers
 - form switching
 - base movement shell
+- Ball floor rebound contract (без изменений текущего поведения)
+- Ball wall rebound contract (отдельно от floor: airborne + wall contact или wall-coyote + jump => импульс вверх и от стены, без требований к входной скорости/удержанию в стену и без искусственного cooldown)
 - marker
 - death / checkpoint reset
 - shared state

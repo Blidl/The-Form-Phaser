@@ -119,6 +119,18 @@ import {
     resolveSquareAttachStartDecision,
     resolveTriangleDashStartDecision
 } from './state/player_form_state_guards';
+import {
+    applyBallReboundSurfaceInputLock,
+    clearBallReboundTrajectoryOnHorizontalInput,
+    createBallReboundRuntimeState,
+    resetBallReboundRuntimeState,
+    resolveBallReboundPreservedVelocityXForRuntime,
+    tickBallReboundPauseRuntime,
+    tickBallReboundSurfaceInputLock,
+    tickBallWallReboundContactCoyote,
+    tryStartBallSurfaceReboundRuntime,
+    type BallReboundRuntimeState
+} from './player_ball_rebound_runtime';
 
 export class PfPlayer {
     public readonly state: PlayerShellState;
@@ -135,6 +147,7 @@ export class PfPlayer {
     private reboundWindowMs: number;
     private reboundJumpVelocity: number;
     private lastAirborneDownwardSpeed: number;
+    private readonly ballReboundRuntime: BallReboundRuntimeState;
     private frozenForRespawn: boolean;
     private airborneWindDriftX: number;
 
@@ -156,6 +169,7 @@ export class PfPlayer {
         this.reboundWindowMs = 0;
         this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
         this.lastAirborneDownwardSpeed = 0;
+        this.ballReboundRuntime = createBallReboundRuntimeState();
         this.frozenForRespawn = false;
         this.airborneWindDriftX = 0;
 
@@ -233,6 +247,7 @@ export class PfPlayer {
         if (freezeDirective.shouldClearAirborneWindDrift) {
             this.airborneWindDriftX = 0;
         }
+        resetBallReboundRuntimeState(this.ballReboundRuntime);
         this.physicsBody.setVelocity(0, 0);
         this.physicsBody.setAcceleration(0, 0);
         this.physicsBody.setAllowGravity(false);
@@ -281,6 +296,7 @@ export class PfPlayer {
         if (respawnDirective.resetLastAirborneDownwardSpeed) {
             this.lastAirborneDownwardSpeed = 0;
         }
+        resetBallReboundRuntimeState(this.ballReboundRuntime);
         if (respawnDirective.resetAirborneWindDrift) {
             this.airborneWindDriftX = 0;
         }
@@ -332,6 +348,7 @@ export class PfPlayer {
         if (grounded) {
             refreshCoyoteTime(this.timers);
             this.jumpCutConsumed = false;
+            resetBallReboundRuntimeState(this.ballReboundRuntime);
         } else if (this.physicsBody.velocity.y > 0) {
             this.lastAirborneDownwardSpeed = Math.max(this.lastAirborneDownwardSpeed, this.physicsBody.velocity.y);
         }
@@ -374,6 +391,9 @@ export class PfPlayer {
             pushJumpBuffer(this.timers);
         }
 
+        const preMoveVelocityX = this.physicsBody.velocity.x;
+        const preMoveVelocityY = this.physicsBody.velocity.y;
+
         const squareAttachEntryBufferDirective = resolveSquareAttachEntryBufferDirective({
             currentForm: this.state.currentForm,
             actionPressed: input.actionPressed,
@@ -386,10 +406,36 @@ export class PfPlayer {
             clearSquareAttachEntryBuffer(this.timers);
         }
 
-        const horizontalDir = (input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0);
+        const rawHorizontalDir = ((input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0)) as -1 | 0 | 1;
+        tickBallWallReboundContactCoyote(
+            this.ballReboundRuntime,
+            this.physicsBody,
+            this.physicsSprite,
+            isBallForm,
+            grounded,
+            deltaMs
+        );
+        const reboundPausePhase = tickBallReboundPauseRuntime(
+            this.ballReboundRuntime,
+            this.physicsBody,
+            isBallForm,
+            grounded,
+            deltaMs
+        );
+        const isBallReboundPauseHolding = reboundPausePhase === 'holding';
+        const didLaunchBallReboundThisFrame = reboundPausePhase === 'launched';
+        tickBallReboundSurfaceInputLock(this.ballReboundRuntime, isBallForm, grounded, deltaMs);
+        const horizontalDir = applyBallReboundSurfaceInputLock(this.ballReboundRuntime, rawHorizontalDir);
         if (horizontalDir !== 0) {
             this.lastMoveDirection = horizontalDir > 0 ? 1 : -1;
+            clearBallReboundTrajectoryOnHorizontalInput(this.ballReboundRuntime);
         }
+        const preservedReboundVelocityX = resolveBallReboundPreservedVelocityXForRuntime(
+            this.ballReboundRuntime,
+            isBallForm,
+            grounded,
+            horizontalDir
+        );
 
         let isTriangleDashActive = isTriangleForm && triangleDash.isActive;
         let dashStartedThisFrame = false;
@@ -512,7 +558,7 @@ export class PfPlayer {
             resetTriangleDashState(this.state.triangleDash);
         }
         const isSquareAttached = isSquareForm && !invalidFormStateFlags.squareAttachOutsideSquare && this.state.squareShell.isAttached;
-        this.physicsBody.setAllowGravity(!isTriangleDashActive && !isSquareAttached);
+        this.physicsBody.setAllowGravity(!isTriangleDashActive && !isSquareAttached && !isBallReboundPauseHolding);
 
         if (isTriangleDashActive) {
             this.state.triangleShell.orientationRad = triangleDash.lockedOrientationRad;
@@ -520,6 +566,11 @@ export class PfPlayer {
                 triangleDash.directionX * PLAYER_TRIANGLE_DASH_SPEED,
                 triangleDash.directionY * PLAYER_TRIANGLE_DASH_SPEED
             );
+        } else if (isBallReboundPauseHolding) {
+            this.physicsBody.setVelocity(0, 0);
+            this.physicsBody.setAcceleration(0, 0);
+        } else if (didLaunchBallReboundThisFrame) {
+            this.physicsBody.setAcceleration(0, 0);
         } else if (isSquareAttached) {
             const attachVelocity = resolveSquareAttachSurfaceVelocity(
                 this.state.squareShell.attachNormalX,
@@ -531,17 +582,22 @@ export class PfPlayer {
             this.physicsBody.setVelocity(attachVelocity.velocityX, attachVelocity.velocityY);
             this.physicsBody.setAcceleration(0, 0);
         } else {
-            const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
-            const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
-            const targetVelocityX = (horizontalDir * moveSpeed) + (grounded ? effectiveExternalInfluenceX : 0);
             const currentVelocityX = this.physicsBody.velocity.x;
-            const maxStepX = moveResponse * deltaSec;
-            let nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
+            let nextVelocityX = currentVelocityX;
 
-            if (grounded) {
-                this.airborneWindDriftX = 0;
+            if (preservedReboundVelocityX !== null) {
+                nextVelocityX = preservedReboundVelocityX;
             } else {
-                nextVelocityX = this.applyAirborneWindDrift(nextVelocityX, effectiveExternalInfluenceX, deltaSec);
+                const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
+                const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
+                const targetVelocityX = (horizontalDir * moveSpeed) + (grounded ? effectiveExternalInfluenceX : 0);
+                const maxStepX = moveResponse * deltaSec;
+                nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
+                if (grounded) {
+                    this.airborneWindDriftX = 0;
+                } else {
+                    nextVelocityX = this.applyAirborneWindDrift(nextVelocityX, effectiveExternalInfluenceX, deltaSec);
+                }
             }
 
             this.physicsBody.setVelocityX(nextVelocityX);
@@ -569,8 +625,23 @@ export class PfPlayer {
             }
         }
 
+        const canProcessJump = !isTriangleDashActive && !isSquareAttached && !isBallReboundPauseHolding && hasJumpBuffer(this.timers);
+        if (canProcessJump && isBallForm && !grounded && tryStartBallSurfaceReboundRuntime(
+            this.ballReboundRuntime,
+            this.physicsBody,
+            hasBoostHold,
+            preMoveVelocityX,
+            preMoveVelocityY
+        )) {
+            clearJumpBuffer(this.timers);
+            clearCoyoteTime(this.timers);
+            this.lastAirborneDownwardSpeed = 0;
+            this.jumpCutConsumed = true;
+            this.reboundWindowMs = 0;
+        }
+
         const canJump = grounded || hasCoyoteTime(this.timers);
-        if (!isTriangleDashActive && !isSquareAttached && canJump && hasJumpBuffer(this.timers)) {
+        if (canProcessJump && canJump && hasJumpBuffer(this.timers)) {
             if (this.state.currentForm === 'triangle') {
                 const triangleJumpLaunch = applyTriangleSpecialJump(
                     this.state.triangleShell,
@@ -672,6 +743,7 @@ export class PfPlayer {
         if (transitionReset.clearSquareAttach) {
             clearSquareAttach(this.state.squareShell);
         }
+        resetBallReboundRuntimeState(this.ballReboundRuntime);
         this.physicsBody.setAllowGravity(true);
         this.applyCurrentFormCollisionBody();
         this.applyCurrentFormVisual();
