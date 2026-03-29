@@ -1,4 +1,5 @@
 import { GameObjects, Physics, Scene } from 'phaser';
+import { markAsPlatformSurface } from './world_surface_tags';
 
 export interface MovingPlatformConfig {
     x: number;
@@ -29,6 +30,7 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
         .setDepth(4205);
 
     scene.physics.add.existing(platform);
+    markAsPlatformSurface(platform);
     const body = platform.body as Physics.Arcade.Body;
     body.setImmovable(true);
     body.setAllowGravity(false);

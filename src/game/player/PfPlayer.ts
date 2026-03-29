@@ -3,6 +3,7 @@ import {
     PLAYER_BALL_BOOST_COOLDOWN_MS,
     PLAYER_BALL_BOOST_HOLD_ACCEL,
     PLAYER_BALL_BOOST_HOLD_AIR_MOVE_SPEED,
+    PLAYER_BALL_BOOST_HOLD_AIR_CONTROL_FACTOR,
     PLAYER_BALL_BOOST_HOLD_MOVE_SPEED,
     PLAYER_BALL_REBOUND_FULL_APPROACH_SPEED,
     PLAYER_BALL_REBOUND_LANDING_WINDOW_MS,
@@ -10,9 +11,11 @@ import {
     PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED,
     PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY,
     PLAYER_BALL_BOOST_SPEED,
+    PLAYER_BALL_BOOST_JUMP_MIN_HORIZONTAL_SPEED,
     PLAYER_AIR_MOVE_ACCEL,
     PLAYER_AIR_MOVE_DECEL,
     PLAYER_BALL_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC,
+    PLAYER_BALL_BOOST_HOLD_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC,
     PLAYER_TRIANGLE_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC,
     PLAYER_SQUARE_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC,
     PLAYER_AIR_MOVE_SPEED,
@@ -124,7 +127,6 @@ import {
 } from './state/player_form_state_guards';
 import {
     applyBallReboundSurfaceInputLock,
-    clearBallReboundTrajectoryOnHorizontalInput,
     createBallReboundRuntimeState,
     resetBallReboundRuntimeState,
     resolveBallReboundPreservedVelocityXForRuntime,
@@ -134,6 +136,7 @@ import {
     tryStartBallSurfaceReboundRuntime,
     type BallReboundRuntimeState
 } from './player_ball_rebound_runtime';
+import { resolveBallGroundJumpBoostLaunch } from './player_ball_ground_jump_boost';
 
 export class PfPlayer {
     public readonly state: PlayerShellState;
@@ -186,7 +189,10 @@ export class PfPlayer {
         this.physicsBody.setBounce(0);
         this.groundedDragX = 2400;
         this.physicsBody.setDragX(this.groundedDragX);
-        this.physicsBody.setMaxVelocity(Math.max(PLAYER_GROUND_MOVE_SPEED, PLAYER_AIR_MOVE_SPEED, PLAYER_BALL_BOOST_SPEED), 1200);
+        this.physicsBody.setMaxVelocity(
+            Math.max(PLAYER_GROUND_MOVE_SPEED, PLAYER_AIR_MOVE_SPEED, PLAYER_BALL_BOOST_SPEED, PLAYER_BALL_BOOST_JUMP_MIN_HORIZONTAL_SPEED),
+            1200
+        );
         this.physicsBody.setCollideWorldBounds(true);
         this.physicsBody.setGravityY(PLAYER_GRAVITY_Y);
 
@@ -413,6 +419,7 @@ export class PfPlayer {
         }
 
         const rawHorizontalDir = ((input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0)) as -1 | 0 | 1;
+        const rawVerticalDir = ((input.moveDown ? 1 : 0) - (input.moveUp ? 1 : 0)) as -1 | 0 | 1;
         tickBallWallReboundContactCoyote(
             this.ballReboundRuntime,
             this.physicsBody,
@@ -426,7 +433,11 @@ export class PfPlayer {
             this.physicsBody,
             isBallForm,
             grounded,
-            deltaMs
+            deltaMs,
+            {
+                horizontalDir: rawHorizontalDir,
+                verticalDir: rawVerticalDir
+            }
         );
         const isBallReboundPauseHolding = reboundPausePhase === 'holding';
         const didLaunchBallReboundThisFrame = reboundPausePhase === 'launched';
@@ -434,7 +445,6 @@ export class PfPlayer {
         const horizontalDir = applyBallReboundSurfaceInputLock(this.ballReboundRuntime, rawHorizontalDir);
         if (horizontalDir !== 0) {
             this.lastMoveDirection = horizontalDir > 0 ? 1 : -1;
-            clearBallReboundTrajectoryOnHorizontalInput(this.ballReboundRuntime);
         }
         const preservedReboundVelocityX = resolveBallReboundPreservedVelocityXForRuntime(
             this.ballReboundRuntime,
@@ -594,22 +604,32 @@ export class PfPlayer {
             if (preservedReboundVelocityX !== null) {
                 nextVelocityX = preservedReboundVelocityX;
             } else {
+                const ballBoostAirControlFactor = this.resolveBallBoostAirControlFactor(
+                    isBallForm,
+                    grounded,
+                    hasBoostHold
+                );
                 const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
                 const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
                 const targetVelocityX = this.resolveTargetVelocityX(
                     currentVelocityX,
                     grounded,
                     horizontalDir,
-                    moveSpeed,
+                    moveSpeed * ballBoostAirControlFactor,
                     effectiveExternalInfluenceX
                 );
-                const maxStepX = moveResponse * deltaSec;
+                const maxStepX = moveResponse * ballBoostAirControlFactor * deltaSec;
                 nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
                 if (grounded) {
                     this.airborneWindDriftX = 0;
                 } else {
                     if (horizontalDir === 0) {
-                        nextVelocityX = this.applyAirborneNoInputInertiaDamping(nextVelocityX, deltaSec, this.state.currentForm);
+                        nextVelocityX = this.applyAirborneNoInputInertiaDamping(
+                            nextVelocityX,
+                            deltaSec,
+                            this.state.currentForm,
+                            hasBoostHold
+                        );
                     }
                     nextVelocityX = this.applyAirborneWindDrift(nextVelocityX, effectiveExternalInfluenceX, deltaSec);
                 }
@@ -640,13 +660,19 @@ export class PfPlayer {
             }
         }
 
+        const hasCoyoteJump = hasCoyoteTime(this.timers);
+        const canJump = grounded || hasCoyoteJump;
         const canProcessJump = !isTriangleDashActive && !isSquareAttached && !isBallReboundPauseHolding && hasJumpBuffer(this.timers);
-        if (canProcessJump && isBallForm && !grounded && tryStartBallSurfaceReboundRuntime(
+        if (canProcessJump && isBallForm && !grounded && !hasCoyoteJump && tryStartBallSurfaceReboundRuntime(
             this.ballReboundRuntime,
             this.physicsBody,
             hasBoostHold,
             preMoveVelocityX,
-            preMoveVelocityY
+            preMoveVelocityY,
+            {
+                horizontalDir: rawHorizontalDir,
+                verticalDir: rawVerticalDir
+            }
         )) {
             clearJumpBuffer(this.timers);
             clearCoyoteTime(this.timers);
@@ -655,7 +681,6 @@ export class PfPlayer {
             this.reboundWindowMs = 0;
         }
 
-        const canJump = grounded || hasCoyoteTime(this.timers);
         if (canProcessJump && canJump && hasJumpBuffer(this.timers)) {
             if (this.state.currentForm === 'triangle') {
                 const triangleJumpLaunch = applyTriangleSpecialJump(
@@ -668,8 +693,17 @@ export class PfPlayer {
                 this.reboundWindowMs = 0;
             } else {
                 const hasReboundJump = grounded && this.reboundWindowMs > 0;
-                const jumpVelocity = hasReboundJump ? this.reboundJumpVelocity : PLAYER_JUMP_VELOCITY;
-                this.physicsBody.setVelocityY(jumpVelocity);
+                const baseJumpVelocity = hasReboundJump ? this.reboundJumpVelocity : PLAYER_JUMP_VELOCITY;
+                const ballJumpLaunch = resolveBallGroundJumpBoostLaunch({
+                    baseJumpVelocity,
+                    currentVelocityX: this.physicsBody.velocity.x,
+                    horizontalDir,
+                    lastMoveDirection: this.lastMoveDirection,
+                    isBallForm,
+                    grounded,
+                    hasBoostHold
+                });
+                this.physicsBody.setVelocity(ballJumpLaunch.velocityX, ballJumpLaunch.velocityY);
                 this.jumpCutConsumed = hasReboundJump;
                 this.reboundWindowMs = 0;
             }
@@ -998,14 +1032,19 @@ export class PfPlayer {
     private applyAirborneNoInputInertiaDamping(
         velocityX: number,
         deltaSec: number,
-        form: PlayerFormId
+        form: PlayerFormId,
+        hasBoostHold: boolean
     ): number {
-        const dampingPerSec = this.resolveAirNoInputInertiaDampingPerSec(form);
+        const dampingPerSec = this.resolveAirNoInputInertiaDampingPerSec(form, hasBoostHold);
         const dampingFactor = Math.max(0, 1 - (dampingPerSec * deltaSec));
         return velocityX * dampingFactor;
     }
 
-    private resolveAirNoInputInertiaDampingPerSec(form: PlayerFormId): number {
+    private resolveAirNoInputInertiaDampingPerSec(form: PlayerFormId, hasBoostHold: boolean): number {
+        if (form === 'ball' && hasBoostHold) {
+            return PLAYER_BALL_BOOST_HOLD_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC;
+        }
+
         if (form === 'square') {
             return PLAYER_SQUARE_AIR_NO_INPUT_INERTIA_DAMPING_PER_SEC;
         }
@@ -1023,6 +1062,18 @@ export class PfPlayer {
         }
 
         return grounded ? PLAYER_BALL_BOOST_HOLD_MOVE_SPEED : PLAYER_BALL_BOOST_HOLD_AIR_MOVE_SPEED;
+    }
+
+    private resolveBallBoostAirControlFactor(
+        isBallForm: boolean,
+        grounded: boolean,
+        hasBoostHold: boolean
+    ): number {
+        if (!isBallForm || grounded || !hasBoostHold) {
+            return 1;
+        }
+
+        return PLAYER_BALL_BOOST_HOLD_AIR_CONTROL_FACTOR;
     }
 
     private isCurrentlyGrounded(): boolean {

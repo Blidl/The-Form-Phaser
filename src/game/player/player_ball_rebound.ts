@@ -1,4 +1,5 @@
 import { GameObjects, Physics } from 'phaser';
+import { isPlatformSurfaceGameObject } from '../world/world_surface_tags';
 
 export function resolveBallWallContactReboundDirection(
     body: Physics.Arcade.Body,
@@ -163,6 +164,10 @@ function hasBallWallProbeHit(
 
         const gameObject = (body as { gameObject?: GameObjects.GameObject }).gameObject;
         if (gameObject === selfGameObject) {
+            continue;
+        }
+
+        if (!isPlatformSurfaceGameObject(gameObject)) {
             continue;
         }
 

@@ -5,6 +5,7 @@ import { createHazard, type HazardObject } from '../hazard';
 import { createMovingPlatform, type MovingPlatformObject } from '../moving_platform';
 import { createTriggerPlatform } from '../trigger_platform';
 import { createWindZone, type WindZoneObject } from '../wind_zone';
+import { markAsPlatformSurface } from '../world_surface_tags';
 import type { RespawnPoint } from './world_runtime_types';
 
 export const TEST_WORLD_WIDTH = 2200;
@@ -41,6 +42,9 @@ export const createTestWorldRuntime = (
     scene.physics.add.existing(ground, true);
     scene.physics.add.existing(lowPlatform, true);
     scene.physics.add.existing(highPlatform, true);
+    markAsPlatformSurface(ground);
+    markAsPlatformSurface(lowPlatform);
+    markAsPlatformSurface(highPlatform);
 
     scene.physics.add.collider(player.arcadeBodyObject, ground);
     scene.physics.add.collider(player.arcadeBodyObject, lowPlatform);

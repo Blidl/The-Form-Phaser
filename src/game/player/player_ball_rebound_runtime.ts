@@ -31,6 +31,11 @@ import {
     type BallReboundPauseState,
     type BallReboundSurfaceType
 } from './player_ball_rebound_pause';
+import {
+    resolveWallReboundSteerVector,
+    type BallReboundSteerInput,
+    type BallReboundSteerVector
+} from './player_ball_rebound_steering';
 
 export interface BallReboundRuntimeState {
     wallReboundCoyoteMs: number;
@@ -47,6 +52,7 @@ export type BallReboundPausePhase = 'inactive' | 'holding' | 'launched';
 interface BallSurfaceReboundCandidate {
     surface: BallReboundSurfaceType;
     wallNormalX: -1 | 1;
+    steerVector: BallReboundSteerVector | null;
 }
 
 export function createBallReboundRuntimeState(): BallReboundRuntimeState {
@@ -169,7 +175,8 @@ export function tickBallReboundPauseRuntime(
     body: Physics.Arcade.Body,
     isBallForm: boolean,
     grounded: boolean,
-    deltaMs: number
+    deltaMs: number,
+    steerInput: BallReboundSteerInput
 ): BallReboundPausePhase {
     if (!state.pauseState.active) {
         return 'inactive';
@@ -182,6 +189,18 @@ export function tickBallReboundPauseRuntime(
 
     tickBallReboundPause(state.pauseState, deltaMs);
     if (state.pauseState.remainingMs > 0) {
+        if (state.pauseState.surface === 'wall') {
+            const steerVector = resolveWallReboundSteerVector(steerInput, state.pauseState.wallNormalX);
+            if (steerVector !== null) {
+                state.pauseState.steerDirectionX = steerVector.x;
+                state.pauseState.steerDirectionY = steerVector.y;
+                state.pauseState.steerStrengthMultiplier = steerVector.strengthMultiplier;
+                state.pauseState.hasSteerDirection = true;
+            } else {
+                state.pauseState.steerStrengthMultiplier = 1;
+                state.pauseState.hasSteerDirection = false;
+            }
+        }
         return 'holding';
     }
 
@@ -191,7 +210,14 @@ export function tickBallReboundPauseRuntime(
     );
     const candidate: BallSurfaceReboundCandidate = {
         surface: state.pauseState.surface,
-        wallNormalX: state.pauseState.wallNormalX
+        wallNormalX: state.pauseState.wallNormalX,
+        steerVector: state.pauseState.hasSteerDirection
+            ? {
+                x: state.pauseState.steerDirectionX,
+                y: state.pauseState.steerDirectionY,
+                strengthMultiplier: state.pauseState.steerStrengthMultiplier
+            }
+            : null
     };
     const launched = applyBallSurfaceReboundImmediate(
         state,
@@ -212,10 +238,11 @@ export function tryStartBallSurfaceReboundRuntime(
     body: Physics.Arcade.Body,
     boosted: boolean,
     sourceVelocityX: number = body.velocity.x,
-    sourceVelocityY: number = body.velocity.y
+    sourceVelocityY: number = body.velocity.y,
+    steerInput: BallReboundSteerInput = { horizontalDir: 0, verticalDir: 0 }
 ): boolean {
     const sourceVelocity = { x: sourceVelocityX, y: sourceVelocityY };
-    const candidate = resolveBallSurfaceReboundCandidate(state, body);
+    const candidate = resolveBallSurfaceReboundCandidate(state, body, steerInput);
     if (candidate === null) {
         return false;
     }
@@ -244,12 +271,16 @@ export function tryStartBallSurfaceReboundRuntime(
 
 function resolveBallSurfaceReboundCandidate(
     state: BallReboundRuntimeState,
-    body: Physics.Arcade.Body
+    body: Physics.Arcade.Body,
+    steerInput: BallReboundSteerInput
 ): BallSurfaceReboundCandidate | null {
-    if (state.wallReboundCoyoteMs > 0) {
+    const directWallNormalX = resolveDirectWallNormalX(body);
+    if (directWallNormalX !== null || state.wallReboundCoyoteMs > 0) {
+        const wallNormalX = directWallNormalX ?? state.wallReboundNormalX;
         return {
             surface: 'wall',
-            wallNormalX: state.wallReboundNormalX
+            wallNormalX,
+            steerVector: resolveWallReboundSteerVector(steerInput, wallNormalX)
         };
     }
 
@@ -260,8 +291,24 @@ function resolveBallSurfaceReboundCandidate(
 
     return {
         surface: 'ceiling',
-        wallNormalX: state.wallReboundNormalX
+        wallNormalX: state.wallReboundNormalX,
+        steerVector: null
     };
+}
+
+function resolveDirectWallNormalX(body: Physics.Arcade.Body): -1 | 1 | null {
+    const hasLeftContact = body.blocked.left || body.touching.left;
+    const hasRightContact = body.blocked.right || body.touching.right;
+
+    if (hasLeftContact && !hasRightContact) {
+        return 1;
+    }
+
+    if (hasRightContact && !hasLeftContact) {
+        return -1;
+    }
+
+    return null;
 }
 
 function applyBallSurfaceReboundImmediate(
@@ -279,6 +326,7 @@ function applyBallSurfaceReboundImmediate(
             state,
             body,
             candidate.wallNormalX,
+            candidate.steerVector,
             directionSourceVelocity,
             strengthMultiplier
         );
@@ -303,6 +351,7 @@ function tryStartBallWallRebound(
     state: BallReboundRuntimeState,
     body: Physics.Arcade.Body,
     wallNormalX: -1 | 1,
+    steerVector: BallReboundSteerVector | null,
     directionSourceVelocity: { x: number; y: number },
     strengthMultiplier: number
 ): boolean {
@@ -342,6 +391,9 @@ function tryStartBallWallRebound(
         wallNormalX,
         fallbackDirectionY
     );
+    if (steerVector !== null) {
+        applyWallReboundSteerDirection(body, steerVector);
+    }
     applyReboundStrengthMultiplier(body, strengthMultiplier);
 
     startBallReboundTrajectory(state.trajectoryState, body.velocity.x);
@@ -411,4 +463,25 @@ function applyReboundStrengthMultiplier(body: Physics.Arcade.Body, multiplier: n
     }
 
     body.setVelocity(body.velocity.x * multiplier, body.velocity.y * multiplier);
+}
+
+function applyWallReboundSteerDirection(
+    body: Physics.Arcade.Body,
+    steerVector: BallReboundSteerVector
+): void {
+    const speed = Math.hypot(body.velocity.x, body.velocity.y);
+    if (speed <= 0.0001) {
+        return;
+    }
+
+    const directionLength = Math.hypot(steerVector.x, steerVector.y);
+    if (directionLength <= 0.0001) {
+        return;
+    }
+
+    const strengthMultiplier = Math.max(0.0001, steerVector.strengthMultiplier);
+    body.setVelocity(
+        (steerVector.x / directionLength) * speed * strengthMultiplier,
+        (steerVector.y / directionLength) * speed * strengthMultiplier
+    );
 }

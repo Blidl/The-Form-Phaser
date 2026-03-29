@@ -139,8 +139,15 @@ Scene/config/data wiring приоритетно использовать для:
 - `Ball floor rebound` — отдельный контракт. Текущие правила floor rebound и распрыгивания на полу не меняются и не переопределяются в рамках обновлений wall rebound.
 - `Ball wall rebound` — отдельный контракт. Он не требует стартовой скорости в сторону стены и не требует удержания направления в сторону стены.
 - Для `Ball wall rebound` достаточно, чтобы `Ball` был в воздухе, имел контакт со стеной или находился в коротком `wall-coyote` окне, и был нажат `jump`.
-- Результат `Ball wall rebound`: импульс вверх и от стены.
-- После старта `Ball wall rebound` не допускаются искусственные ограничения или cooldown между такими отпрыгиваниями.
+- Для `Ball wall rebound` направление выхода:
+  - при выраженной входящей скорости в стену — reflection относительно нормали стены;
+  - при слабой/нулевой входящей скорости — fallback по нормали стены с слабой поправкой вверх.
+- `Ball ceiling rebound` рассчитывается по текущей скорости как reflection относительно нормали потолка.
+- Для wall/ceiling rebound обязателен minimum exit strength не ниже baseline обычного jump.
+- Для `Ball ceiling rebound` не вводится отдельный искусственный down-boost, если reflection + minimum strength уже дают корректный результат.
+- После старта wall/ceiling rebound не допускаются искусственные ограничения или cooldown.
+- Если одновременно валидны `coyote jump` и wall rebound, приоритет имеет `coyote jump`.
+- Rebound от стен для Ball должен валидироваться только на платформенных поверхностях (не trigger/checkpoint/hazard).
 
 ### 5.4. Runtime physics plugin contract (Arcade)
 Если runtime-path сцены использует Phaser Arcade Physics API

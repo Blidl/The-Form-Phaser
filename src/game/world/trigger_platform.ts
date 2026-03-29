@@ -1,4 +1,5 @@
 import { GameObjects, Physics, Scene } from 'phaser';
+import { markAsPlatformSurface } from './world_surface_tags';
 
 export interface TriggerPlatformConfig {
     triggerX: number;
@@ -43,6 +44,7 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
 
     scene.physics.add.existing(triggerZone, true);
     scene.physics.add.existing(platformBodyObject, true);
+    markAsPlatformSurface(platformBodyObject);
 
     const triggerBody = triggerZone.body as Physics.Arcade.StaticBody;
     triggerBody.checkCollision.none = false;

@@ -30,9 +30,18 @@ export function resolveBallReboundPreservedVelocityX(
         return null;
     }
 
-    if (!isBallForm || grounded || horizontalDir !== 0) {
+    if (!isBallForm || grounded) {
         resetBallReboundTrajectoryState(state);
         return null;
+    }
+
+    if (horizontalDir !== 0 && Math.abs(state.preservedVelocityX) > 0.0001) {
+        const inputDir = horizontalDir > 0 ? 1 : -1;
+        const reboundDir = state.preservedVelocityX > 0 ? 1 : -1;
+        if (inputDir !== reboundDir) {
+            resetBallReboundTrajectoryState(state);
+            return null;
+        }
     }
 
     return state.preservedVelocityX;

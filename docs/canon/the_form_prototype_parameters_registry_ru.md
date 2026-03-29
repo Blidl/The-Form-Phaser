@@ -103,7 +103,11 @@
 - `ball_boost_accel_px_per_sec2` — скорость добора до удерживаемого ускорения;
 - `ball_boost_decel_px_per_sec2` — скорость замедления после завершения ускорения;
 - `ball_boost_min_ground_contact_time_sec` — если понадобится минимальный надёжный контакт с землёй;
-- `ball_boost_turn_resistance` — насколько тяжело менять направление в активном ускорении.
+- `ball_boost_turn_resistance` — насколько тяжело менять направление в активном ускорении;
+- `ball_boost_jump_velocity_multiplier` — небольшой множитель высоты boosted jump (должен оставаться близко к 1);
+- `ball_boost_jump_min_horizontal_speed_px_per_sec` — минимальная горизонтальная скорость вылета boosted jump;
+- `ball_boost_air_control_factor` — доля обычного air-control при удержании `K` в воздухе;
+- `ball_boost_air_no_input_inertia_damping_per_sec` — затухание инерции Ball в воздухе при удержании `K`.
 
 ### 4.3. Rebound Ball
 - `ball_rebound_input_window_sec` — окно, в которое прощается ранний повторный `Jump`;
@@ -114,6 +118,17 @@
 - `ball_rebound_floor_reflect_ratio`
 - `ball_rebound_ceiling_reflect_ratio`
 - `ball_rebound_wall_reflect_ratio`
+- `ball_rebound_wall_coyote_time_sec` — окно wall-coyote для rebound от стен;
+- `ball_rebound_pause_before_launch_sec` — пауза перед стартом wall/ceiling rebound;
+- `ball_rebound_surface_input_lock_time_sec` — окно блокировки ввода в сторону поверхности после wall rebound;
+- `ball_rebound_wall_min_into_surface_speed_px_per_sec` — порог «выраженной входящей скорости» для wall reflection;
+- `ball_rebound_wall_fallback_upward_bias` — слабая вертикальная поправка fallback-отскока от стены;
+- `ball_rebound_wall_min_exit_speed_px_per_sec` — минимум итоговой скорости wall rebound;
+- `ball_rebound_ceiling_min_exit_speed_px_per_sec` — минимум итоговой скорости ceiling rebound;
+- `ball_rebound_ceiling_min_downward_speed_px_per_sec` — минимум вертикальной скорости вниз после ceiling rebound;
+- `ball_rebound_wall_steer_perpendicular_strength_multiplier` — множитель силы при steering-перпендикуляре от стены;
+- `ball_rebound_wall_steer_diagonal_angle_deg` — угол steering-диагонали от нормали стены;
+- `ball_rebound_wall_steer_vertical_angle_deg` — угол steering для `W/S` от нормали стены.
 
 Если позже потребуется ограничить runaway-сценарии, это делается через отдельный канонический параметр, а не через скрытые clamp-и.
 
