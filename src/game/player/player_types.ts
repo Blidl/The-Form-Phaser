@@ -50,6 +50,11 @@ export interface PlayerSquareTrailSegment {
     supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
     normalX: -1 | 0 | 1;
     normalY: -1 | 0 | 1;
+    isDetached: boolean;
+    detachedVelocityY: number;
+    detachedDissolveProgress: number;
+    detachedAlpha: number;
+    detachedRefundRemaining: number;
 }
 
 export interface PlayerSquareTrailSupportOwner {

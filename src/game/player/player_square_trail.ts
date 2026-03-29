@@ -1,4 +1,8 @@
+import { Physics } from 'phaser';
 import {
+    PLAYER_SQUARE_TRAIL_DETACHED_CLEANUP_ALPHA,
+    PLAYER_SQUARE_TRAIL_DETACHED_FALL_SPEED,
+    PLAYER_SQUARE_TRAIL_DETACHED_REFUND_RATE,
     PLAYER_SQUARE_TRAIL_MAX_SEGMENTS,
     PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT,
     PLAYER_SQUARE_TRAIL_MIN_SEGMENT_LENGTH,
@@ -179,6 +183,19 @@ const setTrailAnchorToCurrentSurface = (
 export const resolveSquareTrailSegmentWorldLine = (
     segment: PlayerSquareTrailSegment
 ): { startX: number; startY: number; endX: number; endY: number } => {
+    if (segment.isDetached) {
+        segment.startLocalX = segment.startX;
+        segment.startLocalY = segment.startY;
+        segment.endLocalX = segment.endX;
+        segment.endLocalY = segment.endY;
+        return {
+            startX: segment.startX,
+            startY: segment.startY,
+            endX: segment.endX,
+            endY: segment.endY
+        };
+    }
+
     const supportOwner: PlayerSquareTrailSupportOwner = {
         body: segment.supportBody,
         originX: segment.supportOriginX,
@@ -198,6 +215,116 @@ export const resolveSquareTrailSegmentWorldLine = (
         endX: worldEnd.x,
         endY: worldEnd.y
     };
+};
+
+export const tickSquareTrailDetachedLifecycle = (
+    squareShell: PlayerSquareShellState,
+    deltaMs: number
+): number => {
+    const deltaSec = Math.max(0, deltaMs / 1000);
+    let refundedAmount = 0;
+
+    squareShell.trailSegments.forEach((segment) => {
+        if (segment.isDetached || segment.supportBody === null) {
+            // continue to detached update path
+        } else if (isTrailSupportOwnerInvalid(segment.supportBody)) {
+            detachTrailSegmentToWorldSpace(segment);
+        }
+
+        if (!segment.isDetached || deltaSec <= 0) {
+            return;
+        }
+
+        const fallDeltaY = PLAYER_SQUARE_TRAIL_DETACHED_FALL_SPEED * deltaSec;
+        segment.detachedVelocityY = PLAYER_SQUARE_TRAIL_DETACHED_FALL_SPEED;
+        segment.startY += fallDeltaY;
+        segment.endY += fallDeltaY;
+        segment.startLocalY = segment.startY;
+        segment.endLocalY = segment.endY;
+
+        const previousProgress = segment.detachedDissolveProgress;
+        const nextProgress = Math.min(1, previousProgress + (PLAYER_SQUARE_TRAIL_DETACHED_REFUND_RATE * deltaSec));
+        segment.detachedDissolveProgress = nextProgress;
+        segment.detachedAlpha = Math.max(0, 1 - nextProgress);
+
+        const progressed = nextProgress - previousProgress;
+        if (progressed > 0 && segment.detachedRefundRemaining > 0) {
+            const remainingProgress = Math.max(0.0001, 1 - previousProgress);
+            const refundDelta = Math.min(
+                segment.detachedRefundRemaining,
+                segment.detachedRefundRemaining * (progressed / remainingProgress)
+            );
+            segment.detachedRefundRemaining = Math.max(0, segment.detachedRefundRemaining - refundDelta);
+            refundedAmount += refundDelta;
+        }
+    });
+
+    for (let i = squareShell.trailSegments.length - 1; i >= 0; i -= 1) {
+        const segment = squareShell.trailSegments[i];
+        if (!segment.isDetached) {
+            continue;
+        }
+
+        if (segment.detachedAlpha > PLAYER_SQUARE_TRAIL_DETACHED_CLEANUP_ALPHA) {
+            continue;
+        }
+
+        squareShell.trailSegments.splice(i, 1);
+    }
+
+    return refundedAmount;
+};
+
+const isTrailSupportOwnerInvalid = (
+    supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody
+): boolean => {
+    const maybeBody = supportBody as Physics.Arcade.Body & {
+        enable?: boolean;
+        world?: unknown;
+        gameObject?: { active?: boolean } | null;
+    };
+    if (maybeBody.enable === false) {
+        return true;
+    }
+
+    if (!maybeBody.world) {
+        return true;
+    }
+
+    const ownerGameObject = maybeBody.gameObject;
+    if (ownerGameObject && ownerGameObject.active === false) {
+        return true;
+    }
+
+    return false;
+};
+
+const detachTrailSegmentToWorldSpace = (
+    segment: PlayerSquareTrailSegment
+): void => {
+    const worldLine = resolveSquareTrailSegmentWorldLine(segment);
+    segment.isDetached = true;
+    segment.supportBody = null;
+    segment.supportOriginX = 0;
+    segment.supportOriginY = 0;
+    segment.startX = worldLine.startX;
+    segment.startY = worldLine.startY;
+    segment.endX = worldLine.endX;
+    segment.endY = worldLine.endY;
+    segment.startLocalX = worldLine.startX;
+    segment.startLocalY = worldLine.startY;
+    segment.endLocalX = worldLine.endX;
+    segment.endLocalY = worldLine.endY;
+    segment.detachedVelocityY = 0;
+    segment.detachedDissolveProgress = 0;
+    segment.detachedAlpha = 1;
+    if (segment.detachedRefundRemaining <= 0) {
+        segment.detachedRefundRemaining = Math.max(
+            0,
+            Math.hypot(worldLine.endX - worldLine.startX, worldLine.endY - worldLine.startY)
+            * PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT
+        );
+    }
 };
 
 const findNearestTrailJoinPoint = (
@@ -333,6 +460,7 @@ const appendOrMergeSweptLocalInterval = (
         ? squareShell.trailSegments[squareShell.trailSegments.length - 1]
         : null;
     const canMergeWithTrailing = trailingSegment !== null
+        && !trailingSegment.isDetached
         && trailingSegment.normalX === normalX
         && trailingSegment.normalY === normalY
         && isSameSupportOwner(
@@ -378,6 +506,14 @@ const appendOrMergeSweptLocalInterval = (
             trailingSegment.startY = mergedWorldStart.y;
             trailingSegment.endX = mergedWorldEnd.x;
             trailingSegment.endY = mergedWorldEnd.y;
+            trailingSegment.isDetached = false;
+            trailingSegment.detachedVelocityY = 0;
+            trailingSegment.detachedDissolveProgress = 0;
+            trailingSegment.detachedAlpha = 1;
+            trailingSegment.detachedRefundRemaining = Math.max(
+                0,
+                Math.hypot(mergedWorldEnd.x - mergedWorldStart.x, mergedWorldEnd.y - mergedWorldStart.y) * PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT
+            );
             return;
         }
     }
@@ -395,7 +531,15 @@ const appendOrMergeSweptLocalInterval = (
         supportOriginY: supportOwner.originY,
         supportBody: supportOwner.body,
         normalX,
-        normalY
+        normalY,
+        isDetached: false,
+        detachedVelocityY: 0,
+        detachedDissolveProgress: 0,
+        detachedAlpha: 1,
+        detachedRefundRemaining: Math.max(
+            0,
+            Math.hypot(worldEnd.x - worldStart.x, worldEnd.y - worldStart.y) * PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT
+        )
     });
     if (squareShell.trailSegments.length > PLAYER_SQUARE_TRAIL_MAX_SEGMENTS) {
         squareShell.trailSegments.splice(0, squareShell.trailSegments.length - PLAYER_SQUARE_TRAIL_MAX_SEGMENTS);

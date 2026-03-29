@@ -80,6 +80,7 @@ import {
 import {
     beginSquareTrailAnchor,
     resolveSquareTrailSegmentWorldLine,
+    tickSquareTrailDetachedLifecycle,
     tickSquareTrailPaint
 } from './player_square_trail';
 import { resolveSquareAttachSurfaceVelocity } from './player_square_surface_move';
@@ -586,6 +587,14 @@ export class PfPlayer {
         this.reboundWindowMs = Math.max(0, this.reboundWindowMs - deltaMs);
         this.boostCooldownMs = Math.max(0, this.boostCooldownMs - deltaMs);
         tickPlayerTimers(this.timers, deltaMs);
+        const detachedTrailRefund = tickSquareTrailDetachedLifecycle(this.state.squareShell, deltaMs);
+        if (detachedTrailRefund > 0) {
+            this.state.squareShell.trailResourceCurrent = PhaserMath.Clamp(
+                this.state.squareShell.trailResourceCurrent + detachedTrailRefund,
+                0,
+                this.state.squareShell.trailResourceMax
+            );
+        }
         this.wasGrounded = grounded;
         this.syncVisualPosition();
         this.updateTriangleLeadingCornerVisual(this.isCurrentlyGrounded(), input);
@@ -1145,17 +1154,24 @@ export class PfPlayer {
             return;
         }
 
-        this.squareTrailGraphics.lineStyle(
-            PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
-            PLAYER_SQUARE_TRAIL_STROKE_COLOR,
-            PLAYER_SQUARE_TRAIL_STROKE_ALPHA
-        );
         this.state.squareShell.trailSegments.forEach((segment) => {
             const worldLine = resolveSquareTrailSegmentWorldLine(segment);
-            const clippedWorldLine = this.clipTrailLineToSupportBounds(segment, worldLine);
+            const clippedWorldLine = segment.isDetached
+                ? worldLine
+                : this.clipTrailLineToSupportBounds(segment, worldLine);
             if (clippedWorldLine === null) {
                 return;
             }
+            const segmentAlpha = PhaserMath.Clamp(
+                PLAYER_SQUARE_TRAIL_STROKE_ALPHA * (segment.isDetached ? segment.detachedAlpha : 1),
+                0,
+                1
+            );
+            this.squareTrailGraphics.lineStyle(
+                PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
+                PLAYER_SQUARE_TRAIL_STROKE_COLOR,
+                segmentAlpha
+            );
             this.squareTrailGraphics.beginPath();
             this.squareTrailGraphics.moveTo(clippedWorldLine.startX, clippedWorldLine.startY);
             this.squareTrailGraphics.lineTo(clippedWorldLine.endX, clippedWorldLine.endY);
