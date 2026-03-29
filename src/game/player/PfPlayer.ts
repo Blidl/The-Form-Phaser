@@ -3,13 +3,8 @@ import { PLAYER_CONFIG } from '../../config/player/playerConfig';
 import { PLAYER_SWITCH_CONFIG } from '../../config/player/playerSwitchConfig';
 import { BALL_CONFIG } from '../../config/forms/ballConfig';
 import {
-    applyBallAirMovement,
-    applyBallBoost,
-    applyBallGroundMovement,
-    applyBallJump,
-    applyBallRebound,
-    applyBallWallAssist,
-    canChainBallAbility
+    ballAbilityUpdate,
+    ballPassiveUpdate
 } from '../forms/ball';
 import { PLAYER_FORM_IDS, type PlayerFormId } from '../../shared/types/formTypes';
 import { getFormProfile } from '../../config/forms/formProfileConfig';
@@ -113,38 +108,17 @@ export class PfPlayer {
         }
 
         if (this.runtimeState.currentFormId === PLAYER_FORM_IDS.ball) {
-            applyBallGroundMovement(this.body, this.inputFrame, BALL_CONFIG);
-            applyBallAirMovement(this.body, this.inputFrame, BALL_CONFIG);
-            applyBallJump(this.body, this.inputFrame, BALL_CONFIG);
-            applyBallWallAssist(this.body, BALL_CONFIG);
-
-            const didRebound = applyBallRebound(
-                this.body,
-                BALL_CONFIG,
-                this.timerState.reboundBufferMs
-            );
-            if (didRebound) {
-                this.timerState.reboundBufferMs = 0;
-                this.timerState.chainWindowMs = BALL_CONFIG.chainWindowMs;
-            } else {
-                const canBoostByCooldown = this.timerState.boostCooldownMs <= 0;
-                const canBoostNow = canChainBallAbility({
-                    normalEligibility: canBoostByCooldown,
-                    chainWindowMs: this.timerState.chainWindowMs
-                });
-                const didBoost = applyBallBoost({
-                    body: this.body,
-                    inputFrame: this.inputFrame,
-                    ballConfig: BALL_CONFIG,
-                    boostCooldownMs: canBoostNow ? 0 : this.timerState.boostCooldownMs,
-                    reboundConsumedThisFrame: didRebound
-                });
-                if (didBoost) {
-                    this.timerState.boostCooldownMs = BALL_CONFIG.boostCooldownMs;
-                    this.timerState.reboundBufferMs = 0;
-                    this.timerState.chainWindowMs = BALL_CONFIG.chainWindowMs;
-                }
-            }
+            ballPassiveUpdate({
+                body: this.body,
+                inputFrame: this.inputFrame,
+                ballConfig: BALL_CONFIG
+            });
+            ballAbilityUpdate({
+                body: this.body,
+                inputFrame: this.inputFrame,
+                timerState: this.timerState,
+                ballConfig: BALL_CONFIG
+            });
         }
 
         this.updateMarkerPosition();

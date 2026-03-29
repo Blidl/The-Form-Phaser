@@ -1,9 +1,13 @@
+export { ballAbilityUpdate } from './ballAbilityUpdate';
+export type { BallAbilityUpdateContext } from './ballAbilityUpdate';
 export { applyBallAirMovement } from './applyBallAirMovement';
 export { applyBallBoost } from './applyBallBoost';
 export { applyBallGroundMovement } from './applyBallGroundMovement';
 export { applyBallJump } from './applyBallJump';
 export { applyBallRebound } from './applyBallRebound';
 export { applyBallWallAssist } from './applyBallWallAssist';
+export { ballPassiveUpdate } from './ballPassiveUpdate';
+export type { BallPassiveUpdateContext } from './ballPassiveUpdate';
 export { canChainBallAbility } from './canChainBallAbility';
 export { canApplyBallBoost } from './canApplyBallBoost';
 export { canConsumeBallRebound } from './canConsumeBallRebound';
