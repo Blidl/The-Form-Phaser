@@ -1,7 +1,10 @@
 import { Game } from 'phaser';
-import { createGameConfig } from './boot/game_config';
+import { createGameConfig } from './boot/gameConfig';
 
-document.addEventListener('DOMContentLoaded', () => {
-    new Game(createGameConfig('game-container'));
+const GAME_CONTAINER_ID = 'game-container';
 
-});
+const bootstrapGame = (): void => {
+    void new Game(createGameConfig(GAME_CONTAINER_ID));
+};
+
+window.addEventListener('DOMContentLoaded', bootstrapGame);

@@ -1,1377 +1,217 @@
-import { GameObjects, Math as PhaserMath, Physics, Scene } from 'phaser';
+import { GameObjects, Physics } from 'phaser';
+import { PLAYER_CONFIG } from '../../config/player/playerConfig';
+import { PLAYER_SWITCH_CONFIG } from '../../config/player/playerSwitchConfig';
+import { BALL_CONFIG } from '../../config/forms/ballConfig';
 import {
-    PLAYER_BALL_BOOST_COOLDOWN_MS,
-    PLAYER_BALL_BOOST_HOLD_ACCEL,
-    PLAYER_BALL_BOOST_HOLD_AIR_MOVE_SPEED,
-    PLAYER_BALL_BOOST_HOLD_MOVE_SPEED,
-    PLAYER_BALL_REBOUND_FULL_APPROACH_SPEED,
-    PLAYER_BALL_REBOUND_LANDING_WINDOW_MS,
-    PLAYER_BALL_REBOUND_MAX_JUMP_VELOCITY,
-    PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED,
-    PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY,
-    PLAYER_BALL_BOOST_SPEED,
-    PLAYER_AIR_MOVE_ACCEL,
-    PLAYER_AIR_MOVE_DECEL,
-    PLAYER_AIR_MOVE_SPEED,
-    PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER,
-    PLAYER_AIR_WIND_MIN_DRIFT_RATIO,
-    PLAYER_AIR_WIND_RESPONSE,
-    PLAYER_GROUND_MOVE_ACCEL,
-    PLAYER_GROUND_MOVE_DECEL,
-    PLAYER_GROUND_MOVE_SPEED,
-    PLAYER_GRAVITY_Y,
-    PLAYER_JUMP_CUT_MULTIPLIER,
-    PLAYER_JUMP_VELOCITY,
-    PLAYER_FORM_SQUARE_SIZE,
-    PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED,
-    PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED,
-    PLAYER_SQUARE_TRAIL_STROKE_ALPHA,
-    PLAYER_SQUARE_TRAIL_STROKE_COLOR,
-    PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
-    PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
-    PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR,
-    PLAYER_SQUARE_VISUAL_STROKE_COLOR,
-    PLAYER_FORM_TRIANGLE_HEIGHT,
-    PLAYER_FORM_TRIANGLE_WIDTH,
-    PLAYER_PLACEHOLDER_RADIUS,
-    PLAYER_START_FORM,
-    PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS,
-    PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
-    PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER,
-    PLAYER_TRIANGLE_DASH_SPEED,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_ALPHA,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_OUTWARD_OFFSET,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS
-} from './player_constants';
-import { EMPTY_PLAYER_INPUT_SNAPSHOT, type PlayerInputSnapshot } from './player_input';
+    applyBallAirMovement,
+    applyBallBoost,
+    applyBallGroundMovement,
+    applyBallJump,
+    applyBallRebound,
+    applyBallWallAssist,
+    canChainBallAbility
+} from '../forms/ball';
+import { PLAYER_FORM_IDS, type PlayerFormId } from '../../shared/types/formTypes';
+import { getFormProfile } from '../../config/forms/formProfileConfig';
 import {
-    clearCoyoteTime,
-    clearJumpBuffer,
-    clearSquareAttachEntryBuffer,
-    createPlayerTimers,
-    hasCoyoteTime,
-    hasJumpBuffer,
-    hasSquareAttachEntryBuffer,
-    pushJumpBuffer,
-    pushSquareAttachEntryBuffer,
-    refreshCoyoteTime,
-    tickPlayerTimers,
-    type PlayerTimers
-} from './player_timers';
-import { getNextPlayerForm, getPrevPlayerForm } from './player_form_switch';
+    createPlayerRuntimeState,
+    createPlayerSnapshotFromRuntimeState,
+    setPlayerRuntimeRespawnPoint,
+    type PlayerRuntimeState
+} from './core/playerRuntimeState';
+import { createPlayerInput } from './input/createPlayerInput';
+import { readPlayerInputFrame } from './input/readPlayerInputFrame';
 import {
-    createTriangleShellState,
-    resetTriangleShellState,
-    tickTriangleShellOrientation
-} from './player_triangle_shell';
+    EMPTY_PLAYER_INPUT_FRAME,
+    type PlayerInputFrame,
+    type PlayerInputKeys
+} from './input/playerInputTypes';
+import { createPlayerMarker } from './marker/createPlayerMarker';
 import {
-    createSquareShellState,
-    resetSquareShellState,
-    tickSquareShellOrientation
-} from './player_square_shell';
+    DEFAULT_PLAYER_MARKER_CONFIG,
+    type PlayerMarkerConfig
+} from './marker/playerMarkerTypes';
+import type { PfPlayerCreateConfig, PlayerSnapshot } from './shared/playerTypes';
+import { createPlayerTimerState } from './timers/createPlayerTimerState';
+import { tickPlayerTimers } from './timers/tickPlayerTimers';
+import type { PlayerTimerState } from './timers/playerTimerTypes';
 import {
-    clearSquareAttach,
-    tickSquareAttachState,
-    tryEnterSquareAttach
-} from './player_square_attach';
-import {
-    beginSquareTrailAnchor,
-    resolveSquareTrailSegmentWorldLine,
-    tickSquareTrailDetachedLifecycle,
-    tickSquareTrailPaint
-} from './player_square_trail';
-import { resolveSquareAttachSurfaceVelocity } from './player_square_surface_move';
-import { applyTriangleSpecialJump } from './player_triangle_jump';
-import {
-    createTriangleDashState,
-    resolveTriangleDashLeadingCornerPreview,
-    resetTriangleDashState,
-    stopTriangleDash,
-    tickTriangleDashActive,
-    tickTriangleDashCooldown,
-    updateTriangleDashSelectedLeadingCorner,
-    tryStartTriangleDash
-} from './player_triangle_dash';
-import {
-    cancelTriangleChargesRestore,
-    createTriangleChargesState,
-    hasTriangleDashCharges,
-    resetTriangleChargesState,
-    tickTriangleChargesRestore,
-    tryStartTriangleChargesRestore,
-    tryConsumeTriangleDashCharge
-} from './player_triangle_charges';
-import { resolveTriangleLeadingCornerMarkerOffset } from './player_triangle_leading_corner_visual';
-import type {
-    PlayerFormId,
-    PlayerShellState,
-    PlayerSquareTrailSupportOwner
-} from './player_types';
-import {
-    resolvePlayerFormAnchor,
-    resolvePlayerHazardHitShape,
-    resolvePlayerLocomotionBodyConfig,
-    type PlayerFormAnchor,
-    type PlayerHazardHitShape
-} from './player_form_collision_shapes';
+    applyPlayerFormProfile,
+    canSwitchPlayerForm,
+    getNextFormId,
+    getPreviousFormId
+} from './switching';
 
 export class PfPlayer {
-    public readonly state: PlayerShellState;
-    private readonly timers: PlayerTimers;
-    private lastInput: PlayerInputSnapshot;
-    private readonly physicsBody: Physics.Arcade.Body;
-    private readonly physicsSprite: GameObjects.Arc;
-    private readonly ballVisual: GameObjects.Arc;
-    private readonly triangleVisual: GameObjects.Triangle;
-    private readonly squareVisual: GameObjects.Rectangle;
-    private readonly squareContactMarker: GameObjects.Line;
-    private readonly squareTrailGraphics: GameObjects.Graphics;
-    private readonly triangleLeadingCornerMarker: GameObjects.Arc;
-    private jumpCutConsumed: boolean;
-    private boostCooldownMs: number;
-    private boostActive: boolean;
-    private pendingBoostRequest: boolean;
-    private wasGrounded: boolean;
-    private lastMoveDirection: -1 | 1;
-    private reboundWindowMs: number;
-    private reboundJumpVelocity: number;
-    private lastAirborneDownwardSpeed: number;
-    private frozenForRespawn: boolean;
-    private airborneWindDriftX: number;
+    private readonly runtimeState: PlayerRuntimeState;
+    private timerState: PlayerTimerState;
+    private readonly gameObject: GameObjects.Rectangle;
+    private readonly markerGameObject: GameObjects.Arc;
+    private readonly markerConfig: PlayerMarkerConfig;
+    private readonly body: Physics.Arcade.Body;
+    private readonly inputKeys: PlayerInputKeys;
+    private inputFrame: PlayerInputFrame;
 
-    public constructor(scene: Scene, x: number, y: number) {
-        this.state = {
-            currentForm: PLAYER_START_FORM,
-            triangleShell: createTriangleShellState(1),
-            squareShell: createSquareShellState(),
-            triangleDash: createTriangleDashState(),
-            triangleCharges: createTriangleChargesState()
-        };
-        this.timers = createPlayerTimers();
-        this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
-        this.jumpCutConsumed = false;
-        this.boostCooldownMs = 0;
-        this.boostActive = false;
-        this.pendingBoostRequest = false;
-        this.wasGrounded = false;
-        this.lastMoveDirection = 1;
-        this.reboundWindowMs = 0;
-        this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
-        this.lastAirborneDownwardSpeed = 0;
-        this.frozenForRespawn = false;
-        this.airborneWindDriftX = 0;
+    public constructor(config: PfPlayerCreateConfig) {
+        const { scene, spawnPoint } = config;
 
-        this.physicsSprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0xffffff, 0.01);
-        this.physicsSprite.setDepth(4498);
-        this.physicsSprite.name = 'pf_player';
-        scene.physics.add.existing(this.physicsSprite);
-        this.physicsBody = this.physicsSprite.body as Physics.Arcade.Body;
-        this.physicsBody.setCircle(PLAYER_PLACEHOLDER_RADIUS);
-        this.physicsBody.setBounce(0);
-        this.physicsBody.setDragX(2400);
-        this.physicsBody.setMaxVelocity(Math.max(PLAYER_GROUND_MOVE_SPEED, PLAYER_AIR_MOVE_SPEED, PLAYER_BALL_BOOST_SPEED), 1200);
-        this.physicsBody.setCollideWorldBounds(true);
-        this.physicsBody.setGravityY(PLAYER_GRAVITY_Y);
+        this.runtimeState = createPlayerRuntimeState({
+            currentFormId: PLAYER_CONFIG.spawnFormId,
+            spawnX: spawnPoint.x,
+            spawnY: spawnPoint.y
+        });
+        this.timerState = createPlayerTimerState();
 
-        this.ballVisual = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff)
-            .setStrokeStyle(2, 0xffffff)
-            .setDepth(4500);
-        this.triangleVisual = scene.add.triangle(
-            x,
-            y,
-            0,
-            PLAYER_FORM_TRIANGLE_HEIGHT,
-            PLAYER_FORM_TRIANGLE_WIDTH * 0.5,
-            0,
-            PLAYER_FORM_TRIANGLE_WIDTH,
-            PLAYER_FORM_TRIANGLE_HEIGHT,
-            0xffb74d
-        )
-            .setStrokeStyle(2, 0xffffff)
-            .setDepth(4500)
-            .setVisible(false)
-            .setRotation(PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD);
-        this.squareVisual = scene.add.rectangle(x, y, PLAYER_FORM_SQUARE_SIZE, PLAYER_FORM_SQUARE_SIZE, 0xa5d6a7)
-            .setStrokeStyle(2, PLAYER_SQUARE_VISUAL_STROKE_COLOR)
-            .setDepth(4500)
-            .setVisible(false)
-            .setRotation(PLAYER_SQUARE_EDGE_DOWN_POSE_RAD);
-        this.squareContactMarker = scene.add.line(x, y, 0, 0, 0, 12, 0xffffff)
-            .setLineWidth(2, 2)
-            .setDepth(4501)
-            .setVisible(false)
-            .setOrigin(0.5, 0.5);
-        this.squareTrailGraphics = scene.add.graphics().setDepth(4400);
-        this.triangleLeadingCornerMarker = scene.add.circle(x, y, PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS, 0xffffff)
-            .setStrokeStyle(2, 0xffb74d)
-            .setDepth(4501)
-            .setVisible(false)
-            .setAlpha(PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA);
-        this.applyCurrentFormCollisionBody();
-        this.applyCurrentFormVisual();
-    }
-
-    public get currentForm(): PlayerFormId {
-        return this.state.currentForm;
-    }
-
-    public get squareTrailResourceCurrent(): number {
-        return this.state.squareShell.trailResourceCurrent;
-    }
-
-    public get squareTrailResourceMax(): number {
-        return this.state.squareShell.trailResourceMax;
-    }
-
-    public get squareTrailResourceRatio(): number {
-        const maxResource = this.state.squareShell.trailResourceMax;
-        if (maxResource <= 0) {
-            return 0;
-        }
-
-        return PhaserMath.Clamp(this.state.squareShell.trailResourceCurrent / maxResource, 0, 1);
-    }
-
-    public get arcadeBodyObject(): GameObjects.Arc {
-        return this.physicsSprite;
-    }
-
-    public get hazardHitShape(): PlayerHazardHitShape {
-        return resolvePlayerHazardHitShape(
-            this.state.currentForm,
-            this.physicsSprite.x,
-            this.physicsSprite.y,
-            this.state.triangleShell
+        this.gameObject = scene.add.rectangle(
+            spawnPoint.x,
+            spawnPoint.y,
+            getFormProfile(this.runtimeState.currentFormId).bodyWidth,
+            getFormProfile(this.runtimeState.currentFormId).bodyHeight,
+            getFormProfile(this.runtimeState.currentFormId).displayColor
         );
-    }
-
-    public get formAnchor(): PlayerFormAnchor {
-        return resolvePlayerFormAnchor(
-            this.state.currentForm,
-            this.physicsSprite.x,
-            this.physicsSprite.y,
-            this.state.triangleShell
+        this.gameObject.name = 'pf_player';
+        this.markerConfig = DEFAULT_PLAYER_MARKER_CONFIG;
+        this.markerGameObject = createPlayerMarker(
+            scene,
+            spawnPoint.x,
+            spawnPoint.y,
+            this.markerConfig
         );
-    }
 
-    public get triangleVisualObject(): GameObjects.Triangle {
-        return this.triangleVisual;
-    }
-
-    public freezeForRespawn(): void {
-        this.frozenForRespawn = true;
-        this.triangleLeadingCornerMarker.setVisible(false);
-        this.squareContactMarker.setVisible(false);
-        this.airborneWindDriftX = 0;
-        this.physicsBody.setVelocity(0, 0);
-        this.physicsBody.setAcceleration(0, 0);
-        this.physicsBody.setAllowGravity(false);
-    }
-
-    public respawnAt(x: number, y: number): void {
-        this.state.currentForm = PLAYER_START_FORM;
-        resetTriangleShellState(this.state.triangleShell, 1);
-        resetSquareShellState(this.state.squareShell);
-        resetTriangleDashState(this.state.triangleDash);
-        resetTriangleChargesState(this.state.triangleCharges);
-
-        this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
-        this.jumpCutConsumed = false;
-        this.boostCooldownMs = 0;
-        this.boostActive = false;
-        this.pendingBoostRequest = false;
-        this.wasGrounded = false;
-        this.lastMoveDirection = 1;
-        this.reboundWindowMs = 0;
-        this.reboundJumpVelocity = PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY;
-        this.lastAirborneDownwardSpeed = 0;
-        this.airborneWindDriftX = 0;
-
-        clearJumpBuffer(this.timers);
-        clearSquareAttachEntryBuffer(this.timers);
-        clearCoyoteTime(this.timers);
-        this.timers.transformLockMs = 0;
-        this.timers.deathPauseMs = 0;
-
-        this.physicsBody.setAllowGravity(true);
-        this.physicsBody.setVelocity(0, 0);
-        this.physicsBody.setAcceleration(0, 0);
-        this.physicsBody.reset(x, y);
-
-        this.frozenForRespawn = false;
-        this.applyCurrentFormCollisionBody();
-        this.applyCurrentFormVisual();
-        this.syncVisualPosition();
-        this.updateTriangleLeadingCornerVisual(false, EMPTY_PLAYER_INPUT_SNAPSHOT);
-    }
-
-    public tick(deltaMs: number, input: PlayerInputSnapshot, externalHorizontalInfluenceX: number = 0): void {
-        if (this.frozenForRespawn) {
-            this.lastInput = EMPTY_PLAYER_INPUT_SNAPSHOT;
-            return;
-        }
-
-        this.lastInput = input;
-        const deltaSec = deltaMs / 1000;
-        this.tryHandleFormSwitch(input);
-        const isTriangleForm = this.state.currentForm === 'triangle';
-        const isBallForm = this.state.currentForm === 'ball';
-        const isSquareForm = this.state.currentForm === 'square';
-        const triangleDash = this.state.triangleDash;
-        const triangleCharges = this.state.triangleCharges;
-        tickTriangleDashCooldown(triangleDash, deltaMs);
-
-        const grounded = this.physicsBody.blocked.down || this.physicsBody.touching.down;
-        const justLanded = grounded && !this.wasGrounded;
-        if (grounded) {
-            refreshCoyoteTime(this.timers);
-            this.jumpCutConsumed = false;
-        } else if (this.physicsBody.velocity.y > 0) {
-            this.lastAirborneDownwardSpeed = Math.max(this.lastAirborneDownwardSpeed, this.physicsBody.velocity.y);
-        }
-
-        if (justLanded) {
-            const reboundVelocity = this.resolveReboundJumpVelocity(this.lastAirborneDownwardSpeed);
-            if (reboundVelocity !== null) {
-                this.reboundJumpVelocity = reboundVelocity;
-                this.reboundWindowMs = PLAYER_BALL_REBOUND_LANDING_WINDOW_MS;
-            } else {
-                this.reboundWindowMs = 0;
-            }
-
-            this.lastAirborneDownwardSpeed = 0;
-        }
-
-        if (isTriangleForm) {
-            if (input.regenPressed) {
-                tryStartTriangleChargesRestore(triangleCharges, grounded);
-            }
-
-            if (!grounded) {
-                cancelTriangleChargesRestore(triangleCharges);
-            } else {
-                tickTriangleChargesRestore(triangleCharges, deltaMs);
-            }
-        } else {
-            cancelTriangleChargesRestore(triangleCharges);
-        }
-
-        if (isBallForm && !input.actionHeld) {
-            this.boostActive = false;
-            this.pendingBoostRequest = false;
-        } else if (!isBallForm) {
-            this.boostActive = false;
-            this.pendingBoostRequest = false;
-        }
-
-        if (input.jumpPressed) {
-            pushJumpBuffer(this.timers);
-        }
-
-        if (input.actionPressed && isSquareForm) {
-            pushSquareAttachEntryBuffer(this.timers);
-        }
-
-        if (!input.actionHeld || !isSquareForm) {
-            clearSquareAttachEntryBuffer(this.timers);
-        }
-
-        const horizontalDir = (input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0);
-        if (horizontalDir !== 0) {
-            this.lastMoveDirection = horizontalDir > 0 ? 1 : -1;
-        }
-
-        let isTriangleDashActive = isTriangleForm && triangleDash.isActive;
-        let dashStartedThisFrame = false;
-        if (isTriangleForm && !isTriangleDashActive) {
-            const dashSelectionGrounded = this.isCurrentlyGrounded();
-            updateTriangleDashSelectedLeadingCorner(
-                triangleDash,
-                this.state.triangleShell,
-                input.forcePointX,
-                input.forcePointY,
-                input.forcePointActive,
-                dashSelectionGrounded
-            );
-        }
-
-        if (isSquareForm) {
-            const attachedNormalX = this.state.squareShell.isAttached
-                ? this.state.squareShell.attachNormalX
-                : undefined;
-            const attachedNormalY = this.state.squareShell.isAttached
-                ? this.state.squareShell.attachNormalY
-                : undefined;
-            const verticalDir = (input.moveDown ? 1 : 0) - (input.moveUp ? 1 : 0);
-            const squareContact = this.resolveSquareContactNormal(
-                attachedNormalX,
-                attachedNormalY,
-                horizontalDir as -1 | 0 | 1,
-                verticalDir as -1 | 0 | 1
-            );
-            tickSquareShellOrientation(
-                this.state.squareShell,
-                deltaSec,
-                squareContact.normalX,
-                squareContact.normalY,
-                squareContact.hasContact
-            );
-
-            if (!this.state.squareShell.isAttached && input.actionHeld && hasSquareAttachEntryBuffer(this.timers)) {
-                const attachStarted = tryEnterSquareAttach(
-                    this.state.squareShell,
-                    squareContact.hasContact,
-                    squareContact.normalX,
-                    squareContact.normalY
-                );
-                if (attachStarted) {
-                    const surfacePoint = this.resolveSquareTrailSurfacePoint(
-                        this.state.squareShell.attachNormalX,
-                        this.state.squareShell.attachNormalY
-                    );
-                    beginSquareTrailAnchor(
-                        this.state.squareShell,
-                        surfacePoint.x,
-                        surfacePoint.y,
-                        surfacePoint.supportOwner
-                    );
-                    clearJumpBuffer(this.timers);
-                    clearSquareAttachEntryBuffer(this.timers);
-                }
-            }
-
-            tickSquareAttachState(
-                this.state.squareShell,
-                deltaMs,
-                input.actionHeld,
-                squareContact.hasContact,
-                squareContact.normalX,
-                squareContact.normalY
-            );
-            const trailSurfacePoint = this.resolveSquareTrailSurfacePoint(
-                this.state.squareShell.attachNormalX,
-                this.state.squareShell.attachNormalY
-            );
-            tickSquareTrailPaint(
-                this.state.squareShell,
-                trailSurfacePoint.x,
-                trailSurfacePoint.y,
-                trailSurfacePoint.supportOwner,
-                this.state.squareShell.hasContact
-            );
-        }
-        if (input.actionPressed && isTriangleForm && !isTriangleDashActive) {
-            dashStartedThisFrame = this.tryApplyTriangleDash();
-            isTriangleDashActive = dashStartedThisFrame;
-        }
-
-        const hasBoostHold = this.boostActive && input.actionHeld;
-        const effectiveExternalInfluenceX = grounded
-            ? externalHorizontalInfluenceX
-            : externalHorizontalInfluenceX * PLAYER_AIR_WIND_INFLUENCE_MULTIPLIER;
-        const isSquareAttached = isSquareForm && this.state.squareShell.isAttached;
-        this.physicsBody.setAllowGravity(!isTriangleDashActive && !isSquareAttached);
-
-        if (isTriangleDashActive) {
-            this.state.triangleShell.orientationRad = triangleDash.lockedOrientationRad;
-            this.physicsBody.setVelocity(
-                triangleDash.directionX * PLAYER_TRIANGLE_DASH_SPEED,
-                triangleDash.directionY * PLAYER_TRIANGLE_DASH_SPEED
-            );
-        } else if (isSquareAttached) {
-            const attachVelocity = resolveSquareAttachSurfaceVelocity(
-                this.state.squareShell.attachNormalX,
-                this.state.squareShell.attachNormalY,
-                input,
-                PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED,
-                PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED
-            );
-            this.physicsBody.setVelocity(attachVelocity.velocityX, attachVelocity.velocityY);
-            this.physicsBody.setAcceleration(0, 0);
-        } else {
-            const moveSpeed = this.resolveMoveSpeed(grounded, hasBoostHold);
-            const moveResponse = this.resolveMoveResponse(grounded, horizontalDir, hasBoostHold);
-            const targetVelocityX = (horizontalDir * moveSpeed) + (grounded ? effectiveExternalInfluenceX : 0);
-            const currentVelocityX = this.physicsBody.velocity.x;
-            const maxStepX = moveResponse * deltaSec;
-            let nextVelocityX = this.moveToward(currentVelocityX, targetVelocityX, maxStepX);
-
-            if (grounded) {
-                this.airborneWindDriftX = 0;
-            } else {
-                nextVelocityX = this.applyAirborneWindDrift(nextVelocityX, effectiveExternalInfluenceX, deltaSec);
-            }
-
-            this.physicsBody.setVelocityX(nextVelocityX);
-        }
-
-        if (isTriangleForm && !isTriangleDashActive) {
-            tickTriangleShellOrientation(
-                this.state.triangleShell,
-                grounded,
-                justLanded,
-                horizontalDir,
-                this.physicsBody.velocity.x,
-                deltaSec
-            );
-
-            if (grounded) {
-                updateTriangleDashSelectedLeadingCorner(
-                    triangleDash,
-                    this.state.triangleShell,
-                    input.forcePointX,
-                    input.forcePointY,
-                    input.forcePointActive,
-                    grounded
-                );
-            }
-        }
-
-        const canJump = grounded || hasCoyoteTime(this.timers);
-        if (!isTriangleDashActive && !isSquareAttached && canJump && hasJumpBuffer(this.timers)) {
-            if (this.state.currentForm === 'triangle') {
-                const triangleJumpLaunch = applyTriangleSpecialJump(
-                    this.state.triangleShell,
-                    horizontalDir,
-                    this.lastMoveDirection
-                );
-                this.physicsBody.setVelocityY(triangleJumpLaunch.velocityY);
-                this.jumpCutConsumed = false;
-                this.reboundWindowMs = 0;
-            } else {
-                const hasReboundJump = grounded && this.reboundWindowMs > 0;
-                const jumpVelocity = hasReboundJump ? this.reboundJumpVelocity : PLAYER_JUMP_VELOCITY;
-                this.physicsBody.setVelocityY(jumpVelocity);
-                this.jumpCutConsumed = hasReboundJump;
-                this.reboundWindowMs = 0;
-            }
-
-            clearJumpBuffer(this.timers);
-            clearCoyoteTime(this.timers);
-            this.lastAirborneDownwardSpeed = 0;
-        }
-
-        if (!isTriangleDashActive && !isSquareAttached && !input.jumpHeld && !this.jumpCutConsumed && this.physicsBody.velocity.y < 0) {
-            const jumpCutMultiplier = this.state.currentForm === 'triangle'
-                ? PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER
-                : PLAYER_JUMP_CUT_MULTIPLIER;
-            this.physicsBody.setVelocityY(this.physicsBody.velocity.y * jumpCutMultiplier);
-            this.jumpCutConsumed = true;
-        }
-
-        if (input.actionPressed && isBallForm) {
-            if (grounded) {
-                this.tryApplyBoost(grounded, horizontalDir);
-            } else {
-                this.pendingBoostRequest = true;
-            }
-        }
-
-        if (isBallForm && justLanded && this.pendingBoostRequest && input.actionHeld) {
-            this.tryApplyBoost(grounded, horizontalDir, true);
-            if (this.boostActive) {
-                this.pendingBoostRequest = false;
-            }
-        }
-
-        if (triangleDash.isActive && !dashStartedThisFrame) {
-            tickTriangleDashActive(triangleDash, deltaMs);
-            if (!triangleDash.isActive) {
-                this.physicsBody.setAllowGravity(true);
-            }
-        }
-
-        this.reboundWindowMs = Math.max(0, this.reboundWindowMs - deltaMs);
-        this.boostCooldownMs = Math.max(0, this.boostCooldownMs - deltaMs);
-        tickPlayerTimers(this.timers, deltaMs);
-        const detachedTrailRefund = tickSquareTrailDetachedLifecycle(this.state.squareShell, deltaMs);
-        if (detachedTrailRefund > 0) {
-            this.state.squareShell.trailResourceCurrent = PhaserMath.Clamp(
-                this.state.squareShell.trailResourceCurrent + detachedTrailRefund,
-                0,
-                this.state.squareShell.trailResourceMax
-            );
-        }
-        this.wasGrounded = grounded;
-        this.syncVisualPosition();
-        this.updateTriangleLeadingCornerVisual(this.isCurrentlyGrounded(), input);
-    }
-
-    private tryHandleFormSwitch(input: PlayerInputSnapshot): void {
-        if (this.timers.transformLockMs > 0) {
-            return;
-        }
-
-        const wantsNextForm = input.nextFormPressed;
-        const wantsPrevForm = input.prevFormPressed;
-        if (wantsNextForm === wantsPrevForm) {
-            return;
-        }
-
-        const nextForm = wantsNextForm
-            ? getNextPlayerForm(this.state.currentForm)
-            : getPrevPlayerForm(this.state.currentForm);
-
-        if (nextForm === this.state.currentForm) {
-            return;
-        }
-
-        const previousForm = this.state.currentForm;
-        this.state.currentForm = nextForm;
-        this.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;
-        if (nextForm === 'triangle') {
-            resetTriangleShellState(this.state.triangleShell, this.lastMoveDirection);
-            stopTriangleDash(this.state.triangleDash);
-        } else if (nextForm === 'square') {
-            resetSquareShellState(this.state.squareShell);
-        } else if (previousForm === 'square') {
-            clearSquareAttach(this.state.squareShell);
-        } else if (previousForm === 'triangle') {
-            stopTriangleDash(this.state.triangleDash);
-        }
-        this.physicsBody.setAllowGravity(true);
-        this.applyCurrentFormCollisionBody();
-        this.applyCurrentFormVisual();
-    }
-
-    private applyCurrentFormVisual(): void {
-        const currentForm = this.state.currentForm;
-        this.ballVisual.setVisible(currentForm === 'ball');
-        this.triangleVisual.setVisible(currentForm === 'triangle');
-        this.squareVisual.setVisible(currentForm === 'square');
-        this.squareContactMarker.setVisible(currentForm === 'square' && this.state.squareShell.hasContact);
-        this.triangleLeadingCornerMarker.setVisible(currentForm === 'triangle');
-        this.updateSquareAttachVisualState();
-    }
-
-    private syncVisualPosition(): void {
-        const x = this.physicsSprite.x;
-        const y = this.physicsSprite.y;
-        this.applyCurrentFormCollisionBody();
-        const formAnchor = this.formAnchor;
-        this.ballVisual.setPosition(x, y);
-        this.triangleVisual.setPosition(formAnchor.x, formAnchor.y);
-        this.triangleVisual.setRotation(this.state.triangleShell.orientationRad);
-        this.squareVisual.setPosition(x, y);
-        this.squareVisual.setRotation(this.state.squareShell.orientationRad);
-        this.updateSquareAttachVisualState();
-        this.updateSquareContactVisual(x, y);
-        this.renderSquareTrail();
-    }
-
-    private applyCurrentFormCollisionBody(): void {
-        const bodyConfig = resolvePlayerLocomotionBodyConfig(this.state.currentForm, this.state.triangleShell);
-        const spriteWidth = this.physicsSprite.displayWidth;
-        const spriteHeight = this.physicsSprite.displayHeight;
-
-        if (bodyConfig.kind === 'circle') {
-            const diameter = bodyConfig.radius * 2;
-            this.physicsBody.setCircle(bodyConfig.radius);
-            this.physicsBody.setOffset(
-                ((spriteWidth - diameter) * 0.5) + bodyConfig.centerOffset.x,
-                ((spriteHeight - diameter) * 0.5) + bodyConfig.centerOffset.y
-            );
-            return;
-        }
-
-        this.physicsBody.setSize(bodyConfig.width, bodyConfig.height, false);
-        this.physicsBody.setOffset(
-            ((spriteWidth - bodyConfig.width) * 0.5) + bodyConfig.centerOffset.x,
-            ((spriteHeight - bodyConfig.height) * 0.5) + bodyConfig.centerOffset.y
-        );
-    }
-
-    private updateTriangleLeadingCornerVisual(
-        grounded: boolean,
-        input: PlayerInputSnapshot
-    ): void {
-        if (this.state.currentForm !== 'triangle') {
-            this.triangleLeadingCornerMarker.setVisible(false);
-            return;
-        }
-
-        const triangleDash = this.state.triangleDash;
-        const dashPreview = triangleDash.isActive
-            ? {
-                leadingCornerIndex: triangleDash.leadingCornerIndex,
-                lockedOrientationRad: triangleDash.lockedOrientationRad
-            }
-            : resolveTriangleDashLeadingCornerPreview(
-                triangleDash,
-                this.state.triangleShell,
-                grounded
-            );
-        const markerOffset = resolveTriangleLeadingCornerMarkerOffset(
-            dashPreview.leadingCornerIndex,
-            dashPreview.lockedOrientationRad,
-            PLAYER_TRIANGLE_LEADING_CORNER_MARKER_OUTWARD_OFFSET
-        );
-        const markerBaseY = this.physicsSprite.y + this.state.triangleShell.visualOffsetY;
-        const isDashRelevant = input.actionHeld || input.actionPressed || triangleDash.isActive;
-
-        this.triangleLeadingCornerMarker.setVisible(true);
-        this.triangleLeadingCornerMarker.setPosition(
-            this.physicsSprite.x + markerOffset.x,
-            markerBaseY + markerOffset.y
-        );
-        this.triangleLeadingCornerMarker.setAlpha(
-            isDashRelevant
-                ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_ALPHA
-                : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA
-        );
-        this.triangleLeadingCornerMarker.setScale(
-            isDashRelevant
-                ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE
-                : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE
-        );
-    }
-
-    private resolveSquareContactNormal(
-        preferredNormalX?: -1 | 0 | 1,
-        preferredNormalY?: -1 | 0 | 1,
-        moveIntentX: -1 | 0 | 1 = 0,
-        moveIntentY: -1 | 0 | 1 = 0
-    ): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; hasContact: boolean } {
-        const blocked = this.physicsBody.blocked;
-        const touching = this.physicsBody.touching;
-        const hasDownContact = blocked.down || touching.down;
-        const hasUpContact = blocked.up || touching.up;
-        const hasLeftContact = blocked.left || touching.left;
-        const hasRightContact = blocked.right || touching.right;
-
-        const rolloverCandidate = this.resolveSquareOrthogonalCornerContact(
-            preferredNormalX,
-            preferredNormalY,
-            moveIntentX,
-            moveIntentY,
-            hasDownContact,
-            hasUpContact,
-            hasLeftContact,
-            hasRightContact
-        );
-        if (rolloverCandidate !== null) {
-            return {
-                normalX: rolloverCandidate.normalX,
-                normalY: rolloverCandidate.normalY,
-                hasContact: true
-            };
-        }
-
-        if (preferredNormalX === 0 && preferredNormalY === -1 && hasDownContact) {
-            return { normalX: 0, normalY: -1, hasContact: true };
-        }
-
-        if (preferredNormalX === 0 && preferredNormalY === 1 && hasUpContact) {
-            return { normalX: 0, normalY: 1, hasContact: true };
-        }
-
-        if (preferredNormalX === 1 && preferredNormalY === 0 && hasLeftContact) {
-            return { normalX: 1, normalY: 0, hasContact: true };
-        }
-
-        if (preferredNormalX === -1 && preferredNormalY === 0 && hasRightContact) {
-            return { normalX: -1, normalY: 0, hasContact: true };
-        }
-
-        if (hasDownContact) {
-            return { normalX: 0, normalY: -1, hasContact: true };
-        }
-
-        if (hasUpContact) {
-            return { normalX: 0, normalY: 1, hasContact: true };
-        }
-
-        if (hasLeftContact) {
-            return { normalX: 1, normalY: 0, hasContact: true };
-        }
-
-        if (hasRightContact) {
-            return { normalX: -1, normalY: 0, hasContact: true };
-        }
-
-        return { normalX: 0, normalY: -1, hasContact: false };
-    }
-
-    private resolveSquareOrthogonalCornerContact(
-        preferredNormalX: -1 | 0 | 1 | undefined,
-        preferredNormalY: -1 | 0 | 1 | undefined,
-        moveIntentX: -1 | 0 | 1,
-        moveIntentY: -1 | 0 | 1,
-        hasDownContact: boolean,
-        hasUpContact: boolean,
-        hasLeftContact: boolean,
-        hasRightContact: boolean
-    ): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1 } | null {
-        if (preferredNormalX === 0 && preferredNormalY !== undefined && preferredNormalY !== 0) {
-            if (moveIntentX > 0 && hasRightContact) {
-                return { normalX: -1, normalY: 0 };
-            }
-
-            if (moveIntentX < 0 && hasLeftContact) {
-                return { normalX: 1, normalY: 0 };
-            }
-
-            if (moveIntentX === 0) {
-                if (hasRightContact && !hasLeftContact) {
-                    return { normalX: -1, normalY: 0 };
-                }
-
-                if (hasLeftContact && !hasRightContact) {
-                    return { normalX: 1, normalY: 0 };
-                }
-            }
-        }
-
-        if (preferredNormalY === 0 && preferredNormalX !== undefined && preferredNormalX !== 0) {
-            if (moveIntentY < 0 && hasUpContact) {
-                return { normalX: 0, normalY: 1 };
-            }
-
-            if (moveIntentY > 0 && hasDownContact) {
-                return { normalX: 0, normalY: -1 };
-            }
-
-            if (moveIntentY === 0) {
-                if (hasUpContact && !hasDownContact) {
-                    return { normalX: 0, normalY: 1 };
-                }
-
-                if (hasDownContact && !hasUpContact) {
-                    return { normalX: 0, normalY: -1 };
-                }
-            }
-        }
-
-        return null;
-    }
-
-    private updateSquareContactVisual(playerX: number, playerY: number): void {
-        if (this.state.currentForm !== 'square' || !this.state.squareShell.hasContact) {
-            this.squareContactMarker.setVisible(false);
-            return;
-        }
-
-        const markerLength = (PLAYER_FORM_SQUARE_SIZE * 0.5) + 10;
-        const normalX = this.state.squareShell.contactNormalX;
-        const normalY = this.state.squareShell.contactNormalY;
-        this.squareContactMarker.setVisible(true);
-        this.squareContactMarker.setPosition(playerX, playerY);
-        this.squareContactMarker.setTo(0, 0, normalX * markerLength, normalY * markerLength);
-    }
-
-    private updateSquareAttachVisualState(): void {
-        const isAttached = this.state.currentForm === 'square' && this.state.squareShell.isAttached;
-        this.squareVisual.setStrokeStyle(
-            2,
-            isAttached ? PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR : PLAYER_SQUARE_VISUAL_STROKE_COLOR
-        );
-    }
-
-    private resolveSquareTrailSurfacePoint(
-        normalX: -1 | 0 | 1,
-        normalY: -1 | 0 | 1
-    ): { x: number; y: number; supportOwner: PlayerSquareTrailSupportOwner } {
-        const bodyLeft = this.physicsBody.x;
-        const bodyTop = this.physicsBody.y;
-        const bodyRight = bodyLeft + this.physicsBody.width;
-        const bodyBottom = bodyTop + this.physicsBody.height;
-        const centerX = bodyLeft + (this.physicsBody.width * 0.5);
-        const centerY = bodyTop + (this.physicsBody.height * 0.5);
-        const supportInterval = this.resolveSquareSupportInterval(normalX, normalY, bodyLeft, bodyTop, bodyRight, bodyBottom)
-            ?? this.resolveSquareSupportIntervalFromKnownBody(
-                this.state.squareShell.trailAnchorSupportBody,
-                normalX,
-                normalY,
-                bodyLeft,
-                bodyTop,
-                bodyRight,
-                bodyBottom
-            );
-        const supportOwner = supportInterval !== null
-            ? this.resolveTrailSupportOwner(supportInterval.ownerBody)
-            : this.resolveTrailSupportOwner(null);
-
-        if (normalX === 0 && normalY === -1) {
-            return {
-                x: supportInterval !== null ? PhaserMath.Clamp(centerX, supportInterval.min, supportInterval.max) : centerX,
-                y: bodyBottom,
-                supportOwner
-            };
-        }
-
-        if (normalX === 0 && normalY === 1) {
-            return {
-                x: supportInterval !== null ? PhaserMath.Clamp(centerX, supportInterval.min, supportInterval.max) : centerX,
-                y: bodyTop,
-                supportOwner
-            };
-        }
-
-        if (normalX === 1 && normalY === 0) {
-            return {
-                x: bodyLeft,
-                y: supportInterval !== null ? PhaserMath.Clamp(centerY, supportInterval.min, supportInterval.max) : centerY,
-                supportOwner
-            };
-        }
-
-        return {
-            x: bodyRight,
-            y: supportInterval !== null ? PhaserMath.Clamp(centerY, supportInterval.min, supportInterval.max) : centerY,
-            supportOwner
-        };
-    }
-
-    private resolveSquareSupportInterval(
-        normalX: -1 | 0 | 1,
-        normalY: -1 | 0 | 1,
-        bodyLeft: number,
-        bodyTop: number,
-        bodyRight: number,
-        bodyBottom: number
-    ): { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null {
-        const probeThickness = 4;
-        const probePadding = 2;
-        let probeX = bodyLeft - probePadding;
-        let probeY = bodyTop - probePadding;
-        let probeWidth = (bodyRight - bodyLeft) + (probePadding * 2);
-        let probeHeight = (bodyBottom - bodyTop) + (probePadding * 2);
-        let tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
-        let useXAxisAsTangent = true;
-
-        if (normalX === 0 && normalY === -1) {
-            probeY = bodyBottom - (probeThickness * 0.5);
-            probeHeight = probeThickness;
-            tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
-            useXAxisAsTangent = true;
-        } else if (normalX === 0 && normalY === 1) {
-            probeY = bodyTop - (probeThickness * 0.5);
-            probeHeight = probeThickness;
-            tangentValue = bodyLeft + ((bodyRight - bodyLeft) * 0.5);
-            useXAxisAsTangent = true;
-        } else if (normalX === 1 && normalY === 0) {
-            probeX = bodyLeft - (probeThickness * 0.5);
-            probeWidth = probeThickness;
-            tangentValue = bodyTop + ((bodyBottom - bodyTop) * 0.5);
-            useXAxisAsTangent = false;
-        } else if (normalX === -1 && normalY === 0) {
-            probeX = bodyRight - (probeThickness * 0.5);
-            probeWidth = probeThickness;
-            tangentValue = bodyTop + ((bodyBottom - bodyTop) * 0.5);
-            useXAxisAsTangent = false;
-        }
-
-        const overlapBodies = this.physicsSprite.scene.physics.overlapRect(
-            probeX,
-            probeY,
-            probeWidth,
-            probeHeight,
-            true,
-            true
-        ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
-
-        let bestInterval: { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null = null;
-        let bestFaceGap = Infinity;
-        let bestTangentDistance = Infinity;
-
-        overlapBodies.forEach((candidateBody) => {
-            if (candidateBody === this.physicsBody) {
-                return;
-            }
-
-            const candidateLeft = candidateBody.x;
-            const candidateTop = candidateBody.y;
-            const candidateRight = candidateLeft + candidateBody.width;
-            const candidateBottom = candidateTop + candidateBody.height;
-            const faceGap = this.resolveSquareSupportFaceGap(
-                normalX,
-                normalY,
-                bodyLeft,
-                bodyTop,
-                bodyRight,
-                bodyBottom,
-                candidateLeft,
-                candidateTop,
-                candidateRight,
-                candidateBottom
-            );
-            if (faceGap === null) {
-                return;
-            }
-
-            if (useXAxisAsTangent) {
-                const overlapsPlayerSpan = candidateRight > bodyLeft && candidateLeft < bodyRight;
-                if (!overlapsPlayerSpan) {
-                    return;
-                }
-
-                const tangentDistance = this.distanceToInterval(tangentValue, candidateLeft, candidateRight);
-                const hasBetterFaceGap = faceGap < (bestFaceGap - 0.001);
-                const hasEqualFaceGap = Math.abs(faceGap - bestFaceGap) <= 0.001;
-                if (hasBetterFaceGap || (hasEqualFaceGap && tangentDistance < bestTangentDistance)) {
-                    bestFaceGap = faceGap;
-                    bestTangentDistance = tangentDistance;
-                    bestInterval = {
-                        min: candidateLeft,
-                        max: candidateRight,
-                        ownerBody: candidateBody
-                    };
-                }
-                return;
-            }
-
-            const overlapsPlayerSpan = candidateBottom > bodyTop && candidateTop < bodyBottom;
-            if (!overlapsPlayerSpan) {
-                return;
-            }
-
-            const tangentDistance = this.distanceToInterval(tangentValue, candidateTop, candidateBottom);
-            const hasBetterFaceGap = faceGap < (bestFaceGap - 0.001);
-            const hasEqualFaceGap = Math.abs(faceGap - bestFaceGap) <= 0.001;
-            if (hasBetterFaceGap || (hasEqualFaceGap && tangentDistance < bestTangentDistance)) {
-                bestFaceGap = faceGap;
-                bestTangentDistance = tangentDistance;
-                bestInterval = {
-                    min: candidateTop,
-                    max: candidateBottom,
-                    ownerBody: candidateBody
-                };
-            }
+        scene.physics.add.existing(this.gameObject);
+        this.body = this.gameObject.body as Physics.Arcade.Body;
+        this.body.setCollideWorldBounds(true);
+        this.body.setBounce(0.1, 0);
+        applyPlayerFormProfile({
+            gameObject: this.gameObject,
+            body: this.body,
+            formId: this.runtimeState.currentFormId
         });
 
-        return bestInterval;
+        this.inputKeys = createPlayerInput(scene);
+        this.inputFrame = { ...EMPTY_PLAYER_INPUT_FRAME };
     }
 
-    private resolveSquareSupportIntervalFromKnownBody(
-        knownSupportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
-        normalX: -1 | 0 | 1,
-        normalY: -1 | 0 | 1,
-        bodyLeft: number,
-        bodyTop: number,
-        bodyRight: number,
-        bodyBottom: number
-    ): { min: number; max: number; ownerBody: Physics.Arcade.Body | Physics.Arcade.StaticBody } | null {
-        if (knownSupportBody === null || knownSupportBody === this.physicsBody) {
-            return null;
+    public update(deltaMs: number): void {
+        tickPlayerTimers(this.timerState, deltaMs);
+        this.inputFrame = readPlayerInputFrame(this.inputKeys);
+
+        if (this.inputFrame.abilityPressed) {
+            this.timerState.reboundBufferMs = BALL_CONFIG.reboundBufferMs;
         }
 
-        const candidateLeft = knownSupportBody.x;
-        const candidateTop = knownSupportBody.y;
-        const candidateRight = candidateLeft + knownSupportBody.width;
-        const candidateBottom = candidateTop + knownSupportBody.height;
-        const isFaceCompatible = this.resolveSquareSupportFaceGap(
-            normalX,
-            normalY,
-            bodyLeft,
-            bodyTop,
-            bodyRight,
-            bodyBottom,
-            candidateLeft,
-            candidateTop,
-            candidateRight,
-            candidateBottom
-        ) !== null;
-        if (!isFaceCompatible) {
-            return null;
+        if (this.inputFrame.resetPressed) {
+            this.resetToSpawn();
         }
 
-        if (normalX === 0 && normalY !== 0) {
-            const overlapsPlayerSpan = candidateRight > bodyLeft && candidateLeft < bodyRight;
-            if (!overlapsPlayerSpan) {
-                return null;
+        if (canSwitchPlayerForm(this.timerState.transformLockMs)) {
+            if (this.inputFrame.previousFormPressed) {
+                this.setCurrentFormId(getPreviousFormId(this.runtimeState.currentFormId));
+            } else if (this.inputFrame.nextFormPressed) {
+                this.setCurrentFormId(getNextFormId(this.runtimeState.currentFormId));
             }
-
-            return {
-                min: candidateLeft,
-                max: candidateRight,
-                ownerBody: knownSupportBody
-            };
         }
 
-        const overlapsPlayerSpan = candidateBottom > bodyTop && candidateTop < bodyBottom;
-        if (!overlapsPlayerSpan) {
-            return null;
+        if (this.runtimeState.currentFormId === PLAYER_FORM_IDS.ball) {
+            applyBallGroundMovement(this.body, this.inputFrame, BALL_CONFIG);
+            applyBallAirMovement(this.body, this.inputFrame, BALL_CONFIG);
+            applyBallJump(this.body, this.inputFrame, BALL_CONFIG);
+            applyBallWallAssist(this.body, BALL_CONFIG);
+
+            const didRebound = applyBallRebound(
+                this.body,
+                BALL_CONFIG,
+                this.timerState.reboundBufferMs
+            );
+            if (didRebound) {
+                this.timerState.reboundBufferMs = 0;
+                this.timerState.chainWindowMs = BALL_CONFIG.chainWindowMs;
+            } else {
+                const canBoostByCooldown = this.timerState.boostCooldownMs <= 0;
+                const canBoostNow = canChainBallAbility({
+                    normalEligibility: canBoostByCooldown,
+                    chainWindowMs: this.timerState.chainWindowMs
+                });
+                const didBoost = applyBallBoost({
+                    body: this.body,
+                    inputFrame: this.inputFrame,
+                    ballConfig: BALL_CONFIG,
+                    boostCooldownMs: canBoostNow ? 0 : this.timerState.boostCooldownMs,
+                    reboundConsumedThisFrame: didRebound
+                });
+                if (didBoost) {
+                    this.timerState.boostCooldownMs = BALL_CONFIG.boostCooldownMs;
+                    this.timerState.reboundBufferMs = 0;
+                    this.timerState.chainWindowMs = BALL_CONFIG.chainWindowMs;
+                }
+            }
         }
 
-        return {
-            min: candidateTop,
-            max: candidateBottom,
-            ownerBody: knownSupportBody
-        };
+        this.updateMarkerPosition();
     }
 
-    private resolveSquareSupportFaceGap(
-        normalX: -1 | 0 | 1,
-        normalY: -1 | 0 | 1,
-        bodyLeft: number,
-        bodyTop: number,
-        bodyRight: number,
-        bodyBottom: number,
-        candidateLeft: number,
-        candidateTop: number,
-        candidateRight: number,
-        candidateBottom: number
-    ): number | null {
-        const faceAlignmentTolerance = 6;
-
-        if (normalX === 0 && normalY === -1) {
-            const faceGap = Math.abs(candidateTop - bodyBottom);
-            return faceGap <= faceAlignmentTolerance ? faceGap : null;
-        }
-
-        if (normalX === 0 && normalY === 1) {
-            const faceGap = Math.abs(candidateBottom - bodyTop);
-            return faceGap <= faceAlignmentTolerance ? faceGap : null;
-        }
-
-        if (normalX === 1 && normalY === 0) {
-            const faceGap = Math.abs(candidateRight - bodyLeft);
-            return faceGap <= faceAlignmentTolerance ? faceGap : null;
-        }
-
-        const faceGap = Math.abs(candidateLeft - bodyRight);
-        return faceGap <= faceAlignmentTolerance ? faceGap : null;
+    public getSnapshot(): PlayerSnapshot {
+        return createPlayerSnapshotFromRuntimeState(
+            this.runtimeState,
+            this.gameObject.x,
+            this.gameObject.y
+        );
     }
 
-    private distanceToInterval(value: number, min: number, max: number): number {
-        if (value < min) {
-            return min - value;
-        }
-
-        if (value > max) {
-            return value - max;
-        }
-
-        return 0;
+    public setRespawnPoint(x: number, y: number): void {
+        setPlayerRuntimeRespawnPoint(this.runtimeState, x, y);
     }
 
-    private renderSquareTrail(): void {
-        this.squareTrailGraphics.clear();
-        if (this.state.squareShell.trailSegments.length === 0) {
+    public resetToSpawn(): void {
+        const { spawnX, spawnY } = this.runtimeState;
+
+        this.runtimeState.isAlive = true;
+        this.timerState = createPlayerTimerState();
+        this.body.reset(spawnX, spawnY);
+    }
+
+    public getGameObject(): GameObjects.Rectangle {
+        return this.gameObject;
+    }
+
+    public getMarkerGameObject(): GameObjects.Arc {
+        return this.markerGameObject;
+    }
+
+    public getBody(): Physics.Arcade.Body {
+        return this.body;
+    }
+
+    public getCurrentFormId(): PlayerFormId {
+        return this.runtimeState.currentFormId;
+    }
+
+    public getInputFrame(): PlayerInputFrame {
+        return { ...this.inputFrame };
+    }
+
+    public getTimerState(): Readonly<PlayerTimerState> {
+        return { ...this.timerState };
+    }
+
+    private updateMarkerPosition(): void {
+        this.markerGameObject.setPosition(
+            this.gameObject.x + this.markerConfig.offset.x,
+            this.gameObject.y + this.markerConfig.offset.y
+        );
+    }
+
+    private setCurrentFormId(nextFormId: PlayerFormId): void {
+        if (nextFormId === this.runtimeState.currentFormId) {
             return;
         }
 
-        this.state.squareShell.trailSegments.forEach((segment) => {
-            const worldLine = resolveSquareTrailSegmentWorldLine(segment);
-            const clippedWorldLine = segment.isDetached
-                ? worldLine
-                : this.clipTrailLineToSupportBounds(segment, worldLine);
-            if (clippedWorldLine === null) {
-                return;
-            }
-            const segmentAlpha = PhaserMath.Clamp(
-                PLAYER_SQUARE_TRAIL_STROKE_ALPHA * (segment.isDetached ? segment.detachedAlpha : 1),
-                0,
-                1
-            );
-            this.squareTrailGraphics.lineStyle(
-                PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
-                PLAYER_SQUARE_TRAIL_STROKE_COLOR,
-                segmentAlpha
-            );
-            this.squareTrailGraphics.beginPath();
-            this.squareTrailGraphics.moveTo(clippedWorldLine.startX, clippedWorldLine.startY);
-            this.squareTrailGraphics.lineTo(clippedWorldLine.endX, clippedWorldLine.endY);
-            this.squareTrailGraphics.strokePath();
+        this.runtimeState.currentFormId = nextFormId;
+        this.timerState.transformLockMs = PLAYER_SWITCH_CONFIG.switchLockMs;
+        applyPlayerFormProfile({
+            gameObject: this.gameObject,
+            body: this.body,
+            formId: this.runtimeState.currentFormId
         });
-    }
-
-    private resolveTrailSupportOwner(
-        supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
-    ): PlayerSquareTrailSupportOwner {
-        if (supportBody === null) {
-            return {
-                body: null,
-                originX: 0,
-                originY: 0
-            };
-        }
-
-        return {
-            body: supportBody,
-            // Keep owner-local space stable across owner movement.
-            originX: 0,
-            originY: 0
-        };
-    }
-
-    private clipTrailLineToSupportBounds(
-        segment: {
-            supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
-            normalX: -1 | 0 | 1;
-            normalY: -1 | 0 | 1;
-        },
-        worldLine: { startX: number; startY: number; endX: number; endY: number }
-    ): { startX: number; startY: number; endX: number; endY: number } | null {
-        const supportBody = segment.supportBody;
-        if (supportBody === null) {
-            return worldLine;
-        }
-
-        const bodyMinX = supportBody.x;
-        const bodyMaxX = supportBody.x + supportBody.width;
-        const bodyMinY = supportBody.y;
-        const bodyMaxY = supportBody.y + supportBody.height;
-
-        if (segment.normalX === 0) {
-            const clampedStartX = PhaserMath.Clamp(worldLine.startX, bodyMinX, bodyMaxX);
-            const clampedEndX = PhaserMath.Clamp(worldLine.endX, bodyMinX, bodyMaxX);
-            if (Math.abs(clampedEndX - clampedStartX) <= 0.001) {
-                return null;
-            }
-
-            return {
-                startX: clampedStartX,
-                startY: worldLine.startY,
-                endX: clampedEndX,
-                endY: worldLine.endY
-            };
-        }
-
-        const clampedStartY = PhaserMath.Clamp(worldLine.startY, bodyMinY, bodyMaxY);
-        const clampedEndY = PhaserMath.Clamp(worldLine.endY, bodyMinY, bodyMaxY);
-        if (Math.abs(clampedEndY - clampedStartY) <= 0.001) {
-            return null;
-        }
-
-        return {
-            startX: worldLine.startX,
-            startY: clampedStartY,
-            endX: worldLine.endX,
-            endY: clampedEndY
-        };
-    }
-
-    private resolveReboundJumpVelocity(approachSpeed: number): number | null {
-        if (approachSpeed < PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED) {
-            return null;
-        }
-
-        const range = PLAYER_BALL_REBOUND_FULL_APPROACH_SPEED - PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED;
-        const clampedAlpha = range <= 0
-            ? 1
-            : PhaserMath.Clamp((approachSpeed - PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED) / range, 0, 1);
-
-        return PhaserMath.Linear(
-            PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY,
-            PLAYER_BALL_REBOUND_MAX_JUMP_VELOCITY,
-            clampedAlpha
-        );
-    }
-
-    private tryApplyBoost(grounded: boolean, horizontalDir: number, ignoreCooldown: boolean = false): void {
-        if (!grounded || (!ignoreCooldown && this.boostCooldownMs > 0)) {
-            return;
-        }
-
-        const boostDirection = this.resolveBoostDirection(horizontalDir);
-        this.physicsBody.setVelocityX(boostDirection * PLAYER_BALL_BOOST_SPEED);
-        this.boostCooldownMs = PLAYER_BALL_BOOST_COOLDOWN_MS;
-        this.boostActive = true;
-    }
-
-    private tryApplyTriangleDash(): boolean {
-        if (this.state.currentForm !== 'triangle') {
-            return false;
-        }
-
-        if (!hasTriangleDashCharges(this.state.triangleCharges)) {
-            return false;
-        }
-
-        const grounded = this.isCurrentlyGrounded();
-        const dashLaunch = tryStartTriangleDash(
-            this.state.triangleDash,
-            this.state.triangleShell,
-            grounded
-        );
-
-        if (dashLaunch === null) {
-            return false;
-        }
-
-        tryConsumeTriangleDashCharge(this.state.triangleCharges);
-        this.jumpCutConsumed = false;
-        this.state.triangleShell.orientationRad = dashLaunch.lockedOrientationRad;
-        this.physicsBody.setAllowGravity(false);
-        this.physicsBody.setVelocity(dashLaunch.velocityX, dashLaunch.velocityY);
-        return true;
-    }
-
-    private resolveBoostDirection(horizontalDir: number): -1 | 1 {
-        if (horizontalDir < 0) {
-            return -1;
-        }
-
-        if (horizontalDir > 0) {
-            return 1;
-        }
-
-        return this.lastMoveDirection;
-    }
-
-    private moveToward(current: number, target: number, maxDelta: number): number {
-        if (current < target) {
-            return Math.min(current + maxDelta, target);
-        }
-
-        if (current > target) {
-            return Math.max(current - maxDelta, target);
-        }
-
-        return target;
-    }
-
-    private resolveMoveResponse(
-        grounded: boolean,
-        horizontalDir: number,
-        hasBoostHold: boolean
-    ): number {
-        if (hasBoostHold && horizontalDir !== 0) {
-            return PLAYER_BALL_BOOST_HOLD_ACCEL;
-        }
-
-        if (grounded) {
-            return horizontalDir === 0 ? PLAYER_GROUND_MOVE_DECEL : PLAYER_GROUND_MOVE_ACCEL;
-        }
-
-        return horizontalDir === 0 ? PLAYER_AIR_MOVE_DECEL : PLAYER_AIR_MOVE_ACCEL;
-    }
-
-    private applyAirborneWindDrift(baseVelocityX: number, windInfluenceX: number, deltaSec: number): number {
-        const windStep = PLAYER_AIR_WIND_RESPONSE * deltaSec;
-        this.airborneWindDriftX = this.moveToward(this.airborneWindDriftX, windInfluenceX, windStep);
-
-        if (Math.abs(this.airborneWindDriftX) <= 0.001) {
-            return baseVelocityX;
-        }
-
-        let velocityWithDrift = baseVelocityX + this.airborneWindDriftX;
-        const minDriftMagnitude = Math.abs(this.airborneWindDriftX) * PLAYER_AIR_WIND_MIN_DRIFT_RATIO;
-        const windDirection = this.airborneWindDriftX > 0 ? 1 : -1;
-        const signedMinDrift = minDriftMagnitude * windDirection;
-
-        if (windDirection > 0 && velocityWithDrift < signedMinDrift) {
-            velocityWithDrift = signedMinDrift;
-        } else if (windDirection < 0 && velocityWithDrift > signedMinDrift) {
-            velocityWithDrift = signedMinDrift;
-        }
-
-        return velocityWithDrift;
-    }
-
-    private resolveMoveSpeed(grounded: boolean, hasBoostHold: boolean): number {
-        if (!hasBoostHold) {
-            return grounded ? PLAYER_GROUND_MOVE_SPEED : PLAYER_AIR_MOVE_SPEED;
-        }
-
-        return grounded ? PLAYER_BALL_BOOST_HOLD_MOVE_SPEED : PLAYER_BALL_BOOST_HOLD_AIR_MOVE_SPEED;
-    }
-
-    private isCurrentlyGrounded(): boolean {
-        return this.physicsBody.blocked.down || this.physicsBody.touching.down;
     }
 }
