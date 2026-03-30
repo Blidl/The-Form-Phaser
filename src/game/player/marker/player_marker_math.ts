@@ -84,35 +84,30 @@ export const resolveGroundedTriangleMarkerOffset = (
         return { x: 0, y: 0 };
     }
 
+    let targetWorldOffset: { x: number; y: number };
     if (inputY > 0) {
         if (inputX < 0) {
-            return leftSupportCorner;
+            targetWorldOffset = leftSupportCorner;
+        } else if (inputX > 0) {
+            targetWorldOffset = rightSupportCorner;
+        } else {
+            targetWorldOffset = supportMidpoint;
         }
-
-        if (inputX > 0) {
-            return rightSupportCorner;
-        }
-
-        return supportMidpoint;
-    }
-
-    if (inputY < 0) {
+    } else if (inputY < 0) {
         if (inputX < 0) {
-            return leftSideMidpoint;
+            targetWorldOffset = leftSideMidpoint;
+        } else if (inputX > 0) {
+            targetWorldOffset = rightSideMidpoint;
+        } else {
+            targetWorldOffset = topCorner;
         }
-
-        if (inputX > 0) {
-            return rightSideMidpoint;
-        }
-
-        return topCorner;
+    } else if (inputX < 0) {
+        targetWorldOffset = leftSideMidpoint;
+    } else {
+        targetWorldOffset = rightSideMidpoint;
     }
 
-    if (inputX < 0) {
-        return leftSideMidpoint;
-    }
-
-    return rightSideMidpoint;
+    return inverseRotateOffset(targetWorldOffset.x, targetWorldOffset.y, orientationRad);
 };
 
 const PLAYER_PLACEHOLDER_MARKER_RADIUS = Math.min(
@@ -157,6 +152,20 @@ const resolveRotatedTriangleVertices = (orientationRad: number): [{ x: number; y
             y: (vertex.x * sin) + (vertex.y * cos)
         };
     }) as [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }];
+};
+
+const inverseRotateOffset = (
+    offsetX: number,
+    offsetY: number,
+    orientationRad: number
+): { x: number; y: number } => {
+    const sin = Math.sin(orientationRad);
+    const cos = Math.cos(orientationRad);
+
+    return {
+        x: (offsetX * cos) + (offsetY * sin),
+        y: (-offsetX * sin) + (offsetY * cos)
+    };
 };
 
 const resolveTriangleGroundedReferencePoints = (
