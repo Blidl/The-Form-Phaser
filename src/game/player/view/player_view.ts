@@ -168,10 +168,12 @@ export class PlayerView {
     ): void {
         const markerOffset = triangleDash.isActive && currentForm === 'triangle'
             ? this.resolveTriangleDashMarkerOffset(triangleShell, triangleDash)
-            : {
-                x: marker.currentOffsetX,
-                y: marker.currentOffsetY
-            };
+            : currentForm === 'triangle'
+                ? rotateTriangleLocalOffset(marker.currentOffsetX, marker.currentOffsetY, triangleShell.orientationRad)
+                : {
+                    x: marker.currentOffsetX,
+                    y: marker.currentOffsetY
+                };
         const triangleMarkerBaseOffset = currentForm === 'triangle'
             ? resolveTriangleCentroidWorldOffset(triangleShell.orientationRad)
             : { x: 0, y: 0 };
@@ -283,6 +285,20 @@ const resolveTriangleCentroidWorldOffset = (orientationRad: number): { x: number
     return {
         x: (centroidOffset.x * cos) - (centroidOffset.y * sin),
         y: (centroidOffset.x * sin) + (centroidOffset.y * cos)
+    };
+};
+
+const rotateTriangleLocalOffset = (
+    offsetX: number,
+    offsetY: number,
+    orientationRad: number
+): { x: number; y: number } => {
+    const sin = Math.sin(orientationRad);
+    const cos = Math.cos(orientationRad);
+
+    return {
+        x: (offsetX * cos) - (offsetY * sin),
+        y: (offsetX * sin) + (offsetY * cos)
     };
 };
 
