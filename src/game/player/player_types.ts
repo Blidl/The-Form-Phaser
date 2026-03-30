@@ -73,10 +73,8 @@ export interface PlayerSquareTrailSupportOwner {
     originY: number;
 }
 
-export interface PlayerTriangleDashState {
+export interface PlayerTriangleFlightState {
     isActive: boolean;
-    remainingMs: number;
-    cooldownMs: number;
     directionX: number;
     directionY: number;
     forceBiasX: -1 | 1;
@@ -84,13 +82,9 @@ export interface PlayerTriangleDashState {
     forcePointIntentY: number;
     selectedLeadingCornerIndex: TriangleCornerIndex;
     leadingCornerIndex: TriangleCornerIndex;
-    lockedOrientationRad: number;
-}
-
-export interface PlayerTriangleChargesState {
-    currentCharges: number;
-    maxCharges: number;
-    restorePendingMs: number;
+    activeSectionRemainingDistancePx: number;
+    spentSectionCount: number;
+    maxSectionCount: number;
 }
 
 export interface PlayerShellState {
@@ -99,6 +93,5 @@ export interface PlayerShellState {
     triangleShell: PlayerTriangleShellState;
     triangleCollision: PlayerTriangleCollisionState;
     squareShell: PlayerSquareShellState;
-    triangleDash: PlayerTriangleDashState;
-    triangleCharges: PlayerTriangleChargesState;
+    triangleFlight: PlayerTriangleFlightState;
 }

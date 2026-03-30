@@ -6,6 +6,7 @@ export interface PlayerWorldActor {
     currentForm: PlayerFormId;
     arcadeBodyObject: GameObjects.Arc;
     hazardHitShape: PlayerHazardHitShape;
+    refillTriangleFlightResource: () => void;
     freezeForRespawn: () => void;
     respawnAt: (x: number, y: number) => void;
 }
@@ -15,6 +16,9 @@ export interface PlayerHudModel {
     squareTrailResourceCurrent: number;
     squareTrailResourceMax: number;
     squareTrailResourceRatio: number;
+    triangleFlightResourceCurrent: number;
+    triangleFlightResourceMax: number;
+    triangleFlightResourceRatio: number;
 }
 
 export interface PlayerDebugModel {

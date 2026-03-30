@@ -25,12 +25,11 @@ import { resolveMarkerIntent } from '../marker/player_marker_math';
 import type { PlayerMarkerState } from '../marker/player_marker_types';
 import { resolveTriangleCentroidOffset } from '../geometry/player_geometry_queries';
 import { resolveSquareTrailSegmentWorldLine } from '../player_square_trail';
-import { resolveTriangleDashLeadingCornerPreview } from '../player_triangle_dash';
 import type {
     PlayerFormId,
+    PlayerTriangleFlightState,
     PlayerSquareTrailSegment,
     PlayerSquareShellState,
-    PlayerTriangleDashState,
     PlayerTriangleShellState
 } from '../player_types';
 import type { PlayerFormAnchor } from '../geometry/player_geometry_types';
@@ -110,7 +109,7 @@ export class PlayerView {
         marker: PlayerMarkerState,
         triangleShell: PlayerTriangleShellState,
         squareShell: PlayerSquareShellState,
-        triangleDash: PlayerTriangleDashState,
+        triangleFlight: PlayerTriangleFlightState,
         ballBoostActive: boolean
     ): void {
         this.ballVisual.setPosition(playerX, playerY);
@@ -122,7 +121,7 @@ export class PlayerView {
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached);
         this.updateSquareContactVisual(playerX, playerY, currentForm, squareShell);
         this.renderSquareTrail(squareShell.trailSegments);
-        this.updateMarkerVisual(currentForm, playerX, playerY, formAnchor, marker, triangleShell, triangleDash);
+        this.updateMarkerVisual(currentForm, playerX, playerY, formAnchor, marker, triangleShell, triangleFlight);
     }
 
     private updateSquareContactVisual(
@@ -164,16 +163,14 @@ export class PlayerView {
         formAnchor: PlayerFormAnchor,
         marker: PlayerMarkerState,
         triangleShell: PlayerTriangleShellState,
-        triangleDash: PlayerTriangleDashState
+        triangleFlight: PlayerTriangleFlightState
     ): void {
-        const markerOffset = triangleDash.isActive && currentForm === 'triangle'
-            ? this.resolveTriangleDashMarkerOffset(triangleShell, triangleDash)
-            : currentForm === 'triangle'
-                ? rotateTriangleLocalOffset(marker.currentOffsetX, marker.currentOffsetY, triangleShell.orientationRad)
-                : {
-                    x: marker.currentOffsetX,
-                    y: marker.currentOffsetY
-                };
+        const markerOffset = currentForm === 'triangle'
+            ? rotateTriangleLocalOffset(marker.currentOffsetX, marker.currentOffsetY, triangleShell.orientationRad)
+            : {
+                x: marker.currentOffsetX,
+                y: marker.currentOffsetY
+            };
         const triangleMarkerBaseOffset = currentForm === 'triangle'
             ? resolveTriangleCentroidWorldOffset(triangleShell.orientationRad)
             : { x: 0, y: 0 };
@@ -182,20 +179,7 @@ export class PlayerView {
         const markerIntent = resolveMarkerIntent(markerOffset.x, markerOffset.y);
 
         this.markerVisual.setPosition(baseX + markerOffset.x, baseY + markerOffset.y);
-        this.markerVisual.setAlpha(markerIntent.active || triangleDash.isActive ? PLAYER_MARKER_ACTIVE_ALPHA : PLAYER_MARKER_IDLE_ALPHA);
-    }
-
-    private resolveTriangleDashMarkerOffset(
-        triangleShell: PlayerTriangleShellState,
-        triangleDash: PlayerTriangleDashState
-    ): { x: number; y: number } {
-        const grounded = false;
-        const dashPreview = resolveTriangleDashLeadingCornerPreview(triangleDash, triangleShell, grounded);
-        const cornerOffset = resolveTriangleCornerOffset(dashPreview.leadingCornerIndex, dashPreview.lockedOrientationRad);
-        return {
-            x: cornerOffset.x * 0.45,
-            y: cornerOffset.y * 0.45
-        };
+        this.markerVisual.setAlpha(markerIntent.active || triangleFlight.isActive ? PLAYER_MARKER_ACTIVE_ALPHA : PLAYER_MARKER_IDLE_ALPHA);
     }
 
     private renderSquareTrail(segments: PlayerSquareTrailSegment[]): void {
@@ -299,31 +283,5 @@ const rotateTriangleLocalOffset = (
     return {
         x: (offsetX * cos) - (offsetY * sin),
         y: (offsetX * sin) + (offsetY * cos)
-    };
-};
-
-const resolveTriangleCornerOffset = (
-    cornerIndex: 0 | 1 | 2,
-    orientationRad: number
-): { x: number; y: number } => {
-    const halfWidth = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
-    const halfHeight = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
-    const localCorners = [
-        { x: -halfWidth, y: halfHeight },
-        { x: 0, y: -halfHeight },
-        { x: halfWidth, y: halfHeight }
-    ] as const;
-    const centroidOffset = resolveTriangleCentroidOffset();
-    const localCorner = localCorners[cornerIndex] ?? localCorners[1];
-    const centroidLocalCorner = {
-        x: localCorner.x - centroidOffset.x,
-        y: localCorner.y - centroidOffset.y
-    };
-    const sin = Math.sin(orientationRad);
-    const cos = Math.cos(orientationRad);
-
-    return {
-        x: (centroidLocalCorner.x * cos) - (centroidLocalCorner.y * sin),
-        y: (centroidLocalCorner.x * sin) + (centroidLocalCorner.y * cos)
     };
 };

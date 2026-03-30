@@ -1,188 +1,162 @@
 import type { Physics } from 'phaser';
-import { PLAYER_TRIANGLE_DASH_SPEED } from './player_constants';
 import type { PlayerInputSnapshot } from './player_input';
 import {
-    cancelTriangleChargesRestore,
-    hasTriangleDashCharges,
-    tickTriangleChargesRestore,
-    tryConsumeTriangleDashCharge,
-    tryStartTriangleChargesRestore
-} from './player_triangle_charges';
-import { applyTriangleSpecialJump, type TriangleSpecialJumpLaunch } from './player_triangle_jump';
-import { resolveMarkerIntent } from './marker/player_marker_math';
-import {
-    tickTriangleDashActive,
-    tickTriangleDashCooldown,
-    tryStartTriangleDash,
-    updateTriangleDashSelectedLeadingCorner
-} from './player_triangle_dash';
+    applyTriangleFlightVelocity,
+    hasTriangleFlightSectionsRemaining,
+    hasTriangleFlightUsableResource,
+    stopTriangleFlight,
+    tickTriangleFlightOrientation,
+    tickTriangleFlightRestore,
+    tickTriangleFlightState,
+    tryStartTriangleFlight,
+    updateTriangleFlightIntent
+} from './player_triangle_flight';
 import { tickTriangleShellOrientation } from './player_triangle_shell';
-import { resolveTriangleDashStartDecision } from './state/player_form_state_guards';
+import { resolveTriangleFlightStartDecision } from './state/player_form_state_guards';
+import { applyTriangleSpecialJump, type TriangleSpecialJumpLaunch } from './player_triangle_jump';
 import type { PlayerShellState } from './player_types';
 
-interface TickTriangleChargesParams {
+interface TickTriangleFlightResourceParams {
     state: PlayerShellState;
-    input: PlayerInputSnapshot;
     grounded: boolean;
-    deltaMs: number;
+    deltaSec: number;
     isTriangleForm: boolean;
 }
 
-export const tickTriangleChargesRuntime = (params: TickTriangleChargesParams): void => {
-    const { state, input, grounded, deltaMs, isTriangleForm } = params;
-    const triangleCharges = state.triangleCharges;
-
-    if (isTriangleForm) {
-        if (input.regenPressed) {
-            tryStartTriangleChargesRestore(triangleCharges, grounded);
-        }
-
-        if (!grounded) {
-            cancelTriangleChargesRestore(triangleCharges);
-        } else {
-            tickTriangleChargesRestore(triangleCharges, deltaMs);
-        }
+export const tickTriangleFlightResourceRuntime = (params: TickTriangleFlightResourceParams): void => {
+    const { state, grounded, deltaSec, isTriangleForm } = params;
+    if (!isTriangleForm) {
+        stopTriangleFlight(state.triangleFlight);
         return;
     }
 
-    cancelTriangleChargesRestore(triangleCharges);
+    if (!grounded) {
+        return;
+    }
+
+    tickTriangleFlightRestore(state.triangleFlight, deltaSec);
 };
 
-interface PrepareTriangleDashParams {
+interface PrepareTriangleFlightParams {
     state: PlayerShellState;
     input: PlayerInputSnapshot;
-    grounded: boolean;
     isTriangleForm: boolean;
 }
 
-export const prepareTriangleDashRuntime = (params: PrepareTriangleDashParams): void => {
-    const { state, input, grounded, isTriangleForm } = params;
-    if (!isTriangleForm || state.triangleDash.isActive) {
+export const prepareTriangleFlightRuntime = (params: PrepareTriangleFlightParams): void => {
+    const { state, input, isTriangleForm } = params;
+    if (!isTriangleForm) {
         return;
     }
 
-    const markerIntent = resolveMarkerIntent(
-        state.marker.currentOffsetX,
-        state.marker.currentOffsetY
-    );
-
-    updateTriangleDashSelectedLeadingCorner(
-        state.triangleDash,
+    updateTriangleFlightIntent(
+        state.triangleFlight,
         state.triangleShell,
-        markerIntent.x,
-        markerIntent.y,
-        markerIntent.active,
-        grounded
+        input.forcePointX,
+        input.forcePointY,
+        input.forcePointActive
     );
 };
 
-interface StartTriangleDashParams {
+interface StartTriangleFlightParams {
     state: PlayerShellState;
     physicsBody: Physics.Arcade.Body;
     input: PlayerInputSnapshot;
-    isTriangleForm: boolean;
     grounded: boolean;
-    onDashStarted: () => void;
+    isTriangleForm: boolean;
+    onFlightStarted: () => void;
 }
 
-export const tryStartTriangleDashRuntime = (params: StartTriangleDashParams): boolean => {
-    const { state, physicsBody, input, isTriangleForm, grounded, onDashStarted } = params;
-    const triangleDash = state.triangleDash;
-
-    const triangleDashStartDecision = resolveTriangleDashStartDecision({
+export const tryStartTriangleFlightRuntime = (params: StartTriangleFlightParams): boolean => {
+    const { state, physicsBody, input, grounded, isTriangleForm, onFlightStarted } = params;
+    const triangleFlightStartDecision = resolveTriangleFlightStartDecision({
         currentForm: state.currentForm,
         actionPressed: input.actionPressed,
-        isDashActive: isTriangleForm && triangleDash.isActive,
-        dashCooldownMs: triangleDash.cooldownMs,
-        hasDashCharges: hasTriangleDashCharges(state.triangleCharges)
+        isFlightActive: isTriangleForm && state.triangleFlight.isActive,
+        grounded,
+        hasFullFlightResource: hasTriangleFlightSectionsRemaining(state.triangleFlight),
+        hasAnyFlightResource: hasTriangleFlightUsableResource(state.triangleFlight)
     });
 
-    if (!triangleDashStartDecision.canStart || state.currentForm !== 'triangle') {
+    if (!triangleFlightStartDecision.canStart || state.currentForm !== 'triangle' || !input.forcePointActive) {
         return false;
     }
 
-    if (!hasTriangleDashCharges(state.triangleCharges)) {
+    if (!tryStartTriangleFlight(state.triangleFlight)) {
         return false;
     }
 
-    const dashLaunch = tryStartTriangleDash(
-        triangleDash,
-        state.triangleShell,
-        grounded
-    );
-
-    if (dashLaunch === null) {
-        return false;
-    }
-
-    tryConsumeTriangleDashCharge(state.triangleCharges);
-    onDashStarted();
-    state.triangleShell.orientationRad = dashLaunch.lockedOrientationRad;
+    onFlightStarted();
+    state.triangleShell.airborneAngularVelocityRadPerSec = 0;
+    const velocity = applyTriangleFlightVelocity(state.triangleFlight);
     physicsBody.setAllowGravity(false);
-    physicsBody.setVelocity(dashLaunch.velocityX, dashLaunch.velocityY);
+    physicsBody.setVelocity(velocity.velocityX, velocity.velocityY);
     return true;
 };
 
-export const applyTriangleDashMovement = (
+export const applyTriangleFlightMovement = (
     state: PlayerShellState,
     physicsBody: Physics.Arcade.Body
 ): void => {
-    physicsBody.setVelocity(
-        state.triangleDash.directionX * PLAYER_TRIANGLE_DASH_SPEED,
-        state.triangleDash.directionY * PLAYER_TRIANGLE_DASH_SPEED
-    );
-    state.triangleShell.orientationRad = state.triangleDash.lockedOrientationRad;
+    const velocity = applyTriangleFlightVelocity(state.triangleFlight);
+    physicsBody.setVelocity(velocity.velocityX, velocity.velocityY);
 };
 
-interface TickTriangleDashActiveParams {
+interface TickTriangleFlightActiveParams {
     state: PlayerShellState;
     physicsBody: Physics.Arcade.Body;
-    deltaMs: number;
-    dashStartedThisFrame: boolean;
+    input: PlayerInputSnapshot;
+    deltaSec: number;
 }
 
-export const tickTriangleDashActiveRuntime = (params: TickTriangleDashActiveParams): void => {
-    const { state, physicsBody, deltaMs, dashStartedThisFrame } = params;
-    if (!state.triangleDash.isActive || dashStartedThisFrame) {
+export const tickTriangleFlightActiveRuntime = (params: TickTriangleFlightActiveParams): void => {
+    const { state, physicsBody, input, deltaSec } = params;
+    if (!state.triangleFlight.isActive) {
         return;
     }
 
-    tickTriangleDashActive(state.triangleDash, deltaMs);
-    if (!state.triangleDash.isActive) {
+    if (!input.actionHeld || !input.forcePointActive) {
+        stopTriangleFlight(state.triangleFlight);
+        physicsBody.setAllowGravity(true);
+        return;
+    }
+
+    tickTriangleFlightState(state.triangleFlight, deltaSec);
+    if (!state.triangleFlight.isActive) {
         physicsBody.setAllowGravity(true);
     }
 };
 
-export const tickTriangleDashCooldownRuntime = (state: PlayerShellState, deltaMs: number): void => {
-    tickTriangleDashCooldown(state.triangleDash, deltaMs);
-};
-
 interface TickTriangleOrientationParams {
     state: PlayerShellState;
-    input: PlayerInputSnapshot;
     grounded: boolean;
     justLanded: boolean;
     horizontalDir: -1 | 0 | 1;
     horizontalVelocityX: number;
     deltaSec: number;
     isTriangleForm: boolean;
-    isTriangleDashActive: boolean;
+    isTriangleFlightActive: boolean;
 }
 
 export const tickTriangleOrientationRuntime = (params: TickTriangleOrientationParams): void => {
     const {
         state,
-        input,
         grounded,
         justLanded,
         horizontalDir,
         horizontalVelocityX,
         deltaSec,
         isTriangleForm,
-        isTriangleDashActive
+        isTriangleFlightActive
     } = params;
 
-    if (!isTriangleForm || isTriangleDashActive) {
+    if (!isTriangleForm) {
+        return;
+    }
+
+    if (isTriangleFlightActive) {
+        state.triangleShell.airborneAngularVelocityRadPerSec = 0;
+        tickTriangleFlightOrientation(state.triangleFlight, state.triangleShell, deltaSec);
         return;
     }
 
@@ -196,21 +170,6 @@ export const tickTriangleOrientationRuntime = (params: TickTriangleOrientationPa
         horizontalVelocityX,
         deltaSec
     );
-
-    if (grounded) {
-        const markerIntent = resolveMarkerIntent(
-            state.marker.currentOffsetX,
-            state.marker.currentOffsetY
-        );
-        updateTriangleDashSelectedLeadingCorner(
-            state.triangleDash,
-            state.triangleShell,
-            markerIntent.x,
-            markerIntent.y,
-            markerIntent.active,
-            grounded
-        );
-    }
 };
 
 export const applyTriangleJumpRuntime = (

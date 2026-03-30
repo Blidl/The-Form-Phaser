@@ -23,7 +23,7 @@ const TRIANGLE_CENTROID_LOCAL_VERTICES = TRIANGLE_LOCAL_VERTICES.map((vertex) =>
         x: vertex.x - TRIANGLE_CENTROID_OFFSET.x,
         y: vertex.y - TRIANGLE_CENTROID_OFFSET.y
     };
-}) as readonly [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }];
+}) as unknown as readonly [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }];
 
 export const clampMarkerOffsetToForm = (
     form: PlayerFormId,

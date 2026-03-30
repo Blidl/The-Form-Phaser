@@ -22,11 +22,10 @@ import {
     createSquareShellState
 } from './player_square_shell';
 import {
-    createTriangleDashState
-} from './player_triangle_dash';
-import {
-    createTriangleChargesState,
-} from './player_triangle_charges';
+    createTriangleFlightState,
+    refillTriangleFlightResource,
+    resolveTriangleFlightResource
+} from './player_triangle_flight';
 import type {
     PlayerFormId,
     PlayerShellState
@@ -102,8 +101,7 @@ export class PfPlayerRuntime {
             triangleShell: createTriangleShellState(1),
             triangleCollision: createTriangleCollisionState(),
             squareShell: createSquareShellState(),
-            triangleDash: createTriangleDashState(),
-            triangleCharges: createTriangleChargesState()
+            triangleFlight: createTriangleFlightState()
         };
         this.timers = createPlayerTimers();
         this.jumpCutConsumed = false;
@@ -209,6 +207,18 @@ export class PfPlayerRuntime {
         return PhaserMath.Clamp(this.state.squareShell.trailResourceCurrent / maxResource, 0, 1);
     }
 
+    public get triangleFlightResourceCurrent(): number {
+        return resolveTriangleFlightResource(this.state.triangleFlight).current;
+    }
+
+    public get triangleFlightResourceMax(): number {
+        return resolveTriangleFlightResource(this.state.triangleFlight).max;
+    }
+
+    public get triangleFlightResourceRatio(): number {
+        return resolveTriangleFlightResource(this.state.triangleFlight).ratio;
+    }
+
     public get arcadeBodyObject(): GameObjects.Arc {
         return this.physicsSprite;
     }
@@ -241,6 +251,10 @@ export class PfPlayerRuntime {
         }
 
         return this.triangleMatterRuntime.debugPoints;
+    }
+
+    public refillTriangleFlightResource(): void {
+        refillTriangleFlightResource(this.state.triangleFlight);
     }
 
     public freezeForRespawn(): void {
@@ -310,7 +324,7 @@ export class PfPlayerRuntime {
             this.state.marker,
             this.state.triangleShell,
             this.state.squareShell,
-            this.state.triangleDash,
+            this.state.triangleFlight,
             this.state.currentForm === 'ball' && this.boostModeActive
         );
     }

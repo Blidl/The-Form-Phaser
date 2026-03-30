@@ -13,8 +13,8 @@ import type {
     PlayerSquareAttachHoldSnapshot,
     PlayerSquareAttachStartDecision,
     PlayerSquareAttachStartSnapshot,
-    PlayerTriangleDashStartDecision,
-    PlayerTriangleDashStartSnapshot
+    PlayerTriangleFlightStartDecision,
+    PlayerTriangleFlightStartSnapshot
 } from './player_form_state_types';
 
 const EMPTY_SWITCH_DECISION: PlayerFormSwitchDecision = {
@@ -24,8 +24,8 @@ const EMPTY_SWITCH_DECISION: PlayerFormSwitchDecision = {
 };
 
 const EMPTY_TRANSITION_RESET_DIRECTIVE: PlayerFormTransitionResetDirective = {
-    stopTriangleDash: false,
-    resetTriangleDash: false,
+    stopTriangleFlight: false,
+    resetTriangleFlight: false,
     resetTriangleShell: false,
     resetSquareShell: false,
     clearSquareAttach: false
@@ -36,7 +36,7 @@ const EMPTY_SQUARE_ATTACH_ENTRY_BUFFER_DIRECTIVE: PlayerSquareAttachEntryBufferD
     shouldClearEntryBuffer: false
 };
 
-const EMPTY_DASH_START_DECISION: PlayerTriangleDashStartDecision = {
+const EMPTY_DASH_START_DECISION: PlayerTriangleFlightStartDecision = {
     canStart: false
 };
 
@@ -50,7 +50,7 @@ const EMPTY_SQUARE_ATTACH_HOLD_DECISION: PlayerSquareAttachHoldDecision = {
 
 const DEFAULT_FREEZE_RESET_DIRECTIVE: PlayerFreezeResetDirective = {
     shouldClearAirborneWindDrift: true,
-    shouldResetTriangleDash: true,
+    shouldResetTriangleFlight: true,
     shouldFreezeRespawnState: true
 };
 
@@ -93,8 +93,8 @@ export const resolveFormTransitionResetDirective = (
     if (nextForm === 'triangle') {
         return {
             ...EMPTY_TRANSITION_RESET_DIRECTIVE,
-            stopTriangleDash: true,
-            resetTriangleDash: true,
+            stopTriangleFlight: true,
+            resetTriangleFlight: true,
             resetTriangleShell: true
         };
     }
@@ -105,8 +105,8 @@ export const resolveFormTransitionResetDirective = (
             resetSquareShell: true
         };
         if (previousForm === 'triangle') {
-            resetDirective.stopTriangleDash = true;
-            resetDirective.resetTriangleDash = true;
+            resetDirective.stopTriangleFlight = true;
+            resetDirective.resetTriangleFlight = true;
         }
         return resetDirective;
     }
@@ -121,30 +121,26 @@ export const resolveFormTransitionResetDirective = (
     if (previousForm === 'triangle') {
         return {
             ...EMPTY_TRANSITION_RESET_DIRECTIVE,
-            stopTriangleDash: true,
-            resetTriangleDash: true
+            stopTriangleFlight: true,
+            resetTriangleFlight: true
         };
     }
 
     return EMPTY_TRANSITION_RESET_DIRECTIVE;
 };
 
-export const resolveTriangleDashStartDecision = (
-    snapshot: PlayerTriangleDashStartSnapshot
-): PlayerTriangleDashStartDecision => {
+export const resolveTriangleFlightStartDecision = (
+    snapshot: PlayerTriangleFlightStartSnapshot
+): PlayerTriangleFlightStartDecision => {
     if (!snapshot.actionPressed || snapshot.currentForm !== 'triangle') {
         return EMPTY_DASH_START_DECISION;
     }
 
-    if (snapshot.isDashActive) {
+    if (snapshot.isFlightActive) {
         return EMPTY_DASH_START_DECISION;
     }
 
-    if (snapshot.dashCooldownMs > 0) {
-        return EMPTY_DASH_START_DECISION;
-    }
-
-    if (!snapshot.hasDashCharges) {
+    if (!snapshot.hasAnyFlightResource) {
         return EMPTY_DASH_START_DECISION;
     }
 
@@ -216,8 +212,7 @@ export const resolveRespawnResetDirective = (
         nextForm: startForm,
         resetTriangleShell: true,
         resetSquareShell: true,
-        resetTriangleDash: true,
-        resetTriangleCharges: true,
+        resetTriangleFlight: true,
         clearJumpBuffer: true,
         clearSquareAttachEntryBuffer: true,
         clearCoyoteTime: true,
@@ -241,7 +236,7 @@ export const resolveInvalidFormStateCombinationFlags = (
     snapshot: PlayerFormStateCombinationSnapshot
 ): PlayerFormStateCombinationFlags => {
     return {
-        triangleDashOutsideTriangle: snapshot.currentForm !== 'triangle' && snapshot.triangleDashActive,
+        triangleFlightOutsideTriangle: snapshot.currentForm !== 'triangle' && snapshot.triangleFlightActive,
         squareAttachOutsideSquare: snapshot.currentForm !== 'square' && snapshot.squareAttached
     };
 };

@@ -17,11 +17,10 @@ import {
 } from './player_square_shell';
 import { clearSquareAttach } from './player_square_attach';
 import {
-    resetTriangleDashState,
-    stopTriangleDash
-} from './player_triangle_dash';
+    resetTriangleFlightState,
+    stopTriangleFlight
+} from './player_triangle_flight';
 import { clampPlayerMarkerStateToForm, resetPlayerMarkerState } from './marker/player_marker_runtime';
-import { resetTriangleChargesState } from './player_triangle_charges';
 import { resetTriangleCollisionState } from './geometry/player_triangle_collision_runtime';
 import {
     resolveFormSwitchDecision,
@@ -38,8 +37,8 @@ export const freezePlayerForRespawn = (context: PlayerLifecycleRuntimeContext): 
     context.mutable.frozenForRespawn = freezeDirective.shouldFreezeRespawnState;
     context.view.hideTransientMarkers();
 
-    if (freezeDirective.shouldResetTriangleDash) {
-        resetTriangleDashState(context.state.triangleDash);
+    if (freezeDirective.shouldResetTriangleFlight) {
+        resetTriangleFlightState(context.state.triangleFlight);
     }
     resetTriangleCollisionState(context.state.triangleCollision);
     if (freezeDirective.shouldClearAirborneWindDrift) {
@@ -69,11 +68,8 @@ export const respawnPlayerAt = (
     if (respawnDirective.resetSquareShell) {
         resetSquareShellState(context.state.squareShell);
     }
-    if (respawnDirective.resetTriangleDash) {
-        resetTriangleDashState(context.state.triangleDash);
-    }
-    if (respawnDirective.resetTriangleCharges) {
-        resetTriangleChargesState(context.state.triangleCharges);
+    if (respawnDirective.resetTriangleFlight) {
+        resetTriangleFlightState(context.state.triangleFlight);
     }
 
     if (respawnDirective.resetJumpCutConsumed) {
@@ -167,10 +163,10 @@ export const handlePlayerFormSwitch = (
         resetTriangleShellState(context.state.triangleShell, context.mutable.lastMoveDirection);
     }
     resetTriangleCollisionState(context.state.triangleCollision);
-    if (transitionReset.resetTriangleDash) {
-        resetTriangleDashState(context.state.triangleDash);
-    } else if (transitionReset.stopTriangleDash) {
-        stopTriangleDash(context.state.triangleDash);
+    if (transitionReset.resetTriangleFlight) {
+        resetTriangleFlightState(context.state.triangleFlight);
+    } else if (transitionReset.stopTriangleFlight) {
+        stopTriangleFlight(context.state.triangleFlight);
     }
     if (transitionReset.resetSquareShell) {
         resetSquareShellState(context.state.squareShell);

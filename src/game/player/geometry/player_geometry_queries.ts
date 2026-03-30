@@ -110,7 +110,7 @@ export const createPlayerRectSnapshot = (
 
 export const resolvePlayerAnchorOffset = (
     form: PlayerFormId,
-    triangleShell: PlayerTriangleShellState
+    _triangleShell: PlayerTriangleShellState
 ): PlayerAnchorOffset => {
     if (form !== 'triangle') {
         return { x: 0, y: 0 };

@@ -4,7 +4,7 @@ import {
     PLAYER_MARKER_SMOOTHING_TIME_SEC
 } from '../player_constants';
 import type { PlayerInputSnapshot } from '../player_input';
-import type { PlayerShellState } from '../player_types';
+import type { PlayerFormId, PlayerShellState } from '../player_types';
 import type { PlayerMarkerState } from './player_marker_types';
 import { clampMarkerOffsetToForm, resolveGroundedTriangleMarkerOffset } from './player_marker_math';
 

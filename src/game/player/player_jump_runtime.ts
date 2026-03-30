@@ -18,7 +18,7 @@ interface HandleJumpFlowParams {
     physicsBody: Physics.Arcade.Body;
     input: PlayerInputSnapshot;
     isBallForm: boolean;
-    isTriangleDashActive: boolean;
+    isTriangleFlightActive: boolean;
     isSquareAttached: boolean;
     isBallReboundPauseHolding: boolean;
     grounded: boolean;
@@ -38,7 +38,7 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
         timers,
         physicsBody,
         isBallForm,
-        isTriangleDashActive,
+        isTriangleFlightActive,
         isSquareAttached,
         isBallReboundPauseHolding,
         grounded,
@@ -53,7 +53,7 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
 
     const hasCoyoteJump = hasCoyoteTime(timers);
     const canJump = grounded || hasCoyoteJump;
-    const canProcessJump = !isTriangleDashActive && !isSquareAttached && !isBallReboundPauseHolding && hasJumpBuffer(timers);
+    const canProcessJump = !isTriangleFlightActive && !isSquareAttached && !isBallReboundPauseHolding && hasJumpBuffer(timers);
 
     if (canProcessJump) {
         tryStartBallAirRebound({
@@ -106,14 +106,14 @@ interface ApplyJumpCutParams {
     state: PlayerShellState;
     physicsBody: Physics.Arcade.Body;
     input: PlayerInputSnapshot;
-    isTriangleDashActive: boolean;
+    isTriangleFlightActive: boolean;
     isSquareAttached: boolean;
 }
 
 export const applyJumpCutRuntime = (params: ApplyJumpCutParams): void => {
-    const { mutable, state, physicsBody, input, isTriangleDashActive, isSquareAttached } = params;
+    const { mutable, state, physicsBody, input, isTriangleFlightActive, isSquareAttached } = params;
 
-    if (isTriangleDashActive || isSquareAttached || input.jumpHeld || mutable.jumpCutConsumed || physicsBody.velocity.y >= 0) {
+    if (isTriangleFlightActive || isSquareAttached || input.jumpHeld || mutable.jumpCutConsumed || physicsBody.velocity.y >= 0) {
         return;
     }
 

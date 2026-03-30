@@ -13,7 +13,7 @@ interface ApplyPlayerVerticalProfileParams {
     physicsBody: Physics.Arcade.Body;
     input: PlayerInputSnapshot;
     grounded: boolean;
-    isTriangleDashActive: boolean;
+    isTriangleFlightActive: boolean;
     isSquareAttached: boolean;
     isBallReboundPauseHolding: boolean;
 }
@@ -23,12 +23,12 @@ export const applyPlayerVerticalProfile = (params: ApplyPlayerVerticalProfilePar
         physicsBody,
         input,
         grounded,
-        isTriangleDashActive,
+        isTriangleFlightActive,
         isSquareAttached,
         isBallReboundPauseHolding
     } = params;
 
-    if (isTriangleDashActive || isSquareAttached || isBallReboundPauseHolding) {
+    if (isTriangleFlightActive || isSquareAttached || isBallReboundPauseHolding) {
         physicsBody.setGravityY(PLAYER_GRAVITY_Y);
         return;
     }

@@ -30,6 +30,18 @@ export class PfPlayer {
         return this.runtime.squareTrailResourceRatio;
     }
 
+    public get triangleFlightResourceCurrent(): number {
+        return this.runtime.triangleFlightResourceCurrent;
+    }
+
+    public get triangleFlightResourceMax(): number {
+        return this.runtime.triangleFlightResourceMax;
+    }
+
+    public get triangleFlightResourceRatio(): number {
+        return this.runtime.triangleFlightResourceRatio;
+    }
+
     public get arcadeBodyObject(): GameObjects.Arc {
         return this.runtime.arcadeBodyObject;
     }
@@ -48,6 +60,10 @@ export class PfPlayer {
 
     public get trianglePhysicsPoints(): ReadonlyArray<{ x: number; y: number }> | null {
         return this.runtime.trianglePhysicsPoints;
+    }
+
+    public refillTriangleFlightResource(): void {
+        this.runtime.refillTriangleFlightResource();
     }
 
     public freezeForRespawn(): void {

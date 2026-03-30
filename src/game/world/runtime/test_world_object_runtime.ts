@@ -1,6 +1,7 @@
 import type { Scene } from 'phaser';
 import { createHazard, type HazardObject } from '../hazard';
 import { createMovingPlatform, type MovingPlatformObject } from '../moving_platform';
+import { createTriangleFlightPickup } from '../triangle_flight_pickup';
 import { createTriggerPlatform } from '../trigger_platform';
 import type { PlayerWorldActor } from '../../player/player_runtime_contracts';
 
@@ -58,6 +59,22 @@ export const createTestWorldObjectRuntime = (
         if (!triggerPlatform.isActivated()) {
             triggerPlatform.activate();
         }
+    });
+
+    const triangleFlightPickups = [
+        createTriangleFlightPickup(scene, { x: 640, y: 530 }),
+        createTriangleFlightPickup(scene, { x: 1040, y: 430 }),
+        createTriangleFlightPickup(scene, { x: 1480, y: 340 })
+    ];
+    triangleFlightPickups.forEach((pickup) => {
+        scene.physics.add.overlap(player.arcadeBodyObject, pickup.trigger, () => {
+            if (pickup.isCollected() || player.currentForm !== 'triangle') {
+                return;
+            }
+
+            pickup.collect();
+            player.refillTriangleFlightResource();
+        });
     });
 
     return {

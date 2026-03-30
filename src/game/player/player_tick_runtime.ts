@@ -6,8 +6,8 @@ import {
     tickPlayerTimers
 } from './player_timers';
 import { resolveSquareAttachEntryBufferDirective } from './state/player_form_state_guards';
-import { resetTriangleDashState } from './player_triangle_dash';
-import { tickTriangleDashCooldownRuntime, tickTriangleChargesRuntime, prepareTriangleDashRuntime, tryStartTriangleDashRuntime, applyTriangleDashMovement, tickTriangleOrientationRuntime, tickTriangleDashActiveRuntime } from './player_triangle_runtime';
+import { stopTriangleFlight } from './player_triangle_flight';
+import { tickTriangleFlightResourceRuntime, prepareTriangleFlightRuntime, tryStartTriangleFlightRuntime, applyTriangleFlightMovement, tickTriangleOrientationRuntime, tickTriangleFlightActiveRuntime } from './player_triangle_runtime';
 import { tickSquareRuntime, applySquareAttachedMovement, applySquareDetachedTrailRefund } from './player_square_runtime';
 import { syncBallBoostState, updateBallGroundedState, tryApplyBallBoost, tickBallReboundRuntimeFlow, queueOrApplyBallActionBoost, tryConsumeQueuedGroundBoost } from './player_ball_runtime';
 import { resolveEffectiveExternalInfluenceX, resolvePlayerMotionFlags, applyPauseOrLaunchMovement, applyCommonHorizontalMotion } from './player_motion_runtime';
@@ -28,8 +28,6 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const isBallForm = state.currentForm === 'ball';
     const isSquareForm = state.currentForm === 'square';
 
-    tickTriangleDashCooldownRuntime(state, deltaMs);
-
     const grounded = isTriangleForm
         ? state.triangleCollision.hasGroundContact && state.triangleCollision.groundSupportEdgeIndex !== null
         : physicsBody.blocked.down || physicsBody.touching.down;
@@ -41,11 +39,10 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
 
     updateBallGroundedState(context.mutable, ballReboundRuntime, physicsBody, grounded, justLanded);
 
-    tickTriangleChargesRuntime({
+    tickTriangleFlightResourceRuntime({
         state,
-        input,
         grounded,
-        deltaMs,
+        deltaSec,
         isTriangleForm
     });
 
@@ -96,13 +93,11 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const didLaunchBallReboundThisFrame = reboundTick.didLaunchThisFrame;
     const preservedReboundVelocityX = reboundTick.preservedVelocityX;
 
-    let isTriangleDashActive = isTriangleForm && state.triangleDash.isActive;
-    let dashStartedThisFrame = false;
+    let isTriangleFlightActive = isTriangleForm && state.triangleFlight.isActive;
 
-    prepareTriangleDashRuntime({
+    prepareTriangleFlightRuntime({
         state,
         input,
-        grounded: context.isCurrentlyGrounded(),
         isTriangleForm
     });
 
@@ -119,18 +114,18 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         });
     }
 
-    dashStartedThisFrame = tryStartTriangleDashRuntime({
+    const flightStartedThisFrame = tryStartTriangleFlightRuntime({
         state,
         physicsBody,
         input,
+        grounded,
         isTriangleForm,
-        grounded: context.isCurrentlyGrounded(),
-        onDashStarted: () => {
+        onFlightStarted: () => {
             context.mutable.jumpCutConsumed = false;
         }
     });
-    if (dashStartedThisFrame) {
-        isTriangleDashActive = true;
+    if (flightStartedThisFrame) {
+        isTriangleFlightActive = true;
     }
 
     const hasBoostHold = context.mutable.boostActive && input.actionHeld;
@@ -142,14 +137,14 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         state,
         isSquareForm
     });
-    if (motionFlags.invalidTriangleDashOutsideTriangle) {
-        resetTriangleDashState(state.triangleDash);
+    if (motionFlags.invalidTriangleFlightOutsideTriangle) {
+        stopTriangleFlight(state.triangleFlight);
     }
     const isSquareAttached = motionFlags.isSquareAttached;
-    physicsBody.setAllowGravity(!isTriangleDashActive && !isSquareAttached && !isBallReboundPauseHolding);
+    physicsBody.setAllowGravity(!isTriangleFlightActive && !isSquareAttached && !isBallReboundPauseHolding);
 
-    if (isTriangleDashActive) {
-        applyTriangleDashMovement(state, physicsBody);
+    if (isTriangleFlightActive) {
+        applyTriangleFlightMovement(state, physicsBody);
     } else if (applyPauseOrLaunchMovement(physicsBody, isBallReboundPauseHolding, didLaunchBallReboundThisFrame)) {
         // Pause/launch branch already applied.
     } else if (isSquareAttached) {
@@ -171,14 +166,13 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
 
     tickTriangleOrientationRuntime({
         state,
-        input,
         grounded,
         justLanded,
         horizontalDir,
         horizontalVelocityX: physicsBody.velocity.x,
         deltaSec,
         isTriangleForm,
-        isTriangleDashActive
+        isTriangleFlightActive
     });
 
     handlePlayerJumpFlow({
@@ -188,7 +182,7 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         physicsBody,
         input,
         isBallForm,
-        isTriangleDashActive,
+        isTriangleFlightActive,
         isSquareAttached,
         isBallReboundPauseHolding,
         grounded,
@@ -206,7 +200,7 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         state,
         physicsBody,
         input,
-        isTriangleDashActive,
+        isTriangleFlightActive,
         isSquareAttached
     });
 
@@ -215,7 +209,7 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         physicsBody,
         input,
         grounded,
-        isTriangleDashActive,
+        isTriangleFlightActive,
         isSquareAttached,
         isBallReboundPauseHolding
     });
@@ -223,11 +217,11 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     queueOrApplyBallActionBoost(context.mutable, physicsBody, input, isBallForm, grounded, horizontalDir);
     tryConsumeQueuedGroundBoost(context.mutable, physicsBody, input, isBallForm, justLanded, grounded, horizontalDir);
 
-    tickTriangleDashActiveRuntime({
+    tickTriangleFlightActiveRuntime({
         state,
         physicsBody,
-        deltaMs,
-        dashStartedThisFrame
+        input,
+        deltaSec
     });
 
     if (isTriangleForm) {

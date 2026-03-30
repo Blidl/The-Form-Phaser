@@ -16,22 +16,23 @@ export interface PlayerFormSwitchDecision {
 }
 
 export interface PlayerFormTransitionResetDirective {
-    stopTriangleDash: boolean;
-    resetTriangleDash: boolean;
+    stopTriangleFlight: boolean;
+    resetTriangleFlight: boolean;
     resetTriangleShell: boolean;
     resetSquareShell: boolean;
     clearSquareAttach: boolean;
 }
 
-export interface PlayerTriangleDashStartSnapshot {
+export interface PlayerTriangleFlightStartSnapshot {
     currentForm: PlayerFormId;
     actionPressed: boolean;
-    isDashActive: boolean;
-    dashCooldownMs: number;
-    hasDashCharges: boolean;
+    isFlightActive: boolean;
+    grounded: boolean;
+    hasFullFlightResource: boolean;
+    hasAnyFlightResource: boolean;
 }
 
-export interface PlayerTriangleDashStartDecision {
+export interface PlayerTriangleFlightStartDecision {
     canStart: boolean;
 }
 
@@ -70,7 +71,7 @@ export interface PlayerSquareAttachHoldDecision {
 
 export interface PlayerFreezeResetDirective {
     shouldClearAirborneWindDrift: boolean;
-    shouldResetTriangleDash: boolean;
+    shouldResetTriangleFlight: boolean;
     shouldFreezeRespawnState: boolean;
 }
 
@@ -78,8 +79,7 @@ export interface PlayerRespawnResetDirective {
     nextForm: PlayerFormId;
     resetTriangleShell: boolean;
     resetSquareShell: boolean;
-    resetTriangleDash: boolean;
-    resetTriangleCharges: boolean;
+    resetTriangleFlight: boolean;
     clearJumpBuffer: boolean;
     clearSquareAttachEntryBuffer: boolean;
     clearCoyoteTime: boolean;
@@ -100,11 +100,11 @@ export interface PlayerRespawnResetDirective {
 
 export interface PlayerFormStateCombinationSnapshot {
     currentForm: PlayerFormId;
-    triangleDashActive: boolean;
+    triangleFlightActive: boolean;
     squareAttached: boolean;
 }
 
 export interface PlayerFormStateCombinationFlags {
-    triangleDashOutsideTriangle: boolean;
+    triangleFlightOutsideTriangle: boolean;
     squareAttachOutsideSquare: boolean;
 }
