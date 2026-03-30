@@ -1,29 +1,35 @@
+import type { Physics } from 'phaser';
 import type { PlayerSquareShellState } from './player_types';
 import { PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS } from './player_constants';
 import { resetSquareRolloverState } from './player_square_rollover';
+import type { PlayerSquareAttachPoseQuery } from './geometry/player_geometry_types';
 
 export const tryEnterSquareAttach = (
     squareShell: PlayerSquareShellState,
-    hasContact: boolean,
+    physicsBody: Physics.Arcade.Body,
+    attachPose: PlayerSquareAttachPoseQuery | null,
     contactNormalX: -1 | 0 | 1,
     contactNormalY: -1 | 0 | 1
 ): boolean => {
-    if (!hasContact || squareShell.isAttached) {
+    if (attachPose === null || attachPose.supportInterval === null || squareShell.isAttached) {
         return false;
     }
 
-    squareShell.isAttached = true;
-    squareShell.attachNormalX = contactNormalX;
-    squareShell.attachNormalY = contactNormalY;
-    squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
-    return true;
+    return commitSquareAttachPose(
+        squareShell,
+        physicsBody,
+        attachPose,
+        contactNormalX,
+        contactNormalY
+    );
 };
 
 export const tickSquareAttachState = (
     squareShell: PlayerSquareShellState,
+    physicsBody: Physics.Arcade.Body,
     deltaMs: number,
     actionHeld: boolean,
-    hasContact: boolean,
+    attachPose: PlayerSquareAttachPoseQuery | null,
     contactNormalX: -1 | 0 | 1,
     contactNormalY: -1 | 0 | 1
 ): void => {
@@ -36,11 +42,15 @@ export const tickSquareAttachState = (
         return;
     }
 
-    if (hasContact) {
-        if (isSameNormal(squareShell, contactNormalX, contactNormalY)) {
-            squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
-            return;
-        }
+    if (attachPose !== null && attachPose.supportInterval !== null) {
+        commitSquareAttachPose(
+            squareShell,
+            physicsBody,
+            attachPose,
+            contactNormalX,
+            contactNormalY
+        );
+        return;
     }
 
     squareShell.attachContactGraceMs = Math.max(0, squareShell.attachContactGraceMs - deltaMs);
@@ -59,10 +69,24 @@ export const clearSquareAttach = (squareShell: PlayerSquareShellState): void => 
     resetSquareRolloverState(squareShell.rolloverState);
 };
 
-const isSameNormal = (
+export const commitSquareAttachPose = (
     squareShell: PlayerSquareShellState,
+    physicsBody: Physics.Arcade.Body,
+    attachPose: PlayerSquareAttachPoseQuery | null,
     contactNormalX: -1 | 0 | 1,
     contactNormalY: -1 | 0 | 1
 ): boolean => {
-    return squareShell.attachNormalX === contactNormalX && squareShell.attachNormalY === contactNormalY;
+    if (attachPose === null || attachPose.supportInterval === null) {
+        return false;
+    }
+
+    squareShell.isAttached = true;
+    squareShell.hasContact = true;
+    squareShell.attachNormalX = contactNormalX;
+    squareShell.attachNormalY = contactNormalY;
+    squareShell.contactNormalX = contactNormalX;
+    squareShell.contactNormalY = contactNormalY;
+    squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
+    physicsBody.reset(attachPose.snappedCenterX, attachPose.snappedCenterY);
+    return true;
 };

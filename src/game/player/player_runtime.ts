@@ -494,19 +494,27 @@ export class PfPlayerRuntime {
             normalY,
             playerRect
         );
+        const snappedCenter = resolveSnappedSquareAttachCenter(
+            centerX,
+            centerY,
+            this.physicsBody.width * 0.5,
+            normalX,
+            normalY,
+            supportInterval
+        );
         const surfacePoint = resolveSquareTrailSurfacePoint(
             normalX,
             normalY,
-            playerRect,
+            snappedCenter,
             supportInterval,
             null
         );
         const interiorInset = PLAYER_SQUARE_ROLLOVER_SURFACE_VALIDATION_RANGE_PX;
         const interiorBodies = this.physicsSprite.scene.physics.overlapRect(
-            playerRect.left + interiorInset,
-            playerRect.top + interiorInset,
-            Math.max(1, playerRect.width - (interiorInset * 2)),
-            Math.max(1, playerRect.height - (interiorInset * 2)),
+            snappedCenter.left + interiorInset,
+            snappedCenter.top + interiorInset,
+            Math.max(1, snappedCenter.width - (interiorInset * 2)),
+            Math.max(1, snappedCenter.height - (interiorInset * 2)),
             true,
             true
         ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
@@ -514,7 +522,9 @@ export class PfPlayerRuntime {
         return {
             centerX,
             centerY,
-            rect: playerRect,
+            snappedCenterX: snappedCenter.centerX,
+            snappedCenterY: snappedCenter.centerY,
+            rect: snappedCenter,
             supportInterval,
             surfacePoint,
             isPoseClear: resolveSquarePoseClear(interiorBodies, this.physicsBody)
@@ -601,6 +611,45 @@ const resolveSquareDebugAttachZones = (
     }
 
     return resolveSquareDebugVerticalZones(pose, 'TR', 'BR');
+};
+
+const resolveSnappedSquareAttachCenter = (
+    centerX: number,
+    centerY: number,
+    halfSize: number,
+    normalX: -1 | 0 | 1,
+    normalY: -1 | 0 | 1,
+    supportInterval: PlayerSquareAttachPoseQuery['supportInterval']
+) => {
+    let snappedCenterX = centerX;
+    let snappedCenterY = centerY;
+
+    if (supportInterval !== null) {
+        const supportBody = supportInterval.ownerBody;
+        const supportRect = createPlayerRectSnapshot(
+            supportBody.x,
+            supportBody.y,
+            supportBody.width,
+            supportBody.height
+        );
+
+        if (normalY === -1) {
+            snappedCenterY = supportRect.top - halfSize;
+        } else if (normalY === 1) {
+            snappedCenterY = supportRect.bottom + halfSize;
+        } else if (normalX === 1) {
+            snappedCenterX = supportRect.right + halfSize;
+        } else if (normalX === -1) {
+            snappedCenterX = supportRect.left - halfSize;
+        }
+    }
+
+    return createPlayerRectSnapshot(
+        snappedCenterX - halfSize,
+        snappedCenterY - halfSize,
+        halfSize * 2,
+        halfSize * 2
+    );
 };
 
 const resolveSquareDebugHorizontalZones = (

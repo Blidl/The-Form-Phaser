@@ -77,6 +77,41 @@ export const createTestDebugDrawRuntime = (
         debugOverlay.strokePath();
     };
 
+    const drawRotatedSquareOutline = (
+        centerX: number,
+        centerY: number,
+        halfWidth: number,
+        halfHeight: number,
+        rotationRad: number,
+        color: number,
+        alpha: number = 1
+    ): void => {
+        const transform = (localX: number, localY: number) => {
+            const cos = Math.cos(rotationRad);
+            const sin = Math.sin(rotationRad);
+            return {
+                x: centerX + (localX * cos) - (localY * sin),
+                y: centerY + (localX * sin) + (localY * cos)
+            };
+        };
+
+        const points = [
+            transform(-halfWidth, -halfHeight),
+            transform(halfWidth, -halfHeight),
+            transform(halfWidth, halfHeight),
+            transform(-halfWidth, halfHeight)
+        ];
+
+        debugOverlay.lineStyle(2, color, alpha);
+        debugOverlay.beginPath();
+        debugOverlay.moveTo(points[0].x, points[0].y);
+        debugOverlay.lineTo(points[1].x, points[1].y);
+        debugOverlay.lineTo(points[2].x, points[2].y);
+        debugOverlay.lineTo(points[3].x, points[3].y);
+        debugOverlay.closePath();
+        debugOverlay.strokePath();
+    };
+
     const drawSquareZoneOverlay = (): void => {
         const squareDebugView = player.squareDebugView;
         if (player.currentForm !== 'square' || squareDebugView === null) {
@@ -144,10 +179,36 @@ export const createTestDebugDrawRuntime = (
                 if (player.trianglePhysicsPoints !== null && player.trianglePhysicsPoints.length >= 3) {
                     drawTriangleOutline(player.trianglePhysicsPoints, 0x4fc3f7, 1);
                 }
+            } else if (player.currentForm === 'square' && player.squareDebugView !== null) {
+                const body = player.arcadeBodyObject.body as Physics.Arcade.Body;
+                drawRotatedSquareOutline(
+                    body.x + (body.width * 0.5),
+                    body.y + (body.height * 0.5),
+                    body.width * 0.5,
+                    body.height * 0.5,
+                    player.squareDebugView.orientationRad,
+                    0x4fc3f7,
+                    1
+                );
             } else {
                 drawBodyOutline(player.arcadeBodyObject.body as Physics.Arcade.Body, 0x4fc3f7);
             }
-            drawHazardHitShape(player.hazardHitShape, 0xffd54f);
+            if (player.currentForm === 'square' && player.squareDebugView !== null) {
+                const halfSize = player.hazardHitShape.kind === 'box'
+                    ? player.hazardHitShape.width * 0.5
+                    : ((player.arcadeBodyObject.body as Physics.Arcade.Body).width * 0.5);
+                drawRotatedSquareOutline(
+                    player.formAnchor.x,
+                    player.formAnchor.y,
+                    halfSize,
+                    halfSize,
+                    player.squareDebugView.orientationRad,
+                    0xffd54f,
+                    1
+                );
+            } else {
+                drawHazardHitShape(player.hazardHitShape, 0xffd54f);
+            }
             if (player.currentForm === 'triangle') {
                 const visualTrianglePoints = resolveTriangleWorldPoints(
                     player.triangleVisualObject.x,

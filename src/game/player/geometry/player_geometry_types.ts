@@ -114,6 +114,8 @@ export interface PlayerSquareTrailSurfacePoint {
 export interface PlayerSquareAttachPoseQuery {
     centerX: number;
     centerY: number;
+    snappedCenterX: number;
+    snappedCenterY: number;
     rect: PlayerRectSnapshot;
     supportInterval: PlayerSquareSupportInterval<Physics.Arcade.Body | Physics.Arcade.StaticBody> | null;
     surfacePoint: PlayerSquareTrailSurfacePoint;

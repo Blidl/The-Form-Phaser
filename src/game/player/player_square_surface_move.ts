@@ -23,7 +23,9 @@ export const resolveSquareAttachSurfaceVelocity = (
     if (attachNormalY !== 0) {
         surfaceVelocityX = horizontalDir * surfaceMoveSpeed;
     } else {
-        surfaceVelocityY = verticalDir * surfaceMoveSpeed;
+        if (verticalDir !== 0) {
+            surfaceVelocityY = verticalDir * surfaceMoveSpeed;
+        }
     }
 
     return {

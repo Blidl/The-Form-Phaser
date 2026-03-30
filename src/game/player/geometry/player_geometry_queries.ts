@@ -4,6 +4,7 @@ import {
     PLAYER_FORM_TRIANGLE_HEIGHT,
     PLAYER_FORM_TRIANGLE_WIDTH,
     PLAYER_PLACEHOLDER_RADIUS,
+    PLAYER_SQUARE_ATTACH_ACQUIRE_RANGE_PX,
     PLAYER_SQUARE_BODY_SIZE,
     PLAYER_SQUARE_HAZARD_SIZE
 } from '../player_constants';
@@ -414,7 +415,7 @@ export const resolveSquareSupportFaceGap = (
     playerRect: Pick<PlayerRectSnapshot, 'left' | 'top' | 'right' | 'bottom'>,
     candidateRect: Pick<PlayerRectSnapshot, 'left' | 'top' | 'right' | 'bottom'>
 ): number | null => {
-    const faceAlignmentTolerance = 6;
+    const faceAlignmentTolerance = PLAYER_SQUARE_ATTACH_ACQUIRE_RANGE_PX;
 
     if (normalX === 0 && normalY === -1) {
         const faceGap = Math.abs(candidateRect.top - playerRect.bottom);

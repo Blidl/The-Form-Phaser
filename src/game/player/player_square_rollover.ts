@@ -5,6 +5,7 @@ import {
     PLAYER_SQUARE_ROLLOVER_PREVIEW_TIME_MS,
     PLAYER_SQUARE_ROLLOVER_RETURN_TIME_MS
 } from './player_constants';
+import { commitSquareAttachPose } from './player_square_attach';
 import { squareSupportLocalToWorld, squareSupportWorldToLocal } from './player_square_support_space';
 import type {
     PlayerSquareRolloverState,
@@ -227,11 +228,15 @@ export const tickSquareRollover = (params: TickSquareRolloverParams): void => {
             rollover.targetNormalY
         );
         if (targetPose.supportInterval !== null && targetPose.isPoseClear) {
-            squareShell.attachNormalX = rollover.targetNormalX;
-            squareShell.attachNormalY = rollover.targetNormalY;
-            squareShell.contactNormalX = rollover.targetNormalX;
-            squareShell.contactNormalY = rollover.targetNormalY;
+            squareShell.orientationRad = rollover.endOrientationRad;
             squareShell.groundedOrientationRad = rollover.endOrientationRad;
+            commitSquareAttachPose(
+                squareShell,
+                physicsBody,
+                targetPose,
+                rollover.targetNormalX,
+                rollover.targetNormalY
+            );
             physicsBody.checkCollision.none = false;
             resetSquareRolloverState(rollover);
             onSuccessCommit(targetPose);
