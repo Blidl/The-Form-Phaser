@@ -68,6 +68,15 @@
 - `gravity_px_per_sec2` — базовая гравитация;
 - `fall_speed_cap_px_per_sec` — предел скорости падения.
 
+Для актуального канона эти параметры дополнительно задаются по формам:
+- `ball_ground_move_speed_px_per_sec`, `ball_ground_move_accel_px_per_sec2`, `ball_ground_move_decel_px_per_sec2`;
+- `triangle_ground_move_speed_px_per_sec`, `triangle_ground_move_accel_px_per_sec2`, `triangle_ground_move_decel_px_per_sec2`;
+- `square_ground_move_speed_px_per_sec`, `square_ground_move_accel_px_per_sec2`, `square_ground_move_decel_px_per_sec2`;
+- `ball_air_move_speed_px_per_sec`, `ball_air_move_accel_px_per_sec2`, `ball_air_move_decel_px_per_sec2`;
+- `triangle_air_move_speed_px_per_sec`, `triangle_air_move_accel_px_per_sec2`, `triangle_air_move_decel_px_per_sec2`;
+- `square_air_move_speed_px_per_sec`, `square_air_move_accel_px_per_sec2`, `square_air_move_decel_px_per_sec2`;
+- `player_ground_drag_x` — сопротивление на земле (должно позволять ощущать инерционную остановку).
+
 ### 3.3. Marker / точка приложения
 - `marker_move_speed_px_per_sec` — скорость движения marker внутри фигуры;
 - `marker_return_speed_px_per_sec` — скорость возврата marker к центру без ввода;
@@ -99,6 +108,8 @@
 
 ### 4.2. Ускорение Ball
 - `ball_boost_start_impulse_px_per_sec` — стартовый импульс при активации `K`;
+- `ball_boost_start_impulse_decay_time_sec` — время плавного перехода от стартового импульса к hold-speed;
+- `ball_boost_start_impulse_decay_curve` — кривая перехода (линейная/smoothstep и т. п.);
 - `ball_boost_hold_speed_px_per_sec` — скорость при удерживаемом ускорении;
 - `ball_boost_accel_px_per_sec2` — скорость добора до удерживаемого ускорения;
 - `ball_boost_decel_px_per_sec2` — скорость замедления после завершения ускорения;
@@ -108,6 +119,10 @@
 - `ball_boost_jump_min_horizontal_speed_px_per_sec` — минимальная горизонтальная скорость вылета boosted jump;
 - `ball_boost_air_control_factor` — доля обычного air-control при удержании `K` в воздухе;
 - `ball_boost_air_no_input_inertia_damping_per_sec` — затухание инерции Ball в воздухе при удержании `K`.
+- `ball_boost_mode_stroke_width` — толщина обводки Ball в visual boost-mode;
+- `ball_boost_mode_base_stroke_width` — обычная толщина обводки Ball;
+- `ball_boost_requires_direction_for_thrust` — физический boost-разгон активируется только при `A/D`;
+- `ball_boost_mode_on_hold_without_thrust` — visual boost-mode может быть активен без физического thrust при `K held`.
 
 ### 4.3. Rebound Ball
 - `ball_rebound_input_window_sec` — окно, в которое прощается ранний повторный `Jump`;

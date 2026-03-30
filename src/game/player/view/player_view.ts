@@ -1,5 +1,7 @@
 import { GameObjects, Math as PhaserMath, Scene } from 'phaser';
 import {
+    PLAYER_BALL_VISUAL_BOOST_STROKE_WIDTH,
+    PLAYER_BALL_VISUAL_STROKE_WIDTH,
     PLAYER_FORM_SQUARE_SIZE,
     PLAYER_FORM_TRIANGLE_HEIGHT,
     PLAYER_FORM_TRIANGLE_WIDTH,
@@ -43,7 +45,7 @@ export class PlayerView {
 
     public constructor(scene: Scene, x: number, y: number) {
         this.ballVisual = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff)
-            .setStrokeStyle(2, 0xffffff)
+            .setStrokeStyle(PLAYER_BALL_VISUAL_STROKE_WIDTH, 0xffffff)
             .setDepth(4500);
         this.triangleVisual = scene.add.triangle(
             x,
@@ -87,12 +89,17 @@ export class PlayerView {
         this.squareContactMarker.setVisible(false);
     }
 
-    public applyCurrentFormVisibility(currentForm: PlayerFormId, squareShell: PlayerSquareShellState): void {
+    public applyCurrentFormVisibility(
+        currentForm: PlayerFormId,
+        squareShell: PlayerSquareShellState,
+        ballBoostActive: boolean
+    ): void {
         this.ballVisual.setVisible(currentForm === 'ball');
         this.triangleVisual.setVisible(currentForm === 'triangle');
         this.squareVisual.setVisible(currentForm === 'square');
         this.squareContactMarker.setVisible(currentForm === 'square' && squareShell.hasContact);
         this.triangleLeadingCornerMarker.setVisible(currentForm === 'triangle');
+        this.updateBallBoostVisualState(currentForm, ballBoostActive);
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached);
     }
 
@@ -102,13 +109,15 @@ export class PlayerView {
         formAnchor: PlayerFormAnchor,
         currentForm: PlayerFormId,
         triangleShell: PlayerTriangleShellState,
-        squareShell: PlayerSquareShellState
+        squareShell: PlayerSquareShellState,
+        ballBoostActive: boolean
     ): void {
         this.ballVisual.setPosition(playerX, playerY);
         this.triangleVisual.setPosition(formAnchor.x, formAnchor.y);
         this.triangleVisual.setRotation(triangleShell.orientationRad);
         this.squareVisual.setPosition(playerX, playerY);
         this.squareVisual.setRotation(squareShell.orientationRad);
+        this.updateBallBoostVisualState(currentForm, ballBoostActive);
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached);
         this.updateSquareContactVisual(playerX, playerY, currentForm, squareShell);
         this.renderSquareTrail(squareShell.trailSegments);
@@ -186,6 +195,13 @@ export class PlayerView {
             2,
             hasAttachedState ? PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR : PLAYER_SQUARE_VISUAL_STROKE_COLOR
         );
+    }
+
+    private updateBallBoostVisualState(currentForm: PlayerFormId, ballBoostActive: boolean): void {
+        const strokeWidth = currentForm === 'ball' && ballBoostActive
+            ? PLAYER_BALL_VISUAL_BOOST_STROKE_WIDTH
+            : PLAYER_BALL_VISUAL_STROKE_WIDTH;
+        this.ballVisual.setStrokeStyle(strokeWidth, 0xffffff);
     }
 
     private renderSquareTrail(segments: PlayerSquareTrailSegment[]): void {
