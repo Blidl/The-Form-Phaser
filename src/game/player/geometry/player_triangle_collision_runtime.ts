@@ -55,8 +55,7 @@ export const createTriangleMatterRuntime = (
             frictionStatic: 0,
             frictionAir: 0,
             restitution: 0,
-            ignoreGravity: true,
-            inertia: Infinity
+            ignoreGravity: true
         }
     );
     scene.matter.world.remove(body);
@@ -117,11 +116,11 @@ export const syncTriangleMatterMode = (
 
 export const refreshTriangleMatterContacts = (
     runtime: PlayerTriangleMatterRuntime,
-    triangleCollision: PlayerShellState['triangleCollision']
+    _triangleCollision: PlayerShellState['triangleCollision']
 ): void => {
     runtime.debugPoints.length = 0;
 
-    runtime.body.vertices.forEach((vertex) => {
+    getTriangleVertices(runtime.body).forEach((vertex) => {
         runtime.debugPoints.push({ x: vertex.x, y: vertex.y });
     });
 };
@@ -224,7 +223,7 @@ const resolveTrianglePenetration = (
         let resolvedAnyCollision = false;
 
         for (const surfaceBody of surfaceBodies) {
-            const collision = scene.matter.collision.collides(runtime.body, surfaceBody);
+            const collision = collideBodies(scene, runtime.body, surfaceBody);
             if (!collision || collision.depth <= POSITION_EPSILON) {
                 continue;
             }
@@ -256,7 +255,7 @@ const clampTriangleToWorldBounds = (
     let deltaX = 0;
     let deltaY = 0;
 
-    runtime.body.vertices.forEach((vertex) => {
+    getTriangleVertices(runtime.body).forEach((vertex) => {
         if (vertex.x < worldBounds.x) {
             deltaX = Math.max(deltaX, worldBounds.x - vertex.x);
         } else if (vertex.x > worldBounds.right) {
@@ -328,16 +327,16 @@ const updateTriangleSupportEdge = (
         return;
     }
 
-    const previousEdgeIndex = triangleCollision.groundSupportEdgeIndex;
+        const previousEdgeIndex = triangleCollision.groundSupportEdgeIndex;
     if (
         previousEdgeIndex !== null &&
-        isSupportEdgeStable(scene, runtime.body.vertices, previousEdgeIndex)
+        isSupportEdgeStable(scene, getTriangleVertices(runtime.body), previousEdgeIndex)
     ) {
         triangleCollision.groundSupportEdgeIndex = previousEdgeIndex;
         return;
     }
 
-    triangleCollision.groundSupportEdgeIndex = resolveStableGroundSupportEdge(scene, runtime.body.vertices);
+    triangleCollision.groundSupportEdgeIndex = resolveStableGroundSupportEdge(scene, getTriangleVertices(runtime.body));
 };
 
 const applyTriangleRestingContacts = (
@@ -461,28 +460,9 @@ const rotateOffset = (
     };
 };
 
-const resolveBottomSupportEdgeIndex = (vertices: MatterJS.Vertex[]): TriangleEdgeIndex => {
-    const edgeIndices: TriangleEdgeIndex[] = [0, 1, 2];
-    let selectedEdgeIndex: TriangleEdgeIndex = 2;
-    let selectedMidY = Number.NEGATIVE_INFINITY;
-
-    edgeIndices.forEach((edgeIndex) => {
-        const start = vertices[edgeIndex];
-        const end = vertices[(edgeIndex + 1) % vertices.length];
-        const midpointY = (start.y + end.y) * 0.5;
-
-        if (midpointY > selectedMidY) {
-            selectedMidY = midpointY;
-            selectedEdgeIndex = edgeIndex;
-        }
-    });
-
-    return selectedEdgeIndex;
-};
-
 const isSupportEdgeStable = (
     scene: Scene,
-    vertices: MatterJS.Vertex[],
+    vertices: MatterJS.Vector[],
     edgeIndex: TriangleEdgeIndex
 ): boolean => {
     const stableEdgeIndex = resolveStableGroundSupportEdge(scene, vertices);
@@ -496,7 +476,7 @@ const isSupportEdgeStable = (
 };
 
 const resolveEdgeMidpointY = (
-    vertices: MatterJS.Vertex[],
+    vertices: MatterJS.Vector[],
     edgeIndex: TriangleEdgeIndex
 ): number => {
     const start = vertices[edgeIndex];
@@ -506,7 +486,7 @@ const resolveEdgeMidpointY = (
 
 const resolveStableGroundSupportEdge = (
     scene: Scene,
-    vertices: MatterJS.Vertex[]
+    vertices: MatterJS.Vector[]
 ): TriangleEdgeIndex | null => {
     const surfaceBodies = scene.matter.world.getAllBodies().filter((body) => {
         return isPlatformSurfaceMatterBody(body);
@@ -531,7 +511,7 @@ const resolveStableGroundSupportEdge = (
 };
 
 const isEdgeSupportedByAnyPlatform = (
-    vertices: MatterJS.Vertex[],
+    vertices: MatterJS.Vector[],
     edgeIndex: TriangleEdgeIndex,
     surfaceBodies: MatterJS.BodyType[]
 ): boolean => {
@@ -541,7 +521,7 @@ const isEdgeSupportedByAnyPlatform = (
 };
 
 const isEdgeSupportedByPlatform = (
-    vertices: MatterJS.Vertex[],
+    vertices: MatterJS.Vector[],
     edgeIndex: TriangleEdgeIndex,
     surfaceBody: MatterJS.BodyType
 ): boolean => {
@@ -565,4 +545,16 @@ const isEdgeSupportedByPlatform = (
     const edgeMaxX = Math.max(start.x, end.x);
     const overlapX = Math.min(edgeMaxX, surfaceBody.bounds.max.x) - Math.max(edgeMinX, surfaceBody.bounds.min.x);
     return overlapX > POSITION_EPSILON;
+};
+
+const getTriangleVertices = (body: MatterJS.BodyType): MatterJS.Vector[] => {
+    return body.vertices ?? [];
+};
+
+const collideBodies = (
+    scene: Scene,
+    bodyA: MatterJS.BodyType,
+    bodyB: MatterJS.BodyType
+): MatterJS.ICollisionData | null => {
+    return scene.matter.collision.collides(bodyA, bodyB, null);
 };
