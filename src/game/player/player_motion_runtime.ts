@@ -96,7 +96,15 @@ export const applyCommonHorizontalMotion = (params: ApplyCommonHorizontalMotionP
             effectiveExternalInfluenceX
         );
         const maxStepX = moveResponse * ballBoostAirControlFactor * deltaSec;
-        nextVelocityX = moveToward(currentVelocityX, targetVelocityX, maxStepX);
+        nextVelocityX = resolveNextVelocityXWithAirborneBallBoostInertia({
+            currentVelocityX,
+            targetVelocityX,
+            maxStepX,
+            grounded,
+            isBallForm,
+            hasBoostHold,
+            horizontalDir
+        });
 
         if (grounded) {
             mutable.airborneWindDriftX = 0;
@@ -121,6 +129,44 @@ export const applyCommonHorizontalMotion = (params: ApplyCommonHorizontalMotionP
     }
 
     physicsBody.setVelocityX(nextVelocityX);
+};
+
+interface ResolveNextVelocityXWithAirborneBallBoostInertiaParams {
+    currentVelocityX: number;
+    targetVelocityX: number;
+    maxStepX: number;
+    grounded: boolean;
+    isBallForm: boolean;
+    hasBoostHold: boolean;
+    horizontalDir: -1 | 0 | 1;
+}
+
+const resolveNextVelocityXWithAirborneBallBoostInertia = (
+    params: ResolveNextVelocityXWithAirborneBallBoostInertiaParams
+): number => {
+    const {
+        currentVelocityX,
+        targetVelocityX,
+        maxStepX,
+        grounded,
+        isBallForm,
+        hasBoostHold,
+        horizontalDir
+    } = params;
+
+    if (!grounded && isBallForm && hasBoostHold && horizontalDir !== 0) {
+        const currentDir = Math.sign(currentVelocityX);
+        const targetDir = Math.sign(targetVelocityX);
+        const isPreservingSameDirectionInertia = currentDir !== 0
+            && currentDir === targetDir
+            && Math.abs(currentVelocityX) > Math.abs(targetVelocityX);
+
+        if (isPreservingSameDirectionInertia) {
+            return currentVelocityX;
+        }
+    }
+
+    return moveToward(currentVelocityX, targetVelocityX, maxStepX);
 };
 
 export const applyPauseOrLaunchMovement = (

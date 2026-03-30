@@ -14,6 +14,7 @@ import { resolveEffectiveExternalInfluenceX, resolvePlayerMotionFlags, applyPaus
 import { handlePlayerJumpFlow, applyJumpCutRuntime } from './player_jump_runtime';
 import { tickPlayerMarkerState } from './marker/player_marker_runtime';
 import { resetTriangleCollisionState } from './geometry/player_triangle_collision_runtime';
+import { applyPlayerVerticalProfile } from './player_vertical_profile_runtime';
 import type { PlayerTickRuntimeContext } from './player_runtime_types';
 
 export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
@@ -207,6 +208,16 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         input,
         isTriangleDashActive,
         isSquareAttached
+    });
+
+    applyPlayerVerticalProfile({
+        state,
+        physicsBody,
+        input,
+        grounded,
+        isTriangleDashActive,
+        isSquareAttached,
+        isBallReboundPauseHolding
     });
 
     queueOrApplyBallActionBoost(context.mutable, physicsBody, input, isBallForm, grounded, horizontalDir);

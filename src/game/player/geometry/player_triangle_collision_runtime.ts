@@ -174,7 +174,8 @@ export const stepTriangleMatterKinematicRuntime = (
     }
 
     if (physicsBody.allowGravity && !hasGroundPivot) {
-        physicsBody.setVelocityY(Math.min(MAX_FALL_SPEED, physicsBody.velocity.y + (PLAYER_GRAVITY_Y * deltaSec)));
+        const effectiveGravityY = resolveEffectiveGravityY(physicsBody);
+        physicsBody.setVelocityY(Math.min(MAX_FALL_SPEED, physicsBody.velocity.y + (effectiveGravityY * deltaSec)));
     }
 
     const totalDeltaX = physicsBody.velocity.x * deltaSec;
@@ -701,4 +702,9 @@ const collideBodies = (
     bodyB: MatterJS.BodyType
 ): MatterJS.ICollisionData | null => {
     return scene.matter.collision.collides(bodyA, bodyB, null);
+};
+
+const resolveEffectiveGravityY = (physicsBody: Physics.Arcade.Body): number => {
+    const gravityY = Math.abs(physicsBody.gravity.y);
+    return gravityY > POSITION_EPSILON ? gravityY : PLAYER_GRAVITY_Y;
 };
