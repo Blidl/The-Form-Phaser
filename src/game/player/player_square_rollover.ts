@@ -21,9 +21,6 @@ interface SquareRolloverMoveVector {
 }
 
 interface SquareAttachZoneState {
-    cornerId: SquareCornerId;
-    min: number;
-    max: number;
     isAttached: boolean;
 }
 
@@ -33,6 +30,7 @@ interface SquareRolloverStartCandidate {
     pivotSupportOwner: PlayerSquareTrailSupportOwner;
     targetNormalX: -1 | 0 | 1;
     targetNormalY: -1 | 0 | 1;
+    turnAngleRad: number;
 }
 
 interface TryStartSquareRolloverParams {
@@ -64,29 +62,22 @@ interface TickSquareRolloverParams {
 }
 
 const HALF_SIZE = PLAYER_FORM_SQUARE_SIZE * 0.5;
-const ARC_RADIUS = Math.SQRT2 * HALF_SIZE;
 const AXIS_ZONE_EPSILON = 0.5;
 
 export const createSquareRolloverState = (): PlayerSquareRolloverState => {
     return {
         phase: 'inactive',
         elapsedMs: 0,
-        entryOffsetX: 0,
-        entryOffsetY: 0,
-        alignedStartOffsetX: 0,
-        alignedStartOffsetY: 0,
-        endOffsetX: 0,
-        endOffsetY: 0,
         pivotLocalX: 0,
         pivotLocalY: 0,
         pivotSupportBody: null,
         pivotSupportOriginX: 0,
         pivotSupportOriginY: 0,
-        radius: ARC_RADIUS,
-        startAngleRad: 0,
         deltaAngleRad: 0,
         startOrientationRad: 0,
         endOrientationRad: 0,
+        pivotSquareLocalX: 0,
+        pivotSquareLocalY: 0,
         sourceNormalX: 0,
         sourceNormalY: -1,
         targetNormalX: 0,
@@ -98,22 +89,16 @@ export const createSquareRolloverState = (): PlayerSquareRolloverState => {
 export const resetSquareRolloverState = (state: PlayerSquareRolloverState): void => {
     state.phase = 'inactive';
     state.elapsedMs = 0;
-    state.entryOffsetX = 0;
-    state.entryOffsetY = 0;
-    state.alignedStartOffsetX = 0;
-    state.alignedStartOffsetY = 0;
-    state.endOffsetX = 0;
-    state.endOffsetY = 0;
     state.pivotLocalX = 0;
     state.pivotLocalY = 0;
     state.pivotSupportBody = null;
     state.pivotSupportOriginX = 0;
     state.pivotSupportOriginY = 0;
-    state.radius = ARC_RADIUS;
-    state.startAngleRad = 0;
     state.deltaAngleRad = 0;
     state.startOrientationRad = 0;
     state.endOrientationRad = 0;
+    state.pivotSquareLocalX = 0;
+    state.pivotSquareLocalY = 0;
     state.sourceNormalX = 0;
     state.sourceNormalY = -1;
     state.targetNormalX = 0;
@@ -164,58 +149,40 @@ export const tryStartSquareRollover = (params: TryStartSquareRolloverParams): bo
         return false;
     }
 
-    const alignedStartCenter = {
-        x: startCandidate.pivotWorldX + ((squareShell.attachNormalX + startCandidate.targetNormalX) * HALF_SIZE),
-        y: startCandidate.pivotWorldY + ((squareShell.attachNormalY + startCandidate.targetNormalY) * HALF_SIZE)
-    };
-    const endCenter = {
-        x: startCandidate.pivotWorldX + ((startCandidate.targetNormalX - squareShell.attachNormalX) * HALF_SIZE),
-        y: startCandidate.pivotWorldY + ((startCandidate.targetNormalY - squareShell.attachNormalY) * HALF_SIZE)
-    };
     const targetPose = queryAttachPose(
-        endCenter.x,
-        endCenter.y,
+        currentCenterX,
+        currentCenterY,
         startCandidate.targetNormalX,
         startCandidate.targetNormalY
     );
-    if (targetPose.supportInterval === null) {
-        return false;
-    }
-
     const pivotLocal = squareSupportWorldToLocal(
         startCandidate.pivotWorldX,
         startCandidate.pivotWorldY,
         startCandidate.pivotSupportOwner
     );
+    const pivotSquareLocal = worldOffsetToSquareLocal(
+        startCandidate.pivotWorldX - currentCenterX,
+        startCandidate.pivotWorldY - currentCenterY,
+        squareShell.orientationRad
+    );
 
     rollover.phase = 'forward';
     rollover.elapsedMs = 0;
-    rollover.entryOffsetX = currentCenterX - startCandidate.pivotWorldX;
-    rollover.entryOffsetY = currentCenterY - startCandidate.pivotWorldY;
-    rollover.alignedStartOffsetX = alignedStartCenter.x - startCandidate.pivotWorldX;
-    rollover.alignedStartOffsetY = alignedStartCenter.y - startCandidate.pivotWorldY;
-    rollover.endOffsetX = endCenter.x - startCandidate.pivotWorldX;
-    rollover.endOffsetY = endCenter.y - startCandidate.pivotWorldY;
     rollover.pivotLocalX = pivotLocal.x;
     rollover.pivotLocalY = pivotLocal.y;
     rollover.pivotSupportBody = startCandidate.pivotSupportOwner.body;
     rollover.pivotSupportOriginX = startCandidate.pivotSupportOwner.originX;
     rollover.pivotSupportOriginY = startCandidate.pivotSupportOwner.originY;
-    rollover.radius = ARC_RADIUS;
-    rollover.startAngleRad = Math.atan2(
-        rollover.alignedStartOffsetY,
-        rollover.alignedStartOffsetX
-    );
-    rollover.deltaAngleRad = wrapAngle(
-        Math.atan2(rollover.endOffsetY, rollover.endOffsetX) - rollover.startAngleRad
-    );
+    rollover.deltaAngleRad = startCandidate.turnAngleRad;
     rollover.startOrientationRad = squareShell.orientationRad;
-    rollover.endOrientationRad = squareShell.orientationRad + rollover.deltaAngleRad;
+    rollover.endOrientationRad = squareShell.orientationRad + startCandidate.turnAngleRad;
+    rollover.pivotSquareLocalX = pivotSquareLocal.x;
+    rollover.pivotSquareLocalY = pivotSquareLocal.y;
     rollover.sourceNormalX = squareShell.attachNormalX;
     rollover.sourceNormalY = squareShell.attachNormalY;
     rollover.targetNormalX = startCandidate.targetNormalX;
     rollover.targetNormalY = startCandidate.targetNormalY;
-    rollover.targetPoseValid = targetPose.isPoseClear;
+    rollover.targetPoseValid = targetPose.supportInterval !== null && targetPose.isPoseClear;
 
     squareShell.contactNormalX = squareShell.attachNormalX;
     squareShell.contactNormalY = squareShell.attachNormalY;
@@ -253,32 +220,22 @@ export const tickSquareRollover = (params: TickSquareRolloverParams): void => {
             return;
         }
 
-        if (rollover.targetPoseValid) {
-            const endCenter = resolveRolloverWorldOffsetPoint(rollover, rollover.endOffsetX, rollover.endOffsetY);
-            const targetPose = queryAttachPose(
-                endCenter.x,
-                endCenter.y,
-                rollover.targetNormalX,
-                rollover.targetNormalY
-            );
-            applyRolloverPose(
-                squareShell,
-                physicsBody,
-                endCenter.x,
-                endCenter.y,
-                rollover.endOrientationRad
-            );
-            if (targetPose.supportInterval !== null && targetPose.isPoseClear) {
-                squareShell.attachNormalX = rollover.targetNormalX;
-                squareShell.attachNormalY = rollover.targetNormalY;
-                squareShell.contactNormalX = rollover.targetNormalX;
-                squareShell.contactNormalY = rollover.targetNormalY;
-                squareShell.groundedOrientationRad = rollover.endOrientationRad;
-                physicsBody.checkCollision.none = false;
-                resetSquareRolloverState(rollover);
-                onSuccessCommit(targetPose);
-                return;
-            }
+        const targetPose = queryAttachPose(
+            forwardPose.x,
+            forwardPose.y,
+            rollover.targetNormalX,
+            rollover.targetNormalY
+        );
+        if (targetPose.supportInterval !== null && targetPose.isPoseClear) {
+            squareShell.attachNormalX = rollover.targetNormalX;
+            squareShell.attachNormalY = rollover.targetNormalY;
+            squareShell.contactNormalX = rollover.targetNormalX;
+            squareShell.contactNormalY = rollover.targetNormalY;
+            squareShell.groundedOrientationRad = rollover.endOrientationRad;
+            physicsBody.checkCollision.none = false;
+            resetSquareRolloverState(rollover);
+            onSuccessCommit(targetPose);
+            return;
         }
 
         rollover.phase = 'rollback';
@@ -308,20 +265,10 @@ const sampleForwardPose = (
     elapsedMs: number
 ): { x: number; y: number; orientationRad: number; isComplete: boolean; arcProgress: number } => {
     if (elapsedMs <= PLAYER_SQUARE_ROLLOVER_PREVIEW_TIME_MS) {
-        const previewT = PLAYER_SQUARE_ROLLOVER_PREVIEW_TIME_MS <= 0
-            ? 1
-            : Math.min(1, elapsedMs / PLAYER_SQUARE_ROLLOVER_PREVIEW_TIME_MS);
-        const previewPoint = resolveRolloverInterpolatedPoint(
-            rollover,
-            rollover.entryOffsetX,
-            rollover.entryOffsetY,
-            rollover.alignedStartOffsetX,
-            rollover.alignedStartOffsetY,
-            previewT
-        );
+        const center = resolveSquareCenterAroundPivot(rollover, rollover.startOrientationRad);
         return {
-            x: previewPoint.x,
-            y: previewPoint.y,
+            x: center.x,
+            y: center.y,
             orientationRad: rollover.startOrientationRad,
             isComplete: false,
             arcProgress: 0
@@ -335,13 +282,13 @@ const sampleForwardPose = (
     const arcT = PLAYER_SQUARE_ROLLOVER_DURATION_MS <= 0
         ? 1
         : Math.min(1, arcElapsedMs / PLAYER_SQUARE_ROLLOVER_DURATION_MS);
-    const angle = rollover.startAngleRad + (rollover.deltaAngleRad * arcT);
-    const pivotWorld = resolveRolloverWorldPivot(rollover);
+    const orientationRad = lerpAngle(rollover.startOrientationRad, rollover.endOrientationRad, arcT);
+    const center = resolveSquareCenterAroundPivot(rollover, orientationRad);
 
     return {
-        x: pivotWorld.x + (Math.cos(angle) * rollover.radius),
-        y: pivotWorld.y + (Math.sin(angle) * rollover.radius),
-        orientationRad: lerpAngle(rollover.startOrientationRad, rollover.endOrientationRad, arcT),
+        x: center.x,
+        y: center.y,
+        orientationRad,
         isComplete: arcT >= 1,
         arcProgress: arcT
     };
@@ -351,46 +298,17 @@ const sampleRollbackPose = (
     rollover: PlayerSquareRolloverState,
     elapsedMs: number
 ): { x: number; y: number; orientationRad: number; isComplete: boolean } => {
-    const previewDistance = Math.hypot(
-        rollover.alignedStartOffsetX - rollover.entryOffsetX,
-        rollover.alignedStartOffsetY - rollover.entryOffsetY
-    );
-    const arcLength = rollover.radius * Math.abs(rollover.deltaAngleRad);
-    const totalDistance = previewDistance + arcLength;
-    const rollbackDistance = totalDistance <= 0
-        ? totalDistance
-        : Math.min(totalDistance, (elapsedMs / PLAYER_SQUARE_ROLLOVER_RETURN_TIME_MS) * totalDistance);
-    const remainingArcDistance = Math.max(0, arcLength - rollbackDistance);
-
-    if (rollbackDistance <= arcLength) {
-        const arcT = arcLength <= 0 ? 0 : remainingArcDistance / arcLength;
-        const angle = rollover.startAngleRad + (rollover.deltaAngleRad * arcT);
-        const pivotWorld = resolveRolloverWorldPivot(rollover);
-        return {
-            x: pivotWorld.x + (Math.cos(angle) * rollover.radius),
-            y: pivotWorld.y + (Math.sin(angle) * rollover.radius),
-            orientationRad: lerpAngle(rollover.startOrientationRad, rollover.endOrientationRad, arcT),
-            isComplete: false
-        };
-    }
-
-    const previewProgress = previewDistance <= 0
+    const rollbackT = PLAYER_SQUARE_ROLLOVER_RETURN_TIME_MS <= 0
         ? 1
-        : Math.min(1, (rollbackDistance - arcLength) / previewDistance);
-    const previewPoint = resolveRolloverInterpolatedPoint(
-        rollover,
-        rollover.alignedStartOffsetX,
-        rollover.alignedStartOffsetY,
-        rollover.entryOffsetX,
-        rollover.entryOffsetY,
-        previewProgress
-    );
+        : Math.min(1, elapsedMs / PLAYER_SQUARE_ROLLOVER_RETURN_TIME_MS);
+    const orientationRad = lerpAngle(rollover.endOrientationRad, rollover.startOrientationRad, rollbackT);
+    const center = resolveSquareCenterAroundPivot(rollover, orientationRad);
 
     return {
-        x: previewPoint.x,
-        y: previewPoint.y,
-        orientationRad: rollover.startOrientationRad,
-        isComplete: previewProgress >= 1
+        x: center.x,
+        y: center.y,
+        orientationRad,
+        isComplete: rollbackT >= 1
     };
 };
 
@@ -425,20 +343,21 @@ const resolveRolloverStartCandidate = (
     const faceZones = resolveAttachFaceZones(currentPose, attachNormalX, attachNormalY);
     const leadingZone = moveVector.x < 0 || moveVector.y < 0 ? faceZones.leadingNegative : faceZones.leadingPositive;
     const trailingZone = moveVector.x < 0 || moveVector.y < 0 ? faceZones.leadingPositive : faceZones.leadingNegative;
-
     if (leadingZone.isAttached || !trailingZone.isAttached) {
         return null;
     }
 
     const pivotAxisValue = moveVector.x < 0 || moveVector.y < 0 ? supportInterval.min : supportInterval.max;
     const pivotWorld = resolvePivotWorldPoint(currentPose, attachNormalX, attachNormalY, pivotAxisValue);
+    const turnAngleRad = resolveTurnAngleRad(attachNormalX, attachNormalY, moveVector);
 
     return {
         pivotWorldX: pivotWorld.x,
         pivotWorldY: pivotWorld.y,
         pivotSupportOwner: currentPose.surfacePoint.supportOwner,
         targetNormalX: (-moveVector.x) as -1 | 0 | 1,
-        targetNormalY: (-moveVector.y) as -1 | 0 | 1
+        targetNormalY: (-moveVector.y) as -1 | 0 | 1,
+        turnAngleRad
     };
 };
 
@@ -448,59 +367,39 @@ const resolveAttachFaceZones = (
     attachNormalY: -1 | 0 | 1
 ): { leadingNegative: SquareAttachZoneState; leadingPositive: SquareAttachZoneState } => {
     if (attachNormalY === -1) {
-        return buildHorizontalFaceZones(currentPose, 'BL', 'BR');
+        return buildHorizontalFaceZones(currentPose);
     }
 
     if (attachNormalY === 1) {
-        return buildHorizontalFaceZones(currentPose, 'TL', 'TR');
+        return buildHorizontalFaceZones(currentPose);
     }
 
-    if (attachNormalX === 1) {
-        return buildVerticalFaceZones(currentPose, 'TL', 'BL');
-    }
-
-    return buildVerticalFaceZones(currentPose, 'TR', 'BR');
+    return buildVerticalFaceZones(currentPose);
 };
 
 const buildHorizontalFaceZones = (
-    currentPose: PlayerSquareAttachPoseQuery,
-    leftCornerId: SquareCornerId,
-    rightCornerId: SquareCornerId
+    currentPose: PlayerSquareAttachPoseQuery
 ): { leadingNegative: SquareAttachZoneState; leadingPositive: SquareAttachZoneState } => {
     const centerX = currentPose.rect.centerX;
     return {
         leadingNegative: {
-            cornerId: leftCornerId,
-            min: currentPose.rect.left,
-            max: centerX,
             isAttached: doesSupportIntervalOverlapZone(currentPose.supportInterval, currentPose.rect.left, centerX)
         },
         leadingPositive: {
-            cornerId: rightCornerId,
-            min: centerX,
-            max: currentPose.rect.right,
             isAttached: doesSupportIntervalOverlapZone(currentPose.supportInterval, centerX, currentPose.rect.right)
         }
     };
 };
 
 const buildVerticalFaceZones = (
-    currentPose: PlayerSquareAttachPoseQuery,
-    topCornerId: SquareCornerId,
-    bottomCornerId: SquareCornerId
+    currentPose: PlayerSquareAttachPoseQuery
 ): { leadingNegative: SquareAttachZoneState; leadingPositive: SquareAttachZoneState } => {
     const centerY = currentPose.rect.centerY;
     return {
         leadingNegative: {
-            cornerId: topCornerId,
-            min: currentPose.rect.top,
-            max: centerY,
             isAttached: doesSupportIntervalOverlapZone(currentPose.supportInterval, currentPose.rect.top, centerY)
         },
         leadingPositive: {
-            cornerId: bottomCornerId,
-            min: centerY,
-            max: currentPose.rect.bottom,
             isAttached: doesSupportIntervalOverlapZone(currentPose.supportInterval, centerY, currentPose.rect.bottom)
         }
     };
@@ -541,6 +440,18 @@ const resolvePivotWorldPoint = (
     return { x: currentPose.rect.right, y: pivotAxisValue };
 };
 
+const resolveTurnAngleRad = (
+    attachNormalX: -1 | 0 | 1,
+    attachNormalY: -1 | 0 | 1,
+    moveVector: SquareRolloverMoveVector
+): number => {
+    if (attachNormalY !== 0) {
+        return moveVector.x * (Math.PI * 0.5);
+    }
+
+    return (attachNormalX * moveVector.y) * (Math.PI * 0.5);
+};
+
 const resolveRolloverWorldPivot = (
     rollover: PlayerSquareRolloverState
 ): { x: number; y: number } => {
@@ -555,32 +466,47 @@ const resolveRolloverWorldPivot = (
     );
 };
 
-const resolveRolloverWorldOffsetPoint = (
+const resolveSquareCenterAroundPivot = (
     rollover: PlayerSquareRolloverState,
-    offsetX: number,
-    offsetY: number
+    orientationRad: number
 ): { x: number; y: number } => {
     const pivotWorld = resolveRolloverWorldPivot(rollover);
+    const pivotOffsetWorld = squareLocalToWorldOffset(
+        rollover.pivotSquareLocalX,
+        rollover.pivotSquareLocalY,
+        orientationRad
+    );
+
     return {
-        x: pivotWorld.x + offsetX,
-        y: pivotWorld.y + offsetY
+        x: pivotWorld.x - pivotOffsetWorld.x,
+        y: pivotWorld.y - pivotOffsetWorld.y
     };
 };
 
-const resolveRolloverInterpolatedPoint = (
-    rollover: PlayerSquareRolloverState,
-    fromOffsetX: number,
-    fromOffsetY: number,
-    toOffsetX: number,
-    toOffsetY: number,
-    t: number
+const worldOffsetToSquareLocal = (
+    offsetX: number,
+    offsetY: number,
+    orientationRad: number
 ): { x: number; y: number } => {
-    const worldPoint = resolveRolloverWorldOffsetPoint(
-        rollover,
-        linearInterpolate(fromOffsetX, toOffsetX, t),
-        linearInterpolate(fromOffsetY, toOffsetY, t)
-    );
-    return worldPoint;
+    const cos = Math.cos(orientationRad);
+    const sin = Math.sin(orientationRad);
+    return {
+        x: (offsetX * cos) + (offsetY * sin),
+        y: (-offsetX * sin) + (offsetY * cos)
+    };
+};
+
+const squareLocalToWorldOffset = (
+    localX: number,
+    localY: number,
+    orientationRad: number
+): { x: number; y: number } => {
+    const cos = Math.cos(orientationRad);
+    const sin = Math.sin(orientationRad);
+    return {
+        x: (localX * cos) - (localY * sin),
+        y: (localX * sin) + (localY * cos)
+    };
 };
 
 const applyRolloverPose = (
@@ -592,10 +518,6 @@ const applyRolloverPose = (
 ): void => {
     squareShell.orientationRad = orientationRad;
     physicsBody.reset(centerX, centerY);
-};
-
-const linearInterpolate = (from: number, to: number, t: number): number => {
-    return from + ((to - from) * t);
 };
 
 const wrapAngle = (angle: number): number => {
