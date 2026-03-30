@@ -10,6 +10,13 @@ const POSITION_EPSILON = 0.0001;
 const SUPPORT_EDGE_SWITCH_TOLERANCE_PX = 1.5;
 const RESTING_CONTACT_GAP_PX = 2;
 const SUPPORT_EDGE_LEVEL_TOLERANCE_PX = 1.25;
+const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
+const TRIANGLE_HALF_HEIGHT = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
+const TRIANGLE_LOCAL_VERTICES = [
+    { x: -TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT },
+    { x: 0, y: -TRIANGLE_HALF_HEIGHT },
+    { x: TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT }
+] as const;
 
 export const createTriangleCollisionState = () => {
     return {
@@ -32,6 +39,11 @@ export interface PlayerTriangleMatterRuntime {
     readonly body: MatterJS.BodyType;
     readonly debugPoints: Array<{ x: number; y: number }>;
     readonly bodyOffsetFromAnchorLocal: { x: number; y: number };
+    hasGroundPivot: boolean;
+    groundPivotWorldX: number;
+    groundPivotWorldY: number;
+    groundPivotLocalOffsetX: number;
+    groundPivotLocalOffsetY: number;
 }
 
 export const createTriangleMatterRuntime = (
@@ -63,7 +75,12 @@ export const createTriangleMatterRuntime = (
     return {
         body,
         debugPoints: [],
-        bodyOffsetFromAnchorLocal: resolveTriangleCentroidOffset()
+        bodyOffsetFromAnchorLocal: resolveTriangleCentroidOffset(),
+        hasGroundPivot: false,
+        groundPivotWorldX: x,
+        groundPivotWorldY: y,
+        groundPivotLocalOffsetX: 0,
+        groundPivotLocalOffsetY: 0
     };
 };
 
@@ -95,6 +112,7 @@ export const syncTriangleMatterMode = (
     _frozenForRespawn: boolean
 ): void => {
     if (state.currentForm !== 'triangle') {
+        clearTriangleGroundPivot(runtime);
         const bodyOffset = rotateOffset(runtime.bodyOffsetFromAnchorLocal, 0);
         scene.matter.body.setPosition(runtime.body, {
             x: physicsSprite.x + bodyOffset.x,
@@ -103,6 +121,18 @@ export const syncTriangleMatterMode = (
         scene.matter.body.setAngle(runtime.body, 0);
         refreshTriangleMatterContacts(runtime, state.triangleCollision);
         return;
+    }
+
+    if (state.triangleCollision.hasGroundContact && state.triangleCollision.groundSupportEdgeIndex === null && runtime.hasGroundPivot) {
+        const pivotAnchor = resolveTriangleAnchorFromPivot(
+            runtime.groundPivotLocalOffsetX,
+            runtime.groundPivotLocalOffsetY,
+            state.triangleShell.orientationRad,
+            runtime.groundPivotWorldX,
+            runtime.groundPivotWorldY
+        );
+        physicsSprite.x = pivotAnchor.x;
+        physicsSprite.y = pivotAnchor.y;
     }
 
     const bodyOffset = rotateOffset(runtime.bodyOffsetFromAnchorLocal, state.triangleShell.orientationRad);
@@ -136,8 +166,14 @@ export const stepTriangleMatterKinematicRuntime = (
     resetTriangleCollisionState(triangleCollision);
     resolveTrianglePenetration(scene, runtime, triangleCollision, physicsBody);
     clampTriangleToWorldBounds(scene, runtime, triangleCollision, physicsBody);
+    updateTriangleGroundPivot(scene, runtime, triangleCollision);
 
-    if (physicsBody.allowGravity) {
+    const hasGroundPivot = runtime.hasGroundPivot && triangleCollision.groundSupportEdgeIndex === null;
+    if (hasGroundPivot) {
+        physicsBody.setVelocity(0, 0);
+    }
+
+    if (physicsBody.allowGravity && !hasGroundPivot) {
         physicsBody.setVelocityY(Math.min(MAX_FALL_SPEED, physicsBody.velocity.y + (PLAYER_GRAVITY_Y * deltaSec)));
     }
 
@@ -156,6 +192,7 @@ export const stepTriangleMatterKinematicRuntime = (
     syncTriangleProxyFromMatter(runtime, physicsSprite, physicsBody);
     applyTriangleRestingContacts(scene, runtime, triangleCollision, physicsBody);
     updateTriangleSupportEdge(scene, runtime, triangleCollision);
+    updateTriangleGroundPivot(scene, runtime, triangleCollision);
     refreshTriangleMatterContacts(runtime, triangleCollision);
 };
 
@@ -172,6 +209,7 @@ export const primeTriangleMatterKinematicState = (
     syncTriangleProxyFromMatter(runtime, physicsSprite, physicsBody);
     applyTriangleRestingContacts(scene, runtime, triangleCollision, physicsBody);
     updateTriangleSupportEdge(scene, runtime, triangleCollision);
+    updateTriangleGroundPivot(scene, runtime, triangleCollision);
     refreshTriangleMatterContacts(runtime, triangleCollision);
 };
 
@@ -433,17 +471,9 @@ const resolveTrianglePlatformSeparation = (
 };
 
 const resolveTriangleCentroidOffset = (): { x: number; y: number } => {
-    const halfWidth = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
-    const halfHeight = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
-    const localVertices = [
-        { x: -halfWidth, y: halfHeight },
-        { x: 0, y: -halfHeight },
-        { x: halfWidth, y: halfHeight }
-    ];
-
     return {
-        x: (localVertices[0].x + localVertices[1].x + localVertices[2].x) / 3,
-        y: (localVertices[0].y + localVertices[1].y + localVertices[2].y) / 3
+        x: (TRIANGLE_LOCAL_VERTICES[0].x + TRIANGLE_LOCAL_VERTICES[1].x + TRIANGLE_LOCAL_VERTICES[2].x) / 3,
+        y: (TRIANGLE_LOCAL_VERTICES[0].y + TRIANGLE_LOCAL_VERTICES[1].y + TRIANGLE_LOCAL_VERTICES[2].y) / 3
     };
 };
 
@@ -549,6 +579,120 @@ const isEdgeSupportedByPlatform = (
 
 const getTriangleVertices = (body: MatterJS.BodyType): MatterJS.Vector[] => {
     return body.vertices ?? [];
+};
+
+const updateTriangleGroundPivot = (
+    scene: Scene,
+    runtime: PlayerTriangleMatterRuntime,
+    triangleCollision: PlayerShellState['triangleCollision']
+): void => {
+    if (!triangleCollision.hasGroundContact || triangleCollision.groundSupportEdgeIndex !== null) {
+        clearTriangleGroundPivot(runtime);
+        return;
+    }
+
+    const pivotPoint = resolveGroundPivotPoint(scene, getTriangleVertices(runtime.body));
+    if (pivotPoint === null) {
+        clearTriangleGroundPivot(runtime);
+        return;
+    }
+
+    if (
+        runtime.hasGroundPivot &&
+        Math.abs(runtime.groundPivotWorldX - pivotPoint.x) <= POSITION_EPSILON &&
+        Math.abs(runtime.groundPivotWorldY - pivotPoint.y) <= POSITION_EPSILON
+    ) {
+        return;
+    }
+
+    const anchorOffset = rotateOffset(runtime.bodyOffsetFromAnchorLocal, runtime.body.angle);
+    const anchorX = runtime.body.position.x - anchorOffset.x;
+    const anchorY = runtime.body.position.y - anchorOffset.y;
+    const pivotAnchorSpaceOffset = inverseRotateOffset(
+        {
+            x: pivotPoint.x - anchorX,
+            y: pivotPoint.y - anchorY
+        },
+        runtime.body.angle
+    );
+
+    runtime.hasGroundPivot = true;
+    runtime.groundPivotWorldX = pivotPoint.x;
+    runtime.groundPivotWorldY = pivotPoint.y;
+    runtime.groundPivotLocalOffsetX = pivotAnchorSpaceOffset.x;
+    runtime.groundPivotLocalOffsetY = pivotAnchorSpaceOffset.y;
+};
+
+const clearTriangleGroundPivot = (runtime: PlayerTriangleMatterRuntime): void => {
+    runtime.hasGroundPivot = false;
+};
+
+const resolveGroundPivotPoint = (
+    scene: Scene,
+    vertices: MatterJS.Vector[]
+): MatterJS.Vector | null => {
+    const surfaceBodies = scene.matter.world.getAllBodies().filter((body) => {
+        return isPlatformSurfaceMatterBody(body);
+    });
+    const supportedCorners: MatterJS.Vector[] = [];
+
+    vertices.forEach((vertex) => {
+        const isSupported = surfaceBodies.some((surfaceBody) => {
+            return isCornerSupportedByPlatform(vertex, surfaceBody);
+        });
+
+        if (!isSupported) {
+            return;
+        }
+
+        supportedCorners.push(vertex);
+    });
+
+    if (supportedCorners.length !== 1) {
+        return null;
+    }
+
+    return supportedCorners[0];
+};
+
+const isCornerSupportedByPlatform = (
+    vertex: MatterJS.Vector,
+    surfaceBody: MatterJS.BodyType
+): boolean => {
+    const cornerGap = surfaceBody.bounds.min.y - vertex.y;
+    const insidePlatformX = vertex.x >= surfaceBody.bounds.min.x - POSITION_EPSILON
+        && vertex.x <= surfaceBody.bounds.max.x + POSITION_EPSILON;
+    return insidePlatformX && cornerGap >= -POSITION_EPSILON && cornerGap <= RESTING_CONTACT_GAP_PX;
+};
+
+const resolveTriangleAnchorFromPivot = (
+    pivotLocalOffsetX: number,
+    pivotLocalOffsetY: number,
+    orientationRad: number,
+    pivotWorldX: number,
+    pivotWorldY: number
+): { x: number; y: number } => {
+    const rotatedPivotOffset = rotateOffset(
+        { x: pivotLocalOffsetX, y: pivotLocalOffsetY },
+        orientationRad
+    );
+    return {
+        x: pivotWorldX - rotatedPivotOffset.x,
+        y: pivotWorldY - rotatedPivotOffset.y
+    };
+};
+
+const inverseRotateOffset = (
+    offset: { x: number; y: number },
+    angleRad: number
+): { x: number; y: number } => {
+    const sin = Math.sin(angleRad);
+    const cos = Math.cos(angleRad);
+
+    return {
+        x: (offset.x * cos) + (offset.y * sin),
+        y: (-offset.x * sin) + (offset.y * cos)
+    };
 };
 
 const collideBodies = (
