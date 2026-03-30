@@ -4,9 +4,9 @@ import {
     PLAYER_MARKER_SMOOTHING_TIME_SEC
 } from '../player_constants';
 import type { PlayerInputSnapshot } from '../player_input';
-import type { PlayerFormId } from '../player_types';
+import type { PlayerShellState } from '../player_types';
 import type { PlayerMarkerState } from './player_marker_types';
-import { clampMarkerOffsetToForm } from './player_marker_math';
+import { clampMarkerOffsetToForm, resolveGroundedTriangleMarkerOffset } from './player_marker_math';
 
 export const createPlayerMarkerState = (): PlayerMarkerState => {
     return {
@@ -38,20 +38,26 @@ export const clampPlayerMarkerStateToForm = (
 
 export const tickPlayerMarkerState = (
     marker: PlayerMarkerState,
-    form: PlayerFormId,
+    state: PlayerShellState,
     input: PlayerInputSnapshot,
     deltaSec: number
 ): void => {
+    const form = state.currentForm;
     const intentX = input.forcePointX;
     const intentY = input.forcePointY;
     const hasIntent = input.forcePointActive;
+    const groundedTriangleTarget = resolveGroundedTriangleMarkerTarget(state, input);
     const moveSpeed = hasIntent ? PLAYER_MARKER_MOVE_SPEED_PX_PER_SEC : PLAYER_MARKER_RETURN_SPEED_PX_PER_SEC;
-    const nextTargetX = hasIntent
-        ? marker.targetOffsetX + (intentX * moveSpeed * deltaSec)
-        : moveToward(marker.targetOffsetX, 0, moveSpeed * deltaSec);
-    const nextTargetY = hasIntent
-        ? marker.targetOffsetY + (intentY * moveSpeed * deltaSec)
-        : moveToward(marker.targetOffsetY, 0, moveSpeed * deltaSec);
+    const nextTargetX = groundedTriangleTarget !== null
+        ? moveToward(marker.targetOffsetX, groundedTriangleTarget.x, moveSpeed * deltaSec)
+        : hasIntent
+            ? marker.targetOffsetX + (intentX * moveSpeed * deltaSec)
+            : moveToward(marker.targetOffsetX, 0, moveSpeed * deltaSec);
+    const nextTargetY = groundedTriangleTarget !== null
+        ? moveToward(marker.targetOffsetY, groundedTriangleTarget.y, moveSpeed * deltaSec)
+        : hasIntent
+            ? marker.targetOffsetY + (intentY * moveSpeed * deltaSec)
+            : moveToward(marker.targetOffsetY, 0, moveSpeed * deltaSec);
     const clampedTarget = clampMarkerOffsetToForm(form, nextTargetX, nextTargetY);
 
     marker.targetOffsetX = clampedTarget.x;
@@ -64,6 +70,30 @@ export const tickPlayerMarkerState = (
 
     marker.currentOffsetX = clampedCurrent.x;
     marker.currentOffsetY = clampedCurrent.y;
+};
+
+const resolveGroundedTriangleMarkerTarget = (
+    state: PlayerShellState,
+    input: PlayerInputSnapshot
+): { x: number; y: number } | null => {
+    if (state.currentForm !== 'triangle') {
+        return null;
+    }
+
+    const supportEdgeIndex = state.triangleCollision.groundSupportEdgeIndex;
+    if (!state.triangleCollision.hasGroundContact || supportEdgeIndex === null) {
+        return null;
+    }
+
+    if (!input.forcePointActive) {
+        return { x: 0, y: 0 };
+    }
+
+    return resolveGroundedTriangleMarkerOffset(
+        input.forcePointX,
+        input.forcePointY,
+        state.triangleShell.orientationRad
+    );
 };
 
 const moveToward = (current: number, target: number, maxDelta: number): number => {

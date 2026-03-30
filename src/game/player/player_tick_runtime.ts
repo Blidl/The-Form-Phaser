@@ -72,7 +72,7 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const rawHorizontalDir = ((input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0)) as -1 | 0 | 1;
     const rawVerticalDir = ((input.moveDown ? 1 : 0) - (input.moveUp ? 1 : 0)) as -1 | 0 | 1;
 
-    tickPlayerMarkerState(state.marker, state.currentForm, input, deltaSec);
+    tickPlayerMarkerState(state.marker, state, input, deltaSec);
 
     if (isBallForm && grounded && input.actionHeld && !context.mutable.boostActive && rawHorizontalDir !== 0) {
         tryApplyBallBoost(context.mutable, physicsBody, grounded, rawHorizontalDir);

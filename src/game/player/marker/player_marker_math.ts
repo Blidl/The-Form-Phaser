@@ -64,6 +64,57 @@ export const resolveMarkerIntent = (
     };
 };
 
+export const resolveGroundedTriangleMarkerOffset = (
+    inputX: -1 | 0 | 1,
+    inputY: -1 | 0 | 1,
+    orientationRad: number
+): { x: number; y: number } => {
+    const vertices = resolveRotatedTriangleVertices(orientationRad);
+    const { topCorner, leftBottomCorner, rightBottomCorner } = resolveTriangleGroundedReferencePoints(vertices);
+    const supportCornerA = leftBottomCorner;
+    const supportCornerB = rightBottomCorner;
+    const supportMidpoint = midpoint(supportCornerA, supportCornerB);
+    const sideMidpointA = midpoint(topCorner, supportCornerA);
+    const sideMidpointB = midpoint(topCorner, supportCornerB);
+    const leftSupportCorner = leftBottomCorner;
+    const rightSupportCorner = rightBottomCorner;
+    const [leftSideMidpoint, rightSideMidpoint] = sortLeftRight(sideMidpointA, sideMidpointB);
+
+    if (inputX === 0 && inputY === 0) {
+        return { x: 0, y: 0 };
+    }
+
+    if (inputY > 0) {
+        if (inputX < 0) {
+            return leftSupportCorner;
+        }
+
+        if (inputX > 0) {
+            return rightSupportCorner;
+        }
+
+        return supportMidpoint;
+    }
+
+    if (inputY < 0) {
+        if (inputX < 0) {
+            return leftSideMidpoint;
+        }
+
+        if (inputX > 0) {
+            return rightSideMidpoint;
+        }
+
+        return topCorner;
+    }
+
+    if (inputX < 0) {
+        return leftSideMidpoint;
+    }
+
+    return rightSideMidpoint;
+};
+
 const PLAYER_PLACEHOLDER_MARKER_RADIUS = Math.min(
     PLAYER_MARKER_MAX_OFFSET_PX,
     Math.max(0, PLAYER_PLACEHOLDER_RADIUS - PLAYER_MARKER_RADIUS - 4)
@@ -94,6 +145,59 @@ const clampMarkerOffsetToTriangle = (offsetX: number, offsetY: number): { x: num
     }
 
     return closestPointOnTriangle(offsetX, offsetY, insetVertices[0], insetVertices[1], insetVertices[2]);
+};
+
+const resolveRotatedTriangleVertices = (orientationRad: number): [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }] => {
+    const sin = Math.sin(orientationRad);
+    const cos = Math.cos(orientationRad);
+
+    return TRIANGLE_CENTROID_LOCAL_VERTICES.map((vertex) => {
+        return {
+            x: (vertex.x * cos) - (vertex.y * sin),
+            y: (vertex.x * sin) + (vertex.y * cos)
+        };
+    }) as [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }];
+};
+
+const resolveTriangleGroundedReferencePoints = (
+    vertices: [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }]
+): {
+    topCorner: { x: number; y: number };
+    leftBottomCorner: { x: number; y: number };
+    rightBottomCorner: { x: number; y: number };
+} => {
+    const sortedByY = [...vertices].sort((first, second) => {
+        if (Math.abs(first.y - second.y) > EPSILON) {
+            return first.y - second.y;
+        }
+
+        return first.x - second.x;
+    });
+    const topCorner = sortedByY[0];
+    const lowerCorners = sortLeftRight(sortedByY[1], sortedByY[2]);
+
+    return {
+        topCorner,
+        leftBottomCorner: lowerCorners[0],
+        rightBottomCorner: lowerCorners[1]
+    };
+};
+
+const midpoint = (
+    first: { x: number; y: number },
+    second: { x: number; y: number }
+): { x: number; y: number } => {
+    return {
+        x: (first.x + second.x) * 0.5,
+        y: (first.y + second.y) * 0.5
+    };
+};
+
+const sortLeftRight = <T extends { x: number; y: number }>(
+    first: T,
+    second: T
+): [T, T] => {
+    return first.x <= second.x ? [first, second] : [second, first];
 };
 
 const insetConvexPolygon = (
