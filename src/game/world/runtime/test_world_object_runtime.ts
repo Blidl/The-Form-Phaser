@@ -7,6 +7,7 @@ import type { PlayerWorldActor } from '../../player/player_runtime_contracts';
 export interface TestWorldObjectRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
+    syncPlayerCollisionMode: (useArcadePlatformCollisions: boolean) => void;
 }
 
 interface CreateTestWorldObjectRuntimeParams {
@@ -39,7 +40,7 @@ export const createTestWorldObjectRuntime = (
             speed: 120
         })
     ];
-    scene.physics.add.collider(player.arcadeBodyObject, movingPlatforms[0].bodyObject);
+    const movingPlatformCollider = scene.physics.add.collider(player.arcadeBodyObject, movingPlatforms[0].bodyObject);
 
     const triggerPlatform = createTriggerPlatform(scene, {
         triggerX: 560,
@@ -52,7 +53,7 @@ export const createTestWorldObjectRuntime = (
         platformHeight: 22
     });
 
-    scene.physics.add.collider(player.arcadeBodyObject, triggerPlatform.platformBodyObject);
+    const triggerPlatformCollider = scene.physics.add.collider(player.arcadeBodyObject, triggerPlatform.platformBodyObject);
     scene.physics.add.overlap(player.arcadeBodyObject, triggerPlatform.triggerZone, () => {
         if (!triggerPlatform.isActivated()) {
             triggerPlatform.activate();
@@ -65,6 +66,10 @@ export const createTestWorldObjectRuntime = (
             movingPlatforms.forEach((platform) => {
                 platform.update();
             });
+        },
+        syncPlayerCollisionMode: (useArcadePlatformCollisions: boolean): void => {
+            movingPlatformCollider.active = useArcadePlatformCollisions;
+            triggerPlatformCollider.active = useArcadePlatformCollisions;
         }
     };
 };

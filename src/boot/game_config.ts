@@ -14,6 +14,10 @@ export const createGameConfig = (parent: string): Types.Core.GameConfig => {
             arcade: {
                 gravity: { x: 0, y: 0 },
                 debug: false
+            },
+            matter: {
+                gravity: { x: 0, y: 0 },
+                debug: false
             }
         },
         scene: [BootScene, TestScene]

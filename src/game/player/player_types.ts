@@ -3,6 +3,7 @@ import type { PlayerMarkerState } from './marker/player_marker_types';
 
 export type PlayerFormId = 'ball' | 'triangle' | 'square';
 export type TriangleCornerIndex = 0 | 1 | 2;
+export type TriangleEdgeIndex = 0 | 1 | 2;
 
 export interface PlayerTriangleShellState {
     orientationRad: number;
@@ -10,6 +11,14 @@ export interface PlayerTriangleShellState {
     visualOffsetY: number;
     airborneSpinDirection: -1 | 1;
     airborneAngularVelocityRadPerSec: number;
+}
+
+export interface PlayerTriangleCollisionState {
+    hasGroundContact: boolean;
+    hasCeilingContact: boolean;
+    hasLeftWallContact: boolean;
+    hasRightWallContact: boolean;
+    groundSupportEdgeIndex: TriangleEdgeIndex | null;
 }
 
 export interface PlayerSquareShellState {
@@ -88,6 +97,7 @@ export interface PlayerShellState {
     currentForm: PlayerFormId;
     marker: PlayerMarkerState;
     triangleShell: PlayerTriangleShellState;
+    triangleCollision: PlayerTriangleCollisionState;
     squareShell: PlayerSquareShellState;
     triangleDash: PlayerTriangleDashState;
     triangleCharges: PlayerTriangleChargesState;

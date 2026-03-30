@@ -46,6 +46,9 @@ export interface PlayerTickRuntimeContext {
     mutable: PlayerMutableRuntimeState;
     groundedDragX: number;
     handleFormSwitch: () => void;
+    refreshTrianglePhysicsState: () => void;
+    commitTrianglePhysicsState: (deltaSec: number) => void;
+    getTransformLockMs: () => number;
     resolveSquareTrailSurfacePoint: (normalX: -1 | 0 | 1, normalY: -1 | 0 | 1) => PlayerSquareTrailSurfacePoint;
     isCurrentlyGrounded: () => boolean;
 }

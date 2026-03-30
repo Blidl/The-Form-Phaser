@@ -1,4 +1,4 @@
-import type { PlayerTriangleShellState } from './player_types';
+import type { PlayerTriangleShellState, TriangleEdgeIndex } from './player_types';
 import {
     PLAYER_FORM_TRIANGLE_HEIGHT,
     PLAYER_FORM_TRIANGLE_WIDTH,
@@ -7,9 +7,7 @@ import {
     PLAYER_TRIANGLE_AIRBORNE_PASSIVE_SPIN_RAD_PER_SEC,
     PLAYER_TRIANGLE_AIRBORNE_SPIN_ACCEL_RAD_PER_SEC_SQ,
     PLAYER_TRIANGLE_AIRBORNE_SPIN_DECEL_RAD_PER_SEC_SQ,
-    PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
-    PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD,
-    PLAYER_TRIANGLE_GROUNDED_SETTLE_LERP_SPEED
+    PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD
 } from './player_constants';
 
 export const createTriangleShellState = (initialSpinDirection: -1 | 1): PlayerTriangleShellState => {
@@ -37,26 +35,23 @@ export const tickTriangleShellOrientation = (
     triangleShell: PlayerTriangleShellState,
     grounded: boolean,
     justLanded: boolean,
+    groundSupportEdgeIndex: TriangleEdgeIndex | null,
     horizontalMoveDir: number,
     horizontalVelocityX: number,
     deltaSec: number
 ): void => {
     if (grounded) {
-        if (justLanded) {
-            triangleShell.groundedOrientationRad = findNearestGroundedOrientation(triangleShell.orientationRad);
+        if (justLanded && groundSupportEdgeIndex !== null) {
+            triangleShell.groundedOrientationRad = resolveGroundedOrientationFromSupportEdge(groundSupportEdgeIndex);
+        } else if (justLanded) {
+            triangleShell.groundedOrientationRad = resolveNearestGroundedOrientation(triangleShell.orientationRad);
             triangleShell.airborneSpinDirection = horizontalMoveDir !== 0
                 ? (horizontalMoveDir > 0 ? 1 : -1)
                 : triangleShell.airborneSpinDirection;
         }
 
-        const settleT = Math.min(1, PLAYER_TRIANGLE_GROUNDED_SETTLE_LERP_SPEED * deltaSec);
-        triangleShell.orientationRad = lerpAngle(
-            triangleShell.orientationRad,
-            triangleShell.groundedOrientationRad,
-            settleT
-        );
-        const groundedOffsetY = resolveGroundedVisualOffsetY(triangleShell.groundedOrientationRad);
-        triangleShell.visualOffsetY = triangleShell.visualOffsetY + ((groundedOffsetY - triangleShell.visualOffsetY) * settleT);
+        triangleShell.orientationRad = triangleShell.groundedOrientationRad;
+        triangleShell.visualOffsetY = 0;
         triangleShell.airborneAngularVelocityRadPerSec = 0;
 
         return;
@@ -91,11 +86,6 @@ export const tickTriangleShellOrientation = (
     );
 };
 
-const lerpAngle = (from: number, to: number, t: number): number => {
-    const wrappedDelta = Math.atan2(Math.sin(to - from), Math.cos(to - from));
-    return from + (wrappedDelta * t);
-};
-
 const normalizeAngle = (angle: number): number => {
     return Math.atan2(Math.sin(angle), Math.cos(angle));
 };
@@ -124,11 +114,38 @@ const clamp = (value: number, min: number, max: number): number => {
     return value;
 };
 
-const findNearestGroundedOrientation = (angle: number): number => {
-    let nearest: number = PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD[0];
+const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
+const TRIANGLE_HALF_HEIGHT = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
+const TRIANGLE_LOCAL_VERTICES = [
+    { x: -TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT },
+    { x: 0, y: -TRIANGLE_HALF_HEIGHT },
+    { x: TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT }
+] as const;
+
+export const resolveGroundedOrientationFromSupportEdge = (edgeIndex: TriangleEdgeIndex): number => {
+    const start = TRIANGLE_LOCAL_VERTICES[edgeIndex];
+    const end = TRIANGLE_LOCAL_VERTICES[(edgeIndex + 1) % TRIANGLE_LOCAL_VERTICES.length];
+    const edgeAngle = Math.atan2(end.y - start.y, end.x - start.x);
+    const candidates = [
+        normalizeAngle(-edgeAngle),
+        normalizeAngle(Math.PI - edgeAngle)
+    ];
+    const oppositeVertex = TRIANGLE_LOCAL_VERTICES[(edgeIndex + 2) % TRIANGLE_LOCAL_VERTICES.length];
+
+    return candidates.find((candidate) => {
+        const rotatedStartY = rotatePointY(start.x, start.y, candidate);
+        const rotatedOppositeY = rotatePointY(oppositeVertex.x, oppositeVertex.y, candidate);
+        return rotatedOppositeY < rotatedStartY;
+    }) ?? candidates[0];
+};
+
+const resolveNearestGroundedOrientation = (angle: number): number => {
+    const candidates: TriangleEdgeIndex[] = [0, 1, 2];
+    let nearest = resolveGroundedOrientationFromSupportEdge(2);
     let nearestDistance = Infinity;
 
-    PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD.forEach((candidate) => {
+    candidates.forEach((edgeIndex) => {
+        const candidate = resolveGroundedOrientationFromSupportEdge(edgeIndex);
         const delta = Math.atan2(Math.sin(candidate - angle), Math.cos(candidate - angle));
         const distance = Math.abs(delta);
         if (distance < nearestDistance) {
@@ -140,46 +157,8 @@ const findNearestGroundedOrientation = (angle: number): number => {
     return nearest;
 };
 
-const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
-const TRIANGLE_HALF_HEIGHT = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
-const TRIANGLE_LOCAL_VERTICES = [
-    { x: -TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT },
-    { x: 0, y: -TRIANGLE_HALF_HEIGHT },
-    { x: TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT }
-] as const;
-
-function getTriangleBottomExtent(angleRad: number): number {
-    const sin = Math.sin(angleRad);
-    const cos = Math.cos(angleRad);
-    let bottomExtent = -Infinity;
-
-    TRIANGLE_LOCAL_VERTICES.forEach((vertex) => {
-        const rotatedY = (vertex.x * sin) + (vertex.y * cos);
-        if (rotatedY > bottomExtent) {
-            bottomExtent = rotatedY;
-        }
-    });
-
-    return bottomExtent;
-}
-
-const BASE_GROUNDED_BOTTOM_EXTENT = getTriangleBottomExtent(PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD);
-const TRIANGLE_GROUNDED_VISUAL_OFFSETS = PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD.map((orientation) => {
-    return BASE_GROUNDED_BOTTOM_EXTENT - getTriangleBottomExtent(orientation);
-});
-
-const resolveGroundedVisualOffsetY = (orientationRad: number): number => {
-    let nearestIndex = 0;
-    let nearestDistance = Infinity;
-
-    PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD.forEach((candidate, index) => {
-        const delta = Math.atan2(Math.sin(candidate - orientationRad), Math.cos(candidate - orientationRad));
-        const distance = Math.abs(delta);
-        if (distance < nearestDistance) {
-            nearestDistance = distance;
-            nearestIndex = index;
-        }
-    });
-
-    return TRIANGLE_GROUNDED_VISUAL_OFFSETS[nearestIndex] ?? 0;
+const rotatePointY = (x: number, y: number, angle: number): number => {
+    const sin = Math.sin(angle);
+    const cos = Math.cos(angle);
+    return (x * sin) + (y * cos);
 };

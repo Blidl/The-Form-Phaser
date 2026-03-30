@@ -26,11 +26,13 @@ export const createTestSceneFrameRuntime = (
     return {
         update: (deltaMs: number): void => {
             worldRuntime.updateMovingPlatforms();
+            worldRuntime.syncPlayerCollisionMode();
 
             const input = pollPlayerInputSnapshot(playerInputKeys);
             const windInfluenceX = worldRuntime.resolveWindInfluenceX(player.arcadeBodyObject);
 
             player.tick(deltaMs, input, windInfluenceX);
+            worldRuntime.syncPlayerCollisionMode();
             respawnRuntime.evaluateHazardOverlap(worldRuntime.hazards);
             debugRuntime.update();
             hudRuntime.update();

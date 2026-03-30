@@ -13,6 +13,7 @@ import { syncBallBoostState, updateBallGroundedState, tryApplyBallBoost, tickBal
 import { resolveEffectiveExternalInfluenceX, resolvePlayerMotionFlags, applyPauseOrLaunchMovement, applyCommonHorizontalMotion } from './player_motion_runtime';
 import { handlePlayerJumpFlow, applyJumpCutRuntime } from './player_jump_runtime';
 import { tickPlayerMarkerState } from './marker/player_marker_runtime';
+import { resetTriangleCollisionState } from './geometry/player_triangle_collision_runtime';
 import type { PlayerTickRuntimeContext } from './player_runtime_types';
 
 export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
@@ -20,6 +21,7 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const deltaSec = deltaMs / 1000;
 
     context.handleFormSwitch();
+    context.refreshTrianglePhysicsState();
 
     const isTriangleForm = state.currentForm === 'triangle';
     const isBallForm = state.currentForm === 'ball';
@@ -27,7 +29,9 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
 
     tickTriangleDashCooldownRuntime(state, deltaMs);
 
-    const grounded = physicsBody.blocked.down || physicsBody.touching.down;
+    const grounded = isTriangleForm
+        ? state.triangleCollision.hasGroundContact
+        : physicsBody.blocked.down || physicsBody.touching.down;
     physicsBody.setDragX(grounded ? context.groundedDragX : 0);
     const justLanded = grounded && !context.mutable.wasGrounded;
     if (grounded) {
@@ -215,10 +219,21 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         dashStartedThisFrame
     });
 
+    if (isTriangleForm) {
+        const transformLockMs = context.getTransformLockMs();
+        if (transformLockMs <= 0) {
+            context.commitTrianglePhysicsState(deltaSec);
+        }
+    } else {
+        resetTriangleCollisionState(state.triangleCollision);
+    }
+
     context.mutable.reboundWindowMs = Math.max(0, context.mutable.reboundWindowMs - deltaMs);
     context.mutable.boostCooldownMs = Math.max(0, context.mutable.boostCooldownMs - deltaMs);
     context.mutable.boostImpulseMs = Math.max(0, context.mutable.boostImpulseMs - deltaMs);
     tickPlayerTimers(timers, deltaMs);
     applySquareDetachedTrailRefund(state, deltaMs);
-    context.mutable.wasGrounded = grounded;
+    context.mutable.wasGrounded = isTriangleForm
+        ? state.triangleCollision.hasGroundContact
+        : grounded;
 };

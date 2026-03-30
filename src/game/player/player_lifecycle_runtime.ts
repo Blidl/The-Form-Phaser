@@ -22,6 +22,7 @@ import {
 } from './player_triangle_dash';
 import { clampPlayerMarkerStateToForm, resetPlayerMarkerState } from './marker/player_marker_runtime';
 import { resetTriangleChargesState } from './player_triangle_charges';
+import { resetTriangleCollisionState } from './geometry/player_triangle_collision_runtime';
 import {
     resolveFormSwitchDecision,
     resolveFormTransitionResetDirective,
@@ -40,6 +41,7 @@ export const freezePlayerForRespawn = (context: PlayerLifecycleRuntimeContext): 
     if (freezeDirective.shouldResetTriangleDash) {
         resetTriangleDashState(context.state.triangleDash);
     }
+    resetTriangleCollisionState(context.state.triangleCollision);
     if (freezeDirective.shouldClearAirborneWindDrift) {
         context.mutable.airborneWindDriftX = 0;
     }
@@ -48,6 +50,7 @@ export const freezePlayerForRespawn = (context: PlayerLifecycleRuntimeContext): 
     context.physicsBody.setVelocity(0, 0);
     context.physicsBody.setAcceleration(0, 0);
     context.physicsBody.setAllowGravity(false);
+    context.applyCurrentFormCollisionBody();
 };
 
 export const respawnPlayerAt = (
@@ -62,6 +65,7 @@ export const respawnPlayerAt = (
     if (respawnDirective.resetTriangleShell) {
         resetTriangleShellState(context.state.triangleShell, 1);
     }
+    resetTriangleCollisionState(context.state.triangleCollision);
     if (respawnDirective.resetSquareShell) {
         resetSquareShellState(context.state.squareShell);
     }
@@ -162,6 +166,7 @@ export const handlePlayerFormSwitch = (
     if (transitionReset.resetTriangleShell) {
         resetTriangleShellState(context.state.triangleShell, context.mutable.lastMoveDirection);
     }
+    resetTriangleCollisionState(context.state.triangleCollision);
     if (transitionReset.resetTriangleDash) {
         resetTriangleDashState(context.state.triangleDash);
     } else if (transitionReset.stopTriangleDash) {

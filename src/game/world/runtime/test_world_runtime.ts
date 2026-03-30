@@ -12,6 +12,7 @@ export { TEST_WORLD_WIDTH, TEST_WORLD_HEIGHT } from './test_world_layout';
 export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
+    syncPlayerCollisionMode: () => void;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
 }
 
@@ -27,9 +28,11 @@ export const createTestWorldRuntime = (
     const { scene, player, onCheckpointActivated } = params;
 
     const layoutRuntime = createTestWorldLayoutRuntime(scene);
-    scene.physics.add.collider(player.arcadeBodyObject, layoutRuntime.ground);
-    scene.physics.add.collider(player.arcadeBodyObject, layoutRuntime.lowPlatform);
-    scene.physics.add.collider(player.arcadeBodyObject, layoutRuntime.highPlatform);
+    const staticColliders = [
+        scene.physics.add.collider(player.arcadeBodyObject, layoutRuntime.ground),
+        scene.physics.add.collider(player.arcadeBodyObject, layoutRuntime.lowPlatform),
+        scene.physics.add.collider(player.arcadeBodyObject, layoutRuntime.highPlatform)
+    ];
 
     createTestWorldCheckpointRuntime({
         scene,
@@ -48,6 +51,13 @@ export const createTestWorldRuntime = (
     return {
         hazards: objectRuntime.hazards,
         updateMovingPlatforms: objectRuntime.updateMovingPlatforms,
+        syncPlayerCollisionMode: (): void => {
+            const useArcadePlatformCollisions = player.currentForm !== 'triangle';
+            staticColliders.forEach((collider) => {
+                collider.active = useArcadePlatformCollisions;
+            });
+            objectRuntime.syncPlayerCollisionMode(useArcadePlatformCollisions);
+        },
         resolveWindInfluenceX: windRuntime.resolveWindInfluenceX
     };
 };

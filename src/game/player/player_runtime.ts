@@ -41,6 +41,16 @@ import {
     resolveSquareSupportProbe,
     resolveSquareTrailSurfacePoint
 } from './geometry/player_geometry_queries';
+import {
+    createTriangleCollisionState,
+    createTriangleMatterRuntime,
+    destroyTriangleMatterRuntime,
+    primeTriangleMatterKinematicState,
+    stepTriangleMatterKinematicRuntime,
+    syncTriangleArcadeBodyMode,
+    syncTriangleMatterMode,
+    type PlayerTriangleMatterRuntime
+} from './geometry/player_triangle_collision_runtime';
 import type {
     PlayerFormAnchor,
     PlayerHazardHitShape,
@@ -60,11 +70,13 @@ import { tickPlayerRuntime } from './player_tick_runtime';
 import type { PlayerLifecycleRuntimeContext, PlayerMutableRuntimeState, PlayerTickRuntimeContext } from './player_runtime_types';
 
 export class PfPlayerRuntime {
+    private readonly scene: Scene;
     public readonly state: PlayerShellState;
     private readonly timers: PlayerTimers;
     private readonly physicsBody: Physics.Arcade.Body;
     private readonly physicsSprite: GameObjects.Arc;
     private readonly view: PlayerView;
+    private readonly triangleMatterRuntime: PlayerTriangleMatterRuntime;
     private jumpCutConsumed: boolean;
     private boostCooldownMs: number;
     private boostImpulseMs: number;
@@ -83,10 +95,12 @@ export class PfPlayerRuntime {
     private readonly lifecycleContext: PlayerLifecycleRuntimeContext;
 
     public constructor(scene: Scene, x: number, y: number) {
+        this.scene = scene;
         this.state = {
             currentForm: PLAYER_START_FORM,
             marker: createPlayerMarkerState(),
             triangleShell: createTriangleShellState(1),
+            triangleCollision: createTriangleCollisionState(),
             squareShell: createSquareShellState(),
             triangleDash: createTriangleDashState(),
             triangleCharges: createTriangleChargesState()
@@ -122,6 +136,7 @@ export class PfPlayerRuntime {
         );
         this.physicsBody.setCollideWorldBounds(true);
         this.physicsBody.setGravityY(PLAYER_GRAVITY_Y);
+        this.triangleMatterRuntime = createTriangleMatterRuntime(scene, x, y);
 
         this.view = new PlayerView(scene, x, y);
         this.lifecycleContext = {
@@ -220,6 +235,14 @@ export class PfPlayerRuntime {
         return this.view.triangleVisualObject;
     }
 
+    public get trianglePhysicsPoints(): ReadonlyArray<{ x: number; y: number }> | null {
+        if (this.state.currentForm !== 'triangle') {
+            return null;
+        }
+
+        return this.triangleMatterRuntime.debugPoints;
+    }
+
     public freezeForRespawn(): void {
         let mutable = this.mutableState;
         this.lifecycleContext.mutable = mutable;
@@ -254,6 +277,9 @@ export class PfPlayerRuntime {
                 handlePlayerFormSwitch(this.lifecycleContext, input);
                 tickContext.mutable = this.lifecycleContext.mutable;
             },
+            refreshTrianglePhysicsState: () => this.refreshTrianglePhysicsState(),
+            commitTrianglePhysicsState: (triangleDeltaSec) => this.commitTrianglePhysicsState(triangleDeltaSec),
+            getTransformLockMs: () => this.timers.transformLockMs,
             resolveSquareTrailSurfacePoint: (normalX, normalY) => this.resolveSquareTrailSurfacePoint(normalX, normalY),
             isCurrentlyGrounded: () => this.isCurrentlyGrounded()
         };
@@ -290,6 +316,15 @@ export class PfPlayerRuntime {
     }
 
     private applyCurrentFormCollisionBody(): void {
+        syncTriangleArcadeBodyMode(this.state, this.physicsBody, this.frozenForRespawn);
+        syncTriangleMatterMode(
+            this.scene,
+            this.triangleMatterRuntime,
+            this.state,
+            this.physicsSprite,
+            this.physicsBody,
+            this.frozenForRespawn
+        );
         const bodyConfig = resolvePlayerLocomotionBodyConfig(this.state.currentForm, this.state.triangleShell);
         const spriteWidth = this.physicsSprite.displayWidth;
         const spriteHeight = this.physicsSprite.displayHeight;
@@ -355,7 +390,60 @@ export class PfPlayerRuntime {
     }
 
     private isCurrentlyGrounded(): boolean {
+        if (this.state.currentForm === 'triangle') {
+            return this.state.triangleCollision.hasGroundContact;
+        }
+
         return this.physicsBody.blocked.down || this.physicsBody.touching.down;
+    }
+
+    private refreshTrianglePhysicsState(): void {
+        if (this.state.currentForm !== 'triangle') {
+            return;
+        }
+
+        syncTriangleMatterMode(
+            this.scene,
+            this.triangleMatterRuntime,
+            this.state,
+            this.physicsSprite,
+            this.physicsBody,
+            this.frozenForRespawn
+        );
+        primeTriangleMatterKinematicState(
+            this.scene,
+            this.triangleMatterRuntime,
+            this.state.triangleCollision,
+            this.physicsSprite,
+            this.physicsBody
+        );
+    }
+
+    private commitTrianglePhysicsState(deltaSec: number): void {
+        if (this.state.currentForm !== 'triangle') {
+            return;
+        }
+
+        syncTriangleMatterMode(
+            this.scene,
+            this.triangleMatterRuntime,
+            this.state,
+            this.physicsSprite,
+            this.physicsBody,
+            this.frozenForRespawn
+        );
+        stepTriangleMatterKinematicRuntime(
+            this.scene,
+            this.triangleMatterRuntime,
+            this.state.triangleCollision,
+            this.physicsSprite,
+            this.physicsBody,
+            deltaSec
+        );
+    }
+
+    public destroy(): void {
+        destroyTriangleMatterRuntime(this.scene, this.triangleMatterRuntime);
     }
 }
 

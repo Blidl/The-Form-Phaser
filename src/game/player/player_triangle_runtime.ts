@@ -190,6 +190,7 @@ export const tickTriangleOrientationRuntime = (params: TickTriangleOrientationPa
         state.triangleShell,
         grounded,
         justLanded,
+        state.triangleCollision.groundSupportEdgeIndex,
         horizontalDir,
         horizontalVelocityX,
         deltaSec

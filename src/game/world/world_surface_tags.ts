@@ -2,6 +2,7 @@ import { GameObjects } from 'phaser';
 
 const WORLD_SURFACE_KIND_DATA_KEY = 'pf_world_surface_kind';
 const WORLD_SURFACE_KIND_PLATFORM = 'platform';
+const WORLD_SURFACE_MATTER_LABEL = 'pf_platform_surface';
 
 export function markAsPlatformSurface(gameObject: GameObjects.GameObject): void {
     gameObject.setData(WORLD_SURFACE_KIND_DATA_KEY, WORLD_SURFACE_KIND_PLATFORM);
@@ -13,4 +14,16 @@ export function isPlatformSurfaceGameObject(gameObject: GameObjects.GameObject |
     }
 
     return gameObject.getData(WORLD_SURFACE_KIND_DATA_KEY) === WORLD_SURFACE_KIND_PLATFORM;
+}
+
+export function markMatterBodyAsPlatformSurface(body: MatterJS.BodyType): void {
+    body.label = WORLD_SURFACE_MATTER_LABEL;
+}
+
+export function isPlatformSurfaceMatterBody(body: MatterJS.BodyType | undefined): boolean {
+    if (!body) {
+        return false;
+    }
+
+    return body.label === WORLD_SURFACE_MATTER_LABEL;
 }

@@ -1,5 +1,5 @@
 import { GameObjects, Physics, Scene } from 'phaser';
-import { markAsPlatformSurface } from './world_surface_tags';
+import { markAsPlatformSurface, markMatterBodyAsPlatformSurface } from './world_surface_tags';
 
 export interface MovingPlatformConfig {
     x: number;
@@ -15,6 +15,7 @@ export interface MovingPlatformConfig {
 
 export interface MovingPlatformObject {
     bodyObject: GameObjects.Rectangle;
+    matterBody: MatterJS.BodyType;
     update: () => void;
 }
 
@@ -35,6 +36,8 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
     body.setImmovable(true);
     body.setAllowGravity(false);
     body.pushable = false;
+    const matterBody = scene.matter.add.rectangle(platform.x, platform.y, config.width, config.height, { isStatic: true });
+    markMatterBodyAsPlatformSurface(matterBody);
 
     const startX = config.x;
     const startY = config.y;
@@ -56,6 +59,7 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
                 direction = 1;
                 body.setVelocity(config.speed, 0);
             }
+            scene.matter.body.setPosition(matterBody, { x: platform.x, y: platform.y });
             return;
         }
 
@@ -71,12 +75,14 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
             direction = 1;
             body.setVelocity(0, config.speed);
         }
+        scene.matter.body.setPosition(matterBody, { x: platform.x, y: platform.y });
     };
 
     update();
 
     return {
         bodyObject: platform,
+        matterBody,
         update
     };
 };

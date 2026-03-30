@@ -46,6 +46,10 @@ export class PfPlayer {
         return this.runtime.triangleVisualObject;
     }
 
+    public get trianglePhysicsPoints(): ReadonlyArray<{ x: number; y: number }> | null {
+        return this.runtime.trianglePhysicsPoints;
+    }
+
     public freezeForRespawn(): void {
         this.runtime.freezeForRespawn();
     }

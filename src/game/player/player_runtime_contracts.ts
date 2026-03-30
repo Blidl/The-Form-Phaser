@@ -3,6 +3,7 @@ import type { PlayerFormAnchor, PlayerHazardHitShape } from './geometry/player_g
 import type { PlayerFormId } from './player_types';
 
 export interface PlayerWorldActor {
+    currentForm: PlayerFormId;
     arcadeBodyObject: GameObjects.Arc;
     hazardHitShape: PlayerHazardHitShape;
     freezeForRespawn: () => void;
@@ -20,6 +21,7 @@ export interface PlayerDebugModel {
     currentForm: PlayerFormId;
     arcadeBodyObject: GameObjects.Arc;
     triangleVisualObject: GameObjects.Triangle;
+    trianglePhysicsPoints: ReadonlyArray<{ x: number; y: number }> | null;
     hazardHitShape: PlayerHazardHitShape;
     formAnchor: PlayerFormAnchor;
 }

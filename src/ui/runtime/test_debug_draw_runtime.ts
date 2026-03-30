@@ -91,7 +91,13 @@ export const createTestDebugDrawRuntime = (
         render: (): void => {
             debugOverlay.clear();
 
-            drawBodyOutline(player.arcadeBodyObject.body as Physics.Arcade.Body, 0x4fc3f7);
+            if (player.currentForm === 'triangle') {
+                if (player.trianglePhysicsPoints !== null && player.trianglePhysicsPoints.length >= 3) {
+                    drawTriangleOutline(player.trianglePhysicsPoints, 0x4fc3f7, 1);
+                }
+            } else {
+                drawBodyOutline(player.arcadeBodyObject.body as Physics.Arcade.Body, 0x4fc3f7);
+            }
             drawHazardHitShape(player.hazardHitShape, 0xffd54f);
             drawPlayerAnchor(player.formAnchor.x, player.formAnchor.y, 0xffffff);
             if (player.currentForm === 'triangle') {
@@ -106,9 +112,6 @@ export const createTestDebugDrawRuntime = (
                 if (player.hazardHitShape.kind === 'triangle') {
                     drawPlayerAnchor(player.hazardHitShape.anchorX, player.hazardHitShape.anchorY, 0xffd54f);
                 }
-
-                const body = player.arcadeBodyObject.body as Physics.Arcade.Body;
-                drawPlayerAnchor(body.x + (body.width * 0.5), body.y + (body.height * 0.5), 0x4fc3f7);
             }
 
             hazards.forEach((hazard) => {

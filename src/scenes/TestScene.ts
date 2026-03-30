@@ -6,7 +6,19 @@ export class TestScene extends Scene {
     private runtime!: TestSceneRuntime;
 
     public constructor() {
-        super(TestScene.KEY);
+        super({
+            key: TestScene.KEY,
+            physics: {
+                arcade: {
+                    gravity: { x: 0, y: 0 },
+                    debug: false
+                },
+                matter: {
+                    gravity: { x: 0, y: 0 },
+                    debug: false
+                }
+            }
+        });
     }
 
     public create(): void {

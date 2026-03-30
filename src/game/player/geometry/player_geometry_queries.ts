@@ -107,7 +107,7 @@ export const resolvePlayerAnchorOffset = (
 
     return {
         x: 0,
-        y: triangleShell.visualOffsetY
+        y: 0
     };
 };
 
@@ -152,7 +152,7 @@ export const resolvePlayerLocomotionBodyConfig = (
         height: triangleBounds.height,
         centerOffset: {
             x: triangleBounds.centerX,
-            y: triangleShell.visualOffsetY + triangleBounds.centerY
+            y: triangleBounds.centerY
         }
     };
 };

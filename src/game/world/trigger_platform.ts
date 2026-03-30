@@ -1,5 +1,5 @@
 import { GameObjects, Physics, Scene } from 'phaser';
-import { markAsPlatformSurface } from './world_surface_tags';
+import { markAsPlatformSurface, markMatterBodyAsPlatformSurface } from './world_surface_tags';
 
 export interface TriggerPlatformConfig {
     triggerX: number;
@@ -15,6 +15,7 @@ export interface TriggerPlatformConfig {
 export interface TriggerPlatformObject {
     triggerZone: GameObjects.Rectangle;
     platformBodyObject: GameObjects.Rectangle;
+    matterBody: MatterJS.BodyType;
     isActivated: () => boolean;
     activate: () => void;
 }
@@ -55,6 +56,15 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
 
     const platformBody = platformBodyObject.body as Physics.Arcade.StaticBody;
     platformBody.enable = false;
+    const matterBody = scene.matter.add.rectangle(
+        platformBodyObject.x,
+        platformBodyObject.y,
+        platformBodyObject.width,
+        platformBodyObject.height,
+        { isStatic: true }
+    );
+    markMatterBodyAsPlatformSurface(matterBody);
+    scene.matter.world.remove(matterBody);
 
     let activated = false;
 
@@ -66,6 +76,7 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
         activated = true;
         platformBody.enable = true;
         platformBody.updateFromGameObject();
+        scene.matter.world.add(matterBody);
 
         triggerZone.setFillStyle(0xc5e1a5, 0.45);
         triggerZone.setStrokeStyle(2, 0x558b2f);
@@ -77,6 +88,7 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
     return {
         triggerZone,
         platformBodyObject,
+        matterBody,
         isActivated: () => activated,
         activate
     };
