@@ -9,6 +9,7 @@ const MAX_STEP_LENGTH_PX = 8;
 const POSITION_EPSILON = 0.0001;
 const SUPPORT_EDGE_SWITCH_TOLERANCE_PX = 1.5;
 const RESTING_CONTACT_GAP_PX = 2;
+const SUPPORT_EDGE_LEVEL_TOLERANCE_PX = 1.25;
 
 export const createTriangleCollisionState = () => {
     return {
@@ -155,7 +156,7 @@ export const stepTriangleMatterKinematicRuntime = (
 
     syncTriangleProxyFromMatter(runtime, physicsSprite, physicsBody);
     applyTriangleRestingContacts(scene, runtime, triangleCollision, physicsBody);
-    updateTriangleSupportEdge(runtime, triangleCollision);
+    updateTriangleSupportEdge(scene, runtime, triangleCollision);
     refreshTriangleMatterContacts(runtime, triangleCollision);
 };
 
@@ -171,7 +172,7 @@ export const primeTriangleMatterKinematicState = (
     clampTriangleToWorldBounds(scene, runtime, triangleCollision, physicsBody);
     syncTriangleProxyFromMatter(runtime, physicsSprite, physicsBody);
     applyTriangleRestingContacts(scene, runtime, triangleCollision, physicsBody);
-    updateTriangleSupportEdge(runtime, triangleCollision);
+    updateTriangleSupportEdge(scene, runtime, triangleCollision);
     refreshTriangleMatterContacts(runtime, triangleCollision);
 };
 
@@ -318,6 +319,7 @@ const registerCollisionContact = (
 };
 
 const updateTriangleSupportEdge = (
+    scene: Scene,
     runtime: PlayerTriangleMatterRuntime,
     triangleCollision: PlayerShellState['triangleCollision']
 ): void => {
@@ -329,13 +331,13 @@ const updateTriangleSupportEdge = (
     const previousEdgeIndex = triangleCollision.groundSupportEdgeIndex;
     if (
         previousEdgeIndex !== null &&
-        isSupportEdgeStable(runtime.body.vertices, previousEdgeIndex)
+        isSupportEdgeStable(scene, runtime.body.vertices, previousEdgeIndex)
     ) {
         triangleCollision.groundSupportEdgeIndex = previousEdgeIndex;
         return;
     }
 
-    triangleCollision.groundSupportEdgeIndex = resolveBottomSupportEdgeIndex(runtime.body.vertices);
+    triangleCollision.groundSupportEdgeIndex = resolveStableGroundSupportEdge(scene, runtime.body.vertices);
 };
 
 const applyTriangleRestingContacts = (
@@ -459,9 +461,7 @@ const rotateOffset = (
     };
 };
 
-const resolveBottomSupportEdgeIndex = (
-    vertices: MatterJS.Vertex[]
-): TriangleEdgeIndex => {
+const resolveBottomSupportEdgeIndex = (vertices: MatterJS.Vertex[]): TriangleEdgeIndex => {
     const edgeIndices: TriangleEdgeIndex[] = [0, 1, 2];
     let selectedEdgeIndex: TriangleEdgeIndex = 2;
     let selectedMidY = Number.NEGATIVE_INFINITY;
@@ -481,14 +481,18 @@ const resolveBottomSupportEdgeIndex = (
 };
 
 const isSupportEdgeStable = (
+    scene: Scene,
     vertices: MatterJS.Vertex[],
     edgeIndex: TriangleEdgeIndex
 ): boolean => {
-    const currentMidpointY = resolveEdgeMidpointY(vertices, edgeIndex);
-    const bottomEdgeIndex = resolveBottomSupportEdgeIndex(vertices);
-    const bottomMidpointY = resolveEdgeMidpointY(vertices, bottomEdgeIndex);
+    const stableEdgeIndex = resolveStableGroundSupportEdge(scene, vertices);
+    if (stableEdgeIndex === null) {
+        return false;
+    }
 
-    return currentMidpointY >= bottomMidpointY - SUPPORT_EDGE_SWITCH_TOLERANCE_PX;
+    const currentMidpointY = resolveEdgeMidpointY(vertices, edgeIndex);
+    const stableMidpointY = resolveEdgeMidpointY(vertices, stableEdgeIndex);
+    return edgeIndex === stableEdgeIndex || currentMidpointY >= stableMidpointY - SUPPORT_EDGE_SWITCH_TOLERANCE_PX;
 };
 
 const resolveEdgeMidpointY = (
@@ -498,4 +502,67 @@ const resolveEdgeMidpointY = (
     const start = vertices[edgeIndex];
     const end = vertices[(edgeIndex + 1) % vertices.length];
     return (start.y + end.y) * 0.5;
+};
+
+const resolveStableGroundSupportEdge = (
+    scene: Scene,
+    vertices: MatterJS.Vertex[]
+): TriangleEdgeIndex | null => {
+    const surfaceBodies = scene.matter.world.getAllBodies().filter((body) => {
+        return isPlatformSurfaceMatterBody(body);
+    });
+    const edgeIndices: TriangleEdgeIndex[] = [0, 1, 2];
+    let selectedEdgeIndex: TriangleEdgeIndex | null = null;
+    let selectedMidpointY = Number.NEGATIVE_INFINITY;
+
+    edgeIndices.forEach((edgeIndex) => {
+        if (!isEdgeSupportedByAnyPlatform(vertices, edgeIndex, surfaceBodies)) {
+            return;
+        }
+
+        const midpointY = resolveEdgeMidpointY(vertices, edgeIndex);
+        if (midpointY > selectedMidpointY) {
+            selectedMidpointY = midpointY;
+            selectedEdgeIndex = edgeIndex;
+        }
+    });
+
+    return selectedEdgeIndex;
+};
+
+const isEdgeSupportedByAnyPlatform = (
+    vertices: MatterJS.Vertex[],
+    edgeIndex: TriangleEdgeIndex,
+    surfaceBodies: MatterJS.BodyType[]
+): boolean => {
+    return surfaceBodies.some((surfaceBody) => {
+        return isEdgeSupportedByPlatform(vertices, edgeIndex, surfaceBody);
+    });
+};
+
+const isEdgeSupportedByPlatform = (
+    vertices: MatterJS.Vertex[],
+    edgeIndex: TriangleEdgeIndex,
+    surfaceBody: MatterJS.BodyType
+): boolean => {
+    const start = vertices[edgeIndex];
+    const end = vertices[(edgeIndex + 1) % vertices.length];
+    if (Math.abs(start.y - end.y) > SUPPORT_EDGE_LEVEL_TOLERANCE_PX) {
+        return false;
+    }
+
+    const platformTopY = surfaceBody.bounds.min.y;
+    const startGap = platformTopY - start.y;
+    const endGap = platformTopY - end.y;
+    if (
+        startGap < -POSITION_EPSILON || startGap > RESTING_CONTACT_GAP_PX ||
+        endGap < -POSITION_EPSILON || endGap > RESTING_CONTACT_GAP_PX
+    ) {
+        return false;
+    }
+
+    const edgeMinX = Math.min(start.x, end.x);
+    const edgeMaxX = Math.max(start.x, end.x);
+    const overlapX = Math.min(edgeMaxX, surfaceBody.bounds.max.x) - Math.max(edgeMinX, surfaceBody.bounds.min.x);
+    return overlapX > POSITION_EPSILON;
 };

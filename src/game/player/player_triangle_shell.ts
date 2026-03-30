@@ -34,6 +34,7 @@ export const resetTriangleShellState = (
 export const tickTriangleShellOrientation = (
     triangleShell: PlayerTriangleShellState,
     grounded: boolean,
+    hasGroundContact: boolean,
     justLanded: boolean,
     groundSupportEdgeIndex: TriangleEdgeIndex | null,
     horizontalMoveDir: number,
@@ -54,6 +55,30 @@ export const tickTriangleShellOrientation = (
         triangleShell.visualOffsetY = 0;
         triangleShell.airborneAngularVelocityRadPerSec = 0;
 
+        return;
+    }
+
+    if (hasGroundContact && groundSupportEdgeIndex === null) {
+        const nearestGroundedOrientation = resolveNearestGroundedOrientation(triangleShell.orientationRad);
+        const groundedDelta = Math.atan2(
+            Math.sin(nearestGroundedOrientation - triangleShell.orientationRad),
+            Math.cos(nearestGroundedOrientation - triangleShell.orientationRad)
+        );
+        const settleDirection = Math.abs(groundedDelta) <= 0.0001 ? 0 : (groundedDelta > 0 ? 1 : -1);
+        const maxSettleStep = PLAYER_TRIANGLE_AIRBORNE_CONTROLLED_SPIN_RAD_PER_SEC * deltaSec;
+
+        triangleShell.airborneAngularVelocityRadPerSec = 0;
+        if (settleDirection !== 0) {
+            triangleShell.airborneSpinDirection = settleDirection;
+        }
+        triangleShell.orientationRad = normalizeAngle(
+            moveToward(
+                triangleShell.orientationRad,
+                triangleShell.orientationRad + groundedDelta,
+                maxSettleStep
+            )
+        );
+        triangleShell.visualOffsetY = 0;
         return;
     }
 

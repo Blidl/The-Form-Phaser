@@ -30,7 +30,7 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     tickTriangleDashCooldownRuntime(state, deltaMs);
 
     const grounded = isTriangleForm
-        ? state.triangleCollision.hasGroundContact
+        ? state.triangleCollision.hasGroundContact && state.triangleCollision.groundSupportEdgeIndex !== null
         : physicsBody.blocked.down || physicsBody.touching.down;
     physicsBody.setDragX(grounded ? context.groundedDragX : 0);
     const justLanded = grounded && !context.mutable.wasGrounded;

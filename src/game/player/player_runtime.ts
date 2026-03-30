@@ -391,7 +391,7 @@ export class PfPlayerRuntime {
 
     private isCurrentlyGrounded(): boolean {
         if (this.state.currentForm === 'triangle') {
-            return this.state.triangleCollision.hasGroundContact;
+            return this.state.triangleCollision.hasGroundContact && this.state.triangleCollision.groundSupportEdgeIndex !== null;
         }
 
         return this.physicsBody.blocked.down || this.physicsBody.touching.down;
