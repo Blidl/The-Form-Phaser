@@ -13,6 +13,7 @@ import type {
     PlayerSquareTrailSegment,
     PlayerSquareTrailSupportOwner
 } from './player_types';
+import { squareSupportLocalToWorld, squareSupportWorldToLocal } from './player_square_support_space';
 
 const TRAIL_LOCAL_MERGE_AXIS_EPSILON = 1.5;
 const TRAIL_LOCAL_MERGE_GAP_EPSILON = 0.5;
@@ -38,7 +39,7 @@ export const beginSquareTrailAnchor = (
     );
     const anchorX = snappedAnchor?.x ?? surfaceX;
     const anchorY = snappedAnchor?.y ?? surfaceY;
-    const anchorLocal = worldToOwnerLocal(anchorX, anchorY, supportOwner);
+    const anchorLocal = squareSupportWorldToLocal(anchorX, anchorY, supportOwner);
 
     squareShell.trailAnchorActive = true;
     squareShell.trailAnchorX = anchorX;
@@ -79,7 +80,7 @@ export const tickSquareTrailPaint = (
     const effectiveSupportOwner = supportOwner.body === null && anchorSupportOwner.body !== null
         ? anchorSupportOwner
         : supportOwner;
-    const currentSurfaceLocal = worldToOwnerLocal(surfaceX, surfaceY, effectiveSupportOwner);
+    const currentSurfaceLocal = squareSupportWorldToLocal(surfaceX, surfaceY, effectiveSupportOwner);
 
     if (!squareShell.trailAnchorActive) {
         squareShell.trailAnchorActive = true;
@@ -95,7 +96,7 @@ export const tickSquareTrailPaint = (
         return;
     }
 
-    const anchorWorld = ownerLocalToWorld(
+    const anchorWorld = squareSupportLocalToWorld(
         squareShell.trailAnchorLocalX,
         squareShell.trailAnchorLocalY,
         anchorSupportOwner
@@ -168,7 +169,7 @@ const setTrailAnchorToCurrentSurface = (
     normalX: -1 | 0 | 1,
     normalY: -1 | 0 | 1
 ): void => {
-    const anchorWorld = ownerLocalToWorld(currentSurfaceLocal.x, currentSurfaceLocal.y, supportOwner);
+    const anchorWorld = squareSupportLocalToWorld(currentSurfaceLocal.x, currentSurfaceLocal.y, supportOwner);
     squareShell.trailAnchorX = anchorWorld.x;
     squareShell.trailAnchorY = anchorWorld.y;
     squareShell.trailAnchorLocalX = currentSurfaceLocal.x;
@@ -201,8 +202,8 @@ export const resolveSquareTrailSegmentWorldLine = (
         originX: segment.supportOriginX,
         originY: segment.supportOriginY
     };
-    const worldStart = ownerLocalToWorld(segment.startLocalX, segment.startLocalY, supportOwner);
-    const worldEnd = ownerLocalToWorld(segment.endLocalX, segment.endLocalY, supportOwner);
+    const worldStart = squareSupportLocalToWorld(segment.startLocalX, segment.startLocalY, supportOwner);
+    const worldEnd = squareSupportLocalToWorld(segment.endLocalX, segment.endLocalY, supportOwner);
 
     segment.startX = worldStart.x;
     segment.startY = worldStart.y;
@@ -380,43 +381,6 @@ const findNearestTrailJoinPoint = (
     return bestPoint ?? { x: surfaceX, y: surfaceY };
 };
 
-const getSupportCurrentPosition = (
-    supportOwner: PlayerSquareTrailSupportOwner
-): { x: number; y: number } => {
-    if (supportOwner.body === null) {
-        return { x: supportOwner.originX, y: supportOwner.originY };
-    }
-
-    return {
-        x: supportOwner.body.x,
-        y: supportOwner.body.y
-    };
-};
-
-const worldToOwnerLocal = (
-    worldX: number,
-    worldY: number,
-    supportOwner: PlayerSquareTrailSupportOwner
-): { x: number; y: number } => {
-    const supportPosition = getSupportCurrentPosition(supportOwner);
-    return {
-        x: worldX - supportPosition.x + supportOwner.originX,
-        y: worldY - supportPosition.y + supportOwner.originY
-    };
-};
-
-const ownerLocalToWorld = (
-    localX: number,
-    localY: number,
-    supportOwner: PlayerSquareTrailSupportOwner
-): { x: number; y: number } => {
-    const supportPosition = getSupportCurrentPosition(supportOwner);
-    return {
-        x: localX + supportPosition.x - supportOwner.originX,
-        y: localY + supportPosition.y - supportOwner.originY
-    };
-};
-
 const isSameSupportOwner = (
     left: PlayerSquareTrailSupportOwner,
     right: PlayerSquareTrailSupportOwner
@@ -453,8 +417,8 @@ const appendOrMergeSweptLocalInterval = (
 
     const localStart = buildPointFromLocalInterval(intervalMinT);
     const localEnd = buildPointFromLocalInterval(intervalMaxT);
-    const worldStart = ownerLocalToWorld(localStart.x, localStart.y, supportOwner);
-    const worldEnd = ownerLocalToWorld(localEnd.x, localEnd.y, supportOwner);
+    const worldStart = squareSupportLocalToWorld(localStart.x, localStart.y, supportOwner);
+    const worldEnd = squareSupportLocalToWorld(localEnd.x, localEnd.y, supportOwner);
 
     const trailingSegment = squareShell.trailSegments.length > 0
         ? squareShell.trailSegments[squareShell.trailSegments.length - 1]
@@ -495,8 +459,8 @@ const appendOrMergeSweptLocalInterval = (
                 x: (tangentX * mergedMaxT) + (normalX * mergedN),
                 y: (tangentY * mergedMaxT) + (normalY * mergedN)
             };
-            const mergedWorldStart = ownerLocalToWorld(mergedStartLocal.x, mergedStartLocal.y, supportOwner);
-            const mergedWorldEnd = ownerLocalToWorld(mergedEndLocal.x, mergedEndLocal.y, supportOwner);
+            const mergedWorldStart = squareSupportLocalToWorld(mergedStartLocal.x, mergedStartLocal.y, supportOwner);
+            const mergedWorldEnd = squareSupportLocalToWorld(mergedEndLocal.x, mergedEndLocal.y, supportOwner);
 
             trailingSegment.startLocalX = mergedStartLocal.x;
             trailingSegment.startLocalY = mergedStartLocal.y;

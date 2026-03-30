@@ -1,14 +1,19 @@
 import type { Physics } from 'phaser';
 import { Math as PhaserMath } from 'phaser';
-import { PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED, PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED } from './player_constants';
+import {
+    PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS,
+    PLAYER_SQUARE_ATTACH_HOLD_STICK_SPEED,
+    PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED
+} from './player_constants';
 import type { PlayerInputSnapshot } from './player_input';
 import { clearJumpBuffer, clearSquareAttachEntryBuffer, hasSquareAttachEntryBuffer, type PlayerTimers } from './player_timers';
 import { tickSquareShellOrientation } from './player_square_shell';
 import { tickSquareAttachState, tryEnterSquareAttach } from './player_square_attach';
 import { beginSquareTrailAnchor, tickSquareTrailDetachedLifecycle, tickSquareTrailPaint } from './player_square_trail';
 import { resolveSquareAttachSurfaceVelocity } from './player_square_surface_move';
+import { isSquareRolloverActive, tickSquareRollover, tryStartSquareRollover } from './player_square_rollover';
 import { resolveArcadeAxisContactSnapshot, resolveSquareContactNormal } from './geometry/player_geometry_queries';
-import type { PlayerSquareTrailSurfacePoint } from './geometry/player_geometry_types';
+import type { PlayerSquareAttachPoseQuery, PlayerSquareTrailSurfacePoint } from './geometry/player_geometry_types';
 import { resolveSquareAttachHoldDecision, resolveSquareAttachStartDecision } from './state/player_form_state_guards';
 import type { PlayerShellState } from './player_types';
 
@@ -21,6 +26,12 @@ interface TickSquareRuntimeParams {
     deltaSec: number;
     horizontalDir: -1 | 0 | 1;
     resolveSquareTrailSurfacePoint: (normalX: -1 | 0 | 1, normalY: -1 | 0 | 1) => PlayerSquareTrailSurfacePoint;
+    querySquareAttachPose: (
+        centerX: number,
+        centerY: number,
+        normalX: -1 | 0 | 1,
+        normalY: -1 | 0 | 1
+    ) => PlayerSquareAttachPoseQuery;
 }
 
 export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
@@ -32,7 +43,8 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
         deltaMs,
         deltaSec,
         horizontalDir,
-        resolveSquareTrailSurfacePoint
+        resolveSquareTrailSurfacePoint,
+        querySquareAttachPose
     } = params;
 
     const attachedNormalX = state.squareShell.isAttached
@@ -100,26 +112,60 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
         actionHeld: input.actionHeld
     });
 
-    tickSquareAttachState(
-        state.squareShell,
-        deltaMs,
-        squareAttachHoldDecision.shouldKeepAttachHold,
-        squareContact.hasContact,
-        squareContact.normalX,
-        squareContact.normalY
-    );
+    if (!isSquareRolloverActive(state.squareShell)) {
+        tryStartSquareRollover({
+            squareShell: state.squareShell,
+            physicsBody,
+            actionHeld: input.actionHeld,
+            horizontalDir,
+            verticalDir: verticalDir as -1 | 0 | 1,
+            queryAttachPose: querySquareAttachPose
+        });
+    }
 
-    const trailSurfacePoint = resolveSquareTrailSurfacePoint(
-        state.squareShell.attachNormalX,
-        state.squareShell.attachNormalY
-    );
-    tickSquareTrailPaint(
-        state.squareShell,
-        trailSurfacePoint.x,
-        trailSurfacePoint.y,
-        trailSurfacePoint.supportOwner,
-        state.squareShell.hasContact
-    );
+    if (!isSquareRolloverActive(state.squareShell)) {
+        tickSquareAttachState(
+            state.squareShell,
+            deltaMs,
+            squareAttachHoldDecision.shouldKeepAttachHold,
+            squareContact.hasContact,
+            squareContact.normalX,
+            squareContact.normalY
+        );
+    }
+
+    tickSquareRollover({
+        squareShell: state.squareShell,
+        physicsBody,
+        deltaMs,
+        queryAttachPose: querySquareAttachPose,
+        onSuccessCommit: (targetPose) => {
+            state.squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
+            beginSquareTrailAnchor(
+                state.squareShell,
+                targetPose.surfacePoint.x,
+                targetPose.surfacePoint.y,
+                targetPose.surfacePoint.supportOwner
+            );
+        },
+        onRollbackComplete: () => {
+            state.squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
+        }
+    });
+
+    if (!isSquareRolloverActive(state.squareShell)) {
+        const trailSurfacePoint = resolveSquareTrailSurfacePoint(
+            state.squareShell.attachNormalX,
+            state.squareShell.attachNormalY
+        );
+        tickSquareTrailPaint(
+            state.squareShell,
+            trailSurfacePoint.x,
+            trailSurfacePoint.y,
+            trailSurfacePoint.supportOwner,
+            state.squareShell.hasContact
+        );
+    }
 };
 
 export const applySquareAttachedMovement = (
@@ -127,6 +173,12 @@ export const applySquareAttachedMovement = (
     state: PlayerShellState,
     input: PlayerInputSnapshot
 ): void => {
+    if (isSquareRolloverActive(state.squareShell)) {
+        physicsBody.setVelocity(0, 0);
+        physicsBody.setAcceleration(0, 0);
+        return;
+    }
+
     const attachVelocity = resolveSquareAttachSurfaceVelocity(
         state.squareShell.attachNormalX,
         state.squareShell.attachNormalY,

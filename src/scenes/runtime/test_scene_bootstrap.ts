@@ -11,6 +11,10 @@ import {
     type PlayerRespawnRuntime
 } from '../../game/world/runtime/player_respawn_runtime';
 import {
+    createTestWorldEditorRuntime,
+    type TestWorldEditorRuntime
+} from '../../game/world/runtime/test_world_editor_runtime';
+import {
     createTestWorldRuntime,
     TEST_WORLD_HEIGHT,
     TEST_WORLD_WIDTH,
@@ -28,6 +32,7 @@ export interface TestSceneBootstrapRuntime {
     respawnRuntime: PlayerRespawnRuntime;
     hudRuntime: TestHudRuntime;
     debugRuntime: TestDebugRuntime;
+    editorRuntime: TestWorldEditorRuntime;
 }
 
 export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstrapRuntime => {
@@ -67,8 +72,9 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
     const debugRuntime = createTestDebugRuntime({
         scene,
         player: debugModel,
-        hazards: worldRuntime.hazards
+        getHazards: () => worldRuntime.hazards
     });
+    const editorRuntime = createTestWorldEditorRuntime(scene, worldRuntime);
 
     return {
         player,
@@ -76,6 +82,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
         worldRuntime,
         respawnRuntime,
         hudRuntime,
-        debugRuntime
+        debugRuntime,
+        editorRuntime
     };
 };

@@ -5,6 +5,7 @@ import {
     PLAYER_SQUARE_GROUNDED_SETTLE_LERP_SPEED,
     PLAYER_SQUARE_TRAIL_RESOURCE_MAX
 } from './player_constants';
+import { createSquareRolloverState, resetSquareRolloverState } from './player_square_rollover';
 
 export const createSquareShellState = (): PlayerSquareShellState => {
     return {
@@ -29,7 +30,8 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         trailAnchorSupportOriginX: 0,
         trailAnchorSupportOriginY: 0,
         trailAnchorNormalX: 0,
-        trailAnchorNormalY: -1
+        trailAnchorNormalY: -1,
+        rolloverState: createSquareRolloverState()
     };
 };
 
@@ -58,6 +60,7 @@ export const resetSquareShellState = (
     squareShell.trailAnchorSupportOriginY = 0;
     squareShell.trailAnchorNormalX = 0;
     squareShell.trailAnchorNormalY = -1;
+    resetSquareRolloverState(squareShell.rolloverState);
 };
 
 export const tickSquareShellOrientation = (
@@ -67,6 +70,15 @@ export const tickSquareShellOrientation = (
     contactNormalY: -1 | 0 | 1,
     hasContact: boolean
 ): void => {
+    if (squareShell.rolloverState.phase !== 'inactive') {
+        squareShell.hasContact = hasContact;
+        if (hasContact) {
+            squareShell.contactNormalX = contactNormalX;
+            squareShell.contactNormalY = contactNormalY;
+        }
+        return;
+    }
+
     const contactStarted = hasContact && !squareShell.hasContact;
     squareShell.hasContact = hasContact;
 

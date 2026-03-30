@@ -13,6 +13,7 @@ export interface WindZoneObject {
     trigger: GameObjects.Rectangle;
     force: number;
     directionX: -1 | 1;
+    destroy: () => void;
 }
 
 export const createWindZone = (scene: Scene, config: WindZoneConfig): WindZoneObject => {
@@ -37,24 +38,34 @@ export const createWindZone = (scene: Scene, config: WindZoneConfig): WindZoneOb
     const startX = config.x - (config.width * 0.5) + 18;
     const endX = config.x + (config.width * 0.5) - 18;
 
+    const decorations: GameObjects.GameObject[] = [];
+
     for (let stripeX = startX; stripeX <= endX; stripeX += stripeSpacing) {
         const stripe = scene.add.rectangle(stripeX, config.y, stripeWidth, stripeHeight, 0x4dd0e1, 0.28)
             .setDepth(4151);
         stripe.setAngle(config.directionX > 0 ? 18 : -18);
+        decorations.push(stripe);
     }
 
     const arrowSymbol = config.directionX > 0 ? '>>' : '<<';
-    scene.add.text(config.x, config.y - (config.height * 0.5) - 16, `WIND ${arrowSymbol}`, {
+    const label = scene.add.text(config.x, config.y - (config.height * 0.5) - 16, `WIND ${arrowSymbol}`, {
         color: '#b2ebf2',
         fontFamily: 'monospace',
         fontSize: '14px'
     })
         .setOrigin(0.5, 0.5)
         .setDepth(4152);
+    decorations.push(label);
 
     return {
         trigger,
         force: config.force,
-        directionX: config.directionX
+        directionX: config.directionX,
+        destroy: (): void => {
+            trigger.destroy();
+            decorations.forEach((gameObject) => {
+                gameObject.destroy();
+            });
+        }
     };
 };

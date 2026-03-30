@@ -15,6 +15,7 @@ export interface CheckpointObject {
     respawnX: number;
     respawnY: number;
     setActive: (isActive: boolean) => void;
+    destroy: () => void;
 }
 
 export const createCheckpoint = (scene: Scene, config: CheckpointConfig): CheckpointObject => {
@@ -51,6 +52,10 @@ export const createCheckpoint = (scene: Scene, config: CheckpointConfig): Checkp
         beacon,
         respawnX: config.respawnX,
         respawnY: config.respawnY,
-        setActive
+        setActive,
+        destroy: (): void => {
+            trigger.destroy();
+            beacon.destroy();
+        }
     };
 };

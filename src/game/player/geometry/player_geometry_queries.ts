@@ -30,6 +30,7 @@ import type {
     ResolvePlayerGeometryInput,
     ResolveTriangleWorldPointInput
 } from './player_geometry_types';
+import { isPlatformSurfaceGameObject } from '../../world/world_surface_tags';
 
 const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
 const TRIANGLE_HALF_HEIGHT = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
@@ -475,6 +476,9 @@ export const resolveSquareSupportIntervalFromKnownBody = (
     if (knownSupportBody === null || knownSupportBody === selfBody) {
         return null;
     }
+    if (!isPlatformSurfaceBody(knownSupportBody)) {
+        return null;
+    }
 
     const candidateRect = createPlayerRectSnapshot(
         knownSupportBody.x,
@@ -533,6 +537,9 @@ export const resolveSquareSupportIntervalFromOverlap = (
         if (candidateBody === selfBody) {
             return;
         }
+        if (!isPlatformSurfaceBody(candidateBody)) {
+            return;
+        }
 
         const candidateRect = createPlayerRectSnapshot(
             candidateBody.x,
@@ -588,6 +595,15 @@ export const resolveSquareSupportIntervalFromOverlap = (
     return bestInterval;
 };
 
+export const resolveSquarePoseClear = (
+    overlapBodies: Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>,
+    selfBody: Physics.Arcade.Body
+): boolean => {
+    return !overlapBodies.some((candidateBody) => {
+        return candidateBody !== selfBody && isPlatformSurfaceBody(candidateBody);
+    });
+};
+
 export const resolveSquareTrailSurfacePoint = (
     normalX: OrthogonalDirection,
     normalY: OrthogonalDirection,
@@ -628,6 +644,13 @@ export const resolveSquareTrailSurfacePoint = (
         y: supportInterval !== null ? PhaserMath.Clamp(playerRect.centerY, supportInterval.min, supportInterval.max) : playerRect.centerY,
         supportOwner
     };
+};
+
+const isPlatformSurfaceBody = (
+    body: Physics.Arcade.Body | Physics.Arcade.StaticBody
+): boolean => {
+    const gameObject = body.gameObject;
+    return isPlatformSurfaceGameObject(gameObject);
 };
 
 export const resolveTriangleLeadingCornerMarkerOffset = (

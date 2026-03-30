@@ -44,6 +44,35 @@ export interface PlayerSquareShellState {
     trailAnchorSupportOriginY: number;
     trailAnchorNormalX: -1 | 0 | 1;
     trailAnchorNormalY: -1 | 0 | 1;
+    rolloverState: PlayerSquareRolloverState;
+}
+
+export type PlayerSquareRolloverPhase = 'inactive' | 'forward' | 'rollback';
+
+export interface PlayerSquareRolloverState {
+    phase: PlayerSquareRolloverPhase;
+    elapsedMs: number;
+    entryOffsetX: number;
+    entryOffsetY: number;
+    alignedStartOffsetX: number;
+    alignedStartOffsetY: number;
+    endOffsetX: number;
+    endOffsetY: number;
+    pivotLocalX: number;
+    pivotLocalY: number;
+    pivotSupportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
+    pivotSupportOriginX: number;
+    pivotSupportOriginY: number;
+    radius: number;
+    startAngleRad: number;
+    deltaAngleRad: number;
+    startOrientationRad: number;
+    endOrientationRad: number;
+    sourceNormalX: -1 | 0 | 1;
+    sourceNormalY: -1 | 0 | 1;
+    targetNormalX: -1 | 0 | 1;
+    targetNormalY: -1 | 0 | 1;
+    targetPoseValid: boolean;
 }
 
 export interface PlayerSquareTrailSegment {

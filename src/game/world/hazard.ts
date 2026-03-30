@@ -10,6 +10,7 @@ export interface HazardConfig {
 
 export interface HazardObject {
     trigger: GameObjects.Rectangle;
+    destroy: () => void;
 }
 
 interface HazardRect {
@@ -32,7 +33,12 @@ export const createHazard = (scene: Scene, config: HazardConfig): HazardObject =
     triggerBody.checkCollision.left = false;
     triggerBody.checkCollision.right = false;
 
-    return { trigger };
+    return {
+        trigger,
+        destroy: (): void => {
+            trigger.destroy();
+        }
+    };
 };
 
 export const doesHazardOverlapPlayerShape = (

@@ -7,6 +7,7 @@ import {
     PLAYER_MAX_FORM_MOVE_SPEED,
     PLAYER_GRAVITY_Y,
     PLAYER_PLACEHOLDER_RADIUS,
+    PLAYER_SQUARE_ROLLOVER_SURFACE_VALIDATION_RANGE_PX,
     PLAYER_START_FORM
 } from './player_constants';
 import { type PlayerInputSnapshot } from './player_input';
@@ -32,6 +33,7 @@ import type {
 } from './player_types';
 import {
     createPlayerRectSnapshot,
+    resolveSquarePoseClear,
     resolvePlayerHazardHitShape,
     resolvePlayerLocomotionBodyConfig,
     resolvePlayerFormAnchor,
@@ -40,6 +42,7 @@ import {
     resolveSquareSupportProbe,
     resolveSquareTrailSurfacePoint
 } from './geometry/player_geometry_queries';
+import { squareSupportLocalToWorld } from './player_square_support_space';
 import {
     createTriangleCollisionState,
     createTriangleMatterRuntime,
@@ -51,10 +54,12 @@ import {
     type PlayerTriangleMatterRuntime
 } from './geometry/player_triangle_collision_runtime';
 import type {
+    PlayerSquareAttachPoseQuery,
     PlayerFormAnchor,
     PlayerHazardHitShape,
     PlayerSquareTrailSurfacePoint
 } from './geometry/player_geometry_types';
+import type { PlayerSquareDebugView, PlayerSquareDebugZoneId } from './player_runtime_contracts';
 import { PlayerView } from './view/player_view';
 import {
     createBallReboundRuntimeState,
@@ -253,6 +258,55 @@ export class PfPlayerRuntime {
         return this.triangleMatterRuntime.debugPoints;
     }
 
+    public get squareDebugView(): PlayerSquareDebugView | null {
+        if (this.state.currentForm !== 'square') {
+            return null;
+        }
+
+        const squareShell = this.state.squareShell;
+        const attachedZoneIds: PlayerSquareDebugZoneId[] = [];
+        const danglingZoneIds: PlayerSquareDebugZoneId[] = [];
+        const rolloverPivotWorld = squareShell.rolloverState.phase === 'inactive'
+            ? null
+            : squareSupportLocalToWorld(
+                squareShell.rolloverState.pivotLocalX,
+                squareShell.rolloverState.pivotLocalY,
+                {
+                    body: squareShell.rolloverState.pivotSupportBody,
+                    originX: squareShell.rolloverState.pivotSupportOriginX,
+                    originY: squareShell.rolloverState.pivotSupportOriginY
+                }
+            );
+
+        if (squareShell.isAttached) {
+            const currentCenterX = this.physicsBody.x + (this.physicsBody.width * 0.5);
+            const currentCenterY = this.physicsBody.y + (this.physicsBody.height * 0.5);
+            const currentPose = this.querySquareAttachPose(
+                currentCenterX,
+                currentCenterY,
+                squareShell.attachNormalX,
+                squareShell.attachNormalY
+            );
+            const activeZones = resolveSquareDebugAttachZones(
+                currentPose,
+                squareShell.attachNormalX,
+                squareShell.attachNormalY
+            );
+            attachedZoneIds.push(...activeZones.attachedZoneIds);
+            danglingZoneIds.push(...activeZones.danglingZoneIds);
+        }
+
+        return {
+            orientationRad: squareShell.orientationRad,
+            isAttached: squareShell.isAttached,
+            attachNormalX: squareShell.attachNormalX,
+            attachNormalY: squareShell.attachNormalY,
+            attachedZoneIds,
+            danglingZoneIds,
+            rolloverPivotWorld
+        };
+    }
+
     public refillTriangleFlightResource(): void {
         refillTriangleFlightResource(this.state.triangleFlight);
     }
@@ -295,6 +349,7 @@ export class PfPlayerRuntime {
             commitTrianglePhysicsState: (triangleDeltaSec) => this.commitTrianglePhysicsState(triangleDeltaSec),
             getTransformLockMs: () => this.timers.transformLockMs,
             resolveSquareTrailSurfacePoint: (normalX, normalY) => this.resolveSquareTrailSurfacePoint(normalX, normalY),
+            querySquareAttachPose: (centerX, centerY, normalX, normalY) => this.querySquareAttachPose(centerX, centerY, normalX, normalY),
             isCurrentlyGrounded: () => this.isCurrentlyGrounded()
         };
 
@@ -403,6 +458,69 @@ export class PfPlayerRuntime {
         );
     }
 
+    private querySquareAttachPose(
+        centerX: number,
+        centerY: number,
+        normalX: -1 | 0 | 1,
+        normalY: -1 | 0 | 1
+    ): PlayerSquareAttachPoseQuery {
+        const halfSize = this.physicsBody.width * 0.5;
+        const playerRect = createPlayerRectSnapshot(
+            centerX - halfSize,
+            centerY - halfSize,
+            this.physicsBody.width,
+            this.physicsBody.height
+        );
+        const probe = resolveSquareSupportProbe(normalX, normalY, playerRect);
+        const supportBodies = this.physicsSprite.scene.physics.overlapRect(
+            probe.x,
+            probe.y,
+            probe.width,
+            probe.height,
+            true,
+            true
+        ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
+        const supportInterval = resolveSquareSupportIntervalFromOverlap(
+            supportBodies,
+            this.physicsBody,
+            normalX,
+            normalY,
+            playerRect,
+            probe
+        ) ?? resolveSquareSupportIntervalFromKnownBody(
+            this.state.squareShell.trailAnchorSupportBody,
+            this.physicsBody,
+            normalX,
+            normalY,
+            playerRect
+        );
+        const surfacePoint = resolveSquareTrailSurfacePoint(
+            normalX,
+            normalY,
+            playerRect,
+            supportInterval,
+            null
+        );
+        const interiorInset = PLAYER_SQUARE_ROLLOVER_SURFACE_VALIDATION_RANGE_PX;
+        const interiorBodies = this.physicsSprite.scene.physics.overlapRect(
+            playerRect.left + interiorInset,
+            playerRect.top + interiorInset,
+            Math.max(1, playerRect.width - (interiorInset * 2)),
+            Math.max(1, playerRect.height - (interiorInset * 2)),
+            true,
+            true
+        ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
+
+        return {
+            centerX,
+            centerY,
+            rect: playerRect,
+            supportInterval,
+            surfacePoint,
+            isPoseClear: resolveSquarePoseClear(interiorBodies, this.physicsBody)
+        };
+    }
+
     private isCurrentlyGrounded(): boolean {
         if (this.state.currentForm === 'triangle') {
             return this.state.triangleCollision.hasGroundContact && this.state.triangleCollision.groundSupportEdgeIndex !== null;
@@ -460,4 +578,84 @@ export class PfPlayerRuntime {
         destroyTriangleMatterRuntime(this.scene, this.triangleMatterRuntime);
     }
 }
+
+const resolveSquareDebugAttachZones = (
+    pose: PlayerSquareAttachPoseQuery,
+    attachNormalX: -1 | 0 | 1,
+    attachNormalY: -1 | 0 | 1
+): { attachedZoneIds: PlayerSquareDebugZoneId[]; danglingZoneIds: PlayerSquareDebugZoneId[] } => {
+    if (pose.supportInterval === null) {
+        return { attachedZoneIds: [], danglingZoneIds: [] };
+    }
+
+    if (attachNormalY === -1) {
+        return resolveSquareDebugHorizontalZones(pose, 'BL', 'BR');
+    }
+
+    if (attachNormalY === 1) {
+        return resolveSquareDebugHorizontalZones(pose, 'TL', 'TR');
+    }
+
+    if (attachNormalX === 1) {
+        return resolveSquareDebugVerticalZones(pose, 'TL', 'BL');
+    }
+
+    return resolveSquareDebugVerticalZones(pose, 'TR', 'BR');
+};
+
+const resolveSquareDebugHorizontalZones = (
+    pose: PlayerSquareAttachPoseQuery,
+    negativeZoneId: PlayerSquareDebugZoneId,
+    positiveZoneId: PlayerSquareDebugZoneId
+): { attachedZoneIds: PlayerSquareDebugZoneId[]; danglingZoneIds: PlayerSquareDebugZoneId[] } => {
+    const centerX = pose.rect.centerX;
+    const negativeAttached = doesDebugZoneOverlapSupport(pose, pose.rect.left, centerX);
+    const positiveAttached = doesDebugZoneOverlapSupport(pose, centerX, pose.rect.right);
+
+    return {
+        attachedZoneIds: [
+            ...(negativeAttached ? [negativeZoneId] : []),
+            ...(positiveAttached ? [positiveZoneId] : [])
+        ],
+        danglingZoneIds: [
+            ...(!negativeAttached ? [negativeZoneId] : []),
+            ...(!positiveAttached ? [positiveZoneId] : [])
+        ]
+    };
+};
+
+const resolveSquareDebugVerticalZones = (
+    pose: PlayerSquareAttachPoseQuery,
+    negativeZoneId: PlayerSquareDebugZoneId,
+    positiveZoneId: PlayerSquareDebugZoneId
+): { attachedZoneIds: PlayerSquareDebugZoneId[]; danglingZoneIds: PlayerSquareDebugZoneId[] } => {
+    const centerY = pose.rect.centerY;
+    const negativeAttached = doesDebugZoneOverlapSupport(pose, pose.rect.top, centerY);
+    const positiveAttached = doesDebugZoneOverlapSupport(pose, centerY, pose.rect.bottom);
+
+    return {
+        attachedZoneIds: [
+            ...(negativeAttached ? [negativeZoneId] : []),
+            ...(positiveAttached ? [positiveZoneId] : [])
+        ],
+        danglingZoneIds: [
+            ...(!negativeAttached ? [negativeZoneId] : []),
+            ...(!positiveAttached ? [positiveZoneId] : [])
+        ]
+    };
+};
+
+const doesDebugZoneOverlapSupport = (
+    pose: PlayerSquareAttachPoseQuery,
+    zoneMin: number,
+    zoneMax: number
+): boolean => {
+    if (pose.supportInterval === null) {
+        return false;
+    }
+
+    const overlapMin = Math.max(pose.supportInterval.min, zoneMin);
+    const overlapMax = Math.min(pose.supportInterval.max, zoneMax);
+    return (overlapMax - overlapMin) > 0.5;
+};
 

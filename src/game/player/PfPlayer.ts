@@ -1,5 +1,6 @@
 import { GameObjects, Scene } from 'phaser';
 import type { PlayerFormAnchor, PlayerHazardHitShape } from './geometry/player_geometry_types';
+import type { PlayerSquareDebugView } from './player_runtime_contracts';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 import { PfPlayerRuntime } from './player_runtime';
 
@@ -60,6 +61,10 @@ export class PfPlayer {
 
     public get trianglePhysicsPoints(): ReadonlyArray<{ x: number; y: number }> | null {
         return this.runtime.trianglePhysicsPoints;
+    }
+
+    public get squareDebugView(): PlayerSquareDebugView | null {
+        return this.runtime.squareDebugView;
     }
 
     public refillTriangleFlightResource(): void {

@@ -17,6 +17,7 @@ export interface MovingPlatformObject {
     bodyObject: GameObjects.Rectangle;
     matterBody: MatterJS.BodyType;
     update: () => void;
+    destroy: () => void;
 }
 
 export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig): MovingPlatformObject => {
@@ -83,6 +84,10 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
     return {
         bodyObject: platform,
         matterBody,
-        update
+        update,
+        destroy: (): void => {
+            scene.matter.world.remove(matterBody);
+            platform.destroy();
+        }
     };
 };

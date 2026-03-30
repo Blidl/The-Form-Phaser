@@ -111,6 +111,15 @@ export interface PlayerSquareTrailSurfacePoint {
     supportOwner: PlayerSquareTrailSupportOwner;
 }
 
+export interface PlayerSquareAttachPoseQuery {
+    centerX: number;
+    centerY: number;
+    rect: PlayerRectSnapshot;
+    supportInterval: PlayerSquareSupportInterval<Physics.Arcade.Body | Physics.Arcade.StaticBody> | null;
+    surfacePoint: PlayerSquareTrailSurfacePoint;
+    isPoseClear: boolean;
+}
+
 export interface PlayerTriangleWorldPoint {
     x: number;
     y: number;

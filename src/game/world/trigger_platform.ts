@@ -18,6 +18,7 @@ export interface TriggerPlatformObject {
     matterBody: MatterJS.BodyType;
     isActivated: () => boolean;
     activate: () => void;
+    destroy: () => void;
 }
 
 export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfig): TriggerPlatformObject => {
@@ -90,6 +91,11 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
         platformBodyObject,
         matterBody,
         isActivated: () => activated,
-        activate
+        activate,
+        destroy: (): void => {
+            scene.matter.world.remove(matterBody);
+            triggerZone.destroy();
+            platformBodyObject.destroy();
+        }
     };
 };

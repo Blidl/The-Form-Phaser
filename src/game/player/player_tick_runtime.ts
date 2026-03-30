@@ -110,7 +110,8 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
             deltaMs,
             deltaSec,
             horizontalDir,
-            resolveSquareTrailSurfacePoint: context.resolveSquareTrailSurfacePoint
+            resolveSquareTrailSurfacePoint: context.resolveSquareTrailSurfacePoint,
+            querySquareAttachPose: context.querySquareAttachPose
         });
     }
 

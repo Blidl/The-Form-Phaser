@@ -49,6 +49,7 @@ export const freezePlayerForRespawn = (context: PlayerLifecycleRuntimeContext): 
     context.physicsBody.setVelocity(0, 0);
     context.physicsBody.setAcceleration(0, 0);
     context.physicsBody.setAllowGravity(false);
+    context.physicsBody.checkCollision.none = false;
     context.applyCurrentFormCollisionBody();
 };
 
@@ -123,6 +124,7 @@ export const respawnPlayerAt = (
     }
 
     context.physicsBody.setAllowGravity(true);
+    context.physicsBody.checkCollision.none = false;
     context.physicsBody.setVelocity(0, 0);
     context.physicsBody.setAcceleration(0, 0);
     context.physicsBody.reset(x, y);
@@ -177,6 +179,7 @@ export const handlePlayerFormSwitch = (
 
     resetBallReboundRuntimeState(context.ballReboundRuntime);
     context.physicsBody.setAllowGravity(true);
+    context.physicsBody.checkCollision.none = false;
     context.applyCurrentFormCollisionBody();
     context.applyCurrentFormVisual();
     context.syncVisualPosition();

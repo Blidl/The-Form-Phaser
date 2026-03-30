@@ -7,15 +7,15 @@ import { createTestDebugDrawRuntime } from './test_debug_draw_runtime';
 interface CreateTestDebugRuntimeParams {
     scene: Scene;
     player: PlayerDebugModel;
-    hazards: readonly HazardObject[];
+    getHazards: () => readonly HazardObject[];
 }
 
 export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): TestDebugRuntime => {
-    const { scene, player, hazards } = params;
+    const { scene, player, getHazards } = params;
     const debugDrawRuntime = createTestDebugDrawRuntime({
         scene,
         player,
-        hazards
+        getHazards
     });
 
     return {

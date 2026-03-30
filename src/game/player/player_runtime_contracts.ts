@@ -21,6 +21,18 @@ export interface PlayerHudModel {
     triangleFlightResourceRatio: number;
 }
 
+export type PlayerSquareDebugZoneId = 'TL' | 'TR' | 'BL' | 'BR';
+
+export interface PlayerSquareDebugView {
+    orientationRad: number;
+    isAttached: boolean;
+    attachNormalX: -1 | 0 | 1;
+    attachNormalY: -1 | 0 | 1;
+    attachedZoneIds: readonly PlayerSquareDebugZoneId[];
+    danglingZoneIds: readonly PlayerSquareDebugZoneId[];
+    rolloverPivotWorld: { x: number; y: number } | null;
+}
+
 export interface PlayerDebugModel {
     currentForm: PlayerFormId;
     arcadeBodyObject: GameObjects.Arc;
@@ -28,4 +40,5 @@ export interface PlayerDebugModel {
     trianglePhysicsPoints: ReadonlyArray<{ x: number; y: number }> | null;
     hazardHitShape: PlayerHazardHitShape;
     formAnchor: PlayerFormAnchor;
+    squareDebugView: PlayerSquareDebugView | null;
 }
