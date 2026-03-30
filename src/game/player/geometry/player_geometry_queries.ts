@@ -38,6 +38,10 @@ const TRIANGLE_LOCAL_VERTICES = [
     { x: 0, y: -TRIANGLE_HALF_HEIGHT },
     { x: TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT }
 ] as const;
+const TRIANGLE_CENTROID_OFFSET = {
+    x: (TRIANGLE_LOCAL_VERTICES[0].x + TRIANGLE_LOCAL_VERTICES[1].x + TRIANGLE_LOCAL_VERTICES[2].x) / 3,
+    y: (TRIANGLE_LOCAL_VERTICES[0].y + TRIANGLE_LOCAL_VERTICES[1].y + TRIANGLE_LOCAL_VERTICES[2].y) / 3
+} as const;
 
 export const resolveTriangleLocalVertices = (): readonly [
     { x: number; y: number },
@@ -45,6 +49,13 @@ export const resolveTriangleLocalVertices = (): readonly [
     { x: number; y: number }
 ] => {
     return TRIANGLE_LOCAL_VERTICES;
+};
+
+export const resolveTriangleCentroidOffset = (): { x: number; y: number } => {
+    return {
+        x: TRIANGLE_CENTROID_OFFSET.x,
+        y: TRIANGLE_CENTROID_OFFSET.y
+    };
 };
 
 export const resolveTriangleLocalBounds = (

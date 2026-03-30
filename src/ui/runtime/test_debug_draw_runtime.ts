@@ -62,17 +62,6 @@ export const createTestDebugDrawRuntime = (
         debugOverlay.strokeRect(body.x, body.y, body.width, body.height);
     };
 
-    const drawPlayerAnchor = (x: number, y: number, color: number): void => {
-        const markerHalfSize = 4;
-        debugOverlay.lineStyle(2, color, 1);
-        debugOverlay.beginPath();
-        debugOverlay.moveTo(x - markerHalfSize, y);
-        debugOverlay.lineTo(x + markerHalfSize, y);
-        debugOverlay.moveTo(x, y - markerHalfSize);
-        debugOverlay.lineTo(x, y + markerHalfSize);
-        debugOverlay.strokePath();
-    };
-
     const drawTriangleOutline = (
         points: ReadonlyArray<{ x: number; y: number }>,
         color: number,
@@ -99,7 +88,6 @@ export const createTestDebugDrawRuntime = (
                 drawBodyOutline(player.arcadeBodyObject.body as Physics.Arcade.Body, 0x4fc3f7);
             }
             drawHazardHitShape(player.hazardHitShape, 0xffd54f);
-            drawPlayerAnchor(player.formAnchor.x, player.formAnchor.y, 0xffffff);
             if (player.currentForm === 'triangle') {
                 const visualTrianglePoints = resolveTriangleWorldPoints(
                     player.triangleVisualObject.x,
@@ -107,11 +95,6 @@ export const createTestDebugDrawRuntime = (
                     player.triangleVisualObject.rotation
                 );
                 drawTriangleOutline(visualTrianglePoints, 0x66bb6a, 1);
-                drawPlayerAnchor(player.triangleVisualObject.x, player.triangleVisualObject.y, 0x66bb6a);
-
-                if (player.hazardHitShape.kind === 'triangle') {
-                    drawPlayerAnchor(player.hazardHitShape.anchorX, player.hazardHitShape.anchorY, 0xffd54f);
-                }
             }
 
             hazards.forEach((hazard) => {

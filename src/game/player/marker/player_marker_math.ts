@@ -7,6 +7,7 @@ import {
     PLAYER_PLACEHOLDER_RADIUS
 } from '../player_constants';
 import type { PlayerFormId } from '../player_types';
+import { resolveTriangleCentroidOffset } from '../geometry/player_geometry_queries';
 
 const EPSILON = 0.0001;
 const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
@@ -16,6 +17,13 @@ const TRIANGLE_LOCAL_VERTICES = [
     { x: 0, y: -TRIANGLE_HALF_HEIGHT },
     { x: TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT }
 ] as const;
+const TRIANGLE_CENTROID_OFFSET = resolveTriangleCentroidOffset();
+const TRIANGLE_CENTROID_LOCAL_VERTICES = TRIANGLE_LOCAL_VERTICES.map((vertex) => {
+    return {
+        x: vertex.x - TRIANGLE_CENTROID_OFFSET.x,
+        y: vertex.y - TRIANGLE_CENTROID_OFFSET.y
+    };
+}) as readonly [{ x: number; y: number }, { x: number; y: number }, { x: number; y: number }];
 
 export const clampMarkerOffsetToForm = (
     form: PlayerFormId,
@@ -79,7 +87,7 @@ const clampMarkerOffsetToCircle = (
 };
 
 const clampMarkerOffsetToTriangle = (offsetX: number, offsetY: number): { x: number; y: number } => {
-    const insetVertices = insetConvexPolygon(TRIANGLE_LOCAL_VERTICES, PLAYER_MARKER_RADIUS + 1);
+    const insetVertices = insetConvexPolygon(TRIANGLE_CENTROID_LOCAL_VERTICES, PLAYER_MARKER_RADIUS + 1);
 
     if (pointInTriangle(offsetX, offsetY, insetVertices[0], insetVertices[1], insetVertices[2])) {
         return { x: offsetX, y: offsetY };

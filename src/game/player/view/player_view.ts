@@ -23,6 +23,7 @@ import {
 } from '../player_constants';
 import { resolveMarkerIntent } from '../marker/player_marker_math';
 import type { PlayerMarkerState } from '../marker/player_marker_types';
+import { resolveTriangleCentroidOffset } from '../geometry/player_geometry_queries';
 import { resolveSquareTrailSegmentWorldLine } from '../player_square_trail';
 import { resolveTriangleDashLeadingCornerPreview } from '../player_triangle_dash';
 import type {
@@ -171,8 +172,11 @@ export class PlayerView {
                 x: marker.currentOffsetX,
                 y: marker.currentOffsetY
             };
-        const baseX = currentForm === 'triangle' ? formAnchor.x : playerX;
-        const baseY = currentForm === 'triangle' ? formAnchor.y : playerY;
+        const triangleMarkerBaseOffset = currentForm === 'triangle'
+            ? resolveTriangleCentroidWorldOffset(triangleShell.orientationRad)
+            : { x: 0, y: 0 };
+        const baseX = currentForm === 'triangle' ? formAnchor.x + triangleMarkerBaseOffset.x : playerX;
+        const baseY = currentForm === 'triangle' ? formAnchor.y + triangleMarkerBaseOffset.y : playerY;
         const markerIntent = resolveMarkerIntent(markerOffset.x, markerOffset.y);
 
         this.markerVisual.setPosition(baseX + markerOffset.x, baseY + markerOffset.y);
@@ -271,6 +275,17 @@ export class PlayerView {
     }
 }
 
+const resolveTriangleCentroidWorldOffset = (orientationRad: number): { x: number; y: number } => {
+    const centroidOffset = resolveTriangleCentroidOffset();
+    const sin = Math.sin(orientationRad);
+    const cos = Math.cos(orientationRad);
+
+    return {
+        x: (centroidOffset.x * cos) - (centroidOffset.y * sin),
+        y: (centroidOffset.x * sin) + (centroidOffset.y * cos)
+    };
+};
+
 const resolveTriangleCornerOffset = (
     cornerIndex: 0 | 1 | 2,
     orientationRad: number
@@ -282,12 +297,17 @@ const resolveTriangleCornerOffset = (
         { x: 0, y: -halfHeight },
         { x: halfWidth, y: halfHeight }
     ] as const;
+    const centroidOffset = resolveTriangleCentroidOffset();
     const localCorner = localCorners[cornerIndex] ?? localCorners[1];
+    const centroidLocalCorner = {
+        x: localCorner.x - centroidOffset.x,
+        y: localCorner.y - centroidOffset.y
+    };
     const sin = Math.sin(orientationRad);
     const cos = Math.cos(orientationRad);
 
     return {
-        x: (localCorner.x * cos) - (localCorner.y * sin),
-        y: (localCorner.x * sin) + (localCorner.y * cos)
+        x: (centroidLocalCorner.x * cos) - (centroidLocalCorner.y * sin),
+        y: (centroidLocalCorner.x * sin) + (centroidLocalCorner.y * cos)
     };
 };
