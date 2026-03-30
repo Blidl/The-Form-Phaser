@@ -209,9 +209,15 @@ Triangle не использует обычный jump как Ball и Square.
 - `square_attach_acquire_range_px` — допустимая дистанция для attach к валидной поверхности;
 - `square_attach_acquire_buffer_time_sec` — окно forgiving attach input;
 - `square_attach_snap_time_sec` — если attach требует короткой подстройки к поверхности;
+- `square_attach_contact_grace_time_sec` — короткое окно удержания attach-state при переходе между поверхностями;
 - `square_attach_move_speed_px_per_sec` — скорость движения по поверхности;
 - `square_attach_turn_corner_entry_range_px` — зона, в которой начинается проверка rollover;
 - `square_attach_release_time_sec` — если понадобится мягкий выход из attach.
+
+Дополнительный attach-канон текущего прототипа:
+- `square_attach_acquire_range_px` покрывает не только прямой контакт, но и небольшой допустимый зазор с последующим `snap` к поверхности;
+- attach к валидной поверхности при `K held` не должен требовать directional input;
+- бесшовный retarget `floor / wall / ceiling` не должен достигаться скрытым ускорением движения по attach-поверхности.
 
 ### 6.3. Trail resource
 - `square_trail_max_length_px` — полный общий запас trail;
@@ -236,6 +242,12 @@ Triangle не использует обычный jump как Ball и Square.
 - `square_rollover_return_time_sec` — время обратного возврата, если новая поверхность невалидна;
 - `square_rollover_corner_detection_range_px`
 - `square_rollover_surface_validation_range_px`
+
+Rollover current-scope notes:
+- текущий канон ограничен `external-corner rollover`;
+- текущий канон ограничен ортогональным поворотом на `90°`;
+- старт rollover определяется через `TL / TR / BL / BR` corner-zone contract;
+- rollback должен идти по той же траектории в обратном направлении.
 
 ### 6.6. Moving attach surfaces
 - `square_attach_surface_follow_tolerance_px`
@@ -332,6 +344,8 @@ State-specific exceptions при этом живут в каноне форм, �
 - `debug_ui_panel_margin_px`
 - `debug_marker_visibility`
 - `debug_collision_overlay_visibility`
+- `debug_square_corner_zone_overlay_visibility`
+- `debug_square_rollover_pivot_visibility`
 
 ---
 

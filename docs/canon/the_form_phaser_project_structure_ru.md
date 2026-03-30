@@ -197,6 +197,12 @@ the-form/
 
 Подробный состав — в `the_form_test_scene_spec_ru.md`.
 
+Для `sc_test` канонично допустимы:
+
+- единый конфигурационный слой test-уровня, из которого собираются основные объекты сцены;
+- локальный runtime edit mode для ручной настройки test geometry;
+- отдельный debug-layer для acceptance-проверки `Square attach / rollover`.
+
 ---
 
 ## Prefab-by-code modules: core
@@ -307,6 +313,18 @@ the-form/
 Это не обязательно должны быть отдельные классы на каждый пиксельный блок.
 Это означает, что **каждый тип world-behavior должен иметь ясную точку сборки**.
 
+Для `sc_test` допускается отдельный world-config слой, который в одном месте описывает:
+
+- surfaces;
+- hazards;
+- checkpoints;
+- moving platforms;
+- trigger platforms;
+- wind zones;
+- другие обязательные test objects.
+
+Runtime-строители мира при этом должны оставаться thin builder-слоем над этим config, а не новым скрытым источником истины.
+
 ### Что допустимо
 Если в Phaser удобнее держать часть уровня как tilemap/object layer, а часть как runtime-created objects — допустимо.
 Главное, чтобы поведенческие роли были разделены и читались.
@@ -343,6 +361,13 @@ UI не должен жить внутри core player logic.
 - marker/trail визуализацию;
 - debug text;
 - acceptance helpers.
+
+Для `Square` в debug-layer канонично допустимы отдельные acceptance overlays:
+
+- `TL / TR / BL / BR` corner-зоны;
+- attach-valid / dangling zone highlight;
+- rollover pivot marker;
+- rotated gameplay-proxy overlay вместо только axis-aligned `Arcade` body.
 
 Его задача — помогать проверке feature-slices, а не диктовать архитектуру gameplay.
 

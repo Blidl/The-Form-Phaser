@@ -150,9 +150,11 @@ export const tryStartSquareRollover = (params: TryStartSquareRolloverParams): bo
         return false;
     }
 
+    const snappedCenterX = currentPose.snappedCenterX;
+    const snappedCenterY = currentPose.snappedCenterY;
     const targetPose = queryAttachPose(
-        currentCenterX,
-        currentCenterY,
+        snappedCenterX,
+        snappedCenterY,
         startCandidate.targetNormalX,
         startCandidate.targetNormalY
     );
@@ -162,10 +164,12 @@ export const tryStartSquareRollover = (params: TryStartSquareRolloverParams): bo
         startCandidate.pivotSupportOwner
     );
     const pivotSquareLocal = worldOffsetToSquareLocal(
-        startCandidate.pivotWorldX - currentCenterX,
-        startCandidate.pivotWorldY - currentCenterY,
+        startCandidate.pivotWorldX - snappedCenterX,
+        startCandidate.pivotWorldY - snappedCenterY,
         squareShell.orientationRad
     );
+
+    physicsBody.reset(snappedCenterX, snappedCenterY);
 
     rollover.phase = 'forward';
     rollover.elapsedMs = 0;
@@ -221,25 +225,26 @@ export const tickSquareRollover = (params: TickSquareRolloverParams): void => {
             return;
         }
 
-        const targetPose = queryAttachPose(
+        const targetCandidate = resolveRolloverAttachCommitCandidate(
+            queryAttachPose,
             forwardPose.x,
             forwardPose.y,
             rollover.targetNormalX,
             rollover.targetNormalY
         );
-        if (targetPose.supportInterval !== null && targetPose.isPoseClear) {
+        if (targetCandidate !== null) {
             squareShell.orientationRad = rollover.endOrientationRad;
             squareShell.groundedOrientationRad = rollover.endOrientationRad;
             commitSquareAttachPose(
                 squareShell,
                 physicsBody,
-                targetPose,
-                rollover.targetNormalX,
-                rollover.targetNormalY
+                targetCandidate.pose,
+                targetCandidate.normalX,
+                targetCandidate.normalY
             );
             physicsBody.checkCollision.none = false;
             resetSquareRolloverState(rollover);
-            onSuccessCommit(targetPose);
+            onSuccessCommit(targetCandidate.pose);
             return;
         }
 
@@ -451,10 +456,46 @@ const resolveTurnAngleRad = (
     moveVector: SquareRolloverMoveVector
 ): number => {
     if (attachNormalY !== 0) {
-        return moveVector.x * (Math.PI * 0.5);
+        return (moveVector.x * -attachNormalY) * (Math.PI * 0.5);
     }
 
     return (attachNormalX * moveVector.y) * (Math.PI * 0.5);
+};
+
+const resolveRolloverAttachCommitCandidate = (
+    queryAttachPose: (
+        centerX: number,
+        centerY: number,
+        normalX: -1 | 0 | 1,
+        normalY: -1 | 0 | 1
+    ) => PlayerSquareAttachPoseQuery,
+    centerX: number,
+    centerY: number,
+    preferredNormalX: -1 | 0 | 1,
+    preferredNormalY: -1 | 0 | 1
+): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; pose: PlayerSquareAttachPoseQuery } | null => {
+    const orderedNormals: Array<{ normalX: -1 | 0 | 1; normalY: -1 | 0 | 1 }> = [
+        { normalX: preferredNormalX, normalY: preferredNormalY },
+        { normalX: 0, normalY: -1 },
+        { normalX: 1, normalY: 0 },
+        { normalX: -1, normalY: 0 },
+        { normalX: 0, normalY: 1 }
+    ].filter((candidate, index, array) => {
+        return array.findIndex((entry) => entry.normalX === candidate.normalX && entry.normalY === candidate.normalY) === index;
+    });
+
+    for (const candidate of orderedNormals) {
+        const pose = queryAttachPose(centerX, centerY, candidate.normalX, candidate.normalY);
+        if (pose.supportInterval !== null && pose.isPoseClear) {
+            return {
+                normalX: candidate.normalX,
+                normalY: candidate.normalY,
+                pose
+            };
+        }
+    }
+
+    return null;
 };
 
 const resolveRolloverWorldPivot = (

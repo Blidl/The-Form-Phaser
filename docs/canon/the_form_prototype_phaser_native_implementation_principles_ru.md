@@ -225,6 +225,12 @@ Scene/config/data wiring приоритетно использовать для:
 - если стандартный body ломает нужный контракт, геометрия реализуется собственным gameplay-слоем поверх или вместо engine-default поведения;
 - сложные углы, attach, rollover и orientation-сценарии нельзя “сдать на волю движка”, если это ломает механику.
 
+Для актуального Square-канона это фиксируется отдельно:
+
+- `Arcade Physics` остаётся базовым locomotion/proxy physics слоем;
+- attach-query, attach-snap, surface retarget, `external-corner rollover` и rollback реализуются gameplay-слоем поверх Arcade;
+- успех rollover не должен жить в отдельной урезанной ветке, а должен коммититься через тот же attach-contract, что и обычный attach.
+
 ---
 
 ## 9. Test scene как основной truth environment
@@ -252,6 +258,13 @@ UI и debug не должны быть слиты с player-core.
 - держать debug helpers как отдельный слой;
 - пробрасывать наружу только нужные данные;
 - иметь временный placeholder UI.
+
+Для `Square` debug acceptance это означает, что допустимо и полезно пробрасывать наружу только специальные debug-facing данные:
+
+- corner-zone state `TL / TR / BL / BR`;
+- dangling/attached zone info;
+- rollover pivot;
+- orientation gameplay-proxy.
 
 Недопустимо:
 
