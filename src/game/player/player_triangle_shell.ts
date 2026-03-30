@@ -125,7 +125,7 @@ const clamp = (value: number, min: number, max: number): number => {
 };
 
 const findNearestGroundedOrientation = (angle: number): number => {
-    let nearest = PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD[0];
+    let nearest: number = PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD[0];
     let nearestDistance = Infinity;
 
     PLAYER_TRIANGLE_GROUNDED_ORIENTATIONS_RAD.forEach((candidate) => {

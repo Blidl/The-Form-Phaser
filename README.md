@@ -36,6 +36,39 @@ The local development server runs on `http://localhost:8080` by default. Please 
 
 Once the server is running you can edit any of the files in the `src` folder. Vite will automatically recompile your code and then reload the browser.
 
+## Project Architecture
+
+The current project no longer follows the default Phaser template structure. The runtime code is split into composition roots and feature slices:
+
+| Path | Responsibility |
+|------|----------------|
+| `src/main.ts` | Application entry. |
+| `src/boot` | Game config bootstrap. |
+| `src/scenes` | Phaser scene classes only. |
+| `src/scenes/runtime` | Scene composition and frame orchestration. |
+| `src/game/player/PfPlayer.ts` | Thin player facade. |
+| `src/game/player/player_runtime.ts` | Thin runtime host around player adapters/state. |
+| `src/game/player/player_tick_runtime.ts` | Main player tick orchestration flow. |
+| `src/game/player/player_*_runtime.ts` | Player feature slices: lifecycle, ball, triangle, square, motion, jump. |
+| `src/game/world/runtime` | World composition and world feature slices: layout, checkpoints, objects, wind, respawn. |
+| `src/ui/runtime` | UI composition and UI feature slices: HUD widgets and debug draw runtime. |
+
+### Runtime layering
+
+- `Scene` layer: creates high-level runtime graph.
+- `Runtime root` layer: wires a subsystem together.
+- `Feature runtime` layer: owns one gameplay/UI slice.
+- `Facade/contract` layer: keeps external dependencies narrow.
+
+### Practical rule
+
+When adding new gameplay behavior:
+
+1. Put scene wiring into `src/scenes/runtime`.
+2. Put player-specific mechanics into a dedicated `player_*_runtime.ts`.
+3. Put world interactions into a dedicated `world/runtime/*` slice.
+4. Keep Phaser-facing scene classes and facades thin.
+
 ## Template Project Structure
 
 We have provided a default project structure to get you started. This is as follows:

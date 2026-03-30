@@ -3,8 +3,13 @@ import {
     PLAYER_BALL_VISUAL_BOOST_STROKE_WIDTH,
     PLAYER_BALL_VISUAL_STROKE_WIDTH,
     PLAYER_FORM_SQUARE_SIZE,
-    PLAYER_FORM_TRIANGLE_HEIGHT,
-    PLAYER_FORM_TRIANGLE_WIDTH,
+    PLAYER_MARKER_ACTIVE_ALPHA,
+    PLAYER_MARKER_FILL_COLOR,
+    PLAYER_MARKER_IDLE_ALPHA,
+    PLAYER_MARKER_RADIUS,
+    PLAYER_MARKER_STROKE_COLOR,
+    PLAYER_MARKER_STROKE_WIDTH,
+    PLAYER_MARKER_VISUAL_SCALE,
     PLAYER_PLACEHOLDER_RADIUS,
     PLAYER_SQUARE_EDGE_DOWN_POSE_RAD,
     PLAYER_SQUARE_TRAIL_STROKE_ALPHA,
@@ -13,19 +18,13 @@ import {
     PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR,
     PLAYER_SQUARE_VISUAL_STROKE_COLOR,
     PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_ALPHA,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_OUTWARD_OFFSET,
-    PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS
+    PLAYER_FORM_TRIANGLE_HEIGHT,
+    PLAYER_FORM_TRIANGLE_WIDTH
 } from '../player_constants';
-import type { PlayerInputSnapshot } from '../player_input';
+import { resolveMarkerIntent } from '../marker/player_marker_math';
+import type { PlayerMarkerState } from '../marker/player_marker_types';
 import { resolveSquareTrailSegmentWorldLine } from '../player_square_trail';
-import {
-    resolveTriangleDashLeadingCornerPreview
-} from '../player_triangle_dash';
-import { resolveTriangleLeadingCornerMarkerOffset } from '../player_triangle_leading_corner_visual';
+import { resolveTriangleDashLeadingCornerPreview } from '../player_triangle_dash';
 import type {
     PlayerFormId,
     PlayerSquareTrailSegment,
@@ -33,15 +32,15 @@ import type {
     PlayerTriangleDashState,
     PlayerTriangleShellState
 } from '../player_types';
-import type { PlayerFormAnchor } from '../player_form_collision_shapes';
+import type { PlayerFormAnchor } from '../geometry/player_geometry_types';
 
 export class PlayerView {
     private readonly ballVisual: GameObjects.Arc;
     private readonly triangleVisual: GameObjects.Triangle;
     private readonly squareVisual: GameObjects.Rectangle;
+    private readonly markerVisual: GameObjects.Arc;
     private readonly squareContactMarker: GameObjects.Line;
     private readonly squareTrailGraphics: GameObjects.Graphics;
-    private readonly triangleLeadingCornerMarker: GameObjects.Arc;
 
     public constructor(scene: Scene, x: number, y: number) {
         this.ballVisual = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff)
@@ -67,17 +66,17 @@ export class PlayerView {
             .setDepth(4500)
             .setVisible(false)
             .setRotation(PLAYER_SQUARE_EDGE_DOWN_POSE_RAD);
+        this.markerVisual = scene.add.circle(x, y, PLAYER_MARKER_RADIUS, PLAYER_MARKER_FILL_COLOR)
+            .setStrokeStyle(PLAYER_MARKER_STROKE_WIDTH, PLAYER_MARKER_STROKE_COLOR)
+            .setDepth(4502)
+            .setScale(PLAYER_MARKER_VISUAL_SCALE)
+            .setAlpha(PLAYER_MARKER_IDLE_ALPHA);
         this.squareContactMarker = scene.add.line(x, y, 0, 0, 0, 12, 0xffffff)
             .setLineWidth(2, 2)
             .setDepth(4501)
             .setVisible(false)
             .setOrigin(0.5, 0.5);
         this.squareTrailGraphics = scene.add.graphics().setDepth(4400);
-        this.triangleLeadingCornerMarker = scene.add.circle(x, y, PLAYER_TRIANGLE_LEADING_CORNER_MARKER_RADIUS, 0xffffff)
-            .setStrokeStyle(2, 0xffb74d)
-            .setDepth(4501)
-            .setVisible(false)
-            .setAlpha(PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA);
     }
 
     public get triangleVisualObject(): GameObjects.Triangle {
@@ -85,7 +84,6 @@ export class PlayerView {
     }
 
     public hideTransientMarkers(): void {
-        this.triangleLeadingCornerMarker.setVisible(false);
         this.squareContactMarker.setVisible(false);
     }
 
@@ -97,8 +95,8 @@ export class PlayerView {
         this.ballVisual.setVisible(currentForm === 'ball');
         this.triangleVisual.setVisible(currentForm === 'triangle');
         this.squareVisual.setVisible(currentForm === 'square');
+        this.markerVisual.setVisible(true);
         this.squareContactMarker.setVisible(currentForm === 'square' && squareShell.hasContact);
-        this.triangleLeadingCornerMarker.setVisible(currentForm === 'triangle');
         this.updateBallBoostVisualState(currentForm, ballBoostActive);
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached);
     }
@@ -108,8 +106,10 @@ export class PlayerView {
         playerY: number,
         formAnchor: PlayerFormAnchor,
         currentForm: PlayerFormId,
+        marker: PlayerMarkerState,
         triangleShell: PlayerTriangleShellState,
         squareShell: PlayerSquareShellState,
+        triangleDash: PlayerTriangleDashState,
         ballBoostActive: boolean
     ): void {
         this.ballVisual.setPosition(playerX, playerY);
@@ -121,55 +121,7 @@ export class PlayerView {
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached);
         this.updateSquareContactVisual(playerX, playerY, currentForm, squareShell);
         this.renderSquareTrail(squareShell.trailSegments);
-    }
-
-    public updateTriangleLeadingCornerMarker(
-        currentForm: PlayerFormId,
-        playerX: number,
-        playerY: number,
-        triangleShell: PlayerTriangleShellState,
-        triangleDash: PlayerTriangleDashState,
-        grounded: boolean,
-        input: PlayerInputSnapshot
-    ): void {
-        if (currentForm !== 'triangle') {
-            this.triangleLeadingCornerMarker.setVisible(false);
-            return;
-        }
-
-        const dashPreview = triangleDash.isActive
-            ? {
-                leadingCornerIndex: triangleDash.leadingCornerIndex,
-                lockedOrientationRad: triangleDash.lockedOrientationRad
-            }
-            : resolveTriangleDashLeadingCornerPreview(
-                triangleDash,
-                triangleShell,
-                grounded
-            );
-        const markerOffset = resolveTriangleLeadingCornerMarkerOffset(
-            dashPreview.leadingCornerIndex,
-            dashPreview.lockedOrientationRad,
-            PLAYER_TRIANGLE_LEADING_CORNER_MARKER_OUTWARD_OFFSET
-        );
-        const markerBaseY = playerY + triangleShell.visualOffsetY;
-        const isDashRelevant = input.actionHeld || input.actionPressed || triangleDash.isActive;
-
-        this.triangleLeadingCornerMarker.setVisible(true);
-        this.triangleLeadingCornerMarker.setPosition(
-            playerX + markerOffset.x,
-            markerBaseY + markerOffset.y
-        );
-        this.triangleLeadingCornerMarker.setAlpha(
-            isDashRelevant
-                ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_ALPHA
-                : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_ALPHA
-        );
-        this.triangleLeadingCornerMarker.setScale(
-            isDashRelevant
-                ? PLAYER_TRIANGLE_LEADING_CORNER_MARKER_ACTIVE_SCALE
-                : PLAYER_TRIANGLE_LEADING_CORNER_MARKER_IDLE_SCALE
-        );
+        this.updateMarkerVisual(currentForm, playerX, playerY, formAnchor, marker, triangleShell, triangleDash);
     }
 
     private updateSquareContactVisual(
@@ -202,6 +154,42 @@ export class PlayerView {
             ? PLAYER_BALL_VISUAL_BOOST_STROKE_WIDTH
             : PLAYER_BALL_VISUAL_STROKE_WIDTH;
         this.ballVisual.setStrokeStyle(strokeWidth, 0xffffff);
+    }
+
+    private updateMarkerVisual(
+        currentForm: PlayerFormId,
+        playerX: number,
+        playerY: number,
+        formAnchor: PlayerFormAnchor,
+        marker: PlayerMarkerState,
+        triangleShell: PlayerTriangleShellState,
+        triangleDash: PlayerTriangleDashState
+    ): void {
+        const markerOffset = triangleDash.isActive && currentForm === 'triangle'
+            ? this.resolveTriangleDashMarkerOffset(triangleShell, triangleDash)
+            : {
+                x: marker.currentOffsetX,
+                y: marker.currentOffsetY
+            };
+        const baseX = currentForm === 'triangle' ? formAnchor.x : playerX;
+        const baseY = currentForm === 'triangle' ? formAnchor.y : playerY;
+        const markerIntent = resolveMarkerIntent(markerOffset.x, markerOffset.y);
+
+        this.markerVisual.setPosition(baseX + markerOffset.x, baseY + markerOffset.y);
+        this.markerVisual.setAlpha(markerIntent.active || triangleDash.isActive ? PLAYER_MARKER_ACTIVE_ALPHA : PLAYER_MARKER_IDLE_ALPHA);
+    }
+
+    private resolveTriangleDashMarkerOffset(
+        triangleShell: PlayerTriangleShellState,
+        triangleDash: PlayerTriangleDashState
+    ): { x: number; y: number } {
+        const grounded = false;
+        const dashPreview = resolveTriangleDashLeadingCornerPreview(triangleDash, triangleShell, grounded);
+        const cornerOffset = resolveTriangleCornerOffset(dashPreview.leadingCornerIndex, dashPreview.lockedOrientationRad);
+        return {
+            x: cornerOffset.x * 0.45,
+            y: cornerOffset.y * 0.45
+        };
     }
 
     private renderSquareTrail(segments: PlayerSquareTrailSegment[]): void {
@@ -282,3 +270,24 @@ export class PlayerView {
         };
     }
 }
+
+const resolveTriangleCornerOffset = (
+    cornerIndex: 0 | 1 | 2,
+    orientationRad: number
+): { x: number; y: number } => {
+    const halfWidth = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
+    const halfHeight = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
+    const localCorners = [
+        { x: -halfWidth, y: halfHeight },
+        { x: 0, y: -halfHeight },
+        { x: halfWidth, y: halfHeight }
+    ] as const;
+    const localCorner = localCorners[cornerIndex] ?? localCorners[1];
+    const sin = Math.sin(orientationRad);
+    const cos = Math.cos(orientationRad);
+
+    return {
+        x: (localCorner.x * cos) - (localCorner.y * sin),
+        y: (localCorner.x * sin) + (localCorner.y * cos)
+    };
+};

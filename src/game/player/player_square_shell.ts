@@ -88,7 +88,7 @@ export const tickSquareShellOrientation = (
 };
 
 const findNearestGroundedOrientation = (angle: number): number => {
-    let nearest = PLAYER_SQUARE_GROUNDED_ORIENTATIONS_RAD[0];
+    let nearest: number = PLAYER_SQUARE_GROUNDED_ORIENTATIONS_RAD[0];
     let nearestDistance = Infinity;
 
     PLAYER_SQUARE_GROUNDED_ORIENTATIONS_RAD.forEach((candidate) => {

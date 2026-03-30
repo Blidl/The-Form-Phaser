@@ -1,4 +1,5 @@
 import type { Physics } from 'phaser';
+import type { PlayerMarkerState } from './marker/player_marker_types';
 
 export type PlayerFormId = 'ball' | 'triangle' | 'square';
 export type TriangleCornerIndex = 0 | 1 | 2;
@@ -70,8 +71,8 @@ export interface PlayerTriangleDashState {
     directionX: number;
     directionY: number;
     forceBiasX: -1 | 1;
-    forcePointIntentX: -1 | 0 | 1;
-    forcePointIntentY: -1 | 0 | 1;
+    forcePointIntentX: number;
+    forcePointIntentY: number;
     selectedLeadingCornerIndex: TriangleCornerIndex;
     leadingCornerIndex: TriangleCornerIndex;
     lockedOrientationRad: number;
@@ -85,6 +86,7 @@ export interface PlayerTriangleChargesState {
 
 export interface PlayerShellState {
     currentForm: PlayerFormId;
+    marker: PlayerMarkerState;
     triangleShell: PlayerTriangleShellState;
     squareShell: PlayerSquareShellState;
     triangleDash: PlayerTriangleDashState;

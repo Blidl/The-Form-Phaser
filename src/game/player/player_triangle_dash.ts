@@ -114,8 +114,8 @@ export const resolveTriangleDashLeadingCornerPreview = (
 export const updateTriangleDashSelectedLeadingCorner = (
     triangleDash: PlayerTriangleDashState,
     triangleShell: PlayerTriangleShellState,
-    forcePointX: -1 | 0 | 1,
-    forcePointY: -1 | 0 | 1,
+    forcePointX: number,
+    forcePointY: number,
     forcePointActive: boolean,
     grounded: boolean
 ): void => {
@@ -286,8 +286,8 @@ const getTriangleDashSelectedLeadingCornerPreview = (
 const resolveLeadingCornerIndexByForcePoint = (
     candidates: TriangleCornerIndex[],
     corners: CornerPoint[],
-    forcePointX: -1 | 0 | 1,
-    forcePointY: -1 | 0 | 1
+    forcePointX: number,
+    forcePointY: number
 ): TriangleCornerIndex => {
     if (!hasForcePointInput(forcePointX, forcePointY)) {
         return pickMostUpwardCorner(candidates, corners);
@@ -315,8 +315,8 @@ const resolveLeadingCornerIndexByForcePoint = (
 
 const dot = (
     corner: CornerPoint | undefined,
-    forcePointX: -1 | 0 | 1,
-    forcePointY: -1 | 0 | 1
+    forcePointX: number,
+    forcePointY: number
 ): number => {
     const cornerX = corner?.x ?? 0;
     const cornerY = corner?.y ?? 0;
@@ -324,16 +324,16 @@ const dot = (
 };
 
 const hasForcePointInput = (
-    forcePointX: -1 | 0 | 1,
-    forcePointY: -1 | 0 | 1
+    forcePointX: number,
+    forcePointY: number
 ): boolean => {
-    return forcePointX !== 0 || forcePointY !== 0;
+    return Math.hypot(forcePointX, forcePointY) > 0.001;
 };
 
 const updateForcePointIntent = (
     triangleDash: PlayerTriangleDashState,
-    forcePointX: -1 | 0 | 1,
-    forcePointY: -1 | 0 | 1,
+    forcePointX: number,
+    forcePointY: number,
     forcePointActive: boolean
 ): void => {
     if (!forcePointActive) {

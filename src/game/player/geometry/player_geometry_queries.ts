@@ -5,9 +5,7 @@ import {
     PLAYER_FORM_TRIANGLE_WIDTH,
     PLAYER_PLACEHOLDER_RADIUS,
     PLAYER_SQUARE_BODY_SIZE,
-    PLAYER_SQUARE_HAZARD_SIZE,
-    PLAYER_TRIANGLE_BODY_PROXY_HEIGHT,
-    PLAYER_TRIANGLE_BODY_PROXY_WIDTH
+    PLAYER_SQUARE_HAZARD_SIZE
 } from '../player_constants';
 import type {
     PlayerFormId,
@@ -35,12 +33,48 @@ import type {
 
 const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
 const TRIANGLE_HALF_HEIGHT = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
-const TRIANGLE_PROXY_TO_VISUAL_ANCHOR_OFFSET_Y = (PLAYER_TRIANGLE_BODY_PROXY_HEIGHT - PLAYER_FORM_TRIANGLE_HEIGHT) * 0.5;
 const TRIANGLE_LOCAL_VERTICES = [
     { x: -TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT },
     { x: 0, y: -TRIANGLE_HALF_HEIGHT },
     { x: TRIANGLE_HALF_WIDTH, y: TRIANGLE_HALF_HEIGHT }
 ] as const;
+
+export const resolveTriangleLocalVertices = (): readonly [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number }
+] => {
+    return TRIANGLE_LOCAL_VERTICES;
+};
+
+export const resolveTriangleLocalBounds = (
+    orientationRad: number
+): { minX: number; maxX: number; minY: number; maxY: number; centerX: number; centerY: number; width: number; height: number } => {
+    const points = resolveTriangleWorldPoints(0, 0, orientationRad);
+    let minX = points[0].x;
+    let maxX = points[0].x;
+    let minY = points[0].y;
+    let maxY = points[0].y;
+
+    for (let index = 1; index < points.length; index += 1) {
+        const point = points[index];
+        minX = Math.min(minX, point.x);
+        maxX = Math.max(maxX, point.x);
+        minY = Math.min(minY, point.y);
+        maxY = Math.max(maxY, point.y);
+    }
+
+    return {
+        minX,
+        maxX,
+        minY,
+        maxY,
+        centerX: (minX + maxX) * 0.5,
+        centerY: (minY + maxY) * 0.5,
+        width: maxX - minX,
+        height: maxY - minY
+    };
+};
 
 export const createPlayerRectSnapshot = (
     left: number,
@@ -73,7 +107,7 @@ export const resolvePlayerAnchorOffset = (
 
     return {
         x: 0,
-        y: triangleShell.visualOffsetY + TRIANGLE_PROXY_TO_VISUAL_ANCHOR_OFFSET_Y
+        y: triangleShell.visualOffsetY
     };
 };
 
@@ -94,9 +128,6 @@ export const resolvePlayerLocomotionBodyConfig = (
     form: PlayerFormId,
     triangleShell: PlayerTriangleShellState
 ): PlayerLocomotionBodyConfig => {
-    // Triangle locomotion body uses a stable baseline proxy and does not track visual settle offsets.
-    void triangleShell;
-
     if (form === 'ball') {
         return {
             kind: 'circle',
@@ -114,11 +145,15 @@ export const resolvePlayerLocomotionBodyConfig = (
         };
     }
 
+    const triangleBounds = resolveTriangleLocalBounds(triangleShell.orientationRad);
     return {
         kind: 'box',
-        width: PLAYER_TRIANGLE_BODY_PROXY_WIDTH,
-        height: PLAYER_TRIANGLE_BODY_PROXY_HEIGHT,
-        centerOffset: { x: 0, y: 0 }
+        width: triangleBounds.width,
+        height: triangleBounds.height,
+        centerOffset: {
+            x: triangleBounds.centerX,
+            y: triangleShell.visualOffsetY + triangleBounds.centerY
+        }
     };
 };
 

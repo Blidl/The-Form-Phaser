@@ -1,6 +1,6 @@
 import { Scene } from 'phaser';
 import { PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS } from '../../player/player_constants';
-import { PfPlayer } from '../../player/PfPlayer';
+import type { PlayerWorldActor } from '../../player/player_runtime_contracts';
 import { doesHazardOverlapPlayerShape, type HazardObject } from '../hazard';
 import type { RespawnPoint } from './world_runtime_types';
 
@@ -12,7 +12,7 @@ export interface PlayerRespawnRuntime {
 
 interface CreatePlayerRespawnRuntimeParams {
     scene: Scene;
-    player: PfPlayer;
+    player: PlayerWorldActor;
     initialRespawnPoint: RespawnPoint;
 }
 
