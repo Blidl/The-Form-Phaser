@@ -96,6 +96,9 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
     const debugRuntime = createTestDebugRuntime({
         scene,
         player: debugModel,
+        setPlayerDebugVisualsVisible: (visible) => {
+            player.setDebugVisualsVisible(visible);
+        },
         getHazards: () => worldRuntime.hazards
     });
     const editorRuntime = createTestWorldEditorRuntime(

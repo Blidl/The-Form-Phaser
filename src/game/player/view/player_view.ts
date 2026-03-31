@@ -46,6 +46,7 @@ export class PlayerView {
     private readonly squareContactMarker: GameObjects.Line;
     private readonly squareTrailGraphics: GameObjects.Graphics;
     private readonly squareAttachJumpTetherGraphics: GameObjects.Graphics;
+    private debugVisualsVisible: boolean = false;
 
     public constructor(scene: Scene, x: number, y: number) {
         this.ballVisual = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff)
@@ -94,6 +95,13 @@ export class PlayerView {
         this.squareAttachJumpTetherGraphics.clear();
     }
 
+    public setDebugVisualsVisible(visible: boolean): void {
+        this.debugVisualsVisible = visible;
+        if (!visible) {
+            this.squareContactMarker.setVisible(false);
+        }
+    }
+
     public applyCurrentFormVisibility(
         currentForm: PlayerFormId,
         squareShell: PlayerSquareShellState,
@@ -103,7 +111,9 @@ export class PlayerView {
         this.triangleVisual.setVisible(currentForm === 'triangle');
         this.squareVisual.setVisible(currentForm === 'square');
         this.markerVisual.setVisible(true);
-        this.squareContactMarker.setVisible(currentForm === 'square' && squareShell.hasContact);
+        this.squareContactMarker.setVisible(
+            this.debugVisualsVisible && currentForm === 'square' && squareShell.hasContact
+        );
         this.updateBallBoostVisualState(currentForm, ballBoostActive);
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached, squareShell.isTrailRegenerating);
     }
@@ -138,7 +148,7 @@ export class PlayerView {
         currentForm: PlayerFormId,
         squareShell: PlayerSquareShellState
     ): void {
-        if (currentForm !== 'square' || !squareShell.hasContact) {
+        if (!this.debugVisualsVisible || currentForm !== 'square' || !squareShell.hasContact) {
             this.squareContactMarker.setVisible(false);
             return;
         }

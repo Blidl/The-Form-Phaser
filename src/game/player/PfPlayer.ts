@@ -83,6 +83,10 @@ export class PfPlayer {
         return this.runtime.squareDebugView;
     }
 
+    public setDebugVisualsVisible(visible: boolean): void {
+        this.runtime.setDebugVisualsVisible(visible);
+    }
+
     public refillTriangleFlightResource(): void {
         this.runtime.refillTriangleFlightResource();
     }

@@ -327,6 +327,10 @@ export class PfPlayerRuntime {
         };
     }
 
+    public setDebugVisualsVisible(visible: boolean): void {
+        this.view.setDebugVisualsVisible(visible);
+    }
+
     public refillTriangleFlightResource(): void {
         refillTriangleFlightResource(this.state.triangleFlight);
     }
