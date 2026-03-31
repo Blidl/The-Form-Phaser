@@ -120,6 +120,7 @@ export class TestWorldEditorSidebar {
     private readonly root: HTMLDivElement;
     private readonly fileInput: HTMLInputElement;
     private state: TestWorldEditorSidebarState;
+    private pendingScrollRestore: { inner: number; list: number } | null = null;
 
     public constructor(
         parent: HTMLElement,
@@ -166,6 +167,7 @@ export class TestWorldEditorSidebar {
     }
 
     public setState(nextState: TestWorldEditorSidebarState): void {
+        this.captureScrollPosition();
         this.state = nextState;
         this.render();
     }
@@ -260,6 +262,33 @@ export class TestWorldEditorSidebar {
         this.callbacks.onInspectorFieldChange(fieldKey, target.value);
     };
 
+    private captureScrollPosition(): void {
+        const inner = this.root.querySelector<HTMLElement>('.test-world-editor__inner');
+        const list = this.root.querySelector<HTMLElement>('.test-world-editor__list');
+        this.pendingScrollRestore = {
+            inner: inner?.scrollTop ?? 0,
+            list: list?.scrollTop ?? 0
+        };
+    }
+
+    private restoreScrollPosition(): void {
+        if (!this.pendingScrollRestore) {
+            return;
+        }
+
+        const inner = this.root.querySelector<HTMLElement>('.test-world-editor__inner');
+        if (inner) {
+            inner.scrollTop = this.pendingScrollRestore.inner;
+        }
+
+        const list = this.root.querySelector<HTMLElement>('.test-world-editor__list');
+        if (list) {
+            list.scrollTop = this.pendingScrollRestore.list;
+        }
+
+        this.pendingScrollRestore = null;
+    }
+
     private render(): void {
         const state = this.state;
         this.root.classList.toggle('test-world-editor--hidden', !state.visible);
@@ -344,5 +373,6 @@ export class TestWorldEditorSidebar {
             </div>
         `;
         this.root.appendChild(this.fileInput);
+        this.restoreScrollPosition();
     }
 }
