@@ -51,6 +51,7 @@
 - breakable-объекты;
 - moving platform;
 - trigger platform;
+- drag box;
 - wind zone;
 - UI;
 - scene bootstrap;
@@ -201,7 +202,7 @@ the-form/
 
 - единый конфигурационный слой test-уровня, из которого собираются основные объекты сцены;
 - локальный runtime edit mode для ручной настройки test geometry;
-- отдельный debug-layer для acceptance-проверки `Square attach / rollover`.
+- отдельный debug-layer для acceptance-проверки `Square attach / attach-jump / rollover`.
 
 ---
 
@@ -320,6 +321,7 @@ the-form/
 - checkpoints;
 - moving platforms;
 - trigger platforms;
+- drag boxes;
 - wind zones;
 - другие обязательные test objects.
 

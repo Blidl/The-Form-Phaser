@@ -19,6 +19,7 @@ export interface PlayerTriangleCollisionState {
     hasLeftWallContact: boolean;
     hasRightWallContact: boolean;
     groundSupportEdgeIndex: TriangleEdgeIndex | null;
+    groundSupportBody: MatterJS.BodyType | null;
 }
 
 export interface PlayerSquareShellState {
@@ -34,6 +35,9 @@ export interface PlayerSquareShellState {
     trailSegments: PlayerSquareTrailSegment[];
     trailResourceCurrent: number;
     trailResourceMax: number;
+    isOnTrail: boolean;
+    isTrailRegenerating: boolean;
+    isTrailLockedAtBoundary: boolean;
     trailAnchorActive: boolean;
     trailAnchorX: number;
     trailAnchorY: number;
@@ -44,7 +48,35 @@ export interface PlayerSquareShellState {
     trailAnchorSupportOriginY: number;
     trailAnchorNormalX: -1 | 0 | 1;
     trailAnchorNormalY: -1 | 0 | 1;
+    trailLatchActive: boolean;
+    trailLatchLocalX: number;
+    trailLatchLocalY: number;
+    trailLatchSupportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
+    trailLatchSupportOriginX: number;
+    trailLatchSupportOriginY: number;
+    trailLatchNormalX: -1 | 0 | 1;
+    trailLatchNormalY: -1 | 0 | 1;
+    attachJumpState: PlayerSquareAttachJumpState;
     rolloverState: PlayerSquareRolloverState;
+}
+
+export type PlayerSquareAttachJumpPhase = 'inactive' | 'outbound' | 'return';
+
+export interface PlayerSquareAttachJumpState {
+    phase: PlayerSquareAttachJumpPhase;
+    elapsedMs: number;
+    anchorLocalX: number;
+    anchorLocalY: number;
+    anchorSupportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
+    anchorSupportOriginX: number;
+    anchorSupportOriginY: number;
+    normalX: -1 | 0 | 1;
+    normalY: -1 | 0 | 1;
+    launchCenterX: number;
+    launchCenterY: number;
+    peakCenterX: number;
+    peakCenterY: number;
+    orientationRad: number;
 }
 
 export type PlayerSquareRolloverPhase = 'inactive' | 'forward' | 'rollback';

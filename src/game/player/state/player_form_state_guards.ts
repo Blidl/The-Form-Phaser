@@ -101,8 +101,7 @@ export const resolveFormTransitionResetDirective = (
 
     if (nextForm === 'square') {
         const resetDirective: PlayerFormTransitionResetDirective = {
-            ...EMPTY_TRANSITION_RESET_DIRECTIVE,
-            resetSquareShell: true
+            ...EMPTY_TRANSITION_RESET_DIRECTIVE
         };
         if (previousForm === 'triangle') {
             resetDirective.stopTriangleFlight = true;

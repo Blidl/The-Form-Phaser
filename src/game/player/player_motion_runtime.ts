@@ -25,6 +25,8 @@ interface ResolveMotionFlagsParams {
 export const resolvePlayerMotionFlags = (params: ResolveMotionFlagsParams): {
     invalidTriangleFlightOutsideTriangle: boolean;
     isSquareAttached: boolean;
+    isSquareTrailRegenerating: boolean;
+    isSquareAttachJumpActive: boolean;
 } => {
     const { state, isSquareForm } = params;
     const invalidTriangleFlightOutsideTriangle = state.currentForm !== 'triangle' && state.triangleFlight.isActive;
@@ -32,7 +34,9 @@ export const resolvePlayerMotionFlags = (params: ResolveMotionFlagsParams): {
 
     return {
         invalidTriangleFlightOutsideTriangle,
-        isSquareAttached: isSquareForm && !invalidSquareAttachOutsideSquare && state.squareShell.isAttached
+        isSquareAttached: isSquareForm && !invalidSquareAttachOutsideSquare && state.squareShell.isAttached,
+        isSquareTrailRegenerating: isSquareForm && state.squareShell.isTrailRegenerating,
+        isSquareAttachJumpActive: isSquareForm && state.squareShell.attachJumpState.phase !== 'inactive'
     };
 };
 

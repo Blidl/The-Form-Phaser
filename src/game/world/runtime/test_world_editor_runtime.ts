@@ -16,6 +16,7 @@ const BRUSH_TYPES: TestWorldEditableElementKind[] = [
     'hazard',
     'checkpoint',
     'moving_platform',
+    'drag_box',
     'trigger_platform_trigger',
     'wind_zone',
     'triangle_pickup'
@@ -48,7 +49,8 @@ export const createTestWorldEditorRuntime = (
         keyboard.addKey(Input.Keyboard.KeyCodes.FOUR),
         keyboard.addKey(Input.Keyboard.KeyCodes.FIVE),
         keyboard.addKey(Input.Keyboard.KeyCodes.SIX),
-        keyboard.addKey(Input.Keyboard.KeyCodes.SEVEN)
+        keyboard.addKey(Input.Keyboard.KeyCodes.SEVEN),
+        keyboard.addKey(Input.Keyboard.KeyCodes.EIGHT)
     ];
     const selectionGraphics = scene.add.graphics().setDepth(4990);
     const overlayText = scene.add.text(18, 18, '', {
@@ -198,7 +200,7 @@ export const createTestWorldEditorRuntime = (
                 `EDITOR F2 exit/apply  F3 copy-config`,
                 `LMB select+drag  Arrows move  Ctrl+Arrows resize`,
                 `N add  Del remove  Brush: ${brushKind}`,
-                `1 surface 2 hazard 3 checkpoint 4 moving 5 trigger 6 wind 7 pickup`
+                `1 surface 2 hazard 3 checkpoint 4 moving 5 box 6 trigger 7 wind 8 pickup`
             ].join('\n'));
 
             digitKeys.forEach((key, index) => {

@@ -2,6 +2,7 @@ import type { Physics } from 'phaser';
 import type { PlayerSquareShellState } from './player_types';
 import { PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS } from './player_constants';
 import { resetSquareRolloverState } from './player_square_rollover';
+import { clearSquareTrailLatch } from './player_square_trail_latch';
 import type { PlayerSquareAttachPoseQuery } from './geometry/player_geometry_types';
 
 export const tryEnterSquareAttach = (
@@ -61,11 +62,29 @@ export const tickSquareAttachState = (
 
 export const clearSquareAttach = (squareShell: PlayerSquareShellState): void => {
     squareShell.isAttached = false;
+    squareShell.isOnTrail = false;
+    squareShell.isTrailRegenerating = false;
+    squareShell.isTrailLockedAtBoundary = false;
     squareShell.attachNormalX = 0;
     squareShell.attachNormalY = -1;
     squareShell.attachContactGraceMs = 0;
     squareShell.trailAnchorActive = false;
     squareShell.trailAnchorSupportBody = null;
+    clearSquareTrailLatch(squareShell);
+    squareShell.attachJumpState.phase = 'inactive';
+    squareShell.attachJumpState.elapsedMs = 0;
+    squareShell.attachJumpState.anchorLocalX = 0;
+    squareShell.attachJumpState.anchorLocalY = 0;
+    squareShell.attachJumpState.anchorSupportBody = null;
+    squareShell.attachJumpState.anchorSupportOriginX = 0;
+    squareShell.attachJumpState.anchorSupportOriginY = 0;
+    squareShell.attachJumpState.normalX = 0;
+    squareShell.attachJumpState.normalY = -1;
+    squareShell.attachJumpState.launchCenterX = 0;
+    squareShell.attachJumpState.launchCenterY = 0;
+    squareShell.attachJumpState.peakCenterX = 0;
+    squareShell.attachJumpState.peakCenterY = 0;
+    squareShell.attachJumpState.orientationRad = 0;
     resetSquareRolloverState(squareShell.rolloverState);
 };
 

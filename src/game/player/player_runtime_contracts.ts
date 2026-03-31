@@ -1,10 +1,12 @@
-import type { GameObjects } from 'phaser';
+import type { GameObjects, Physics } from 'phaser';
 import type { PlayerFormAnchor, PlayerHazardHitShape } from './geometry/player_geometry_types';
 import type { PlayerFormId } from './player_types';
 
 export interface PlayerWorldActor {
     currentForm: PlayerFormId;
     arcadeBodyObject: GameObjects.Arc;
+    squareAttachJumpPullBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
+    isCurrentlyGrounded: boolean;
     hazardHitShape: PlayerHazardHitShape;
     refillTriangleFlightResource: () => void;
     freezeForRespawn: () => void;

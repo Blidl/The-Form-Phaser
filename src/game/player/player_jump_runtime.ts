@@ -3,9 +3,11 @@ import { PLAYER_JUMP_CUT_MULTIPLIER, PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER } from 
 import type { PlayerInputSnapshot } from './player_input';
 import { clearCoyoteTime, clearJumpBuffer, hasCoyoteTime, hasJumpBuffer, type PlayerTimers } from './player_timers';
 import { applyBallJumpRuntime, tryStartBallAirRebound, type PlayerBallMutableState } from './player_ball_runtime';
+import { tryStartSquareAttachJump } from './player_square_attach_jump';
 import { applyTriangleJumpRuntime } from './player_triangle_runtime';
 import type { BallReboundRuntimeState } from './player_ball_rebound_runtime';
 import type { PlayerShellState } from './player_types';
+import { PLAYER_JUMP_VELOCITY } from './player_constants';
 
 export interface PlayerJumpMutableState extends PlayerBallMutableState {
     lastMoveDirection: -1 | 1;
@@ -53,6 +55,18 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
 
     const hasCoyoteJump = hasCoyoteTime(timers);
     const canJump = grounded || hasCoyoteJump;
+    const canStartSquareAttachJump = state.currentForm === 'square'
+        && state.squareShell.isAttached
+        && params.input.actionHeld
+        && hasJumpBuffer(timers);
+
+    if (canStartSquareAttachJump && tryStartSquareAttachJump(state.squareShell, physicsBody)) {
+        mutable.jumpCutConsumed = false;
+        clearJumpBuffer(timers);
+        clearCoyoteTime(timers);
+        return;
+    }
+
     const canProcessJump = !isTriangleFlightActive && !isSquareAttached && !isBallReboundPauseHolding && hasJumpBuffer(timers);
 
     if (canProcessJump) {
@@ -90,15 +104,25 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
         return;
     }
 
-    applyBallJumpRuntime({
-        mutable,
-        physicsBody,
-        timers,
-        horizontalDir,
-        isBallForm,
-        grounded,
-        hasBoostHold
-    });
+    if (isBallForm) {
+        applyBallJumpRuntime({
+            mutable,
+            physicsBody,
+            timers,
+            horizontalDir,
+            isBallForm,
+            grounded,
+            hasBoostHold
+        });
+        return;
+    }
+
+    physicsBody.setVelocityY(PLAYER_JUMP_VELOCITY);
+    mutable.jumpCutConsumed = false;
+    mutable.reboundWindowMs = 0;
+    clearJumpBuffer(timers);
+    clearCoyoteTime(timers);
+    mutable.lastAirborneDownwardSpeed = 0;
 };
 
 interface ApplyJumpCutParams {

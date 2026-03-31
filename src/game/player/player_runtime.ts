@@ -228,6 +228,16 @@ export class PfPlayerRuntime {
         return this.physicsSprite;
     }
 
+    public get squareAttachJumpPullBody(): Physics.Arcade.Body | Physics.Arcade.StaticBody | null {
+        return this.state.squareShell.attachJumpState.phase !== 'return'
+            ? null
+            : this.state.squareShell.attachJumpState.anchorSupportBody;
+    }
+
+    public get isCurrentlyGrounded(): boolean {
+        return this.computeIsCurrentlyGrounded();
+    }
+
     public get hazardHitShape(): PlayerHazardHitShape {
         return resolvePlayerHazardHitShape({
             form: this.state.currentForm,
@@ -350,7 +360,7 @@ export class PfPlayerRuntime {
             getTransformLockMs: () => this.timers.transformLockMs,
             resolveSquareTrailSurfacePoint: (normalX, normalY) => this.resolveSquareTrailSurfacePoint(normalX, normalY),
             querySquareAttachPose: (centerX, centerY, normalX, normalY) => this.querySquareAttachPose(centerX, centerY, normalX, normalY),
-            isCurrentlyGrounded: () => this.isCurrentlyGrounded()
+            isCurrentlyGrounded: () => this.computeIsCurrentlyGrounded()
         };
 
         tickPlayerRuntime(tickContext);
@@ -531,7 +541,7 @@ export class PfPlayerRuntime {
         };
     }
 
-    private isCurrentlyGrounded(): boolean {
+    private computeIsCurrentlyGrounded(): boolean {
         if (this.state.currentForm === 'triangle') {
             return this.state.triangleCollision.hasGroundContact && this.state.triangleCollision.groundSupportEdgeIndex !== null;
         }

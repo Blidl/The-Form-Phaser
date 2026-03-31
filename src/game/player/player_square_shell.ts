@@ -5,6 +5,7 @@ import {
     PLAYER_SQUARE_GROUNDED_SETTLE_LERP_SPEED,
     PLAYER_SQUARE_TRAIL_RESOURCE_MAX
 } from './player_constants';
+import { createSquareAttachJumpState, resetSquareAttachJumpState } from './player_square_attach_jump';
 import { createSquareRolloverState, resetSquareRolloverState } from './player_square_rollover';
 
 export const createSquareShellState = (): PlayerSquareShellState => {
@@ -21,6 +22,9 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         trailSegments: [],
         trailResourceCurrent: PLAYER_SQUARE_TRAIL_RESOURCE_MAX,
         trailResourceMax: PLAYER_SQUARE_TRAIL_RESOURCE_MAX,
+        isOnTrail: false,
+        isTrailRegenerating: false,
+        isTrailLockedAtBoundary: false,
         trailAnchorActive: false,
         trailAnchorX: 0,
         trailAnchorY: 0,
@@ -31,6 +35,15 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         trailAnchorSupportOriginY: 0,
         trailAnchorNormalX: 0,
         trailAnchorNormalY: -1,
+        trailLatchActive: false,
+        trailLatchLocalX: 0,
+        trailLatchLocalY: 0,
+        trailLatchSupportBody: null,
+        trailLatchSupportOriginX: 0,
+        trailLatchSupportOriginY: 0,
+        trailLatchNormalX: 0,
+        trailLatchNormalY: -1,
+        attachJumpState: createSquareAttachJumpState(),
         rolloverState: createSquareRolloverState()
     };
 };
@@ -50,6 +63,9 @@ export const resetSquareShellState = (
     squareShell.trailSegments.length = 0;
     squareShell.trailResourceMax = PLAYER_SQUARE_TRAIL_RESOURCE_MAX;
     squareShell.trailResourceCurrent = squareShell.trailResourceMax;
+    squareShell.isOnTrail = false;
+    squareShell.isTrailRegenerating = false;
+    squareShell.isTrailLockedAtBoundary = false;
     squareShell.trailAnchorActive = false;
     squareShell.trailAnchorX = 0;
     squareShell.trailAnchorY = 0;
@@ -60,6 +76,15 @@ export const resetSquareShellState = (
     squareShell.trailAnchorSupportOriginY = 0;
     squareShell.trailAnchorNormalX = 0;
     squareShell.trailAnchorNormalY = -1;
+    squareShell.trailLatchActive = false;
+    squareShell.trailLatchLocalX = 0;
+    squareShell.trailLatchLocalY = 0;
+    squareShell.trailLatchSupportBody = null;
+    squareShell.trailLatchSupportOriginX = 0;
+    squareShell.trailLatchSupportOriginY = 0;
+    squareShell.trailLatchNormalX = 0;
+    squareShell.trailLatchNormalY = -1;
+    resetSquareAttachJumpState(squareShell.attachJumpState);
     resetSquareRolloverState(squareShell.rolloverState);
 };
 
@@ -70,7 +95,7 @@ export const tickSquareShellOrientation = (
     contactNormalY: -1 | 0 | 1,
     hasContact: boolean
 ): void => {
-    if (squareShell.rolloverState.phase !== 'inactive') {
+    if (squareShell.rolloverState.phase !== 'inactive' || squareShell.attachJumpState.phase !== 'inactive') {
         squareShell.hasContact = hasContact;
         if (hasContact) {
             squareShell.contactNormalX = contactNormalX;

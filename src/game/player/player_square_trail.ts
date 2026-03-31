@@ -17,6 +17,7 @@ import { squareSupportLocalToWorld, squareSupportWorldToLocal } from './player_s
 
 const TRAIL_LOCAL_MERGE_AXIS_EPSILON = 1.5;
 const TRAIL_LOCAL_MERGE_GAP_EPSILON = 0.5;
+const TRAIL_COVERAGE_DISTANCE_EPSILON = 1.25;
 
 export const beginSquareTrailAnchor = (
     squareShell: PlayerSquareShellState,
@@ -128,8 +129,17 @@ export const tickSquareTrailPaint = (
     if (distanceAlongSurface < PLAYER_SQUARE_TRAIL_MIN_SEGMENT_LENGTH) {
         return;
     }
+    const coveredDistance = resolveTrailCoveredDistanceForInterval(
+        squareShell,
+        { x: squareShell.trailAnchorLocalX, y: squareShell.trailAnchorLocalY },
+        currentSurfaceLocal,
+        effectiveSupportOwner,
+        normalX,
+        normalY
+    );
+    const uncoveredDistance = Math.max(0, distanceAlongSurface - coveredDistance);
     const maxPaintDistance = squareShell.trailResourceCurrent / PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT;
-    const paintDistance = Math.min(distanceAlongSurface, Math.max(0, maxPaintDistance));
+    const paintDistance = Math.min(uncoveredDistance, Math.max(0, maxPaintDistance));
     if (paintDistance <= 0) {
         setTrailAnchorToCurrentSurface(squareShell, currentSurfaceLocal, effectiveSupportOwner, normalX, normalY);
         return;
@@ -276,6 +286,84 @@ export const tickSquareTrailDetachedLifecycle = (
     return refundedAmount;
 };
 
+export const isSquareSurfacePointOnTrail = (
+    squareShell: PlayerSquareShellState,
+    surfaceX: number,
+    surfaceY: number,
+    normalX: -1 | 0 | 1,
+    normalY: -1 | 0 | 1,
+    supportOwner: PlayerSquareTrailSupportOwner
+): boolean => {
+    return findTrailCoveragePoint(
+        squareShell,
+        surfaceX,
+        surfaceY,
+        normalX,
+        normalY,
+        supportOwner
+    ) !== null;
+};
+
+export const findNearestSquareTrailPoint = (
+    squareShell: PlayerSquareShellState,
+    surfaceX: number,
+    surfaceY: number,
+    normalX: -1 | 0 | 1,
+    normalY: -1 | 0 | 1,
+    supportOwner: PlayerSquareTrailSupportOwner
+): { x: number; y: number } | null => {
+    return findNearestTrailCoveragePoint(
+        squareShell,
+        surfaceX,
+        surfaceY,
+        normalX,
+        normalY,
+        supportOwner
+    );
+};
+
+export const tickSquareTrailManualRegen = (
+    squareShell: PlayerSquareShellState,
+    deltaMs: number,
+    regenSpeedPxPerSec: number
+): number => {
+    if (deltaMs <= 0 || regenSpeedPxPerSec <= 0 || squareShell.trailSegments.length <= 0) {
+        return 0;
+    }
+
+    let remainingDistance = regenSpeedPxPerSec * Math.max(0, deltaMs / 1000);
+    let refundedAmount = 0;
+
+    while (remainingDistance > 0.0001 && squareShell.trailSegments.length > 0) {
+        const segment = squareShell.trailSegments[0];
+        const segmentLength = Math.hypot(segment.endX - segment.startX, segment.endY - segment.startY);
+        if (segmentLength <= 0.0001) {
+            squareShell.trailSegments.shift();
+            continue;
+        }
+
+        const shrinkDistance = Math.min(segmentLength, remainingDistance);
+        const shrinkT = shrinkDistance / segmentLength;
+        segment.startX += (segment.endX - segment.startX) * shrinkT;
+        segment.startY += (segment.endY - segment.startY) * shrinkT;
+        segment.startLocalX += (segment.endLocalX - segment.startLocalX) * shrinkT;
+        segment.startLocalY += (segment.endLocalY - segment.startLocalY) * shrinkT;
+        segment.detachedRefundRemaining = Math.max(
+            0,
+            segment.detachedRefundRemaining - (shrinkDistance * PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT)
+        );
+
+        refundedAmount += shrinkDistance * PLAYER_SQUARE_TRAIL_RESOURCE_COST_PER_UNIT;
+        remainingDistance -= shrinkDistance;
+
+        if (shrinkDistance >= segmentLength - 0.0001) {
+            squareShell.trailSegments.shift();
+        }
+    }
+
+    return refundedAmount;
+};
+
 const isTrailSupportOwnerInvalid = (
     supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody
 ): boolean => {
@@ -379,6 +467,79 @@ const findNearestTrailJoinPoint = (
     });
 
     return bestPoint ?? { x: surfaceX, y: surfaceY };
+};
+
+const findTrailCoveragePoint = (
+    squareShell: PlayerSquareShellState,
+    surfaceX: number,
+    surfaceY: number,
+    normalX: -1 | 0 | 1,
+    normalY: -1 | 0 | 1,
+    supportOwner: PlayerSquareTrailSupportOwner
+): { x: number; y: number } | null => {
+    const nearestPoint = findNearestTrailCoveragePoint(
+        squareShell,
+        surfaceX,
+        surfaceY,
+        normalX,
+        normalY,
+        supportOwner
+    );
+    if (nearestPoint === null) {
+        return null;
+    }
+
+    const dx = surfaceX - nearestPoint.x;
+    const dy = surfaceY - nearestPoint.y;
+    return ((dx * dx) + (dy * dy)) <= (TRAIL_COVERAGE_DISTANCE_EPSILON * TRAIL_COVERAGE_DISTANCE_EPSILON)
+        ? nearestPoint
+        : null;
+};
+
+const findNearestTrailCoveragePoint = (
+    squareShell: PlayerSquareShellState,
+    surfaceX: number,
+    surfaceY: number,
+    normalX: -1 | 0 | 1,
+    normalY: -1 | 0 | 1,
+    supportOwner: PlayerSquareTrailSupportOwner
+): { x: number; y: number } | null => {
+    let bestPoint: { x: number; y: number } | null = null;
+    let bestDistanceSq = Infinity;
+
+    squareShell.trailSegments.forEach((segment) => {
+        if (segment.isDetached || segment.normalX !== normalX || segment.normalY !== normalY) {
+            return;
+        }
+
+        const segmentSupportOwner: PlayerSquareTrailSupportOwner = {
+            body: segment.supportBody,
+            originX: segment.supportOriginX,
+            originY: segment.supportOriginY
+        };
+        if (!isSameSupportOwner(segmentSupportOwner, supportOwner)) {
+            return;
+        }
+
+        const worldLine = resolveSquareTrailSegmentWorldLine(segment);
+        const point = projectPointToSegment(
+            surfaceX,
+            surfaceY,
+            worldLine.startX,
+            worldLine.startY,
+            worldLine.endX,
+            worldLine.endY
+        );
+        const dx = surfaceX - point.x;
+        const dy = surfaceY - point.y;
+        const distanceSq = (dx * dx) + (dy * dy);
+        if (distanceSq < bestDistanceSq) {
+            bestDistanceSq = distanceSq;
+            bestPoint = point;
+        }
+    });
+
+    return bestPoint;
 };
 
 const isSameSupportOwner = (
@@ -508,6 +669,87 @@ const appendOrMergeSweptLocalInterval = (
     if (squareShell.trailSegments.length > PLAYER_SQUARE_TRAIL_MAX_SEGMENTS) {
         squareShell.trailSegments.splice(0, squareShell.trailSegments.length - PLAYER_SQUARE_TRAIL_MAX_SEGMENTS);
     }
+};
+
+const resolveTrailCoveredDistanceForInterval = (
+    squareShell: PlayerSquareShellState,
+    fromLocal: { x: number; y: number },
+    toLocal: { x: number; y: number },
+    supportOwner: PlayerSquareTrailSupportOwner,
+    normalX: -1 | 0 | 1,
+    normalY: -1 | 0 | 1
+): number => {
+    const tangentX = -normalY;
+    const tangentY = normalX;
+    const intervalMinT = Math.min(
+        (fromLocal.x * tangentX) + (fromLocal.y * tangentY),
+        (toLocal.x * tangentX) + (toLocal.y * tangentY)
+    );
+    const intervalMaxT = Math.max(
+        (fromLocal.x * tangentX) + (fromLocal.y * tangentY),
+        (toLocal.x * tangentX) + (toLocal.y * tangentY)
+    );
+    const intervalN = ((fromLocal.x * normalX) + (fromLocal.y * normalY) + (toLocal.x * normalX) + (toLocal.y * normalY)) * 0.5;
+    const overlaps: Array<{ min: number; max: number }> = [];
+
+    squareShell.trailSegments.forEach((segment) => {
+        if (segment.isDetached || segment.normalX !== normalX || segment.normalY !== normalY) {
+            return;
+        }
+
+        const segmentOwner: PlayerSquareTrailSupportOwner = {
+            body: segment.supportBody,
+            originX: segment.supportOriginX,
+            originY: segment.supportOriginY
+        };
+        if (!isSameSupportOwner(segmentOwner, supportOwner)) {
+            return;
+        }
+
+        const segmentN = ((segment.startLocalX * normalX) + (segment.startLocalY * normalY)
+            + (segment.endLocalX * normalX) + (segment.endLocalY * normalY)) * 0.5;
+        if (Math.abs(segmentN - intervalN) > TRAIL_LOCAL_MERGE_AXIS_EPSILON) {
+            return;
+        }
+
+        const segmentMinT = Math.min(
+            (segment.startLocalX * tangentX) + (segment.startLocalY * tangentY),
+            (segment.endLocalX * tangentX) + (segment.endLocalY * tangentY)
+        );
+        const segmentMaxT = Math.max(
+            (segment.startLocalX * tangentX) + (segment.startLocalY * tangentY),
+            (segment.endLocalX * tangentX) + (segment.endLocalY * tangentY)
+        );
+        const overlapMin = Math.max(intervalMinT, segmentMinT);
+        const overlapMax = Math.min(intervalMaxT, segmentMaxT);
+        if (overlapMax - overlapMin > 0.0001) {
+            overlaps.push({ min: overlapMin, max: overlapMax });
+        }
+    });
+
+    if (overlaps.length <= 0) {
+        return 0;
+    }
+
+    overlaps.sort((left, right) => left.min - right.min);
+    let coveredDistance = 0;
+    let mergedMin = overlaps[0].min;
+    let mergedMax = overlaps[0].max;
+
+    for (let index = 1; index < overlaps.length; index += 1) {
+        const overlap = overlaps[index];
+        if (overlap.min <= mergedMax + TRAIL_LOCAL_MERGE_GAP_EPSILON) {
+            mergedMax = Math.max(mergedMax, overlap.max);
+            continue;
+        }
+
+        coveredDistance += mergedMax - mergedMin;
+        mergedMin = overlap.min;
+        mergedMax = overlap.max;
+    }
+
+    coveredDistance += mergedMax - mergedMin;
+    return coveredDistance;
 };
 
 const projectPointToSegment = (

@@ -6,6 +6,7 @@ import {
     PLAYER_SQUARE_ROLLOVER_RETURN_TIME_MS
 } from './player_constants';
 import { commitSquareAttachPose } from './player_square_attach';
+import { isSquareSurfacePointOnTrail } from './player_square_trail';
 import { squareSupportLocalToWorld, squareSupportWorldToLocal } from './player_square_support_space';
 import type {
     PlayerSquareRolloverState,
@@ -226,6 +227,7 @@ export const tickSquareRollover = (params: TickSquareRolloverParams): void => {
         }
 
         const targetCandidate = resolveRolloverAttachCommitCandidate(
+            squareShell,
             queryAttachPose,
             forwardPose.x,
             forwardPose.y,
@@ -463,6 +465,7 @@ const resolveTurnAngleRad = (
 };
 
 const resolveRolloverAttachCommitCandidate = (
+    squareShell: PlayerSquareShellState,
     queryAttachPose: (
         centerX: number,
         centerY: number,
@@ -486,7 +489,19 @@ const resolveRolloverAttachCommitCandidate = (
 
     for (const candidate of orderedNormals) {
         const pose = queryAttachPose(centerX, centerY, candidate.normalX, candidate.normalY);
-        if (pose.supportInterval !== null && pose.isPoseClear) {
+        const poseOnTrail = isSquareSurfacePointOnTrail(
+            squareShell,
+            pose.surfacePoint.x,
+            pose.surfacePoint.y,
+            candidate.normalX,
+            candidate.normalY,
+            pose.surfacePoint.supportOwner
+        );
+        if (
+            pose.supportInterval !== null
+            && pose.isPoseClear
+            && (poseOnTrail || squareShell.trailResourceCurrent > 0)
+        ) {
             return {
                 normalX: candidate.normalX,
                 normalY: candidate.normalY,

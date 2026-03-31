@@ -31,7 +31,7 @@ import type {
     ResolvePlayerGeometryInput,
     ResolveTriangleWorldPointInput
 } from './player_geometry_types';
-import { isPlatformSurfaceGameObject } from '../../world/world_surface_tags';
+import { getPlatformSurfaceAttachPriority, isPlatformSurfaceGameObject } from '../../world/world_surface_tags';
 
 const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
 const TRIANGLE_HALF_HEIGHT = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
@@ -533,6 +533,7 @@ export const resolveSquareSupportIntervalFromOverlap = (
     let bestInterval: PlayerSquareSupportInterval<Physics.Arcade.Body | Physics.Arcade.StaticBody> | null = null;
     let bestFaceGap = Infinity;
     let bestTangentDistance = Infinity;
+    let bestAttachPriority = -Infinity;
 
     overlapBodies.forEach((candidateBody) => {
         if (candidateBody === selfBody) {
@@ -553,6 +554,7 @@ export const resolveSquareSupportIntervalFromOverlap = (
             return;
         }
 
+        const attachPriority = getPlatformSurfaceAttachPriority(candidateBody.gameObject);
         if (probe.useXAxisAsTangent) {
             const overlapsPlayerSpan = candidateRect.right > playerRect.left && candidateRect.left < playerRect.right;
             if (!overlapsPlayerSpan) {
@@ -562,9 +564,16 @@ export const resolveSquareSupportIntervalFromOverlap = (
             const tangentDistance = distanceToInterval(probe.tangentValue, candidateRect.left, candidateRect.right);
             const hasBetterFaceGap = faceGap < (bestFaceGap - 0.001);
             const hasEqualFaceGap = Math.abs(faceGap - bestFaceGap) <= 0.001;
-            if (hasBetterFaceGap || (hasEqualFaceGap && tangentDistance < bestTangentDistance)) {
+            const hasEqualTangentDistance = Math.abs(tangentDistance - bestTangentDistance) <= 0.001;
+            const hasBetterPriority = attachPriority > bestAttachPriority;
+            if (
+                hasBetterFaceGap
+                || (hasEqualFaceGap && tangentDistance < bestTangentDistance)
+                || (hasEqualFaceGap && hasEqualTangentDistance && hasBetterPriority)
+            ) {
                 bestFaceGap = faceGap;
                 bestTangentDistance = tangentDistance;
+                bestAttachPriority = attachPriority;
                 bestInterval = {
                     min: candidateRect.left,
                     max: candidateRect.right,
@@ -582,9 +591,16 @@ export const resolveSquareSupportIntervalFromOverlap = (
         const tangentDistance = distanceToInterval(probe.tangentValue, candidateRect.top, candidateRect.bottom);
         const hasBetterFaceGap = faceGap < (bestFaceGap - 0.001);
         const hasEqualFaceGap = Math.abs(faceGap - bestFaceGap) <= 0.001;
-        if (hasBetterFaceGap || (hasEqualFaceGap && tangentDistance < bestTangentDistance)) {
+        const hasEqualTangentDistance = Math.abs(tangentDistance - bestTangentDistance) <= 0.001;
+        const hasBetterPriority = attachPriority > bestAttachPriority;
+        if (
+            hasBetterFaceGap
+            || (hasEqualFaceGap && tangentDistance < bestTangentDistance)
+            || (hasEqualFaceGap && hasEqualTangentDistance && hasBetterPriority)
+        ) {
             bestFaceGap = faceGap;
             bestTangentDistance = tangentDistance;
+            bestAttachPriority = attachPriority;
             bestInterval = {
                 min: candidateRect.top,
                 max: candidateRect.bottom,
@@ -650,8 +666,12 @@ export const resolveSquareTrailSurfacePoint = (
 const isPlatformSurfaceBody = (
     body: Physics.Arcade.Body | Physics.Arcade.StaticBody
 ): boolean => {
+    if (body.enable === false) {
+        return false;
+    }
+
     const gameObject = body.gameObject;
-    return isPlatformSurfaceGameObject(gameObject);
+    return !!gameObject?.active && isPlatformSurfaceGameObject(gameObject);
 };
 
 export const resolveTriangleLeadingCornerMarkerOffset = (

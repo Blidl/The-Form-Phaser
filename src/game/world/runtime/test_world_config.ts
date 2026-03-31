@@ -49,6 +49,23 @@ export interface TestWorldTriggerPlatformConfig {
     platformY: number;
     platformWidth: number;
     platformHeight: number;
+    activator?: 'player' | 'drag_box';
+}
+
+export interface TestWorldDragBoxConfig {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    targetTriggerPlatformId?: string;
+    gravityY?: number;
+    mass?: number;
+    pullAcceleration?: number;
+    pullMaxSpeed?: number;
+    dragX?: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
 export interface TestWorldWindZoneConfig {
@@ -74,6 +91,7 @@ export interface TestWorldConfig {
     checkpoints: TestWorldCheckpointConfig[];
     movingPlatforms: TestWorldMovingPlatformConfig[];
     triggerPlatforms: TestWorldTriggerPlatformConfig[];
+    dragBoxes: TestWorldDragBoxConfig[];
     windZones: TestWorldWindZoneConfig[];
     trianglePickups: TestWorldTrianglePickupConfig[];
 }
@@ -213,7 +231,37 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             platformX: 760,
             platformY: 470,
             platformWidth: 180,
-            platformHeight: 22
+            platformHeight: 22,
+            activator: 'player'
+        },
+        {
+            id: 'trigger_platform_drag_box',
+            triggerX: 1460,
+            triggerY: 720,
+            triggerWidth: 96,
+            triggerHeight: 84,
+            platformX: 1700,
+            platformY: 560,
+            platformWidth: 180,
+            platformHeight: 22,
+            activator: 'drag_box'
+        }
+    ],
+    dragBoxes: [
+        {
+            id: 'drag_box_main',
+            x: 1290,
+            y: 710,
+            width: 44,
+            height: 44,
+            targetTriggerPlatformId: 'trigger_platform_drag_box',
+            gravityY: 2200,
+            mass: 10,
+            pullAcceleration: 1400,
+            pullMaxSpeed: 150,
+            dragX: 900,
+            fillColor: 0xfff59d,
+            strokeColor: 0xf9a825
         }
     ],
     windZones: [

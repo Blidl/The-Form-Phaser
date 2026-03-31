@@ -225,16 +225,22 @@ Triangle не использует обычный jump как Ball и Square.
 - `square_trail_visual_thickness_px`
 - `square_trail_ui_segment_count`
 - `square_trail_auto_regen_speed_px_per_sec` — скорость автоматического возврата trail вне attach;
-- `square_trail_manual_regen_speed_px_per_sec` — скорость ручного восстановления по `O`;
+- `square_trail_manual_regen_speed_px_per_sec` — скорость ручного восстановления trail по каноническому regen-жесту;
 - `square_trail_regen_start_delay_sec`
 - `square_trail_stop_regen_on_attach` = true.
+- `square_trail_regen_requires_attach` = false
+- `square_trail_regen_requires_ground_contact` = true
+- `square_trail_regen_requires_zero_surface_move` = true
+- `square_trail_regen_requires_input_into_surface` = true
+- `square_trail_regen_outline_stroke_width_px`
 
 ### 6.4. Attach-jump
 - `square_attach_jump_height_px` — фиксированная уменьшенная высота прыжка;
 - `square_attach_jump_out_speed_px_per_sec` — скорость отрыва перпендикулярно поверхности;
 - `square_attach_jump_return_time_sec` — длительность возврата к trail;
 - `square_attach_jump_tether_stretch_px` — визуальная/игровая длина натяжения связи;
-- `square_attach_jump_release_detach` = true.
+- `square_attach_jump_release_detach` = true;
+- `square_attach_jump_return_surface_reacquire_range_px`
 
 ### 6.5. Rollover
 - `square_rollover_preview_time_sec` — если preview имеет минимальную длительность;
@@ -321,6 +327,15 @@ State-specific exceptions при этом живут в каноне форм, �
 - `trigger_platform_activation_delay_sec`
 - `trigger_platform_move_speed_px_per_sec`
 - `trigger_platform_return_delay_sec`
+
+### 11.4. Drag box
+- `drag_box_gravity_y_px_per_sec2`
+- `drag_box_weight_value`
+- `drag_box_pull_accel_px_per_sec2`
+- `drag_box_pull_max_speed_px_per_sec`
+- `drag_box_drag_x_px_per_sec2`
+- `drag_box_attach_priority`
+- `drag_box_only_attach_jump_can_move` = true
 
 ---
 

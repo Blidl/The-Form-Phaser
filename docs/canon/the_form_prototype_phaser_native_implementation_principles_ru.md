@@ -230,6 +230,12 @@ Scene/config/data wiring приоритетно использовать для:
 - `Arcade Physics` остаётся базовым locomotion/proxy physics слоем;
 - attach-query, attach-snap, surface retarget, `external-corner rollover` и rollback реализуются gameplay-слоем поверх Arcade;
 - успех rollover не должен жить в отдельной урезанной ветке, а должен коммититься через тот же attach-contract, что и обычный attach.
+- attach/trail gating по ресурсу и существующему trail также должны жить в gameplay-layer, а не в случайных raw-collision ветках.
+
+Для world-objects текущего канона:
+- тяжёлый `drag box` может использовать `Arcade` как базовый body для мира и `Matter`-proxy как obstacle для Triangle-path, если это нужно для сохранения единого gameplay-контракта;
+- world-object collision contract не должен зависеть от режима коллизий текущей формы игрока;
+- player-only colliders и world-vs-world colliders должны быть разведены, если иначе объект ломает собственную физику при form switch.
 
 ---
 
@@ -240,9 +246,9 @@ Scene/config/data wiring приоритетно использовать для:
 
 - проверки всех форм;
 - form switching;
-- hazards / checkpoint / wind / moving platform / trigger platform / breakables;
+- hazards / checkpoint / wind / moving platform / trigger platform / drag box / breakables;
 - camera behavior;
-- square attach / trail / rollover;
+- square attach / trail / attach-jump / rollover;
 - fast regression-проверки после каждого feature-slice.
 
 Любой slice, который не проверяется в `sc_test`, считается незавершённым или хотя бы недопроверенным.

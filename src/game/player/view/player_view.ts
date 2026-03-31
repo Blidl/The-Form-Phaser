@@ -15,7 +15,10 @@ import {
     PLAYER_SQUARE_TRAIL_STROKE_ALPHA,
     PLAYER_SQUARE_TRAIL_STROKE_COLOR,
     PLAYER_SQUARE_TRAIL_STROKE_WIDTH,
+    PLAYER_SQUARE_ATTACH_JUMP_TETHER_STRETCH_PX,
     PLAYER_SQUARE_VISUAL_ATTACH_STROKE_COLOR,
+    PLAYER_SQUARE_VISUAL_REGEN_STROKE_COLOR,
+    PLAYER_SQUARE_VISUAL_REGEN_STROKE_WIDTH,
     PLAYER_SQUARE_VISUAL_STROKE_COLOR,
     PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD,
     PLAYER_FORM_TRIANGLE_HEIGHT,
@@ -24,6 +27,7 @@ import {
 import { resolveMarkerIntent } from '../marker/player_marker_math';
 import type { PlayerMarkerState } from '../marker/player_marker_types';
 import { resolveTriangleCentroidOffset } from '../geometry/player_geometry_queries';
+import { squareSupportLocalToWorld } from '../player_square_support_space';
 import { resolveSquareTrailSegmentWorldLine } from '../player_square_trail';
 import type {
     PlayerFormId,
@@ -41,6 +45,7 @@ export class PlayerView {
     private readonly markerVisual: GameObjects.Arc;
     private readonly squareContactMarker: GameObjects.Line;
     private readonly squareTrailGraphics: GameObjects.Graphics;
+    private readonly squareAttachJumpTetherGraphics: GameObjects.Graphics;
 
     public constructor(scene: Scene, x: number, y: number) {
         this.ballVisual = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0x00e5ff)
@@ -77,6 +82,7 @@ export class PlayerView {
             .setVisible(false)
             .setOrigin(0.5, 0.5);
         this.squareTrailGraphics = scene.add.graphics().setDepth(4400);
+        this.squareAttachJumpTetherGraphics = scene.add.graphics().setDepth(4499);
     }
 
     public get triangleVisualObject(): GameObjects.Triangle {
@@ -85,6 +91,7 @@ export class PlayerView {
 
     public hideTransientMarkers(): void {
         this.squareContactMarker.setVisible(false);
+        this.squareAttachJumpTetherGraphics.clear();
     }
 
     public applyCurrentFormVisibility(
@@ -98,7 +105,7 @@ export class PlayerView {
         this.markerVisual.setVisible(true);
         this.squareContactMarker.setVisible(currentForm === 'square' && squareShell.hasContact);
         this.updateBallBoostVisualState(currentForm, ballBoostActive);
-        this.updateSquareAttachVisualState(currentForm, squareShell.isAttached);
+        this.updateSquareAttachVisualState(currentForm, squareShell.isAttached, squareShell.isTrailRegenerating);
     }
 
     public syncVisualPosition(
@@ -118,9 +125,10 @@ export class PlayerView {
         this.squareVisual.setPosition(playerX, playerY);
         this.squareVisual.setRotation(squareShell.orientationRad);
         this.updateBallBoostVisualState(currentForm, ballBoostActive);
-        this.updateSquareAttachVisualState(currentForm, squareShell.isAttached);
+        this.updateSquareAttachVisualState(currentForm, squareShell.isAttached, squareShell.isTrailRegenerating);
         this.updateSquareContactVisual(playerX, playerY, currentForm, squareShell);
         this.renderSquareTrail(squareShell.trailSegments);
+        this.renderSquareAttachJumpTether(playerX, playerY, currentForm, squareShell);
         this.updateMarkerVisual(currentForm, playerX, playerY, formAnchor, marker, triangleShell, triangleFlight);
     }
 
@@ -141,7 +149,15 @@ export class PlayerView {
         this.squareContactMarker.setTo(0, 0, squareShell.contactNormalX * markerLength, squareShell.contactNormalY * markerLength);
     }
 
-    private updateSquareAttachVisualState(currentForm: PlayerFormId, isAttached: boolean): void {
+    private updateSquareAttachVisualState(currentForm: PlayerFormId, isAttached: boolean, isTrailRegenerating: boolean): void {
+        if (currentForm === 'square' && isTrailRegenerating) {
+            this.squareVisual.setStrokeStyle(
+                PLAYER_SQUARE_VISUAL_REGEN_STROKE_WIDTH,
+                PLAYER_SQUARE_VISUAL_REGEN_STROKE_COLOR
+            );
+            return;
+        }
+
         const hasAttachedState = currentForm === 'square' && isAttached;
         this.squareVisual.setStrokeStyle(
             2,
@@ -258,6 +274,44 @@ export class PlayerView {
             endX: worldLine.endX,
             endY: clampedEndY
         };
+    }
+
+    private renderSquareAttachJumpTether(
+        playerX: number,
+        playerY: number,
+        currentForm: PlayerFormId,
+        squareShell: PlayerSquareShellState
+    ): void {
+        this.squareAttachJumpTetherGraphics.clear();
+        if (currentForm !== 'square' || squareShell.attachJumpState.phase === 'inactive') {
+            return;
+        }
+
+        const anchorWorld = squareSupportLocalToWorld(
+            squareShell.attachJumpState.anchorLocalX,
+            squareShell.attachJumpState.anchorLocalY,
+            {
+                body: squareShell.attachJumpState.anchorSupportBody,
+                originX: squareShell.attachJumpState.anchorSupportOriginX,
+                originY: squareShell.attachJumpState.anchorSupportOriginY
+            }
+        );
+        const tetherDx = playerX - anchorWorld.x;
+        const tetherDy = playerY - anchorWorld.y;
+        const tetherLength = Math.hypot(tetherDx, tetherDy);
+        const tensionAlpha = PhaserMath.Clamp(
+            tetherLength / Math.max(1, PLAYER_SQUARE_ATTACH_JUMP_TETHER_STRETCH_PX),
+            0.45,
+            1
+        );
+
+        this.squareAttachJumpTetherGraphics.lineStyle(4, 0x42a5f5, tensionAlpha);
+        this.squareAttachJumpTetherGraphics.beginPath();
+        this.squareAttachJumpTetherGraphics.moveTo(anchorWorld.x, anchorWorld.y);
+        this.squareAttachJumpTetherGraphics.lineTo(playerX, playerY);
+        this.squareAttachJumpTetherGraphics.strokePath();
+        this.squareAttachJumpTetherGraphics.fillStyle(0x90caf9, tensionAlpha);
+        this.squareAttachJumpTetherGraphics.fillCircle(anchorWorld.x, anchorWorld.y, 4);
     }
 }
 

@@ -1,5 +1,6 @@
 import { type GameObjects, type Physics, type Scene } from 'phaser';
 import { createCheckpoint, type CheckpointObject } from '../checkpoint';
+import { createDraggableBox, type DraggableBoxObject } from '../draggable_box';
 import { createHazard, type HazardObject } from '../hazard';
 import { createMovingPlatform, type MovingPlatformObject } from '../moving_platform';
 import { createTriangleFlightPickup, type TriangleFlightPickupObject } from '../triangle_flight_pickup';
@@ -13,6 +14,7 @@ import {
     cloneTestWorldConfig,
     type TestWorldCheckpointConfig,
     type TestWorldConfig,
+    type TestWorldDragBoxConfig,
     type TestWorldHazardConfig,
     type TestWorldMovingPlatformConfig,
     type TestWorldSurfaceConfig,
@@ -29,6 +31,7 @@ export type TestWorldEditableElementKind =
     | 'hazard'
     | 'checkpoint'
     | 'moving_platform'
+    | 'drag_box'
     | 'trigger_platform_trigger'
     | 'trigger_platform_surface'
     | 'wind_zone'
@@ -53,6 +56,7 @@ export interface TestWorldEditableElement {
 export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
+    postPlayerTickUpdate: () => void;
     syncPlayerCollisionMode: () => void;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
     getConfig: () => TestWorldConfig;
@@ -72,6 +76,7 @@ interface BuiltWorldInstance {
     hazards: HazardObject[];
     editableElements: TestWorldEditableElement[];
     updateMovingPlatforms: () => void;
+    postPlayerTickUpdate: () => void;
     syncPlayerCollisionMode: (useArcadePlatformCollisions: boolean) => void;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
     destroy: () => void;
@@ -99,6 +104,9 @@ export const createTestWorldRuntime = (
         },
         updateMovingPlatforms: (): void => {
             instance.updateMovingPlatforms();
+        },
+        postPlayerTickUpdate: (): void => {
+            instance.postPlayerTickUpdate();
         },
         syncPlayerCollisionMode: (): void => {
             useArcadePlatformCollisions = player.currentForm !== 'triangle';
@@ -154,6 +162,19 @@ export const createTestWorldRuntime = (
                     axis: 'horizontal',
                     travelDistance: 200,
                     speed: 120
+                });
+            } else if (kind === 'drag_box') {
+                currentConfig.dragBoxes.push({
+                    id: nextId,
+                    x: worldX,
+                    y: worldY,
+                    width: 44,
+                    height: 44,
+                    gravityY: 2200,
+                    mass: 10,
+                    pullAcceleration: 1400,
+                    pullMaxSpeed: 150,
+                    dragX: 900
                 });
             } else if (kind === 'trigger_platform_trigger' || kind === 'trigger_platform_surface') {
                 currentConfig.triggerPlatforms.push({
@@ -212,6 +233,7 @@ export const createTestWorldRuntime = (
                 || removeById(currentConfig.hazards)
                 || removeById(currentConfig.checkpoints)
                 || removeById(currentConfig.movingPlatforms)
+                || removeById(currentConfig.dragBoxes)
                 || removeById(currentConfig.triggerPlatforms)
                 || removeById(currentConfig.windZones)
                 || removeById(currentConfig.trianglePickups);
@@ -233,12 +255,17 @@ const buildWorldInstance = (
     const cleanup: Array<() => void> = [];
     const editableElements: TestWorldEditableElement[] = [];
     const hazards: HazardObject[] = [];
+    const surfaces: Phaser.GameObjects.Rectangle[] = [];
     const movingPlatforms: MovingPlatformObject[] = [];
-    const staticColliders: Physics.Arcade.Collider[] = [];
-    const dynamicColliders: Physics.Arcade.Collider[] = [];
+    const dragBoxes: DraggableBoxObject[] = [];
+    const triggerPlatformObjects: Array<{ config: TestWorldTriggerPlatformConfig; object: TriggerPlatformObject }> = [];
+    const playerPlatformColliders: Physics.Arcade.Collider[] = [];
+    const worldBodyColliders: Physics.Arcade.Collider[] = [];
     const overlapColliders: Physics.Arcade.Collider[] = [];
     const windZones: WindZoneObject[] = [];
+    const trianglePickups: TriangleFlightPickupObject[] = [];
     let activeCheckpointId = config.checkpoints[0]?.id ?? null;
+    let wasTriangleGrounded = false;
 
     const addCleanup = (cleanupFn: () => void): void => {
         cleanup.push(cleanupFn);
@@ -246,7 +273,8 @@ const buildWorldInstance = (
 
     config.surfaces.forEach((surfaceConfig) => {
         const surface = createSurface(scene, surfaceConfig);
-        staticColliders.push(scene.physics.add.collider(player.arcadeBodyObject, surface));
+        surfaces.push(surface);
+        playerPlatformColliders.push(scene.physics.add.collider(player.arcadeBodyObject, surface));
         editableElements.push(createRectangleEditorElement(surfaceConfig.id, 'surface', surfaceConfig.id, surfaceConfig));
         addCleanup(() => {
             const matterBody = surface.getData('pf_matter_body') as MatterJS.BodyType | undefined;
@@ -288,21 +316,47 @@ const buildWorldInstance = (
         movingPlatforms.push(platform);
         const collider = scene.physics.add.collider(player.arcadeBodyObject, platform.bodyObject);
         collider.active = useArcadePlatformCollisions;
-        dynamicColliders.push(collider);
+        playerPlatformColliders.push(collider);
         editableElements.push(createRectangleEditorElement(platformConfig.id, 'moving_platform', platformConfig.id, platformConfig));
         addCleanup(() => platform.destroy());
     });
 
+    config.dragBoxes.forEach((dragBoxConfig) => {
+        const dragBox = createDraggableBox(scene, dragBoxConfig);
+        dragBox.bodyObject.setName(dragBoxConfig.id);
+        dragBoxes.push(dragBox);
+        const collider = scene.physics.add.collider(player.arcadeBodyObject, dragBox.bodyObject);
+        collider.active = useArcadePlatformCollisions;
+        playerPlatformColliders.push(collider);
+        surfaces.forEach((surface) => {
+            worldBodyColliders.push(scene.physics.add.collider(dragBox.bodyObject, surface));
+        });
+        movingPlatforms.forEach((platform) => {
+            worldBodyColliders.push(scene.physics.add.collider(dragBox.bodyObject, platform.bodyObject));
+        });
+        editableElements.push(createRectangleEditorElement(dragBoxConfig.id, 'drag_box', dragBoxConfig.id, dragBoxConfig));
+        addCleanup(() => dragBox.destroy());
+    });
+
     config.triggerPlatforms.forEach((triggerPlatformConfig) => {
         const triggerPlatform = createTriggerPlatform(scene, triggerPlatformConfig);
+        triggerPlatformObjects.push({
+            config: triggerPlatformConfig,
+            object: triggerPlatform
+        });
         const platformCollider = scene.physics.add.collider(player.arcadeBodyObject, triggerPlatform.platformBodyObject);
         platformCollider.active = useArcadePlatformCollisions;
-        dynamicColliders.push(platformCollider);
-        overlapColliders.push(scene.physics.add.overlap(player.arcadeBodyObject, triggerPlatform.triggerZone, () => {
-            if (!triggerPlatform.isActivated()) {
-                triggerPlatform.activate();
-            }
-        }));
+        playerPlatformColliders.push(platformCollider);
+        dragBoxes.forEach((dragBox) => {
+            worldBodyColliders.push(scene.physics.add.collider(dragBox.bodyObject, triggerPlatform.platformBodyObject));
+        });
+        if (triggerPlatformConfig.activator !== 'drag_box') {
+            overlapColliders.push(scene.physics.add.overlap(player.arcadeBodyObject, triggerPlatform.triggerZone, () => {
+                if (!triggerPlatform.isActivated()) {
+                    triggerPlatform.activate();
+                }
+            }));
+        }
         editableElements.push(createTriggerEditorElement(triggerPlatformConfig, 'trigger'));
         editableElements.push(createTriggerEditorElement(triggerPlatformConfig, 'platform'));
         addCleanup(() => triggerPlatform.destroy());
@@ -317,6 +371,7 @@ const buildWorldInstance = (
 
     config.trianglePickups.forEach((pickupConfig) => {
         const pickup = createTriangleFlightPickup(scene, pickupConfig);
+        trianglePickups.push(pickup);
         overlapColliders.push(scene.physics.add.overlap(player.arcadeBodyObject, pickup.trigger, () => {
             if (pickup.isCollected() || player.currentForm !== 'triangle') {
                 return;
@@ -336,12 +391,35 @@ const buildWorldInstance = (
             movingPlatforms.forEach((platform) => {
                 platform.update();
             });
+            dragBoxes.forEach((dragBox) => {
+                dragBox.update(player);
+            });
+            triggerPlatformObjects.forEach(({ config: triggerConfig, object: triggerPlatform }) => {
+                if (triggerConfig.activator !== 'drag_box' || triggerPlatform.isActivated()) {
+                    return;
+                }
+
+                const targetDragBox = resolveTriggerDragBox(triggerConfig, config.dragBoxes, dragBoxes);
+                if (targetDragBox === null) {
+                    return;
+                }
+
+                if (scene.physics.overlap(targetDragBox.bodyObject, triggerPlatform.triggerZone)) {
+                    triggerPlatform.activate();
+                }
+            });
+        },
+        postPlayerTickUpdate: (): void => {
+            const isTriangleGrounded = player.currentForm === 'triangle' && player.isCurrentlyGrounded;
+            if (isTriangleGrounded && !wasTriangleGrounded) {
+                trianglePickups.forEach((pickup) => {
+                    pickup.respawn();
+                });
+            }
+            wasTriangleGrounded = isTriangleGrounded;
         },
         syncPlayerCollisionMode: (shouldUseArcadePlatformCollisions: boolean): void => {
-            staticColliders.forEach((collider) => {
-                collider.active = shouldUseArcadePlatformCollisions;
-            });
-            dynamicColliders.forEach((collider) => {
+            playerPlatformColliders.forEach((collider) => {
                 collider.active = shouldUseArcadePlatformCollisions;
             });
         },
@@ -357,7 +435,7 @@ const buildWorldInstance = (
             return horizontalInfluenceX;
         },
         destroy: (): void => {
-            [...staticColliders, ...dynamicColliders, ...overlapColliders].forEach((collider) => {
+            [...playerPlatformColliders, ...worldBodyColliders, ...overlapColliders].forEach((collider) => {
                 collider.destroy();
             });
             cleanup.forEach((cleanupFn) => {
@@ -498,6 +576,19 @@ const createTriggerEditorElement = (
     };
 };
 
+const resolveTriggerDragBox = (
+    triggerConfig: TestWorldTriggerPlatformConfig,
+    dragBoxConfigs: TestWorldDragBoxConfig[],
+    dragBoxes: DraggableBoxObject[]
+): DraggableBoxObject | null => {
+    const targetConfig = dragBoxConfigs.find((entry) => entry.targetTriggerPlatformId === triggerConfig.id) ?? null;
+    if (targetConfig === null) {
+        return null;
+    }
+
+    return dragBoxes.find((entry) => entry.bodyObject.name === targetConfig.id) ?? null;
+};
+
 const createPickupEditorElement = (config: TestWorldTrianglePickupConfig): TestWorldEditableElement => {
     return {
         id: config.id,
@@ -527,6 +618,7 @@ const createNextElementId = (kind: TestWorldEditableElementKind, config: TestWor
         ...config.hazards,
         ...config.checkpoints,
         ...config.movingPlatforms,
+        ...config.dragBoxes,
         ...config.triggerPlatforms,
         ...config.windZones,
         ...config.trianglePickups

@@ -1,4 +1,4 @@
-import { GameObjects, Scene } from 'phaser';
+import { GameObjects, Physics, Scene } from 'phaser';
 import type { PlayerFormAnchor, PlayerHazardHitShape } from './geometry/player_geometry_types';
 import type { PlayerSquareDebugView } from './player_runtime_contracts';
 import type { PlayerFormId, PlayerShellState } from './player_types';
@@ -45,6 +45,14 @@ export class PfPlayer {
 
     public get arcadeBodyObject(): GameObjects.Arc {
         return this.runtime.arcadeBodyObject;
+    }
+
+    public get squareAttachJumpPullBody(): Physics.Arcade.Body | Physics.Arcade.StaticBody | null {
+        return this.runtime.squareAttachJumpPullBody;
+    }
+
+    public get isCurrentlyGrounded(): boolean {
+        return this.runtime.isCurrentlyGrounded;
     }
 
     public get hazardHitShape(): PlayerHazardHitShape {

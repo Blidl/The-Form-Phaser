@@ -41,6 +41,7 @@ export const createTestSceneFrameRuntime = (
             const windInfluenceX = worldRuntime.resolveWindInfluenceX(player.arcadeBodyObject);
 
             player.tick(deltaMs, input, windInfluenceX);
+            worldRuntime.postPlayerTickUpdate();
             worldRuntime.syncPlayerCollisionMode();
             respawnRuntime.evaluateHazardOverlap(worldRuntime.hazards);
             debugRuntime.update();

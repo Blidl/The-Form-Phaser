@@ -24,7 +24,8 @@ export const createTriangleCollisionState = () => {
         hasCeilingContact: false,
         hasLeftWallContact: false,
         hasRightWallContact: false,
-        groundSupportEdgeIndex: null
+        groundSupportEdgeIndex: null,
+        groundSupportBody: null
     };
 };
 
@@ -33,6 +34,7 @@ export const resetTriangleCollisionState = (triangleCollision: PlayerShellState[
     triangleCollision.hasCeilingContact = false;
     triangleCollision.hasLeftWallContact = false;
     triangleCollision.hasRightWallContact = false;
+    triangleCollision.groundSupportBody = null;
 };
 
 export interface PlayerTriangleMatterRuntime {
@@ -163,6 +165,11 @@ export const stepTriangleMatterKinematicRuntime = (
     physicsBody: Physics.Arcade.Body,
     deltaSec: number
 ): void => {
+    const carryDelta = resolveSupportCarryDelta(triangleCollision.groundSupportBody);
+    if (Math.abs(carryDelta.x) > POSITION_EPSILON || Math.abs(carryDelta.y) > POSITION_EPSILON) {
+        scene.matter.body.translate(runtime.body, carryDelta);
+    }
+
     resetTriangleCollisionState(triangleCollision);
     resolveTrianglePenetration(scene, runtime, triangleCollision, physicsBody);
     clampTriangleToWorldBounds(scene, runtime, triangleCollision, physicsBody);
@@ -402,6 +409,7 @@ const applyTriangleRestingContacts = (
                 scene.matter.body.translate(runtime.body, { x: 0, y: floorGap });
             }
             triangleCollision.hasGroundContact = true;
+            triangleCollision.groundSupportBody = surfaceBody;
             physicsBody.setVelocityY(Math.min(physicsBody.velocity.y, 0));
             continue;
         }
@@ -707,4 +715,28 @@ const collideBodies = (
 const resolveEffectiveGravityY = (physicsBody: Physics.Arcade.Body): number => {
     const gravityY = Math.abs(physicsBody.gravity.y);
     return gravityY > POSITION_EPSILON ? gravityY : PLAYER_GRAVITY_Y;
+};
+
+const resolveSupportCarryDelta = (
+    supportBody: MatterJS.BodyType | null
+): { x: number; y: number } => {
+    if (supportBody === null) {
+        return { x: 0, y: 0 };
+    }
+
+    const typedSupportBody = supportBody as MatterJS.BodyType & {
+        pfCarryDeltaX?: number;
+        pfCarryDeltaY?: number;
+    };
+    if (typeof typedSupportBody.pfCarryDeltaX === 'number' || typeof typedSupportBody.pfCarryDeltaY === 'number') {
+        return {
+            x: typedSupportBody.pfCarryDeltaX ?? 0,
+            y: typedSupportBody.pfCarryDeltaY ?? 0
+        };
+    }
+
+    return {
+        x: supportBody.position.x - supportBody.positionPrev.x,
+        y: supportBody.position.y - supportBody.positionPrev.y
+    };
 };

@@ -142,13 +142,21 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         stopTriangleFlight(state.triangleFlight);
     }
     const isSquareAttached = motionFlags.isSquareAttached;
-    physicsBody.setAllowGravity(!isTriangleFlightActive && !isSquareAttached && !isBallReboundPauseHolding);
+    const isSquareTrailRegenerating = motionFlags.isSquareTrailRegenerating;
+    const isSquareAttachJumpActive = motionFlags.isSquareAttachJumpActive;
+    physicsBody.setAllowGravity(
+        !isTriangleFlightActive
+        && !isSquareAttached
+        && !isBallReboundPauseHolding
+        && !isSquareTrailRegenerating
+        && !isSquareAttachJumpActive
+    );
 
     if (isTriangleFlightActive) {
         applyTriangleFlightMovement(state, physicsBody);
     } else if (applyPauseOrLaunchMovement(physicsBody, isBallReboundPauseHolding, didLaunchBallReboundThisFrame)) {
         // Pause/launch branch already applied.
-    } else if (isSquareAttached) {
+    } else if (isSquareAttached || isSquareTrailRegenerating || isSquareAttachJumpActive) {
         applySquareAttachedMovement(physicsBody, state, input);
     } else {
         applyCommonHorizontalMotion({

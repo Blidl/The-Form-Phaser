@@ -10,6 +10,7 @@ export interface TriangleFlightPickupObject {
     visual: GameObjects.Arc;
     trigger: GameObjects.Arc;
     collect: () => void;
+    respawn: () => void;
     isCollected: () => boolean;
     destroy: () => void;
 }
@@ -57,6 +58,14 @@ export const createTriangleFlightPickup = (
 
             collected = true;
             setVisibleState(false);
+        },
+        respawn: (): void => {
+            if (!collected) {
+                return;
+            }
+
+            collected = false;
+            setVisibleState(true);
         },
         isCollected: (): boolean => {
             return collected;

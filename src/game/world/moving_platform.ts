@@ -20,6 +20,11 @@ export interface MovingPlatformObject {
     destroy: () => void;
 }
 
+type MovingPlatformMatterBody = MatterJS.BodyType & {
+    pfCarryDeltaX?: number;
+    pfCarryDeltaY?: number;
+};
+
 export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig): MovingPlatformObject => {
     const platform = scene.add.rectangle(
         config.x,
@@ -37,18 +42,25 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
     body.setImmovable(true);
     body.setAllowGravity(false);
     body.pushable = false;
-    const matterBody = scene.matter.add.rectangle(platform.x, platform.y, config.width, config.height, { isStatic: true });
+    const matterBody = scene.matter.add.rectangle(platform.x, platform.y, config.width, config.height, { isStatic: true }) as MovingPlatformMatterBody;
     markMatterBodyAsPlatformSurface(matterBody);
+    matterBody.pfCarryDeltaX = 0;
+    matterBody.pfCarryDeltaY = 0;
 
     const startX = config.x;
     const startY = config.y;
     let direction = 1;
 
     const update = (): void => {
+        const previousX = platform.x;
+        const previousY = platform.y;
+        const deltaSec = scene.game.loop.delta / 1000;
         const velocity = config.speed * direction;
 
         if (config.axis === 'horizontal') {
             body.setVelocity(velocity, 0);
+            matterBody.pfCarryDeltaX = velocity * deltaSec;
+            matterBody.pfCarryDeltaY = 0;
 
             const offset = platform.x - startX;
             if (offset >= config.travelDistance && direction > 0) {
@@ -60,11 +72,16 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
                 direction = 1;
                 body.setVelocity(config.speed, 0);
             }
+            if (platform.x !== previousX) {
+                matterBody.pfCarryDeltaX = platform.x - previousX;
+            }
             scene.matter.body.setPosition(matterBody, { x: platform.x, y: platform.y });
             return;
         }
 
         body.setVelocity(0, velocity);
+        matterBody.pfCarryDeltaX = 0;
+        matterBody.pfCarryDeltaY = velocity * deltaSec;
 
         const offset = platform.y - startY;
         if (offset >= config.travelDistance && direction > 0) {
@@ -75,6 +92,9 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
             platform.y = startY - config.travelDistance;
             direction = 1;
             body.setVelocity(0, config.speed);
+        }
+        if (platform.y !== previousY) {
+            matterBody.pfCarryDeltaY = platform.y - previousY;
         }
         scene.matter.body.setPosition(matterBody, { x: platform.x, y: platform.y });
     };
