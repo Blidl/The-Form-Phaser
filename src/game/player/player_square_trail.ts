@@ -322,6 +322,38 @@ export const findNearestSquareTrailPoint = (
     );
 };
 
+
+export const appendSquareTrailSegmentFromWorldPoints = (
+    squareShell: PlayerSquareShellState,
+    fromWorldX: number,
+    fromWorldY: number,
+    toWorldX: number,
+    toWorldY: number,
+    supportOwner: PlayerSquareTrailSupportOwner,
+    normalX: -1 | 0 | 1,
+    normalY: -1 | 0 | 1
+): void => {
+    const fromLocal = squareSupportWorldToLocal(fromWorldX, fromWorldY, supportOwner);
+    const toLocal = squareSupportWorldToLocal(toWorldX, toWorldY, supportOwner);
+    const tangentX = -normalY;
+    const tangentY = normalX;
+    const distanceAlongSurface = Math.abs(
+        ((toLocal.x - fromLocal.x) * tangentX) + ((toLocal.y - fromLocal.y) * tangentY)
+    );
+    if (distanceAlongSurface <= 0.0001) {
+        return;
+    }
+
+    appendOrMergeSweptLocalInterval(
+        squareShell,
+        fromLocal,
+        toLocal,
+        supportOwner,
+        normalX,
+        normalY
+    );
+};
+
 export const tickSquareTrailManualRegen = (
     squareShell: PlayerSquareShellState,
     deltaMs: number,

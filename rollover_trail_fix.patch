@@ -1,0 +1,159 @@
+--- a/src/game/player/player_square_rollover.ts
++++ b/src/game/player/player_square_rollover.ts
+@@ -1,11 +1,16 @@
+ import type { Physics } from 'phaser';
+ import {
++    PLAYER_SQUARE_ATTACH_ACQUIRE_RANGE_PX,
+     PLAYER_SQUARE_ROLLOVER_DURATION_MS,
+     PLAYER_SQUARE_ROLLOVER_PREVIEW_TIME_MS,
+     PLAYER_SQUARE_ROLLOVER_RETURN_TIME_MS
+ } from './player_constants';
+ import { commitSquareAttachPose } from './player_square_attach';
+-import { isSquareSurfacePointOnTrail } from './player_square_trail';
++import { resolveTrailCompatibleAttachPose } from './player_square_attach_candidates';
++import {
++    appendSquareTrailSegmentFromWorldPoints,
++    findNearestSquareTrailPoint
++} from './player_square_trail';
+ import { squareSupportLocalToWorld, squareSupportWorldToLocal } from './player_square_support_space';
+ import type {
+     PlayerSquareRolloverState,
+@@ -231,6 +236,7 @@
+             rollover.targetNormalY
+         );
+         if (targetCandidate !== null) {
++            sealRolloverTrailCorner(squareShell, rollover, targetCandidate);
+             squareShell.orientationRad = rollover.endOrientationRad;
+             squareShell.groundedOrientationRad = rollover.endOrientationRad;
+             commitSquareAttachPose(
+@@ -488,28 +494,80 @@
+ 
+     for (const candidate of orderedNormals) {
+         const pose = queryAttachPose(centerX, centerY, candidate.normalX, candidate.normalY);
+-        const poseOnTrail = isSquareSurfacePointOnTrail(
++        const trailCompatiblePose = resolveTrailCompatibleAttachPose(
+             squareShell,
+-            pose.surfacePoint.x,
+-            pose.surfacePoint.y,
++            pose,
+             candidate.normalX,
+-            candidate.normalY,
+-            pose.surfacePoint.supportOwner
++            candidate.normalY
+         );
+         if (
+-            pose.supportInterval !== null
+-            && pose.isPoseClear
+-            && (poseOnTrail || squareShell.trailResourceCurrent > 0)
++            trailCompatiblePose !== null
++            && trailCompatiblePose.supportInterval !== null
++            && trailCompatiblePose.isPoseClear
+         ) {
+             return {
+                 normalX: candidate.normalX,
+                 normalY: candidate.normalY,
+-                pose
++                pose: trailCompatiblePose
+             };
+         }
+     }
+ 
+     return null;
++};
++
++
++const sealRolloverTrailCorner = (
++    squareShell: PlayerSquareShellState,
++    rollover: PlayerSquareRolloverState,
++    targetCandidate: { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; pose: PlayerSquareAttachPoseQuery }
++): void => {
++    const pivotWorld = resolveRolloverWorldPivot(rollover);
++    const sourceSupportOwner: PlayerSquareTrailSupportOwner = {
++        body: rollover.pivotSupportBody,
++        originX: rollover.pivotSupportOriginX,
++        originY: rollover.pivotSupportOriginY
++    };
++    const sourceTrailPoint = findNearestSquareTrailPoint(
++        squareShell,
++        pivotWorld.x,
++        pivotWorld.y,
++        rollover.sourceNormalX,
++        rollover.sourceNormalY,
++        sourceSupportOwner
++    );
++    if (sourceTrailPoint !== null) {
++        const sourceGap = Math.hypot(pivotWorld.x - sourceTrailPoint.x, pivotWorld.y - sourceTrailPoint.y);
++        if (sourceGap <= PLAYER_SQUARE_ATTACH_ACQUIRE_RANGE_PX) {
++            appendSquareTrailSegmentFromWorldPoints(
++                squareShell,
++                sourceTrailPoint.x,
++                sourceTrailPoint.y,
++                pivotWorld.x,
++                pivotWorld.y,
++                sourceSupportOwner,
++                rollover.sourceNormalX,
++                rollover.sourceNormalY
++            );
++        }
++    }
++
++    const targetGap = Math.hypot(
++        targetCandidate.pose.surfacePoint.x - pivotWorld.x,
++        targetCandidate.pose.surfacePoint.y - pivotWorld.y
++    );
++    if (targetGap <= PLAYER_SQUARE_ATTACH_ACQUIRE_RANGE_PX) {
++        appendSquareTrailSegmentFromWorldPoints(
++            squareShell,
++            pivotWorld.x,
++            pivotWorld.y,
++            targetCandidate.pose.surfacePoint.x,
++            targetCandidate.pose.surfacePoint.y,
++            targetCandidate.pose.surfacePoint.supportOwner,
++            targetCandidate.normalX,
++            targetCandidate.normalY
++        );
++    }
+ };
+ 
+ const resolveRolloverWorldPivot = (
+--- a/src/game/player/player_square_trail.ts
++++ b/src/game/player/player_square_trail.ts
+@@ -319,6 +319,38 @@
+         normalX,
+         normalY,
+         supportOwner
++    );
++};
++
++
++export const appendSquareTrailSegmentFromWorldPoints = (
++    squareShell: PlayerSquareShellState,
++    fromWorldX: number,
++    fromWorldY: number,
++    toWorldX: number,
++    toWorldY: number,
++    supportOwner: PlayerSquareTrailSupportOwner,
++    normalX: -1 | 0 | 1,
++    normalY: -1 | 0 | 1
++): void => {
++    const fromLocal = squareSupportWorldToLocal(fromWorldX, fromWorldY, supportOwner);
++    const toLocal = squareSupportWorldToLocal(toWorldX, toWorldY, supportOwner);
++    const tangentX = -normalY;
++    const tangentY = normalX;
++    const distanceAlongSurface = Math.abs(
++        ((toLocal.x - fromLocal.x) * tangentX) + ((toLocal.y - fromLocal.y) * tangentY)
++    );
++    if (distanceAlongSurface <= 0.0001) {
++        return;
++    }
++
++    appendOrMergeSweptLocalInterval(
++        squareShell,
++        fromLocal,
++        toLocal,
++        supportOwner,
++        normalX,
++        normalY
+     );
+ };
+ 
