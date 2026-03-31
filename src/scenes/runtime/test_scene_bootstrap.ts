@@ -14,6 +14,7 @@ import {
     createTestWorldEditorRuntime,
     type TestWorldEditorRuntime
 } from '../../game/world/runtime/test_world_editor_runtime';
+import { loadTestWorldEditorDraft } from '../../game/world/runtime/test_world_editor_storage';
 import {
     createTestWorldRuntime,
     TEST_WORLD_HEIGHT,
@@ -38,7 +39,11 @@ export interface TestSceneBootstrapRuntime {
 export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstrapRuntime => {
     scene.cameras.main.setBackgroundColor('#263238');
 
-    const initialRespawnPoint: RespawnPoint = { x: 220, y: 620 };
+    const initialWorldLoad = loadTestWorldEditorDraft();
+    const initialRespawnPoint: RespawnPoint = {
+        x: initialWorldLoad.config.playerSpawn.x,
+        y: initialWorldLoad.config.playerSpawn.y
+    };
     const player = new PfPlayer(scene, initialRespawnPoint.x, initialRespawnPoint.y);
     const playerInputKeys = createPlayerInputKeys(scene);
     const worldActor: PlayerWorldActor = player;
@@ -54,6 +59,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
     const worldRuntime = createTestWorldRuntime({
         scene,
         player: worldActor,
+        initialConfig: initialWorldLoad.config,
         onCheckpointActivated: (point) => {
             respawnRuntime.setRespawnPoint(point);
         }
@@ -77,7 +83,16 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
         player: debugModel,
         getHazards: () => worldRuntime.hazards
     });
-    const editorRuntime = createTestWorldEditorRuntime(scene, worldRuntime);
+    const editorRuntime = createTestWorldEditorRuntime(
+        scene,
+        worldRuntime,
+        player,
+        initialWorldLoad.source === 'draft'
+            ? 'loaded saved draft'
+            : initialWorldLoad.error
+                ? 'draft invalid, loaded default'
+                : null
+    );
 
     return {
         player,

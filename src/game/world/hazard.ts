@@ -6,6 +6,8 @@ export interface HazardConfig {
     y: number;
     width: number;
     height: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
 export interface HazardObject {
@@ -21,8 +23,8 @@ interface HazardRect {
 }
 
 export const createHazard = (scene: Scene, config: HazardConfig): HazardObject => {
-    const trigger = scene.add.rectangle(config.x, config.y, config.width, config.height, 0xef5350, 0.75)
-        .setStrokeStyle(2, 0xb71c1c)
+    const trigger = scene.add.rectangle(config.x, config.y, config.width, config.height, config.fillColor ?? 0xef5350, 0.75)
+        .setStrokeStyle(2, config.strokeColor ?? 0xb71c1c)
         .setDepth(4300);
 
     scene.physics.add.existing(trigger, true);

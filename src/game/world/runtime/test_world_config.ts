@@ -1,4 +1,17 @@
-export interface TestWorldSurfaceConfig {
+export interface TestWorldEditorLockable {
+    editorLocked?: boolean;
+}
+
+export interface TestWorldPlayerSpawnConfig extends TestWorldEditorLockable {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fillColor?: number;
+    strokeColor?: number;
+}
+
+export interface TestWorldSurfaceConfig extends TestWorldEditorLockable {
     id: string;
     x: number;
     y: number;
@@ -8,15 +21,17 @@ export interface TestWorldSurfaceConfig {
     strokeColor: number;
 }
 
-export interface TestWorldHazardConfig {
+export interface TestWorldHazardConfig extends TestWorldEditorLockable {
     id: string;
     x: number;
     y: number;
     width: number;
     height: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
-export interface TestWorldCheckpointConfig {
+export interface TestWorldCheckpointConfig extends TestWorldEditorLockable {
     id: string;
     x: number;
     y: number;
@@ -24,9 +39,11 @@ export interface TestWorldCheckpointConfig {
     height: number;
     respawnX: number;
     respawnY: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
-export interface TestWorldMovingPlatformConfig {
+export interface TestWorldMovingPlatformConfig extends TestWorldEditorLockable {
     id: string;
     x: number;
     y: number;
@@ -39,7 +56,7 @@ export interface TestWorldMovingPlatformConfig {
     strokeColor?: number;
 }
 
-export interface TestWorldTriggerPlatformConfig {
+export interface TestWorldTriggerPlatformConfig extends TestWorldEditorLockable {
     id: string;
     triggerX: number;
     triggerY: number;
@@ -54,9 +71,15 @@ export interface TestWorldTriggerPlatformConfig {
     platformWidth: number;
     platformHeight: number;
     activator?: 'player' | 'drag_box';
+    triggerFillColor?: number;
+    triggerStrokeColor?: number;
+    deactivateTriggerFillColor?: number;
+    deactivateTriggerStrokeColor?: number;
+    platformFillColor?: number;
+    platformStrokeColor?: number;
 }
 
-export interface TestWorldDragBoxConfig {
+export interface TestWorldDragBoxConfig extends TestWorldEditorLockable {
     id: string;
     x: number;
     y: number;
@@ -72,7 +95,7 @@ export interface TestWorldDragBoxConfig {
     strokeColor?: number;
 }
 
-export interface TestWorldWindZoneConfig {
+export interface TestWorldWindZoneConfig extends TestWorldEditorLockable {
     id: string;
     x: number;
     y: number;
@@ -80,9 +103,11 @@ export interface TestWorldWindZoneConfig {
     height: number;
     directionX: -1 | 1;
     force: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
-export interface TestWorldTriangleFlightBreakWallConfig {
+export interface TestWorldTriangleFlightBreakWallConfig extends TestWorldEditorLockable {
     id: string;
     x: number;
     y: number;
@@ -92,14 +117,17 @@ export interface TestWorldTriangleFlightBreakWallConfig {
     strokeColor?: number;
 }
 
-export interface TestWorldTrianglePickupConfig {
+export interface TestWorldTrianglePickupConfig extends TestWorldEditorLockable {
     id: string;
     x: number;
     y: number;
     radius: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
 export interface TestWorldConfig {
+    playerSpawn: TestWorldPlayerSpawnConfig;
     surfaces: TestWorldSurfaceConfig[];
     hazards: TestWorldHazardConfig[];
     checkpoints: TestWorldCheckpointConfig[];
@@ -112,6 +140,14 @@ export interface TestWorldConfig {
 }
 
 export const TEST_WORLD_CONFIG: TestWorldConfig = {
+    playerSpawn: {
+        x: 220,
+        y: 620,
+        width: 36,
+        height: 56,
+        fillColor: 0x81d4fa,
+        strokeColor: 0x0277bd
+    },
     surfaces: [
         {
             id: 'ground',
@@ -201,7 +237,9 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             x: 980,
             y: 720,
             width: 180,
-            height: 20
+            height: 20,
+            fillColor: 0xef5350,
+            strokeColor: 0xb71c1c
         }
     ],
     checkpoints: [
@@ -212,7 +250,9 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             width: 68,
             height: 88,
             respawnX: 220,
-            respawnY: 620
+            respawnY: 620,
+            fillColor: 0x90caf9,
+            strokeColor: 0x64b5f6
         },
         {
             id: 'checkpoint_mid',
@@ -221,7 +261,9 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             width: 68,
             height: 88,
             respawnX: 1320,
-            respawnY: 620
+            respawnY: 620,
+            fillColor: 0x90caf9,
+            strokeColor: 0x64b5f6
         }
     ],
     movingPlatforms: [
@@ -233,7 +275,9 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             height: 20,
             axis: 'horizontal',
             travelDistance: 200,
-            speed: 120
+            speed: 120,
+            fillColor: 0xffcc80,
+            strokeColor: 0xef6c00
         }
     ],
     triggerPlatforms: [
@@ -251,7 +295,13 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             platformY: 470,
             platformWidth: 180,
             platformHeight: 22,
-            activator: 'player'
+            activator: 'player',
+            triggerFillColor: 0xfff59d,
+            triggerStrokeColor: 0xf9a825,
+            deactivateTriggerFillColor: 0xffccbc,
+            deactivateTriggerStrokeColor: 0xe64a19,
+            platformFillColor: 0x616161,
+            platformStrokeColor: 0xb0bec5
         },
         {
             id: 'trigger_platform_drag_box',
@@ -263,7 +313,11 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             platformY: 560,
             platformWidth: 180,
             platformHeight: 22,
-            activator: 'drag_box'
+            activator: 'drag_box',
+            triggerFillColor: 0xfff59d,
+            triggerStrokeColor: 0xf9a825,
+            platformFillColor: 0x616161,
+            platformStrokeColor: 0xb0bec5
         }
     ],
     dragBoxes: [
@@ -291,7 +345,9 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             width: 260,
             height: 170,
             directionX: 1,
-            force: 160
+            force: 160,
+            fillColor: 0x80deea,
+            strokeColor: 0x00838f
         }
     ],
     triangleFlightBreakWalls: [
@@ -310,19 +366,25 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             id: 'triangle_pickup_a',
             x: 640,
             y: 530,
-            radius: 10
+            radius: 10,
+            fillColor: 0xfff59d,
+            strokeColor: 0xffca28
         },
         {
             id: 'triangle_pickup_b',
             x: 1040,
             y: 430,
-            radius: 10
+            radius: 10,
+            fillColor: 0xfff59d,
+            strokeColor: 0xffca28
         },
         {
             id: 'triangle_pickup_c',
             x: 1480,
             y: 340,
-            radius: 10
+            radius: 10,
+            fillColor: 0xfff59d,
+            strokeColor: 0xffca28
         }
     ]
 };

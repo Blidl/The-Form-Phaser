@@ -1,4 +1,3 @@
-import type { Physics } from 'phaser';
 import { PLAYER_FORM_SQUARE_SIZE } from './player_constants';
 import { squareSupportLocalToWorld, squareSupportWorldToLocal } from './player_square_support_space';
 import type { PlayerSquareAttachPoseQuery } from './geometry/player_geometry_types';

@@ -14,6 +14,12 @@ export interface TriggerPlatformConfig {
     platformY: number;
     platformWidth: number;
     platformHeight: number;
+    triggerFillColor?: number;
+    triggerStrokeColor?: number;
+    deactivateTriggerFillColor?: number;
+    deactivateTriggerStrokeColor?: number;
+    platformFillColor?: number;
+    platformStrokeColor?: number;
 }
 
 export interface TriggerPlatformObject {
@@ -34,10 +40,10 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
         config.triggerY,
         config.triggerWidth,
         config.triggerHeight,
-        0xfff59d,
+        config.triggerFillColor ?? 0xfff59d,
         0.4
     )
-        .setStrokeStyle(2, 0xf9a825)
+        .setStrokeStyle(2, config.triggerStrokeColor ?? 0xf9a825)
         .setDepth(4202);
 
     const platformBodyObject = scene.add.rectangle(
@@ -45,10 +51,10 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
         config.platformY,
         config.platformWidth,
         config.platformHeight,
-        0x616161,
+        config.platformFillColor ?? 0x616161,
         0.55
     )
-        .setStrokeStyle(2, 0xb0bec5)
+        .setStrokeStyle(2, config.platformStrokeColor ?? 0xb0bec5)
         .setDepth(4203);
 
     scene.physics.add.existing(triggerZone, true);
@@ -58,10 +64,10 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
             config.deactivateTriggerY!,
             config.deactivateTriggerWidth!,
             config.deactivateTriggerHeight!,
-            0xef9a9a,
+            config.deactivateTriggerFillColor ?? 0xef9a9a,
             0.35
         )
-            .setStrokeStyle(2, 0xc62828)
+            .setStrokeStyle(2, config.deactivateTriggerStrokeColor ?? 0xc62828)
             .setDepth(4202)
         : null;
     if (deactivateTriggerZone !== null) {

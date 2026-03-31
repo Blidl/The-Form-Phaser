@@ -7,6 +7,8 @@ export interface CheckpointConfig {
     height?: number;
     respawnX: number;
     respawnY: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
 export interface CheckpointObject {
@@ -21,11 +23,13 @@ export interface CheckpointObject {
 export const createCheckpoint = (scene: Scene, config: CheckpointConfig): CheckpointObject => {
     const width = config.width ?? 68;
     const height = config.height ?? 88;
+    const fillColor = config.fillColor ?? 0x90caf9;
+    const strokeColor = config.strokeColor ?? 0x64b5f6;
 
-    const trigger = scene.add.rectangle(config.x, config.y, width, height, 0x90caf9, 0.3)
-        .setStrokeStyle(2, 0x64b5f6)
+    const trigger = scene.add.rectangle(config.x, config.y, width, height, fillColor, 0.3)
+        .setStrokeStyle(2, strokeColor)
         .setDepth(4100);
-    const beacon = scene.add.circle(config.x, config.y - (height * 0.5) - 14, 9, 0x90caf9)
+    const beacon = scene.add.circle(config.x, config.y - (height * 0.5) - 14, 9, fillColor)
         .setStrokeStyle(2, 0xe3f2fd)
         .setDepth(4101);
 

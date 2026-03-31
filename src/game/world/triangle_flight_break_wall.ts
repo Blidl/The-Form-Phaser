@@ -1,6 +1,6 @@
 import { GameObjects, Physics, Scene } from 'phaser';
 import { markAsPlatformSurface, markMatterBodyAsPlatformSurface } from './world_surface_tags';
-import type { PlayerHazardHitShape } from '../player/player_runtime_contracts';
+import type { PlayerHazardHitShape } from '../player/player_form_collision_shapes';
 
 export interface TriangleFlightBreakWallConfig {
     x: number;

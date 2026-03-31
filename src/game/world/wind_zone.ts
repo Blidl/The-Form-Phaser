@@ -7,6 +7,8 @@ export interface WindZoneConfig {
     height: number;
     directionX: -1 | 1;
     force: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
 export interface WindZoneObject {
@@ -17,8 +19,8 @@ export interface WindZoneObject {
 }
 
 export const createWindZone = (scene: Scene, config: WindZoneConfig): WindZoneObject => {
-    const fillColor = 0x80deea;
-    const strokeColor = 0x00838f;
+    const fillColor = config.fillColor ?? 0x80deea;
+    const strokeColor = config.strokeColor ?? 0x00838f;
 
     const trigger = scene.add.rectangle(config.x, config.y, config.width, config.height, fillColor, 0.25)
         .setStrokeStyle(2, strokeColor)

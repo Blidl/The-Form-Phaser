@@ -621,7 +621,7 @@ const shouldRunSquareTrailManualRegen = (
     surfaceNormalX: -1 | 0 | 1,
     surfaceNormalY: -1 | 0 | 1,
     hasSurfacePose: boolean,
-    hasSurfaceContact: boolean,
+    _hasSurfaceContact: boolean,
     velocityX: number,
     velocityY: number,
     _canStartAttachThisFrame: boolean
@@ -703,7 +703,7 @@ const resolveBoundaryLockedAttachPose = (
 
 const resolveSquareSurfacePoseWithTrailAnchorFallback = (
     squareShell: PlayerShellState['squareShell'],
-    physicsBody: Physics.Arcade.Body,
+    _physicsBody: Physics.Arcade.Body,
     querySquareAttachPose: (
         centerX: number,
         centerY: number,

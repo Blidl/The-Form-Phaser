@@ -4,6 +4,8 @@ export interface TriangleFlightPickupConfig {
     x: number;
     y: number;
     radius?: number;
+    fillColor?: number;
+    strokeColor?: number;
 }
 
 export interface TriangleFlightPickupObject {
@@ -22,8 +24,8 @@ export const createTriangleFlightPickup = (
     const radius = config.radius ?? 10;
     let collected = false;
 
-    const visual = scene.add.circle(config.x, config.y, radius, 0xfff59d, 0.95)
-        .setStrokeStyle(2, 0xffca28, 1)
+    const visual = scene.add.circle(config.x, config.y, radius, config.fillColor ?? 0xfff59d, 0.95)
+        .setStrokeStyle(2, config.strokeColor ?? 0xffca28, 1)
         .setDepth(4300);
     const core = scene.add.circle(config.x, config.y, radius * 0.42, 0xffffff, 0.92)
         .setDepth(4301);

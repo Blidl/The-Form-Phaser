@@ -1,6 +1,5 @@
 import type { Physics } from 'phaser';
 import {
-    PLAYER_FORM_SQUARE_SIZE,
     PLAYER_SQUARE_ROLLOVER_DURATION_MS,
     PLAYER_SQUARE_ROLLOVER_PREVIEW_TIME_MS,
     PLAYER_SQUARE_ROLLOVER_RETURN_TIME_MS
@@ -14,8 +13,6 @@ import type {
     PlayerSquareTrailSupportOwner
 } from './player_types';
 import type { PlayerSquareAttachPoseQuery } from './geometry/player_geometry_types';
-
-type SquareCornerId = 'TL' | 'TR' | 'BL' | 'BR';
 
 interface SquareRolloverMoveVector {
     x: -1 | 0 | 1;
@@ -63,7 +60,6 @@ interface TickSquareRolloverParams {
     onRollbackComplete: () => void;
 }
 
-const HALF_SIZE = PLAYER_FORM_SQUARE_SIZE * 0.5;
 const AXIS_ZONE_EPSILON = 0.5;
 
 export const createSquareRolloverState = (): PlayerSquareRolloverState => {
@@ -375,7 +371,7 @@ const resolveRolloverStartCandidate = (
 
 const resolveAttachFaceZones = (
     currentPose: PlayerSquareAttachPoseQuery,
-    attachNormalX: -1 | 0 | 1,
+    _attachNormalX: -1 | 0 | 1,
     attachNormalY: -1 | 0 | 1
 ): { leadingNegative: SquareAttachZoneState; leadingPositive: SquareAttachZoneState } => {
     if (attachNormalY === -1) {
@@ -477,15 +473,18 @@ const resolveRolloverAttachCommitCandidate = (
     preferredNormalX: -1 | 0 | 1,
     preferredNormalY: -1 | 0 | 1
 ): { normalX: -1 | 0 | 1; normalY: -1 | 0 | 1; pose: PlayerSquareAttachPoseQuery } | null => {
-    const orderedNormals: Array<{ normalX: -1 | 0 | 1; normalY: -1 | 0 | 1 }> = [
-        { normalX: preferredNormalX, normalY: preferredNormalY },
-        { normalX: 0, normalY: -1 },
-        { normalX: 1, normalY: 0 },
-        { normalX: -1, normalY: 0 },
-        { normalX: 0, normalY: 1 }
-    ].filter((candidate, index, array) => {
-        return array.findIndex((entry) => entry.normalX === candidate.normalX && entry.normalY === candidate.normalY) === index;
-    });
+    const orderedNormals: Array<{ normalX: -1 | 0 | 1; normalY: -1 | 0 | 1 }> = [];
+    const pushNormal = (normalX: -1 | 0 | 1, normalY: -1 | 0 | 1): void => {
+        if (orderedNormals.some((entry) => entry.normalX === normalX && entry.normalY === normalY)) {
+            return;
+        }
+        orderedNormals.push({ normalX, normalY });
+    };
+    pushNormal(preferredNormalX, preferredNormalY);
+    pushNormal(0, -1);
+    pushNormal(1, 0);
+    pushNormal(-1, 0);
+    pushNormal(0, 1);
 
     for (const candidate of orderedNormals) {
         const pose = queryAttachPose(centerX, centerY, candidate.normalX, candidate.normalY);
