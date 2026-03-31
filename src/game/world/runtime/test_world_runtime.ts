@@ -433,6 +433,31 @@ const buildWorldInstance = (
         });
     };
 
+    const containsBoundsPoint = (bounds: TestWorldEditorBounds, worldX: number, worldY: number): boolean => {
+        return Math.abs(worldX - bounds.x) <= (bounds.width * 0.5)
+            && Math.abs(worldY - bounds.y) <= (bounds.height * 0.5);
+    };
+
+    const getLiveHandleBounds = <TConfig>(
+        binding: Omit<RuntimeBinding, 'handleDefinitions'>,
+        definition: TestWorldEditorHandleDefinition<TConfig>,
+        configObject: TConfig
+    ): TestWorldEditorBounds => {
+        if (binding.type === 'dragBox' && definition.part === 'main') {
+            const runtimeDragBox = dragBoxesById.get(binding.rootId);
+            if (runtimeDragBox) {
+                return {
+                    x: runtimeDragBox.bodyObject.x,
+                    y: runtimeDragBox.bodyObject.y,
+                    width: runtimeDragBox.bodyObject.width,
+                    height: runtimeDragBox.bodyObject.height
+                };
+            }
+        }
+
+        return definition.getBounds(configObject);
+    };
+
     const addBinding = <TConfig>(
         configObject: TConfig,
         binding: Omit<RuntimeBinding, 'handleDefinitions'>,
@@ -457,8 +482,14 @@ const buildWorldInstance = (
                 type: definition.type,
                 part: definition.part,
                 isLocked: () => binding.isLocked(),
-                getBounds: () => definition.getBounds(configObject),
-                containsPoint: (worldX, worldY) => definition.containsPoint(configObject, worldX, worldY)
+                getBounds: () => getLiveHandleBounds(binding, definition, configObject),
+                containsPoint: (worldX, worldY) => {
+                    if (binding.type === 'dragBox' && definition.part === 'main') {
+                        return containsBoundsPoint(getLiveHandleBounds(binding, definition, configObject), worldX, worldY);
+                    }
+
+                    return definition.containsPoint(configObject, worldX, worldY);
+                }
             });
         });
     };
