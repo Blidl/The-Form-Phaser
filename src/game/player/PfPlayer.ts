@@ -55,6 +55,14 @@ export class PfPlayer {
         return this.runtime.isCurrentlyGrounded;
     }
 
+    public get isTriangleFlightActive(): boolean {
+        return this.runtime.isTriangleFlightActive;
+    }
+
+    public get isTriangleBreakWallActive(): boolean {
+        return this.runtime.isTriangleBreakWallActive;
+    }
+
     public get hazardHitShape(): PlayerHazardHitShape {
         return this.runtime.hazardHitShape;
     }

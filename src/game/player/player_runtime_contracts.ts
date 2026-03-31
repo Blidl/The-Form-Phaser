@@ -7,6 +7,8 @@ export interface PlayerWorldActor {
     arcadeBodyObject: GameObjects.Arc;
     squareAttachJumpPullBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
     isCurrentlyGrounded: boolean;
+    isTriangleFlightActive: boolean;
+    isTriangleBreakWallActive: boolean;
     hazardHitShape: PlayerHazardHitShape;
     refillTriangleFlightResource: () => void;
     freezeForRespawn: () => void;

@@ -6,6 +6,7 @@ import type { RespawnPoint } from './world_runtime_types';
 
 export interface PlayerRespawnRuntime {
     setRespawnPoint: (point: RespawnPoint) => void;
+    setOnPlayerRespawned: (callback: (() => void) | null) => void;
     evaluateHazardOverlap: (hazards: readonly HazardObject[]) => void;
     isRespawnInProgress: () => boolean;
 }
@@ -25,6 +26,7 @@ export const createPlayerRespawnRuntime = (
         y: initialRespawnPoint.y
     };
     let respawnInProgress = false;
+    let onPlayerRespawned: (() => void) | null = null;
 
     const handlePlayerDefeat = (): void => {
         if (respawnInProgress) {
@@ -36,6 +38,7 @@ export const createPlayerRespawnRuntime = (
 
         scene.time.delayedCall(PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS, () => {
             player.respawnAt(currentRespawnPoint.x, currentRespawnPoint.y);
+            onPlayerRespawned?.();
             respawnInProgress = false;
         });
     };
@@ -64,6 +67,9 @@ export const createPlayerRespawnRuntime = (
 
     return {
         setRespawnPoint,
+        setOnPlayerRespawned: (callback): void => {
+            onPlayerRespawned = callback;
+        },
         evaluateHazardOverlap,
         isRespawnInProgress: () => respawnInProgress
     };

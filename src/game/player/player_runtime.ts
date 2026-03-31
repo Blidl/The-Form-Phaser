@@ -238,6 +238,14 @@ export class PfPlayerRuntime {
         return this.computeIsCurrentlyGrounded();
     }
 
+    public get isTriangleFlightActive(): boolean {
+        return this.state.currentForm === 'triangle' && this.state.triangleFlight.isActive;
+    }
+
+    public get isTriangleBreakWallActive(): boolean {
+        return this.state.currentForm === 'triangle' && this.state.triangleFlight.isActive;
+    }
+
     public get hazardHitShape(): PlayerHazardHitShape {
         return resolvePlayerHazardHitShape({
             form: this.state.currentForm,

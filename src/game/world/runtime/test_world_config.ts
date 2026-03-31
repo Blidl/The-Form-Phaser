@@ -45,6 +45,10 @@ export interface TestWorldTriggerPlatformConfig {
     triggerY: number;
     triggerWidth: number;
     triggerHeight: number;
+    deactivateTriggerX?: number;
+    deactivateTriggerY?: number;
+    deactivateTriggerWidth?: number;
+    deactivateTriggerHeight?: number;
     platformX: number;
     platformY: number;
     platformWidth: number;
@@ -78,6 +82,16 @@ export interface TestWorldWindZoneConfig {
     force: number;
 }
 
+export interface TestWorldTriangleFlightBreakWallConfig {
+    id: string;
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    fillColor?: number;
+    strokeColor?: number;
+}
+
 export interface TestWorldTrianglePickupConfig {
     id: string;
     x: number;
@@ -93,6 +107,7 @@ export interface TestWorldConfig {
     triggerPlatforms: TestWorldTriggerPlatformConfig[];
     dragBoxes: TestWorldDragBoxConfig[];
     windZones: TestWorldWindZoneConfig[];
+    triangleFlightBreakWalls: TestWorldTriangleFlightBreakWallConfig[];
     trianglePickups: TestWorldTrianglePickupConfig[];
 }
 
@@ -228,6 +243,10 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             triggerY: 692,
             triggerWidth: 110,
             triggerHeight: 84,
+            deactivateTriggerX: 980,
+            deactivateTriggerY: 692,
+            deactivateTriggerWidth: 110,
+            deactivateTriggerHeight: 84,
             platformX: 760,
             platformY: 470,
             platformWidth: 180,
@@ -273,6 +292,17 @@ export const TEST_WORLD_CONFIG: TestWorldConfig = {
             height: 170,
             directionX: 1,
             force: 160
+        }
+    ],
+    triangleFlightBreakWalls: [
+        {
+            id: 'triangle_flight_break_wall_main',
+            x: 1560,
+            y: 668,
+            width: 40,
+            height: 184,
+            fillColor: 0xa1887f,
+            strokeColor: 0x4e342e
         }
     ],
     trianglePickups: [

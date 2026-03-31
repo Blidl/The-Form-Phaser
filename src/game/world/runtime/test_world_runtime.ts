@@ -4,6 +4,11 @@ import { createDraggableBox, type DraggableBoxObject } from '../draggable_box';
 import { createHazard, type HazardObject } from '../hazard';
 import { createMovingPlatform, type MovingPlatformObject } from '../moving_platform';
 import { createTriangleFlightPickup, type TriangleFlightPickupObject } from '../triangle_flight_pickup';
+import {
+    createTriangleFlightBreakWall,
+    doesTriangleFlightBreakWallOverlapPlayerShape,
+    type TriangleFlightBreakWallObject
+} from '../triangle_flight_break_wall';
 import { createTriggerPlatform, type TriggerPlatformObject } from '../trigger_platform';
 import { createWindZone, type WindZoneObject } from '../wind_zone';
 import { markAsPlatformSurface, markMatterBodyAsPlatformSurface } from '../world_surface_tags';
@@ -18,6 +23,7 @@ import {
     type TestWorldHazardConfig,
     type TestWorldMovingPlatformConfig,
     type TestWorldSurfaceConfig,
+    type TestWorldTriangleFlightBreakWallConfig,
     type TestWorldTrianglePickupConfig,
     type TestWorldTriggerPlatformConfig,
     type TestWorldWindZoneConfig
@@ -33,8 +39,10 @@ export type TestWorldEditableElementKind =
     | 'moving_platform'
     | 'drag_box'
     | 'trigger_platform_trigger'
+    | 'trigger_platform_deactivate_trigger'
     | 'trigger_platform_surface'
     | 'wind_zone'
+    | 'triangle_flight_break_wall'
     | 'triangle_pickup';
 
 export interface TestWorldEditableBounds {
@@ -57,6 +65,7 @@ export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
     postPlayerTickUpdate: () => void;
+    resetRespawnObjects: () => void;
     syncPlayerCollisionMode: () => void;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
     getConfig: () => TestWorldConfig;
@@ -77,6 +86,7 @@ interface BuiltWorldInstance {
     editableElements: TestWorldEditableElement[];
     updateMovingPlatforms: () => void;
     postPlayerTickUpdate: () => void;
+    resetRespawnObjects: () => void;
     syncPlayerCollisionMode: (useArcadePlatformCollisions: boolean) => void;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
     destroy: () => void;
@@ -107,6 +117,9 @@ export const createTestWorldRuntime = (
         },
         postPlayerTickUpdate: (): void => {
             instance.postPlayerTickUpdate();
+        },
+        resetRespawnObjects: (): void => {
+            instance.resetRespawnObjects();
         },
         syncPlayerCollisionMode: (): void => {
             useArcadePlatformCollisions = player.currentForm !== 'triangle';
@@ -176,13 +189,21 @@ export const createTestWorldRuntime = (
                     pullMaxSpeed: 150,
                     dragX: 900
                 });
-            } else if (kind === 'trigger_platform_trigger' || kind === 'trigger_platform_surface') {
+            } else if (
+                kind === 'trigger_platform_trigger'
+                || kind === 'trigger_platform_deactivate_trigger'
+                || kind === 'trigger_platform_surface'
+            ) {
                 currentConfig.triggerPlatforms.push({
                     id: nextId,
                     triggerX: worldX - 120,
                     triggerY: worldY + 80,
                     triggerWidth: 110,
                     triggerHeight: 84,
+                    deactivateTriggerX: worldX + 120,
+                    deactivateTriggerY: worldY + 80,
+                    deactivateTriggerWidth: 110,
+                    deactivateTriggerHeight: 84,
                     platformX: worldX,
                     platformY: worldY,
                     platformWidth: 180,
@@ -198,6 +219,14 @@ export const createTestWorldRuntime = (
                     directionX: 1,
                     force: 160
                 });
+            } else if (kind === 'triangle_flight_break_wall') {
+                currentConfig.triangleFlightBreakWalls.push({
+                    id: nextId,
+                    x: worldX,
+                    y: worldY,
+                    width: 40,
+                    height: 180
+                });
             } else if (kind === 'triangle_pickup') {
                 currentConfig.trianglePickups.push({
                     id: nextId,
@@ -212,6 +241,9 @@ export const createTestWorldRuntime = (
             rebuildFromCurrentConfig();
             if (kind === 'trigger_platform_trigger') {
                 return `${nextId}:trigger`;
+            }
+            if (kind === 'trigger_platform_deactivate_trigger') {
+                return `${nextId}:deactivate_trigger`;
             }
             if (kind === 'trigger_platform_surface') {
                 return `${nextId}:platform`;
@@ -236,6 +268,7 @@ export const createTestWorldRuntime = (
                 || removeById(currentConfig.dragBoxes)
                 || removeById(currentConfig.triggerPlatforms)
                 || removeById(currentConfig.windZones)
+                || removeById(currentConfig.triangleFlightBreakWalls)
                 || removeById(currentConfig.trianglePickups);
 
             if (removed) {
@@ -244,6 +277,8 @@ export const createTestWorldRuntime = (
         }
     };
 };
+
+const DRAG_BOX_TRIGGER_RELEASE_SPEED_EPSILON = 16;
 
 const buildWorldInstance = (
     scene: Scene,
@@ -263,6 +298,7 @@ const buildWorldInstance = (
     const worldBodyColliders: Physics.Arcade.Collider[] = [];
     const overlapColliders: Physics.Arcade.Collider[] = [];
     const windZones: WindZoneObject[] = [];
+    const triangleFlightBreakWalls: TriangleFlightBreakWallObject[] = [];
     const trianglePickups: TriangleFlightPickupObject[] = [];
     let activeCheckpointId = config.checkpoints[0]?.id ?? null;
     let wasTriangleGrounded = false;
@@ -350,14 +386,10 @@ const buildWorldInstance = (
         dragBoxes.forEach((dragBox) => {
             worldBodyColliders.push(scene.physics.add.collider(dragBox.bodyObject, triggerPlatform.platformBodyObject));
         });
-        if (triggerPlatformConfig.activator !== 'drag_box') {
-            overlapColliders.push(scene.physics.add.overlap(player.arcadeBodyObject, triggerPlatform.triggerZone, () => {
-                if (!triggerPlatform.isActivated()) {
-                    triggerPlatform.activate();
-                }
-            }));
-        }
         editableElements.push(createTriggerEditorElement(triggerPlatformConfig, 'trigger'));
+        if (triggerPlatformConfig.deactivateTriggerWidth !== undefined && triggerPlatformConfig.deactivateTriggerHeight !== undefined) {
+            editableElements.push(createTriggerEditorElement(triggerPlatformConfig, 'deactivate_trigger'));
+        }
         editableElements.push(createTriggerEditorElement(triggerPlatformConfig, 'platform'));
         addCleanup(() => triggerPlatform.destroy());
     });
@@ -367,6 +399,16 @@ const buildWorldInstance = (
         windZones.push(windZone);
         editableElements.push(createRectangleEditorElement(windZoneConfig.id, 'wind_zone', windZoneConfig.id, windZoneConfig));
         addCleanup(() => windZone.destroy());
+    });
+
+    config.triangleFlightBreakWalls.forEach((wallConfig) => {
+        const wall = createTriangleFlightBreakWall(scene, wallConfig);
+        triangleFlightBreakWalls.push(wall);
+        const playerCollider = scene.physics.add.collider(player.arcadeBodyObject, wall.bodyObject);
+        playerCollider.active = useArcadePlatformCollisions;
+        playerPlatformColliders.push(playerCollider);
+        editableElements.push(createRectangleEditorElement(wallConfig.id, 'triangle_flight_break_wall', wallConfig.id, wallConfig));
+        addCleanup(() => wall.destroy());
     });
 
     config.trianglePickups.forEach((pickupConfig) => {
@@ -395,21 +437,37 @@ const buildWorldInstance = (
                 dragBox.update(player);
             });
             triggerPlatformObjects.forEach(({ config: triggerConfig, object: triggerPlatform }) => {
-                if (triggerConfig.activator !== 'drag_box' || triggerPlatform.isActivated()) {
+                if (triggerConfig.activator === 'drag_box') {
+                    const targetDragBox = resolveTriggerDragBox(triggerConfig, config.dragBoxes, dragBoxes);
+                    const isBoxInside = targetDragBox !== null && scene.physics.overlap(targetDragBox.bodyObject, triggerPlatform.triggerZone);
+                    const isBoxStillMoving = targetDragBox !== null && isDragBoxStillMoving(targetDragBox);
+                    triggerPlatform.setActive(isBoxInside || (triggerPlatform.isActivated() && isBoxStillMoving));
                     return;
                 }
 
-                const targetDragBox = resolveTriggerDragBox(triggerConfig, config.dragBoxes, dragBoxes);
-                if (targetDragBox === null) {
-                    return;
-                }
-
-                if (scene.physics.overlap(targetDragBox.bodyObject, triggerPlatform.triggerZone)) {
+                const isInActivateZone = scene.physics.overlap(player.arcadeBodyObject, triggerPlatform.triggerZone);
+                const isInDeactivateZone = triggerPlatform.deactivateTriggerZone !== null
+                    && scene.physics.overlap(player.arcadeBodyObject, triggerPlatform.deactivateTriggerZone);
+                if (isInDeactivateZone) {
+                    triggerPlatform.deactivate();
+                } else if (isInActivateZone) {
                     triggerPlatform.activate();
                 }
             });
         },
         postPlayerTickUpdate: (): void => {
+            if (player.currentForm === 'triangle' && player.isTriangleBreakWallActive) {
+                triangleFlightBreakWalls.forEach((wall) => {
+                    if (wall.isBroken()) {
+                        return;
+                    }
+
+                    if (doesTriangleFlightBreakWallOverlapPlayerShape(wall, player.hazardHitShape)) {
+                        wall.breakWall();
+                    }
+                });
+            }
+
             const isTriangleGrounded = player.currentForm === 'triangle' && player.isCurrentlyGrounded;
             if (isTriangleGrounded && !wasTriangleGrounded) {
                 trianglePickups.forEach((pickup) => {
@@ -417,6 +475,11 @@ const buildWorldInstance = (
                 });
             }
             wasTriangleGrounded = isTriangleGrounded;
+        },
+        resetRespawnObjects: (): void => {
+            triangleFlightBreakWalls.forEach((wall) => {
+                wall.respawn();
+            });
         },
         syncPlayerCollisionMode: (shouldUseArcadePlatformCollisions: boolean): void => {
             playerPlatformColliders.forEach((collider) => {
@@ -443,6 +506,11 @@ const buildWorldInstance = (
             });
         }
     };
+};
+
+const isDragBoxStillMoving = (dragBox: DraggableBoxObject): boolean => {
+    return Math.abs(dragBox.body.velocity.x) > DRAG_BOX_TRIGGER_RELEASE_SPEED_EPSILON
+        || Math.abs(dragBox.body.velocity.y) > DRAG_BOX_TRIGGER_RELEASE_SPEED_EPSILON;
 };
 
 const applyActiveCheckpointState = (
@@ -529,12 +597,16 @@ const createCheckpointEditorElement = (config: TestWorldCheckpointConfig): TestW
 
 const createTriggerEditorElement = (
     config: TestWorldTriggerPlatformConfig,
-    part: 'trigger' | 'platform'
+    part: 'trigger' | 'deactivate_trigger' | 'platform'
 ): TestWorldEditableElement => {
     return {
         id: `${config.id}:${part}`,
         label: `${config.id}:${part}`,
-        kind: part === 'trigger' ? 'trigger_platform_trigger' : 'trigger_platform_surface',
+        kind: part === 'trigger'
+            ? 'trigger_platform_trigger'
+            : part === 'deactivate_trigger'
+                ? 'trigger_platform_deactivate_trigger'
+                : 'trigger_platform_surface',
         getBounds: () => {
             if (part === 'trigger') {
                 return {
@@ -542,6 +614,14 @@ const createTriggerEditorElement = (
                     y: config.triggerY,
                     width: config.triggerWidth,
                     height: config.triggerHeight
+                };
+            }
+            if (part === 'deactivate_trigger') {
+                return {
+                    x: config.deactivateTriggerX ?? config.triggerX,
+                    y: config.deactivateTriggerY ?? config.triggerY,
+                    width: config.deactivateTriggerWidth ?? config.triggerWidth,
+                    height: config.deactivateTriggerHeight ?? config.triggerHeight
                 };
             }
 
@@ -560,6 +640,13 @@ const createTriggerEditorElement = (
                 config.triggerHeight = Math.max(8, bounds.height);
                 return;
             }
+            if (part === 'deactivate_trigger') {
+                config.deactivateTriggerX = bounds.x;
+                config.deactivateTriggerY = bounds.y;
+                config.deactivateTriggerWidth = Math.max(8, bounds.width);
+                config.deactivateTriggerHeight = Math.max(8, bounds.height);
+                return;
+            }
 
             config.platformX = bounds.x;
             config.platformY = bounds.y;
@@ -569,6 +656,13 @@ const createTriggerEditorElement = (
         containsPoint: (worldX, worldY) => {
             const bounds = part === 'trigger'
                 ? { x: config.triggerX, y: config.triggerY, width: config.triggerWidth, height: config.triggerHeight }
+                : part === 'deactivate_trigger'
+                    ? {
+                        x: config.deactivateTriggerX ?? config.triggerX,
+                        y: config.deactivateTriggerY ?? config.triggerY,
+                        width: config.deactivateTriggerWidth ?? config.triggerWidth,
+                        height: config.deactivateTriggerHeight ?? config.triggerHeight
+                    }
                 : { x: config.platformX, y: config.platformY, width: config.platformWidth, height: config.platformHeight };
             return Math.abs(worldX - bounds.x) <= (bounds.width * 0.5)
                 && Math.abs(worldY - bounds.y) <= (bounds.height * 0.5);
@@ -621,6 +715,7 @@ const createNextElementId = (kind: TestWorldEditableElementKind, config: TestWor
         ...config.dragBoxes,
         ...config.triggerPlatforms,
         ...config.windZones,
+        ...config.triangleFlightBreakWalls,
         ...config.trianglePickups
     ].map((entry) => entry.id);
 

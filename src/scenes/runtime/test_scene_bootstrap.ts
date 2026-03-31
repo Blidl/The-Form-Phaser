@@ -58,6 +58,9 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
             respawnRuntime.setRespawnPoint(point);
         }
     });
+    respawnRuntime.setOnPlayerRespawned(() => {
+        worldRuntime.resetRespawnObjects();
+    });
 
     setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
         width: TEST_WORLD_WIDTH,
