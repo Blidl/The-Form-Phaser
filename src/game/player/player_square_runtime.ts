@@ -134,7 +134,16 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
             squareContact.normalY
         )
         : null;
+    const currentRawContactPose = !state.squareShell.isAttached && squareContact.hasContact
+        ? querySquareAttachPose(
+            physicsBody.x + (physicsBody.width * 0.5),
+            physicsBody.y + (physicsBody.height * 0.5),
+            squareContact.normalX,
+            squareContact.normalY
+        )
+        : null;
     const currentSurfacePose = currentAttachPose ?? currentContactPose;
+    const currentRegenSurfacePose = currentSurfacePose ?? currentRawContactPose;
     const currentSurfaceNormalX = state.squareShell.isAttached
         ? state.squareShell.attachNormalX
         : squareContact.normalX;
@@ -163,7 +172,7 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
         verticalDir as -1 | 0 | 1,
         currentSurfaceNormalX,
         currentSurfaceNormalY,
-        currentSurfacePose !== null,
+        currentRegenSurfacePose !== null,
         squareContact.hasContact || state.squareShell.isAttached,
         physicsBody.velocity.x,
         physicsBody.velocity.y,

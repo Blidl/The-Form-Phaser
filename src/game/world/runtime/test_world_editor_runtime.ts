@@ -760,7 +760,10 @@ const buildInspectorSections = (
                     { key: 'platformHeight', label: 'Height', input: 'number', value: entry.platformHeight, min: 8, step: 1 },
                     { key: 'platformFillColor', label: 'Fill', input: 'color', value: entry.platformFillColor ?? 0x616161 },
                     { key: 'platformStrokeColor', label: 'Stroke', input: 'color', value: entry.platformStrokeColor ?? 0xb0bec5 },
-                    { key: 'activator', label: 'Activator', input: 'select', value: entry.activator ?? 'player', options: [{ value: 'player', label: 'Player' }, { value: 'drag_box', label: 'Drag Box' }] }
+                    { key: 'activator', label: 'Activator', input: 'select', value: entry.activator ?? 'player', options: [{ value: 'player', label: 'Player' }, { value: 'drag_box', label: 'Drag Box' }] },
+                    { key: 'triggerAction', label: 'Trigger Action', input: 'select', value: entry.triggerAction ?? 'activate', options: [{ value: 'activate', label: 'Show' }, { value: 'deactivate', label: 'Hide' }] },
+                    { key: 'deactivateTriggerAction', label: 'Off Action', input: 'select', value: entry.deactivateTriggerAction ?? 'deactivate', options: [{ value: 'activate', label: 'Show' }, { value: 'deactivate', label: 'Hide' }] },
+                    { key: 'initiallyActive', label: 'Initially Visible', input: 'checkbox', value: entry.initiallyActive ?? false }
                 ]
             }
         ] : [];

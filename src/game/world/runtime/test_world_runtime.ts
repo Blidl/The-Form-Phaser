@@ -718,6 +718,20 @@ const buildWorldInstance = (
         );
     });
 
+    const resolveTriggerActionActiveState = (
+        triggerConfig: TestWorldTriggerPlatformConfig,
+        action: 'activate' | 'deactivate' | undefined
+    ): boolean => {
+        const initialActive = triggerConfig.initiallyActive ?? false;
+        if (action === 'activate') {
+            return true;
+        }
+        if (action === 'deactivate') {
+            return false;
+        }
+        return initialActive;
+    };
+
     const rebuildTriggerPlatformObject = (triggerConfig: TestWorldTriggerPlatformConfig): void => {
         const existing = triggerPlatformsById.get(triggerConfig.id);
         if (existing) {
@@ -912,7 +926,11 @@ const buildWorldInstance = (
                     const targetDragBox = resolveTriggerDragBox(triggerConfig, config.dragBoxes, dragBoxes);
                     const isBoxInside = targetDragBox !== null && scene.physics.overlap(targetDragBox.bodyObject, triggerPlatform.triggerZone);
                     const isBoxStillMoving = targetDragBox !== null && isDragBoxStillMoving(targetDragBox);
-                    triggerPlatform.setActive(isBoxInside || (triggerPlatform.isActivated() && isBoxStillMoving));
+                    const activeWhenTriggered = resolveTriggerActionActiveState(triggerConfig, triggerConfig.triggerAction);
+                    const activeWhenIdle = triggerConfig.initiallyActive ?? false;
+                    const shouldUseTriggeredState = isBoxInside
+                        || (triggerPlatform.isActivated() === activeWhenTriggered && isBoxStillMoving);
+                    triggerPlatform.setActive(shouldUseTriggeredState ? activeWhenTriggered : activeWhenIdle);
                     return;
                 }
 
@@ -920,9 +938,13 @@ const buildWorldInstance = (
                 const isInDeactivateZone = triggerPlatform.deactivateTriggerZone !== null
                     && scene.physics.overlap(player.arcadeBodyObject, triggerPlatform.deactivateTriggerZone);
                 if (isInDeactivateZone) {
-                    triggerPlatform.deactivate();
+                    triggerPlatform.setActive(
+                        resolveTriggerActionActiveState(triggerConfig, triggerConfig.deactivateTriggerAction)
+                    );
                 } else if (isInActivateZone) {
-                    triggerPlatform.activate();
+                    triggerPlatform.setActive(
+                        resolveTriggerActionActiveState(triggerConfig, triggerConfig.triggerAction)
+                    );
                 }
             });
         },

@@ -71,6 +71,9 @@ export interface TestWorldTriggerPlatformConfig extends TestWorldEditorLockable 
     platformWidth: number;
     platformHeight: number;
     activator?: 'player' | 'drag_box';
+    triggerAction?: 'activate' | 'deactivate';
+    deactivateTriggerAction?: 'activate' | 'deactivate';
+    initiallyActive?: boolean;
     triggerFillColor?: number;
     triggerStrokeColor?: number;
     deactivateTriggerFillColor?: number;
@@ -141,253 +144,523 @@ export interface TestWorldConfig {
 
 export const TEST_WORLD_CONFIG: TestWorldConfig = {
     playerSpawn: {
-        x: 220,
-        y: 620,
-        width: 36,
-        height: 56,
-        fillColor: 0x81d4fa,
-        strokeColor: 0x0277bd
+        x: 96,
+        y: 112,
+        width: 32,
+        height: 64,
+        fillColor: 8508666,
+        strokeColor: 161725,
+        editorLocked: false
     },
     surfaces: [
         {
-            id: 'ground',
-            x: 1100,
-            y: 760,
-            width: 2080,
-            height: 56,
-            fillColor: 0x90a4ae,
-            strokeColor: 0xcfd8dc
+            id: "ground",
+            x: -128,
+            y: 864,
+            width: 2064,
+            height: 64,
+            fillColor: 4678251,
+            strokeColor: 13621468,
+            editorLocked: false
         },
         {
-            id: 'low_platform',
-            x: 760,
-            y: 610,
-            width: 280,
-            height: 24,
-            fillColor: 0xb0bec5,
-            strokeColor: 0xeceff1
+            id: "low_platform",
+            x: 1248,
+            y: 368,
+            width: 272,
+            height: 48,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
         },
         {
-            id: 'high_platform',
-            x: 1380,
-            y: 500,
-            width: 240,
-            height: 24,
-            fillColor: 0xb0bec5,
-            strokeColor: 0xeceff1
+            id: "rollover_floor",
+            x: 976,
+            y: 1040,
+            width: 224,
+            height: 32,
+            fillColor: 16764032,
+            strokeColor: 15690752,
+            editorLocked: false
         },
         {
-            id: 'rollover_floor',
-            x: 470,
-            y: 682,
-            width: 220,
-            height: 24,
-            fillColor: 0xffcc80,
-            strokeColor: 0xef6c00
+            id: "rollover_wall",
+            x: 1232,
+            y: 128,
+            width: 32,
+            height: 240,
+            fillColor: 4678251,
+            strokeColor: 15132390,
+            editorLocked: false
         },
         {
-            id: 'rollover_wall',
-            x: 592,
-            y: 570,
-            width: 24,
-            height: 200,
-            fillColor: 0xffcc80,
-            strokeColor: 0xef6c00
+            id: "rollover_ceiling",
+            x: 992,
+            y: 976,
+            width: 224,
+            height: 32,
+            fillColor: 16764032,
+            strokeColor: 15690752,
+            editorLocked: false
         },
         {
-            id: 'rollover_ceiling',
-            x: 700,
-            y: 458,
-            width: 216,
-            height: 24,
-            fillColor: 0xffcc80,
-            strokeColor: 0xef6c00
+            id: "surface_1",
+            x: 16,
+            y: 416,
+            width: 32,
+            height: 864,
+            fillColor: 4678251,
+            strokeColor: 13621468,
+            editorLocked: false
         },
         {
-            id: 'rollback_floor',
-            x: 1020,
-            y: 682,
-            width: 180,
-            height: 24,
-            fillColor: 0xf48fb1,
-            strokeColor: 0xad1457
+            id: "surface_2",
+            x: 384,
+            y: 352,
+            width: 432,
+            height: 704,
+            fillColor: 4678251,
+            strokeColor: 13621468,
+            editorLocked: false
         },
         {
-            id: 'rollback_wall',
-            x: 1122,
-            y: 570,
-            width: 24,
-            height: 200,
-            fillColor: 0xf48fb1,
-            strokeColor: 0xad1457
+            id: "rollback_blocker",
+            x: 96,
+            y: 48,
+            width: 32,
+            height: 32,
+            fillColor: 13538264,
+            strokeColor: 6953882,
+            editorLocked: false
         },
         {
-            id: 'rollback_blocker',
-            x: 1092,
-            y: 690,
-            width: 28,
-            height: 28,
-            fillColor: 0xce93d8,
-            strokeColor: 0x6a1b9a
+            id: "surface_3",
+            x: 1104,
+            y: 528,
+            width: 32,
+            height: 864,
+            fillColor: 4678251,
+            strokeColor: 13621468,
+            editorLocked: false
+        },
+        {
+            id: "surface_4",
+            x: 96,
+            y: 928,
+            width: 2048,
+            height: 64,
+            fillColor: 4678251,
+            strokeColor: 13621468,
+            editorLocked: false
+        },
+        {
+            id: "surface_5",
+            x: 1056,
+            y: 864,
+            width: 128,
+            height: 64,
+            fillColor: 4678251,
+            strokeColor: 13621468,
+            editorLocked: false
+        },
+        {
+            id: "surface_6",
+            x: 2080,
+            y: 368,
+            width: 128,
+            height: 32,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_7",
+            x: 1632,
+            y: 384,
+            width: 1024,
+            height: 8,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_8",
+            x: 2112,
+            y: 736,
+            width: 176,
+            height: 32,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_9",
+            x: 1984,
+            y: 480,
+            width: 48,
+            height: 208,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_10",
+            x: 1776,
+            y: 528,
+            width: 48,
+            height: 288,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_11",
+            x: 1888,
+            y: 736,
+            width: 80,
+            height: 32,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_12",
+            x: 1408,
+            y: 528,
+            width: 288,
+            height: 272,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_13",
+            x: 1376,
+            y: 736,
+            width: 512,
+            height: 32,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_14",
+            x: 1104,
+            y: 1104,
+            width: 32,
+            height: 592,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
+        },
+        {
+            id: "surface_15",
+            x: 1280,
+            y: 1376,
+            width: 368,
+            height: 32,
+            fillColor: 4678251,
+            strokeColor: 15527921,
+            editorLocked: false
         }
     ],
     hazards: [
         {
-            id: 'hazard_main',
-            x: 980,
-            y: 720,
-            width: 180,
-            height: 20,
-            fillColor: 0xef5350,
-            strokeColor: 0xb71c1c
+            id: "hazard_main",
+            x: 608,
+            y: 352,
+            width: 16,
+            height: 512,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
+        },
+        {
+            id: "hazard_1",
+            x: 1088,
+            y: 352,
+            width: 16,
+            height: 512,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
+        },
+        {
+            id: "hazard_2",
+            x: 1696,
+            y: 368,
+            width: 640,
+            height: 16,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
+        },
+        {
+            id: "hazard_3",
+            x: 1728,
+            y: 32,
+            width: 960,
+            height: 16,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
+        },
+        {
+            id: "hazard_4",
+            x: 1840,
+            y: 736,
+            width: 368,
+            height: 16,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
+        },
+        {
+            id: "hazard_6",
+            x: 32,
+            y: 656,
+            width: 32,
+            height: 32,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
+        },
+        {
+            id: "hazard_7",
+            x: 176,
+            y: 592,
+            width: 32,
+            height: 32,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
+        },
+        {
+            id: "hazard_8",
+            x: 32,
+            y: 528,
+            width: 32,
+            height: 32,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
+        },
+        {
+            id: "hazard_9",
+            x: 176,
+            y: 448,
+            width: 32,
+            height: 32,
+            fillColor: 15684432,
+            strokeColor: 12000284,
+            editorLocked: false
         }
     ],
     checkpoints: [
         {
-            id: 'checkpoint_start',
-            x: 260,
-            y: 676,
-            width: 68,
-            height: 88,
-            respawnX: 220,
-            respawnY: 620,
-            fillColor: 0x90caf9,
-            strokeColor: 0x64b5f6
+            id: "checkpoint_start",
+            x: 128,
+            y: 128,
+            width: 64,
+            height: 96,
+            respawnX: 88,
+            respawnY: 72,
+            fillColor: 9489145,
+            strokeColor: 6600182,
+            editorLocked: false
         },
         {
-            id: 'checkpoint_mid',
-            x: 1320,
-            y: 676,
-            width: 68,
-            height: 88,
-            respawnX: 1320,
-            respawnY: 620,
-            fillColor: 0x90caf9,
-            strokeColor: 0x64b5f6
+            id: "checkpoint_mid",
+            x: 2144,
+            y: 288,
+            width: 64,
+            height: 96,
+            respawnX: 2144,
+            respawnY: 232,
+            fillColor: 9489145,
+            strokeColor: 6600182,
+            editorLocked: false
+        },
+        {
+            id: "checkpoint_1",
+            x: 1136,
+            y: 80,
+            width: 64,
+            height: 96,
+            respawnX: 1096,
+            respawnY: 24,
+            fillColor: 9489145,
+            strokeColor: 6600182,
+            editorLocked: false
+        },
+        {
+            id: "checkpoint_2",
+            x: 512,
+            y: 784,
+            width: 64,
+            height: 96,
+            respawnX: 472,
+            respawnY: 728,
+            fillColor: 9489145,
+            strokeColor: 6600182,
+            editorLocked: false
         }
     ],
     movingPlatforms: [
         {
-            id: 'moving_platform_main',
-            x: 980,
-            y: 555,
-            width: 180,
-            height: 20,
-            axis: 'horizontal',
+            id: "moving_platform_main",
+            x: 880,
+            y: 240,
+            width: 176,
+            height: 16,
+            axis: "horizontal",
             travelDistance: 200,
             speed: 120,
-            fillColor: 0xffcc80,
-            strokeColor: 0xef6c00
+            fillColor: 16764032,
+            strokeColor: 15690752,
+            editorLocked: false
         }
     ],
     triggerPlatforms: [
         {
-            id: 'trigger_platform_main',
-            triggerX: 560,
-            triggerY: 692,
-            triggerWidth: 110,
-            triggerHeight: 84,
-            deactivateTriggerX: 980,
-            deactivateTriggerY: 692,
-            deactivateTriggerWidth: 110,
-            deactivateTriggerHeight: 84,
-            platformX: 760,
-            platformY: 470,
-            platformWidth: 180,
-            platformHeight: 22,
-            activator: 'player',
-            triggerFillColor: 0xfff59d,
-            triggerStrokeColor: 0xf9a825,
-            deactivateTriggerFillColor: 0xffccbc,
-            deactivateTriggerStrokeColor: 0xe64a19,
-            platformFillColor: 0x616161,
-            platformStrokeColor: 0xb0bec5
+            id: "trigger_platform_main",
+            triggerX: 720,
+            triggerY: 128,
+            triggerWidth: 112,
+            triggerHeight: 80,
+            deactivateTriggerX: 880,
+            deactivateTriggerY: 128,
+            deactivateTriggerWidth: 112,
+            deactivateTriggerHeight: 80,
+            platformX: 800,
+            platformY: 64,
+            platformWidth: 176,
+            platformHeight: 16,
+            activator: "player",
+            triggerFillColor: 16774557,
+            triggerStrokeColor: 16361509,
+            deactivateTriggerFillColor: 16764092,
+            deactivateTriggerStrokeColor: 15092249,
+            platformFillColor: 6381921,
+            platformStrokeColor: 11583173,
+            editorLocked: false
         },
         {
-            id: 'trigger_platform_drag_box',
-            triggerX: 1460,
-            triggerY: 720,
+            id: "trigger_platform_drag_box",
+            triggerX: 944,
+            triggerY: 880,
             triggerWidth: 96,
-            triggerHeight: 84,
-            platformX: 1700,
-            platformY: 560,
-            platformWidth: 180,
-            platformHeight: 22,
-            activator: 'drag_box',
-            triggerFillColor: 0xfff59d,
-            triggerStrokeColor: 0xf9a825,
-            platformFillColor: 0x616161,
-            platformStrokeColor: 0xb0bec5
+            triggerHeight: 80,
+            platformX: 848,
+            platformY: 608,
+            platformWidth: 496,
+            platformHeight: 32,
+            activator: "drag_box",
+            triggerFillColor: 16774557,
+            triggerStrokeColor: 16361509,
+            platformFillColor: 6381921,
+            platformStrokeColor: 11583173,
+            editorLocked: false
+        },
+        {
+            id: "trigger_platform_1",
+            triggerX: 880,
+            triggerY: 128,
+            triggerWidth: 112,
+            triggerHeight: 80,
+            deactivateTriggerX: 720,
+            deactivateTriggerY: 128,
+            deactivateTriggerWidth: 112,
+            deactivateTriggerHeight: 80,
+            platformX: 1088,
+            platformY: 64,
+            platformWidth: 16,
+            platformHeight: 96,
+            activator: "player",
+            triggerFillColor: 16774557,
+            triggerStrokeColor: 16361509,
+            deactivateTriggerFillColor: 16764092,
+            deactivateTriggerStrokeColor: 15092249,
+            platformFillColor: 6381921,
+            platformStrokeColor: 11583173,
+            editorLocked: false
         }
     ],
     dragBoxes: [
         {
-            id: 'drag_box_main',
-            x: 1290,
-            y: 710,
-            width: 44,
-            height: 44,
-            targetTriggerPlatformId: 'trigger_platform_drag_box',
+            id: "drag_box_main",
+            x: 784,
+            y: 768,
+            width: 48,
+            height: 48,
+            targetTriggerPlatformId: "trigger_platform_drag_box",
             gravityY: 2200,
             mass: 10,
             pullAcceleration: 1400,
             pullMaxSpeed: 150,
             dragX: 900,
-            fillColor: 0xfff59d,
-            strokeColor: 0xf9a825
+            fillColor: 16774557,
+            strokeColor: 16361509,
+            editorLocked: false
         }
     ],
     windZones: [
         {
-            id: 'wind_main',
-            x: 1080,
-            y: 640,
-            width: 260,
-            height: 170,
+            id: "wind_main",
+            x: 1824,
+            y: 560,
+            width: 368,
+            height: 352,
             directionX: 1,
             force: 160,
-            fillColor: 0x80deea,
-            strokeColor: 0x00838f
+            fillColor: 8445674,
+            strokeColor: 33679,
+            editorLocked: false
         }
     ],
     triangleFlightBreakWalls: [
         {
-            id: 'triangle_flight_break_wall_main',
-            x: 1560,
-            y: 668,
-            width: 40,
-            height: 184,
-            fillColor: 0xa1887f,
-            strokeColor: 0x4e342e
+            id: "triangle_flight_break_wall_main",
+            x: 352,
+            y: 768,
+            width: 48,
+            height: 192,
+            fillColor: 10586239,
+            strokeColor: 5125166,
+            editorLocked: false
         }
     ],
     trianglePickups: [
         {
-            id: 'triangle_pickup_a',
-            x: 640,
-            y: 530,
-            radius: 10,
-            fillColor: 0xfff59d,
-            strokeColor: 0xffca28
+            id: "triangle_pickup_a",
+            x: 656,
+            y: 528,
+            radius: 8,
+            fillColor: 16774557,
+            strokeColor: 16763432,
+            editorLocked: false
         },
         {
-            id: 'triangle_pickup_b',
-            x: 1040,
-            y: 430,
-            radius: 10,
-            fillColor: 0xfff59d,
-            strokeColor: 0xffca28
+            id: "triangle_pickup_b",
+            x: 816,
+            y: 352,
+            radius: 8,
+            fillColor: 16774557,
+            strokeColor: 16763432,
+            editorLocked: false
         },
         {
-            id: 'triangle_pickup_c',
-            x: 1480,
-            y: 340,
-            radius: 10,
-            fillColor: 0xfff59d,
-            strokeColor: 0xffca28
+            id: "triangle_pickup_c",
+            x: 1200,
+            y: 544,
+            radius: 40,
+            fillColor: 16774557,
+            strokeColor: 16763432,
+            editorLocked: false
         }
     ]
 };
+
 
 export const cloneTestWorldConfig = (config: TestWorldConfig): TestWorldConfig => {
     return JSON.parse(JSON.stringify(config)) as TestWorldConfig;

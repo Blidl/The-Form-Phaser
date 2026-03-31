@@ -20,6 +20,7 @@ export interface TriggerPlatformConfig {
     deactivateTriggerStrokeColor?: number;
     platformFillColor?: number;
     platformStrokeColor?: number;
+    initiallyActive?: boolean;
 }
 
 export interface TriggerPlatformObject {
@@ -138,6 +139,8 @@ export const createTriggerPlatform = (scene: Scene, config: TriggerPlatformConfi
     const deactivate = (): void => {
         setActive(false);
     };
+
+    setActive(config.initiallyActive ?? false);
 
     return {
         triggerZone,

@@ -427,6 +427,9 @@ const triggerPlatformAdapter: TestWorldEditorAdapter<TestWorldTriggerPlatformCon
         platformWidth: 180,
         platformHeight: 22,
         activator: 'player',
+        triggerAction: 'activate',
+        deactivateTriggerAction: 'deactivate',
+        initiallyActive: false,
         triggerFillColor: 0xfff59d,
         triggerStrokeColor: 0xf9a825,
         deactivateTriggerFillColor: 0xffccbc,
@@ -541,6 +544,15 @@ const triggerPlatformAdapter: TestWorldEditorAdapter<TestWorldTriggerPlatformCon
         }
         if (patch.activator === 'player' || patch.activator === 'drag_box') {
             config.activator = patch.activator;
+        }
+        if (patch.triggerAction === 'activate' || patch.triggerAction === 'deactivate') {
+            config.triggerAction = patch.triggerAction;
+        }
+        if (patch.deactivateTriggerAction === 'activate' || patch.deactivateTriggerAction === 'deactivate') {
+            config.deactivateTriggerAction = patch.deactivateTriggerAction;
+        }
+        if (typeof patch.initiallyActive === 'boolean') {
+            config.initiallyActive = patch.initiallyActive;
         }
         if (typeof patch.deactivateTriggerX === 'number') {
             config.deactivateTriggerX = patch.deactivateTriggerX;
