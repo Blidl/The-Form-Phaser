@@ -164,7 +164,7 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
         currentSurfaceNormalX,
         currentSurfaceNormalY,
         currentSurfacePose !== null,
-        squareContact.hasContact,
+        squareContact.hasContact || state.squareShell.isAttached,
         physicsBody.velocity.x,
         physicsBody.velocity.y,
         squareAttachStartDecision.canStart
@@ -624,16 +624,14 @@ const shouldRunSquareTrailManualRegen = (
     hasSurfaceContact: boolean,
     velocityX: number,
     velocityY: number,
-    canStartAttachThisFrame: boolean
+    _canStartAttachThisFrame: boolean
 ): boolean => {
-    const isStandingOnFloor = hasSurfaceContact
-        && hasSurfacePose
+    const isStandingOnFloor = hasSurfacePose
         && surfaceNormalX === 0
         && surfaceNormalY === -1;
     const isStableAtRest = Math.abs(velocityX) <= 8 && Math.abs(velocityY) <= 8;
 
     return isStandingOnFloor
-        && !canStartAttachThisFrame
         && isStableAtRest
         && input.actionHeld
         && horizontalDir === 0
