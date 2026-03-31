@@ -122,18 +122,6 @@ export const createPlayerTuningPanelRuntime = (
         close: (): void => {
             close();
         },
-        shouldMuteGameplayInput: (): boolean => {
-            if (!active) {
-                return false;
-            }
-
-            const activeElement = document.activeElement;
-            if (!activeElement || !sidebar.getRootElement().contains(activeElement)) {
-                return false;
-            }
-            return activeElement instanceof HTMLInputElement
-                || activeElement instanceof HTMLSelectElement
-                || activeElement instanceof HTMLTextAreaElement;
-        }
+        shouldMuteGameplayInput: (): boolean => false
     };
 };
