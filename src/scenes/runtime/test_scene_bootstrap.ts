@@ -14,6 +14,11 @@ import {
     createTestWorldEditorRuntime,
     type TestWorldEditorRuntime
 } from '../../game/world/runtime/test_world_editor_runtime';
+import {
+    bootstrapPersistedPlayerTuning,
+    createPlayerTuningRuntime,
+    type PlayerTuningRuntime
+} from '../../game/player/tuning/player_tuning_runtime';
 import { loadTestWorldEditorDraft } from '../../game/world/runtime/test_world_editor_storage';
 import {
     createTestWorldRuntime,
@@ -25,6 +30,10 @@ import type { RespawnPoint } from '../../game/world/runtime/world_runtime_types'
 import { setupBaselineFollowCamera } from '../../game/camera/follow_camera';
 import { createTestDebugRuntime, type TestDebugRuntime } from '../../ui/runtime/test_debug_runtime';
 import { createTestHudRuntime, type TestHudRuntime } from '../../ui/runtime/test_hud_runtime';
+import {
+    createPlayerTuningPanelRuntime,
+    type PlayerTuningPanelRuntime
+} from '../../ui/runtime/player_tuning_panel_runtime';
 
 export interface TestSceneBootstrapRuntime {
     player: PfPlayer;
@@ -34,10 +43,13 @@ export interface TestSceneBootstrapRuntime {
     hudRuntime: TestHudRuntime;
     debugRuntime: TestDebugRuntime;
     editorRuntime: TestWorldEditorRuntime;
+    tuningRuntime: PlayerTuningRuntime;
+    tuningPanelRuntime: PlayerTuningPanelRuntime;
 }
 
 export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstrapRuntime => {
     scene.cameras.main.setBackgroundColor('#263238');
+    bootstrapPersistedPlayerTuning();
 
     const initialWorldLoad = loadTestWorldEditorDraft();
     const initialRespawnPoint: RespawnPoint = {
@@ -93,6 +105,14 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
                 ? 'draft invalid, loaded default'
                 : null
     );
+    const tuningRuntime = createPlayerTuningRuntime();
+    const tuningPanelRuntime = createPlayerTuningPanelRuntime({
+        scene,
+        tuningRuntime,
+        onOpened: () => {
+            editorRuntime.close();
+        }
+    });
 
     return {
         player,
@@ -101,6 +121,8 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
         respawnRuntime,
         hudRuntime,
         debugRuntime,
-        editorRuntime
+        editorRuntime,
+        tuningRuntime,
+        tuningPanelRuntime
     };
 };

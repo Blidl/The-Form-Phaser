@@ -8,6 +8,7 @@ import {
     PLAYER_GRAVITY_Y,
     PLAYER_PLACEHOLDER_RADIUS,
     PLAYER_SQUARE_ROLLOVER_SURFACE_VALIDATION_RANGE_PX,
+    PLAYER_SQUARE_TRAIL_RESOURCE_MAX,
     PLAYER_START_FORM
 } from './player_constants';
 import { type PlayerInputSnapshot } from './player_input';
@@ -25,7 +26,8 @@ import {
 import {
     createTriangleFlightState,
     refillTriangleFlightResource,
-    resolveTriangleFlightResource
+    resolveTriangleFlightResource,
+    syncTriangleFlightRuntimeTuning
 } from './player_triangle_flight';
 import type {
     PlayerFormId,
@@ -347,6 +349,7 @@ export class PfPlayerRuntime {
             return;
         }
 
+        this.syncLiveTuningRuntimeState();
         const tickContext: PlayerTickRuntimeContext = {
             state: this.state,
             timers: this.timers,
@@ -474,6 +477,24 @@ export class PfPlayerRuntime {
             supportInterval,
             null
         );
+    }
+
+    private syncLiveTuningRuntimeState(): void {
+        this.physicsBody.setMaxVelocity(
+            Math.max(PLAYER_MAX_FORM_MOVE_SPEED, PLAYER_BALL_BOOST_SPEED, PLAYER_BALL_BOOST_JUMP_MIN_HORIZONTAL_SPEED),
+            1200
+        );
+
+        const previousSquareTrailMax = Math.max(0.0001, this.state.squareShell.trailResourceMax);
+        const squareTrailRatio = PhaserMath.Clamp(this.state.squareShell.trailResourceCurrent / previousSquareTrailMax, 0, 1);
+        this.state.squareShell.trailResourceMax = PLAYER_SQUARE_TRAIL_RESOURCE_MAX;
+        this.state.squareShell.trailResourceCurrent = PhaserMath.Clamp(
+            this.state.squareShell.trailResourceMax * squareTrailRatio,
+            0,
+            this.state.squareShell.trailResourceMax
+        );
+
+        syncTriangleFlightRuntimeTuning(this.state.triangleFlight);
     }
 
     private querySquareAttachPose(

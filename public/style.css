@@ -137,3 +137,113 @@ body {
     color: #78909c;
     font-size: 12px;
 }
+
+.player-tuning {
+    width: 360px;
+    height: calc(100vh - 40px);
+    border-radius: 16px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    background: rgba(12, 16, 23, 0.96);
+    box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+    overflow: hidden;
+}
+
+.player-tuning--hidden {
+    display: none;
+}
+
+.player-tuning__inner {
+    height: 100%;
+    overflow-y: auto;
+    padding: 16px;
+    box-sizing: border-box;
+}
+
+.player-tuning__section + .player-tuning__section {
+    margin-top: 16px;
+}
+
+.player-tuning__section h2,
+.player-tuning__section h3 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #cfd8dc;
+}
+
+.player-tuning__toolbar,
+.player-tuning__tabs {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.player-tuning__button,
+.player-tuning__tab {
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #eceff1;
+    border-radius: 10px;
+    padding: 10px 12px;
+    cursor: pointer;
+    text-align: left;
+}
+
+.player-tuning__tab.is-active,
+.player-tuning__button:hover,
+.player-tuning__tab:hover {
+    background: rgba(129, 212, 250, 0.16);
+}
+
+.player-tuning__status-row {
+    display: grid;
+    gap: 6px;
+    font-size: 12px;
+    color: #b0bec5;
+}
+
+.player-tuning__fields {
+    display: grid;
+    gap: 8px;
+}
+
+.player-tuning__field {
+    display: grid;
+    gap: 4px;
+    font-size: 12px;
+    color: #cfd8dc;
+}
+
+.player-tuning__field small {
+    color: #90a4ae;
+    font-size: 11px;
+}
+
+.player-tuning__field input {
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+    padding: 8px 10px;
+}
+
+.player-tuning__details {
+    margin-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    padding-top: 10px;
+}
+
+.player-tuning__details summary {
+    cursor: pointer;
+    color: #90a4ae;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.player-tuning__fields--raw {
+    margin-top: 10px;
+}

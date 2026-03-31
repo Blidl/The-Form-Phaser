@@ -1,7 +1,5 @@
 import type { PlayerTriangleShellState } from './player_types';
-import {
-    PLAYER_TRIANGLE_JUMP_VELOCITY
-} from './player_constants';
+import { PLAYER_TRIANGLE_JUMP_LAUNCH_VELOCITY } from './player_constants';
 
 export interface TriangleSpecialJumpLaunch {
     velocityY: number;
@@ -15,7 +13,7 @@ export const applyTriangleSpecialJump = (
     triangleShell.airborneSpinDirection = resolveJumpDirection(horizontalMoveDir, fallbackFacingDirection);
 
     return {
-        velocityY: PLAYER_TRIANGLE_JUMP_VELOCITY
+        velocityY: PLAYER_TRIANGLE_JUMP_LAUNCH_VELOCITY
     };
 };
 

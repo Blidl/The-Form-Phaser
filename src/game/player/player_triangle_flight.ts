@@ -15,7 +15,6 @@ const TRIANGLE_CORNER_INDICES: TriangleCornerIndex[] = [0, 1, 2];
 const TRIANGLE_HALF_WIDTH = PLAYER_FORM_TRIANGLE_WIDTH * 0.5;
 const TRIANGLE_HALF_HEIGHT = PLAYER_FORM_TRIANGLE_HEIGHT * 0.5;
 const TRIANGLE_CENTROID_OFFSET = resolveTriangleCentroidOffset();
-const MAX_FLIGHT_RESOURCE_DISTANCE_PX = PLAYER_TRIANGLE_FLIGHT_SECTION_DISTANCE_PX * PLAYER_TRIANGLE_FLIGHT_MAX_SECTIONS;
 const TRIANGLE_LOCAL_CORNERS = [
     { x: -TRIANGLE_HALF_WIDTH - TRIANGLE_CENTROID_OFFSET.x, y: TRIANGLE_HALF_HEIGHT - TRIANGLE_CENTROID_OFFSET.y },
     { x: -TRIANGLE_CENTROID_OFFSET.x, y: -TRIANGLE_HALF_HEIGHT - TRIANGLE_CENTROID_OFFSET.y },
@@ -23,6 +22,7 @@ const TRIANGLE_LOCAL_CORNERS = [
 ] as const;
 
 export const createTriangleFlightState = (): PlayerTriangleFlightState => {
+    const maxDistancePx = resolveMaxTriangleFlightDistancePx();
     return {
         isActive: false,
         directionX: 0,
@@ -32,13 +32,14 @@ export const createTriangleFlightState = (): PlayerTriangleFlightState => {
         forcePointIntentY: -1,
         selectedLeadingCornerIndex: 1,
         leadingCornerIndex: 1,
-        activeSectionRemainingDistancePx: MAX_FLIGHT_RESOURCE_DISTANCE_PX,
+        activeSectionRemainingDistancePx: maxDistancePx,
         spentSectionCount: 0,
         maxSectionCount: PLAYER_TRIANGLE_FLIGHT_MAX_SECTIONS
     };
 };
 
 export const resetTriangleFlightState = (triangleFlight: PlayerTriangleFlightState): void => {
+    const maxDistancePx = resolveMaxTriangleFlightDistancePx();
     triangleFlight.isActive = false;
     triangleFlight.directionX = 0;
     triangleFlight.directionY = -1;
@@ -47,7 +48,7 @@ export const resetTriangleFlightState = (triangleFlight: PlayerTriangleFlightSta
     triangleFlight.forcePointIntentY = -1;
     triangleFlight.selectedLeadingCornerIndex = 1;
     triangleFlight.leadingCornerIndex = 1;
-    triangleFlight.activeSectionRemainingDistancePx = MAX_FLIGHT_RESOURCE_DISTANCE_PX;
+    triangleFlight.activeSectionRemainingDistancePx = maxDistancePx;
     triangleFlight.spentSectionCount = 0;
     triangleFlight.maxSectionCount = PLAYER_TRIANGLE_FLIGHT_MAX_SECTIONS;
 };
@@ -59,17 +60,18 @@ export const stopTriangleFlight = (triangleFlight: PlayerTriangleFlightState): v
 };
 
 export const restoreTriangleFlightSections = (triangleFlight: PlayerTriangleFlightState): void => {
+    const maxDistancePx = resolveMaxTriangleFlightDistancePx();
     triangleFlight.isActive = false;
-    triangleFlight.spentSectionCount = triangleFlight.activeSectionRemainingDistancePx >= MAX_FLIGHT_RESOURCE_DISTANCE_PX - EPSILON ? 0 : 1;
+    triangleFlight.spentSectionCount = triangleFlight.activeSectionRemainingDistancePx >= maxDistancePx - EPSILON ? 0 : 1;
 };
 
 export const refillTriangleFlightResource = (triangleFlight: PlayerTriangleFlightState): void => {
-    triangleFlight.activeSectionRemainingDistancePx = MAX_FLIGHT_RESOURCE_DISTANCE_PX;
+    triangleFlight.activeSectionRemainingDistancePx = resolveMaxTriangleFlightDistancePx();
     triangleFlight.spentSectionCount = 0;
 };
 
 export const hasTriangleFlightSectionsRemaining = (triangleFlight: PlayerTriangleFlightState): boolean => {
-    return triangleFlight.activeSectionRemainingDistancePx >= MAX_FLIGHT_RESOURCE_DISTANCE_PX - EPSILON;
+    return triangleFlight.activeSectionRemainingDistancePx >= resolveMaxTriangleFlightDistancePx() - EPSILON;
 };
 
 export const hasTriangleFlightUsableResource = (triangleFlight: PlayerTriangleFlightState): boolean => {
@@ -115,21 +117,36 @@ export const tickTriangleFlightRestore = (
     triangleFlight: PlayerTriangleFlightState,
     deltaSec: number
 ): void => {
+    const maxDistancePx = resolveMaxTriangleFlightDistancePx();
     if (triangleFlight.isActive) {
         return;
     }
 
-    if (triangleFlight.activeSectionRemainingDistancePx >= MAX_FLIGHT_RESOURCE_DISTANCE_PX - EPSILON) {
-        triangleFlight.activeSectionRemainingDistancePx = MAX_FLIGHT_RESOURCE_DISTANCE_PX;
+    if (triangleFlight.activeSectionRemainingDistancePx >= maxDistancePx - EPSILON) {
+        triangleFlight.activeSectionRemainingDistancePx = maxDistancePx;
         triangleFlight.spentSectionCount = 0;
         return;
     }
 
     triangleFlight.activeSectionRemainingDistancePx = Math.min(
-        MAX_FLIGHT_RESOURCE_DISTANCE_PX,
+        maxDistancePx,
         triangleFlight.activeSectionRemainingDistancePx + (PLAYER_TRIANGLE_FLIGHT_RESTORE_SPEED_PX_PER_SEC * deltaSec)
     );
-    triangleFlight.spentSectionCount = triangleFlight.activeSectionRemainingDistancePx >= MAX_FLIGHT_RESOURCE_DISTANCE_PX - EPSILON
+    triangleFlight.spentSectionCount = triangleFlight.activeSectionRemainingDistancePx >= maxDistancePx - EPSILON
+        ? 0
+        : triangleFlight.maxSectionCount;
+};
+
+export const syncTriangleFlightRuntimeTuning = (triangleFlight: PlayerTriangleFlightState): void => {
+    const previousMaxDistancePx = triangleFlight.maxSectionCount * PLAYER_TRIANGLE_FLIGHT_SECTION_DISTANCE_PX;
+    const nextMaxDistancePx = resolveMaxTriangleFlightDistancePx();
+    const ratio = previousMaxDistancePx <= EPSILON
+        ? 1
+        : Math.max(0, Math.min(1, triangleFlight.activeSectionRemainingDistancePx / previousMaxDistancePx));
+
+    triangleFlight.maxSectionCount = PLAYER_TRIANGLE_FLIGHT_MAX_SECTIONS;
+    triangleFlight.activeSectionRemainingDistancePx = Math.max(0, Math.min(nextMaxDistancePx, nextMaxDistancePx * ratio));
+    triangleFlight.spentSectionCount = triangleFlight.activeSectionRemainingDistancePx >= nextMaxDistancePx - EPSILON
         ? 0
         : triangleFlight.maxSectionCount;
 };
@@ -198,7 +215,7 @@ export const applyTriangleFlightVelocity = (
 export const resolveTriangleFlightResource = (
     triangleFlight: PlayerTriangleFlightState
 ): { current: number; max: number; ratio: number } => {
-    const max = MAX_FLIGHT_RESOURCE_DISTANCE_PX;
+    const max = resolveMaxTriangleFlightDistancePx();
     const current = Math.max(0, Math.min(max, triangleFlight.activeSectionRemainingDistancePx));
 
     return {
@@ -206,6 +223,10 @@ export const resolveTriangleFlightResource = (
         max,
         ratio: max <= 0 ? 0 : Math.max(0, Math.min(1, current / max))
     };
+};
+
+const resolveMaxTriangleFlightDistancePx = (): number => {
+    return PLAYER_TRIANGLE_FLIGHT_SECTION_DISTANCE_PX * PLAYER_TRIANGLE_FLIGHT_MAX_SECTIONS;
 };
 
 const resolveFlightDirection = (

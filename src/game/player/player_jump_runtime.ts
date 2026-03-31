@@ -1,5 +1,10 @@
 import type { Physics } from 'phaser';
-import { PLAYER_JUMP_CUT_MULTIPLIER, PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER } from './player_constants';
+import {
+    PLAYER_BALL_JUMP_CUT_MULTIPLIER,
+    PLAYER_SQUARE_JUMP_CUT_MULTIPLIER,
+    PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER,
+    PLAYER_SQUARE_JUMP_LAUNCH_VELOCITY
+} from './player_constants';
 import type { PlayerInputSnapshot } from './player_input';
 import { clearCoyoteTime, clearJumpBuffer, hasCoyoteTime, hasJumpBuffer, type PlayerTimers } from './player_timers';
 import { applyBallJumpRuntime, tryStartBallAirRebound, type PlayerBallMutableState } from './player_ball_runtime';
@@ -7,8 +12,6 @@ import { tryStartSquareAttachJump } from './player_square_attach_jump';
 import { applyTriangleJumpRuntime } from './player_triangle_runtime';
 import type { BallReboundRuntimeState } from './player_ball_rebound_runtime';
 import type { PlayerShellState } from './player_types';
-import { PLAYER_JUMP_VELOCITY } from './player_constants';
-
 export interface PlayerJumpMutableState extends PlayerBallMutableState {
     lastMoveDirection: -1 | 1;
 }
@@ -117,7 +120,7 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
         return;
     }
 
-    physicsBody.setVelocityY(PLAYER_JUMP_VELOCITY);
+    physicsBody.setVelocityY(PLAYER_SQUARE_JUMP_LAUNCH_VELOCITY);
     mutable.jumpCutConsumed = false;
     mutable.reboundWindowMs = 0;
     clearJumpBuffer(timers);
@@ -143,7 +146,9 @@ export const applyJumpCutRuntime = (params: ApplyJumpCutParams): void => {
 
     const jumpCutMultiplier = state.currentForm === 'triangle'
         ? PLAYER_TRIANGLE_JUMP_CUT_MULTIPLIER
-        : PLAYER_JUMP_CUT_MULTIPLIER;
+        : state.currentForm === 'square'
+            ? PLAYER_SQUARE_JUMP_CUT_MULTIPLIER
+            : PLAYER_BALL_JUMP_CUT_MULTIPLIER;
     physicsBody.setVelocityY(physicsBody.velocity.y * jumpCutMultiplier);
     mutable.jumpCutConsumed = true;
 };

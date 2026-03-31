@@ -11,6 +11,7 @@ import { TEST_WORLD_HEIGHT, TEST_WORLD_WIDTH, type TestWorldEditorHandle, type T
 export interface TestWorldEditorRuntime {
     update: (deltaMs: number) => void;
     isActive: () => boolean;
+    close: () => void;
 }
 
 type DragMode = 'move' | 'resize' | 'pan';
@@ -443,7 +444,6 @@ export const createTestWorldEditorRuntime = (
         overlayText.setVisible(active);
         if (active) {
             scene.cameras.main.stopFollow();
-            player.freezeForRespawn();
             setStatus('editor mode on');
         } else {
             pointerDragState = null;
@@ -569,7 +569,13 @@ export const createTestWorldEditorRuntime = (
             drawGrid(gridGraphics, camera, gridEnabled ? gridSize : 0);
             drawSelection(selectionGraphics, getSelectedHandle());
         },
-        isActive: (): boolean => active
+        isActive: (): boolean => active,
+        close: (): void => {
+            if (!active) {
+                return;
+            }
+            toggleEditor();
+        }
     };
 };
 

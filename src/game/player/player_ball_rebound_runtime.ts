@@ -4,6 +4,7 @@ import {
     PLAYER_BALL_REBOUND_BOOST_STRENGTH_MULTIPLIER,
     PLAYER_BALL_CEILING_REBOUND_MIN_DOWNWARD_SPEED,
     PLAYER_BALL_CEILING_REBOUND_MIN_EXIT_SPEED,
+    PLAYER_BALL_REBOUND_HIT_PAUSE_MS,
     PLAYER_BALL_REBOUND_PAUSE_BEFORE_LAUNCH_MS,
     PLAYER_BALL_REBOUND_SURFACE_INPUT_LOCK_MS,
     PLAYER_BALL_WALL_REBOUND_COYOTE_MS,
@@ -247,13 +248,14 @@ export function tryStartBallSurfaceReboundRuntime(
         return false;
     }
 
-    if (PLAYER_BALL_REBOUND_PAUSE_BEFORE_LAUNCH_MS <= 0) {
+    const totalPauseMs = PLAYER_BALL_REBOUND_HIT_PAUSE_MS + PLAYER_BALL_REBOUND_PAUSE_BEFORE_LAUNCH_MS;
+    if (totalPauseMs <= 0) {
         return applyBallSurfaceReboundImmediate(state, body, candidate, boosted, sourceVelocity);
     }
 
     startBallReboundPause(
         state.pauseState,
-        PLAYER_BALL_REBOUND_PAUSE_BEFORE_LAUNCH_MS,
+        totalPauseMs,
         candidate.surface,
         candidate.wallNormalX,
         sourceVelocity.x,

@@ -7,8 +7,8 @@ import {
     PLAYER_BALL_REBOUND_LANDING_WINDOW_MS,
     PLAYER_BALL_REBOUND_MAX_JUMP_VELOCITY,
     PLAYER_BALL_REBOUND_MIN_APPROACH_SPEED,
-    PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY,
-    PLAYER_JUMP_VELOCITY
+    PLAYER_BALL_JUMP_LAUNCH_VELOCITY,
+    PLAYER_BALL_REBOUND_MIN_JUMP_VELOCITY
 } from './player_constants';
 import type { PlayerInputSnapshot } from './player_input';
 import { clearCoyoteTime, clearJumpBuffer, hasCoyoteTime, type PlayerTimers } from './player_timers';
@@ -252,7 +252,7 @@ export const applyBallJumpRuntime = (params: ApplyBallJumpParams): void => {
     const { mutable, physicsBody, timers, horizontalDir, isBallForm, grounded, hasBoostHold } = params;
     const hasCoyoteJump = hasCoyoteTime(timers);
     const hasReboundJump = grounded && mutable.reboundWindowMs > 0;
-    const baseJumpVelocity = hasReboundJump ? mutable.reboundJumpVelocity : PLAYER_JUMP_VELOCITY;
+    const baseJumpVelocity = hasReboundJump ? mutable.reboundJumpVelocity : PLAYER_BALL_JUMP_LAUNCH_VELOCITY;
     const canUseGroundBoostLaunch = grounded || hasCoyoteJump;
 
     const ballJumpLaunch = resolveBallGroundJumpBoostLaunch({
