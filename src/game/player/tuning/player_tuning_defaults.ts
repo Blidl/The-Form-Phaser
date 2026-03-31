@@ -9,6 +9,7 @@ export const createPlayerTuningDefaultsSnapshot = (): PlayerTuningSnapshot => {
                 jumpBufferMs: 120,
                 transformLockMs: 150,
                 deathPauseMs: 250,
+                cameraFollowLerp: 0.18,
                 gravityY: 1800,
                 windResponse: 5200,
                 windMinDriftRatio: 0.2,

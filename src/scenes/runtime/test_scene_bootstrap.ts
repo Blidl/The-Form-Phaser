@@ -27,7 +27,10 @@ import {
     type TestWorldRuntime
 } from '../../game/world/runtime/test_world_runtime';
 import type { RespawnPoint } from '../../game/world/runtime/world_runtime_types';
-import { setupBaselineFollowCamera } from '../../game/camera/follow_camera';
+import {
+    refreshBaselineFollowCameraLerp,
+    setupBaselineFollowCamera
+} from '../../game/camera/follow_camera';
 import { createTestDebugRuntime, type TestDebugRuntime } from '../../ui/runtime/test_debug_runtime';
 import { createTestHudRuntime, type TestHudRuntime } from '../../ui/runtime/test_hud_runtime';
 import {
@@ -80,7 +83,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
         worldRuntime.resetRespawnObjects();
     });
 
-    setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
+    const camera = setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
         width: TEST_WORLD_WIDTH,
         height: TEST_WORLD_HEIGHT
     });
@@ -106,6 +109,9 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
                 : null
     );
     const tuningRuntime = createPlayerTuningRuntime();
+    tuningRuntime.subscribe(() => {
+        refreshBaselineFollowCameraLerp(camera);
+    });
     const tuningPanelRuntime = createPlayerTuningPanelRuntime({
         scene,
         tuningRuntime,

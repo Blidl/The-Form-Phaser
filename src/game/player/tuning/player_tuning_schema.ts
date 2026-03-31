@@ -300,6 +300,16 @@ export const PLAYER_TUNING_TABS: PlayerTuningTabSchema[] = [
                 ]
             },
             {
+                id: 'common-camera',
+                title: 'Camera',
+                fields: [
+                    rawField('common-camera-follow-lerp', 'Follow Lerp', 'ratio', 'common.cameraFollowLerp', { min: 0.01, max: 1, step: 0.01 })
+                ],
+                rawFields: [
+                    rawField('common-camera-follow-lerp-raw', 'Follow Lerp', 'ratio', 'common.cameraFollowLerp', { min: 0.01, max: 1, step: 0.01 })
+                ]
+            },
+            {
                 id: 'common-marker',
                 title: 'Marker',
                 fields: [

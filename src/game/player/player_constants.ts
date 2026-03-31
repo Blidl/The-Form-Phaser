@@ -128,6 +128,7 @@ export let PLAYER_MARKER_MOVE_SPEED_PX_PER_SEC = 240;
 export let PLAYER_MARKER_RETURN_SPEED_PX_PER_SEC = 180;
 export let PLAYER_MARKER_MAX_OFFSET_PX = 14;
 export let PLAYER_MARKER_SMOOTHING_TIME_SEC = 0.08;
+export let PLAYER_CAMERA_FOLLOW_LERP = 0.18;
 
 export let PLAYER_BALL_GROUND_MOVE_SPEED = 300;
 export let PLAYER_BALL_GROUND_MOVE_ACCEL = 1900;
@@ -227,6 +228,7 @@ export const applyPlayerTuningRawSnapshot = (raw: PlayerTuningRawSnapshot): void
     PLAYER_TIMER_DEFAULT_JUMP_BUFFER_MS = raw.common.jumpBufferMs;
     PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS = raw.common.transformLockMs;
     PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS = raw.common.deathPauseMs;
+    PLAYER_CAMERA_FOLLOW_LERP = raw.common.cameraFollowLerp;
     PLAYER_GRAVITY_Y = raw.common.gravityY;
     PLAYER_AIR_WIND_RESPONSE = raw.common.windResponse;
     PLAYER_AIR_WIND_MIN_DRIFT_RATIO = raw.common.windMinDriftRatio;
@@ -321,6 +323,7 @@ export const capturePlayerTuningRawSnapshot = (): PlayerTuningRawSnapshot => ({
         jumpBufferMs: PLAYER_TIMER_DEFAULT_JUMP_BUFFER_MS,
         transformLockMs: PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS,
         deathPauseMs: PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS,
+        cameraFollowLerp: PLAYER_CAMERA_FOLLOW_LERP,
         gravityY: PLAYER_GRAVITY_Y,
         windResponse: PLAYER_AIR_WIND_RESPONSE,
         windMinDriftRatio: PLAYER_AIR_WIND_MIN_DRIFT_RATIO,

@@ -20,6 +20,7 @@ export interface PlayerCommonTuningRaw {
     jumpBufferMs: number;
     transformLockMs: number;
     deathPauseMs: number;
+    cameraFollowLerp: number;
     gravityY: number;
     windResponse: number;
     windMinDriftRatio: number;
