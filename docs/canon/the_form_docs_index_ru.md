@@ -253,6 +253,38 @@
 - задаёт profile-driven lighting contract;
 - служит source of truth для live tuning и scene atmosphere.
 
+### Orchestrator State
+**Файл:** `the_form_orchestrator_state_ru.md`
+
+**Назначение:**
+- главный снимок текущего состояния оркестрации;
+- фиксирует, какой canon и какой порядок фаз сейчас действуют;
+- удерживает stop gates и проектные инварианты между внешними чатами.
+
+### Orchestrator Work Queue
+**Файл:** `the_form_orchestrator_work_queue_ru.md`
+
+**Назначение:**
+- рабочая очередь задач оркестратора;
+- показывает, какие эпики и задачи уже закрыты, активны или заблокированы;
+- задаёт рекомендуемый порядок запуска внешних Codex-чатов.
+
+### Orchestrator Log
+**Файл:** `the_form_orchestrator_log_ru.md`
+
+**Назначение:**
+- журнал результатов внешних чатов;
+- фиксирует, что реально сделано, что проверено и что остаётся спорным;
+- не даёт потерять контекст между отдельными feature-slice итерациями.
+
+### External Chat Intake Template
+**Файл:** `the_form_external_chat_intake_template_ru.md`
+
+**Назначение:**
+- шаблон для переноса результатов из внешних чатов обратно в основной оркестраторский контур;
+- снижает риск путаницы между несколькими параллельными реализациями;
+- помогает быстро обновлять log и work queue без копирования целых диалогов.
+
 ### 13. Parameters Registry
 **Файл:** `the_form_prototype_parameters_registry_ru.md`
 
@@ -323,7 +355,8 @@
 
 1. открыть `prototype_decisions`;
 2. открыть релевантный `feature_*` документ;
-3. при необходимости открыть `parameters_registry`, `test_scene_spec`, `implementation_principles`;
-4. собрать короткий prompt для Codex только по этим материалам.
+3. если задача идёт через внешний чат, открыть `the_form_orchestrator_state_ru.md` и `the_form_orchestrator_work_queue_ru.md`;
+4. при необходимости открыть `parameters_registry`, `test_scene_spec`, `implementation_principles`;
+5. после внешнего чата заполнить `the_form_external_chat_intake_template_ru.md` и обновить `the_form_orchestrator_log_ru.md`.
 
 Этот индекс существует именно для того, чтобы не тащить в каждый новый slice весь пакет целиком.
