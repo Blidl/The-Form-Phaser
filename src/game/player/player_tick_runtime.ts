@@ -111,7 +111,9 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
             deltaSec,
             horizontalDir,
             resolveSquareTrailSurfacePoint: context.resolveSquareTrailSurfacePoint,
-            querySquareAttachPose: context.querySquareAttachPose
+            querySquareAttachPose: context.querySquareAttachPose,
+            isSquareAttachPathClear: context.isSquareAttachPathClear,
+            isSquareRolloverPoseClear: context.isSquareRolloverPoseClear
         });
     }
 

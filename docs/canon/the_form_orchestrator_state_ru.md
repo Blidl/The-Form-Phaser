@@ -61,6 +61,8 @@
 - layout/gameplay authoring оставлять в существующем editor;
 - сложные системы author’ить через data profiles и registries;
 - новые системы добавлять узкими runtime-slices.
+- square collision safety не лечить post-tick coordinate correction-логикой, если можно удержать контракт `valid pose or detach` на уровне attach/runtime rules.
+- square corner stability считать отдельным attach-runtime контрактом: внешний угол нельзя лечить случайным overlap retarget или post-factum depenetration; attached pose должна сама ограничивать minimum contact с текущей surface.
 
 ---
 
@@ -68,6 +70,7 @@
 - Персонаж не должен завершать кадр внутри solid geometry.
 - Square rollover должен следовать input intent в валидных corner cases.
 - Square trail должен быть непрерывным для игрока визуально и логически.
+- Square не должен пассивно доползать до `corner-to-corner` external-edge стыка; attached pose обязана сохранять минимум `1/4` контакта с текущей surface.
 - Triangle должен стабильно ломать breakable wall в валидном состоянии.
 - Ball должен иметь предсказуемый jump feel и distance-based coyote.
 - Dev/prod trigger behavior должен совпадать.
@@ -116,4 +119,3 @@
 Локальные результаты отдельных задач сюда не писать. Для этого есть:
 - `the_form_orchestrator_log_ru.md`
 - `the_form_orchestrator_work_queue_ru.md`
-

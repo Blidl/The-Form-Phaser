@@ -5,12 +5,21 @@ import { resetSquareRolloverState } from './player_square_rollover';
 import { clearSquareTrailLatch } from './player_square_trail_latch';
 import type { PlayerSquareAttachPoseQuery } from './geometry/player_geometry_types';
 
+type SquareAttachPathClearFn = (
+    fromCenterX: number,
+    fromCenterY: number,
+    toCenterX: number,
+    toCenterY: number,
+    supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+) => boolean;
+
 export const tryEnterSquareAttach = (
     squareShell: PlayerSquareShellState,
     physicsBody: Physics.Arcade.Body,
     attachPose: PlayerSquareAttachPoseQuery | null,
     contactNormalX: -1 | 0 | 1,
-    contactNormalY: -1 | 0 | 1
+    contactNormalY: -1 | 0 | 1,
+    isPathClear: SquareAttachPathClearFn
 ): boolean => {
     if (attachPose === null || attachPose.supportInterval === null || squareShell.isAttached) {
         return false;
@@ -21,7 +30,8 @@ export const tryEnterSquareAttach = (
         physicsBody,
         attachPose,
         contactNormalX,
-        contactNormalY
+        contactNormalY,
+        isPathClear
     );
 };
 
@@ -32,7 +42,8 @@ export const tickSquareAttachState = (
     actionHeld: boolean,
     attachPose: PlayerSquareAttachPoseQuery | null,
     contactNormalX: -1 | 0 | 1,
-    contactNormalY: -1 | 0 | 1
+    contactNormalY: -1 | 0 | 1,
+    isPathClear: SquareAttachPathClearFn
 ): void => {
     if (!squareShell.isAttached) {
         return;
@@ -44,13 +55,18 @@ export const tickSquareAttachState = (
     }
 
     if (attachPose !== null && attachPose.supportInterval !== null) {
-        commitSquareAttachPose(
+        const committed = commitSquareAttachPose(
             squareShell,
             physicsBody,
             attachPose,
             contactNormalX,
-            contactNormalY
+            contactNormalY,
+            isPathClear
         );
+        if (committed) {
+            return;
+        }
+        squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
         return;
     }
 
@@ -67,6 +83,7 @@ export const clearSquareAttach = (squareShell: PlayerSquareShellState): void => 
     squareShell.isTrailLockedAtBoundary = false;
     squareShell.attachNormalX = 0;
     squareShell.attachNormalY = -1;
+    squareShell.attachSupportBody = null;
     squareShell.attachContactGraceMs = 0;
     squareShell.trailAnchorActive = false;
     squareShell.trailAnchorSupportBody = null;
@@ -93,9 +110,25 @@ export const commitSquareAttachPose = (
     physicsBody: Physics.Arcade.Body,
     attachPose: PlayerSquareAttachPoseQuery | null,
     contactNormalX: -1 | 0 | 1,
-    contactNormalY: -1 | 0 | 1
+    contactNormalY: -1 | 0 | 1,
+    isPathClear?: SquareAttachPathClearFn
 ): boolean => {
     if (attachPose === null || attachPose.supportInterval === null) {
+        return false;
+    }
+
+    const currentCenterX = physicsBody.x + (physicsBody.width * 0.5);
+    const currentCenterY = physicsBody.y + (physicsBody.height * 0.5);
+    if (
+        isPathClear !== undefined
+        && !isPathClear(
+            currentCenterX,
+            currentCenterY,
+            attachPose.snappedCenterX,
+            attachPose.snappedCenterY,
+            attachPose.supportInterval.ownerBody
+        )
+    ) {
         return false;
     }
 
@@ -103,6 +136,7 @@ export const commitSquareAttachPose = (
     squareShell.hasContact = true;
     squareShell.attachNormalX = contactNormalX;
     squareShell.attachNormalY = contactNormalY;
+    squareShell.attachSupportBody = attachPose.supportInterval.ownerBody;
     squareShell.contactNormalX = contactNormalX;
     squareShell.contactNormalY = contactNormalY;
     squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;

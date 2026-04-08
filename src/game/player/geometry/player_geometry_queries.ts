@@ -110,6 +110,58 @@ export const createPlayerRectSnapshot = (
     };
 };
 
+export const resolveSquareWorldPoints = (
+    centerX: number,
+    centerY: number,
+    halfSize: number,
+    orientationRad: number
+): [
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number },
+    { x: number; y: number }
+] => {
+    const cos = Math.cos(orientationRad);
+    const sin = Math.sin(orientationRad);
+    const localPoints = [
+        { x: -halfSize, y: -halfSize },
+        { x: halfSize, y: -halfSize },
+        { x: halfSize, y: halfSize },
+        { x: -halfSize, y: halfSize }
+    ] as const;
+
+    return localPoints.map((point) => {
+        return {
+            x: centerX + ((point.x * cos) - (point.y * sin)),
+            y: centerY + ((point.x * sin) + (point.y * cos))
+        };
+    }) as [
+        { x: number; y: number },
+        { x: number; y: number },
+        { x: number; y: number },
+        { x: number; y: number }
+    ];
+};
+
+export const resolveWorldPointBounds = (
+    points: ReadonlyArray<{ x: number; y: number }>
+): PlayerRectSnapshot => {
+    let minX = points[0]?.x ?? 0;
+    let maxX = points[0]?.x ?? 0;
+    let minY = points[0]?.y ?? 0;
+    let maxY = points[0]?.y ?? 0;
+
+    for (let index = 1; index < points.length; index += 1) {
+        const point = points[index];
+        minX = Math.min(minX, point.x);
+        maxX = Math.max(maxX, point.x);
+        minY = Math.min(minY, point.y);
+        maxY = Math.max(maxY, point.y);
+    }
+
+    return createPlayerRectSnapshot(minX, minY, maxX - minX, maxY - minY);
+};
+
 export const resolvePlayerAnchorOffset = (
     form: PlayerFormId,
     _triangleShell: PlayerTriangleShellState
@@ -614,10 +666,74 @@ export const resolveSquareSupportIntervalFromOverlap = (
 
 export const resolveSquarePoseClear = (
     overlapBodies: Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>,
-    selfBody: Physics.Arcade.Body
+    selfBody: Physics.Arcade.Body,
+    playerRect: PlayerRectSnapshot,
+    supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
+    _normalX: OrthogonalDirection,
+    _normalY: OrthogonalDirection
 ): boolean => {
+    const foreignOverlapTolerance = 1;
+
     return !overlapBodies.some((candidateBody) => {
-        return candidateBody !== selfBody && isPlatformSurfaceBody(candidateBody);
+        if (candidateBody === selfBody || !isPlatformSurfaceBody(candidateBody)) {
+            return false;
+        }
+
+        if (candidateBody === supportBody) {
+            return false;
+        }
+
+        const candidateRect = createPlayerRectSnapshot(
+            candidateBody.x,
+            candidateBody.y,
+            candidateBody.width,
+            candidateBody.height
+        );
+        const overlapX = Math.min(playerRect.right, candidateRect.right) - Math.max(playerRect.left, candidateRect.left);
+        const overlapY = Math.min(playerRect.bottom, candidateRect.bottom) - Math.max(playerRect.top, candidateRect.top);
+        if (overlapX <= foreignOverlapTolerance || overlapY <= foreignOverlapTolerance) {
+            return false;
+        }
+
+        return true;
+    });
+};
+
+export const doesConvexPolygonOverlapRect = (
+    polygonPoints: ReadonlyArray<{ x: number; y: number }>,
+    rect: Pick<PlayerRectSnapshot, 'left' | 'top' | 'right' | 'bottom'>
+): boolean => {
+    const rectPoints = [
+        { x: rect.left, y: rect.top },
+        { x: rect.right, y: rect.top },
+        { x: rect.right, y: rect.bottom },
+        { x: rect.left, y: rect.bottom }
+    ];
+    const axes: Array<{ x: number; y: number }> = [
+        { x: 1, y: 0 },
+        { x: 0, y: 1 }
+    ];
+
+    for (let index = 0; index < polygonPoints.length; index += 1) {
+        const pointA = polygonPoints[index];
+        const pointB = polygonPoints[(index + 1) % polygonPoints.length];
+        const edgeX = pointB.x - pointA.x;
+        const edgeY = pointB.y - pointA.y;
+        const axisLength = Math.hypot(edgeX, edgeY);
+        if (axisLength <= 0.0001) {
+            continue;
+        }
+
+        axes.push({
+            x: -edgeY / axisLength,
+            y: edgeX / axisLength
+        });
+    }
+
+    return axes.every((axis) => {
+        const polygonProjection = projectPointsOntoAxis(polygonPoints, axis);
+        const rectProjection = projectPointsOntoAxis(rectPoints, axis);
+        return polygonProjection.max > rectProjection.min && rectProjection.max > polygonProjection.min;
     });
 };
 
@@ -672,6 +788,22 @@ const isPlatformSurfaceBody = (
 
     const gameObject = body.gameObject;
     return !!gameObject?.active && isPlatformSurfaceGameObject(gameObject);
+};
+
+const projectPointsOntoAxis = (
+    points: ReadonlyArray<{ x: number; y: number }>,
+    axis: { x: number; y: number }
+): { min: number; max: number } => {
+    let min = (points[0]?.x ?? 0) * axis.x + (points[0]?.y ?? 0) * axis.y;
+    let max = min;
+
+    for (let index = 1; index < points.length; index += 1) {
+        const projection = (points[index].x * axis.x) + (points[index].y * axis.y);
+        min = Math.min(min, projection);
+        max = Math.max(max, projection);
+    }
+
+    return { min, max };
 };
 
 export const resolveTriangleLeadingCornerMarkerOffset = (

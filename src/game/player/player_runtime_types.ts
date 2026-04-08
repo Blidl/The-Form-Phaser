@@ -56,5 +56,19 @@ export interface PlayerTickRuntimeContext {
         normalX: -1 | 0 | 1,
         normalY: -1 | 0 | 1
     ) => PlayerSquareAttachPoseQuery;
+    isSquareAttachPathClear: (
+        fromCenterX: number,
+        fromCenterY: number,
+        toCenterX: number,
+        toCenterY: number,
+        supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+    ) => boolean;
+    isSquareRolloverPoseClear: (
+        centerX: number,
+        centerY: number,
+        orientationRad: number,
+        ignoreBodyA: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
+        ignoreBodyB: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+    ) => boolean;
     isCurrentlyGrounded: () => boolean;
 }

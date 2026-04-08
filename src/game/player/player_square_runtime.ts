@@ -9,7 +9,7 @@ import {
 import type { PlayerInputSnapshot } from './player_input';
 import { clearJumpBuffer, clearSquareAttachEntryBuffer, hasSquareAttachEntryBuffer, type PlayerTimers } from './player_timers';
 import { tickSquareShellOrientation } from './player_square_shell';
-import { tickSquareAttachState, tryEnterSquareAttach } from './player_square_attach';
+import { clearSquareAttach, tickSquareAttachState, tryEnterSquareAttach } from './player_square_attach';
 import { isSquareAttachJumpActive, tickSquareAttachJump } from './player_square_attach_jump';
 import {
     beginSquareTrailAnchor,
@@ -28,7 +28,11 @@ import {
     updateSquareTrailLatchFromPose
 } from './player_square_trail_latch';
 import { resolveSquareAttachSurfaceVelocity } from './player_square_surface_move';
-import { isSquareRolloverActive, tickSquareRollover, tryStartSquareRollover } from './player_square_rollover';
+import {
+    isSquareRolloverActive,
+    tickSquareRollover,
+    tryStartSquareRollover
+} from './player_square_rollover';
 import { resolveArcadeAxisContactSnapshot, resolveSquareContactNormal } from './geometry/player_geometry_queries';
 import type { PlayerSquareAttachPoseQuery, PlayerSquareTrailSurfacePoint } from './geometry/player_geometry_types';
 import { resolveSquareAttachHoldDecision, resolveSquareAttachStartDecision } from './state/player_form_state_guards';
@@ -50,6 +54,20 @@ interface TickSquareRuntimeParams {
         normalX: -1 | 0 | 1,
         normalY: -1 | 0 | 1
     ) => PlayerSquareAttachPoseQuery;
+    isSquareAttachPathClear: (
+        fromCenterX: number,
+        fromCenterY: number,
+        toCenterX: number,
+        toCenterY: number,
+        supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+    ) => boolean;
+    isSquareRolloverPoseClear: (
+        centerX: number,
+        centerY: number,
+        orientationRad: number,
+        ignoreBodyA: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
+        ignoreBodyB: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+    ) => boolean;
 }
 
 interface SquareAttachCandidateSample {
@@ -58,6 +76,7 @@ interface SquareAttachCandidateSample {
     preferredNormalX?: -1 | 0 | 1;
     preferredNormalY?: -1 | 0 | 1;
     restrictToPreferredNormal?: boolean;
+    restrictToAttachedNormal?: boolean;
 }
 
 export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
@@ -70,7 +89,9 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
         deltaSec,
         horizontalDir,
         resolveSquareTrailSurfacePoint,
-        querySquareAttachPose
+        querySquareAttachPose,
+        isSquareAttachPathClear,
+        isSquareRolloverPoseClear
     } = params;
 
     const attachedNormalX = state.squareShell.isAttached
@@ -112,7 +133,25 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
         deltaSec,
         querySquareAttachPose
     );
-    const currentAttachPose = state.squareShell.isAttached
+    const attachedCenterX = physicsBody.x + (physicsBody.width * 0.5);
+    const attachedCenterY = physicsBody.y + (physicsBody.height * 0.5);
+    const invalidAttachedPose = state.squareShell.isAttached
+        ? querySquareAttachPose(
+            attachedCenterX,
+            attachedCenterY,
+            state.squareShell.attachNormalX,
+            state.squareShell.attachNormalY
+        )
+        : null;
+    if (
+        state.squareShell.isAttached
+        && invalidAttachedPose !== null
+        && invalidAttachedPose.supportInterval !== null
+        && !invalidAttachedPose.isPoseClear
+    ) {
+        clearSquareAttach(state.squareShell);
+    }
+    const rawCurrentAttachPose = state.squareShell.isAttached
         ? resolveSquareSurfacePoseWithTrailAnchorFallback(
             state.squareShell,
             physicsBody,
@@ -121,6 +160,23 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
             physicsBody.y + (physicsBody.height * 0.5),
             state.squareShell.attachNormalX,
             state.squareShell.attachNormalY
+        )
+        : null;
+    const currentAttachPose = state.squareShell.isAttached
+        ? resolveQuarterContactClampPose(
+            rawCurrentAttachPose,
+            state.squareShell.attachNormalX,
+            state.squareShell.attachNormalY
+        ) ?? rawCurrentAttachPose
+        : null;
+    const slideTargetPose = state.squareShell.isAttached
+        ? resolveAttachedSlideTargetPose(
+            currentAttachPose,
+            state.squareShell.attachNormalX,
+            state.squareShell.attachNormalY,
+            horizontalDir,
+            verticalDir as -1 | 0 | 1,
+            deltaSec
         )
         : null;
     const currentContactPose = !state.squareShell.isAttached && squareContact.hasContact
@@ -188,6 +244,7 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
             deltaMs,
             actionHeld: input.actionHeld,
             queryAttachPose: querySquareAttachPose,
+            isPathClear: isSquareAttachPathClear,
             onReturnCommit: (targetPose) => {
                 state.squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
                 if (isAttachPoseOnTrail(state.squareShell, targetPose, state.squareShell.attachNormalX, state.squareShell.attachNormalY)) {
@@ -221,7 +278,8 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
             physicsBody,
             attachCandidate?.pose ?? null,
             attachCandidate?.normalX ?? squareContact.normalX,
-            attachCandidate?.normalY ?? squareContact.normalY
+            attachCandidate?.normalY ?? squareContact.normalY,
+            isSquareAttachPathClear
         );
 
         if (attachStarted) {
@@ -274,7 +332,16 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
     }
 
     if (!isSquareRolloverActive(state.squareShell)) {
-        const effectiveAttachPose = attachCandidate?.pose
+        const shouldPreferSlideTargetPose = slideTargetPose !== null
+            && (
+                attachCandidate === null
+                || (
+                    attachCandidate.normalX === state.squareShell.attachNormalX
+                    && attachCandidate.normalY === state.squareShell.attachNormalY
+                )
+            );
+        const effectiveAttachPose = (shouldPreferSlideTargetPose ? slideTargetPose : null)
+            ?? attachCandidate?.pose
             ?? resolveBoundaryLockedAttachPose(
                 state.squareShell,
                 currentAttachPose
@@ -289,7 +356,8 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
             squareAttachHoldDecision.shouldKeepAttachHold,
             effectiveAttachPose,
             effectiveNormalX,
-            effectiveNormalY
+            effectiveNormalY,
+            isSquareAttachPathClear
         );
         if (state.squareShell.isAttached && effectiveAttachPose !== null) {
             if (isAttachPoseOnTrail(state.squareShell, effectiveAttachPose, effectiveNormalX, effectiveNormalY)) {
@@ -310,6 +378,7 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
         physicsBody,
         deltaMs,
         queryAttachPose: querySquareAttachPose,
+        isRolloverPoseClear: isSquareRolloverPoseClear,
         onSuccessCommit: (targetPose) => {
             state.squareShell.attachContactGraceMs = PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS;
             if (isAttachPoseOnTrail(state.squareShell, targetPose, state.squareShell.attachNormalX, state.squareShell.attachNormalY)) {
@@ -403,7 +472,7 @@ export const applySquareAttachedMovement = (
         return;
     }
 
-    physicsBody.setVelocity(attachVelocity.velocityX, attachVelocity.velocityY);
+    physicsBody.setVelocity(attachVelocity.holdVelocityX, attachVelocity.holdVelocityY);
     physicsBody.setAcceleration(0, 0);
 };
 
@@ -464,7 +533,8 @@ const resolveBestSquareAttachCandidate = (
             hasContact,
             sample.preferredNormalX,
             sample.preferredNormalY,
-            sample.restrictToPreferredNormal === true
+            sample.restrictToPreferredNormal === true,
+            sample.restrictToAttachedNormal === true
         );
 
         for (let normalIndex = 0; normalIndex < orderedNormals.length; normalIndex += 1) {
@@ -520,7 +590,7 @@ const resolveAttachCandidateSamples = (
     deltaSec: number
 ): SquareAttachCandidateSample[] => {
     const samples: SquareAttachCandidateSample[] = [];
-    if (squareShell.isAttached && actionHeld) {
+    if (actionHeld) {
         const transitionNormal = resolveAttachTransitionNormal(
             squareShell.attachNormalX,
             squareShell.attachNormalY,
@@ -549,7 +619,8 @@ const resolveAttachCandidateSamples = (
 
     samples.push({
         centerX: currentCenterX,
-        centerY: currentCenterY
+        centerY: currentCenterY,
+        restrictToAttachedNormal: squareShell.isAttached
     });
 
     return samples;
@@ -585,7 +656,8 @@ const resolveAttachCandidateNormals = (
     hasContact: boolean,
     preferredNormalX?: -1 | 0 | 1,
     preferredNormalY?: -1 | 0 | 1,
-    restrictToPreferredNormal: boolean = false
+    restrictToPreferredNormal: boolean = false,
+    restrictToAttachedNormal: boolean = false
 ): Array<{ normalX: -1 | 0 | 1; normalY: -1 | 0 | 1 }> => {
     const ordered: Array<{ normalX: -1 | 0 | 1; normalY: -1 | 0 | 1 }> = [];
     const pushUnique = (normalX: -1 | 0 | 1, normalY: -1 | 0 | 1): void => {
@@ -600,6 +672,11 @@ const resolveAttachCandidateNormals = (
         if (restrictToPreferredNormal) {
             return ordered;
         }
+    }
+
+    if (restrictToAttachedNormal && squareShell.isAttached) {
+        pushUnique(squareShell.attachNormalX, squareShell.attachNormalY);
+        return ordered;
     }
 
     if (squareShell.isAttached && hasContact && (contactNormalX !== squareShell.attachNormalX || contactNormalY !== squareShell.attachNormalY)) {
@@ -708,6 +785,166 @@ const resolveBoundaryLockedAttachPose = (
             y: nearestTrailPoint.y
         }
     };
+};
+
+const resolveAttachedSlideTargetPose = (
+    currentAttachPose: PlayerSquareAttachPoseQuery | null,
+    attachNormalX: -1 | 0 | 1,
+    attachNormalY: -1 | 0 | 1,
+    horizontalDir: -1 | 0 | 1,
+    verticalDir: -1 | 0 | 1,
+    deltaSec: number
+): PlayerSquareAttachPoseQuery | null => {
+    const supportInterval = currentAttachPose?.supportInterval;
+    if (currentAttachPose === null || supportInterval === null) {
+        return null;
+    }
+
+    const travelDelta = resolveAttachedSurfaceTravelDelta(
+        attachNormalX,
+        attachNormalY,
+        horizontalDir,
+        verticalDir,
+        deltaSec
+    );
+    if (travelDelta.deltaX === 0 && travelDelta.deltaY === 0) {
+        return currentAttachPose;
+    }
+
+    const minContactPx = currentAttachPose.rect.width * 0.25;
+
+    if (attachNormalY !== 0 && travelDelta.deltaX !== 0) {
+        const movingPositive = travelDelta.deltaX > 0;
+        const remainingContactPx = movingPositive
+            ? supportInterval.max - currentAttachPose.rect.left
+            : currentAttachPose.rect.right - supportInterval.min;
+        const allowedTravelPx = Math.max(0, remainingContactPx - minContactPx);
+        const clampedDeltaX = Math.min(Math.abs(travelDelta.deltaX), allowedTravelPx) * (movingPositive ? 1 : -1);
+        return offsetAttachPoseAlongSurface(currentAttachPose, clampedDeltaX, 0);
+    }
+
+    if (attachNormalX !== 0 && travelDelta.deltaY !== 0) {
+        const movingPositive = travelDelta.deltaY > 0;
+        const remainingContactPx = movingPositive
+            ? supportInterval.max - currentAttachPose.rect.top
+            : currentAttachPose.rect.bottom - supportInterval.min;
+        const allowedTravelPx = Math.max(0, remainingContactPx - minContactPx);
+        const clampedDeltaY = Math.min(Math.abs(travelDelta.deltaY), allowedTravelPx) * (movingPositive ? 1 : -1);
+        return offsetAttachPoseAlongSurface(currentAttachPose, 0, clampedDeltaY);
+    }
+
+    return currentAttachPose;
+};
+
+const resolveQuarterContactClampPose = (
+    currentAttachPose: PlayerSquareAttachPoseQuery | null,
+    attachNormalX: -1 | 0 | 1,
+    attachNormalY: -1 | 0 | 1
+): PlayerSquareAttachPoseQuery | null => {
+    const supportInterval = currentAttachPose?.supportInterval;
+    if (currentAttachPose === null || supportInterval === null) {
+        return null;
+    }
+
+    const minContactPx = currentAttachPose.rect.width * 0.25;
+
+    if (attachNormalY !== 0) {
+        const positiveContactPx = supportInterval.max - currentAttachPose.rect.left;
+        if (positiveContactPx < minContactPx) {
+            return offsetAttachPoseAlongSurface(
+                currentAttachPose,
+                positiveContactPx - minContactPx,
+                0
+            );
+        }
+
+        const negativeContactPx = currentAttachPose.rect.right - supportInterval.min;
+        if (negativeContactPx < minContactPx) {
+            return offsetAttachPoseAlongSurface(
+                currentAttachPose,
+                minContactPx - negativeContactPx,
+                0
+            );
+        }
+
+        return null;
+    }
+
+    const positiveContactPx = supportInterval.max - currentAttachPose.rect.top;
+    if (positiveContactPx < minContactPx) {
+        return offsetAttachPoseAlongSurface(
+            currentAttachPose,
+            0,
+            positiveContactPx - minContactPx
+        );
+    }
+
+    const negativeContactPx = currentAttachPose.rect.bottom - supportInterval.min;
+    if (negativeContactPx < minContactPx) {
+        return offsetAttachPoseAlongSurface(
+            currentAttachPose,
+            0,
+            minContactPx - negativeContactPx
+        );
+    }
+
+    return null;
+};
+
+const offsetAttachPoseAlongSurface = (
+    pose: PlayerSquareAttachPoseQuery,
+    deltaX: number,
+    deltaY: number
+): PlayerSquareAttachPoseQuery => {
+    return {
+        ...pose,
+        centerX: pose.centerX + deltaX,
+        centerY: pose.centerY + deltaY,
+        snappedCenterX: pose.snappedCenterX + deltaX,
+        snappedCenterY: pose.snappedCenterY + deltaY,
+        rect: {
+            ...pose.rect,
+            left: pose.rect.left + deltaX,
+            right: pose.rect.right + deltaX,
+            top: pose.rect.top + deltaY,
+            bottom: pose.rect.bottom + deltaY,
+            centerX: pose.rect.centerX + deltaX,
+            centerY: pose.rect.centerY + deltaY
+        },
+        surfacePoint: {
+            ...pose.surfacePoint,
+            x: pose.surfacePoint.x + deltaX,
+            y: pose.surfacePoint.y + deltaY
+        }
+    };
+};
+
+const resolveAttachedSurfaceTravelDelta = (
+    attachNormalX: -1 | 0 | 1,
+    attachNormalY: -1 | 0 | 1,
+    horizontalDir: -1 | 0 | 1,
+    verticalDir: -1 | 0 | 1,
+    deltaSec: number
+): { deltaX: number; deltaY: number } => {
+    if (deltaSec <= 0) {
+        return { deltaX: 0, deltaY: 0 };
+    }
+
+    if (attachNormalY !== 0 && horizontalDir !== 0) {
+        return {
+            deltaX: horizontalDir * PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED * deltaSec,
+            deltaY: 0
+        };
+    }
+
+    if (attachNormalX !== 0 && verticalDir !== 0) {
+        return {
+            deltaX: 0,
+            deltaY: verticalDir * PLAYER_SQUARE_ATTACH_SURFACE_MOVE_SPEED * deltaSec
+        };
+    }
+
+    return { deltaX: 0, deltaY: 0 };
 };
 
 const resolveSquareSurfacePoseWithTrailAnchorFallback = (

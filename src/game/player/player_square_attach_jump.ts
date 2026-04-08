@@ -27,6 +27,13 @@ interface TickSquareAttachJumpParams {
         normalX: -1 | 0 | 1,
         normalY: -1 | 0 | 1
     ) => PlayerSquareAttachPoseQuery;
+    isPathClear: (
+        fromCenterX: number,
+        fromCenterY: number,
+        toCenterX: number,
+        toCenterY: number,
+        supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+    ) => boolean;
     onReturnCommit: (query: PlayerSquareAttachPoseQuery) => void;
 }
 
@@ -106,6 +113,7 @@ export const tryStartSquareAttachJump = (
     squareShell.isOnTrail = false;
     squareShell.isTrailRegenerating = false;
     squareShell.isTrailLockedAtBoundary = false;
+    squareShell.attachSupportBody = null;
     squareShell.attachContactGraceMs = 0;
     squareShell.hasContact = false;
     physicsBody.setVelocity(0, 0);
@@ -114,7 +122,7 @@ export const tryStartSquareAttachJump = (
 };
 
 export const tickSquareAttachJump = (params: TickSquareAttachJumpParams): void => {
-    const { squareShell, physicsBody, deltaMs, actionHeld, queryAttachPose, onReturnCommit } = params;
+    const { squareShell, physicsBody, deltaMs, actionHeld, queryAttachPose, isPathClear, onReturnCommit } = params;
     const state = squareShell.attachJumpState;
     if (state.phase === 'inactive') {
         physicsBody.checkCollision.none = false;
@@ -137,6 +145,10 @@ export const tickSquareAttachJump = (params: TickSquareAttachJumpParams): void =
         const easedProgress = 1 - ((1 - progress) * (1 - progress));
         const centerX = lerp(state.launchCenterX, state.peakCenterX, easedProgress);
         const centerY = lerp(state.launchCenterY, state.peakCenterY, easedProgress);
+        if (!tryMoveSquareAttachJumpBody(physicsBody, centerX, centerY, state.anchorSupportBody, isPathClear)) {
+            beginBlockedAttachJumpReturn(physicsBody, state);
+            return;
+        }
         physicsBody.reset(centerX, centerY);
         squareShell.orientationRad = state.orientationRad;
 
@@ -155,7 +167,12 @@ export const tickSquareAttachJump = (params: TickSquareAttachJumpParams): void =
     const easedReturnProgress = returnProgress * returnProgress * (3 - (2 * returnProgress));
     const centerX = lerp(state.peakCenterX, targetCenterX, easedReturnProgress);
     const centerY = lerp(state.peakCenterY, targetCenterY, easedReturnProgress);
+    const pathSupportBody = targetPose?.supportInterval?.ownerBody ?? state.anchorSupportBody;
 
+    if (!tryMoveSquareAttachJumpBody(physicsBody, centerX, centerY, pathSupportBody, isPathClear)) {
+        restartAttachJumpReturnFromCurrentCenter(physicsBody, state);
+        return;
+    }
     physicsBody.reset(centerX, centerY);
     squareShell.orientationRad = state.orientationRad;
 
@@ -164,14 +181,17 @@ export const tickSquareAttachJump = (params: TickSquareAttachJumpParams): void =
     }
 
     if (targetPose !== null) {
-        commitSquareAttachPose(
+        const committed = commitSquareAttachPose(
             squareShell,
             physicsBody,
             targetPose,
             state.normalX,
-            state.normalY
+            state.normalY,
+            isPathClear
         );
-        onReturnCommit(targetPose);
+        if (committed) {
+            onReturnCommit(targetPose);
+        }
     }
 
     physicsBody.checkCollision.none = false;
@@ -317,4 +337,36 @@ const resolveAttachJumpAnchorWorld = (
 
 const lerp = (from: number, to: number, t: number): number => {
     return from + ((to - from) * t);
+};
+
+const tryMoveSquareAttachJumpBody = (
+    physicsBody: Physics.Arcade.Body,
+    centerX: number,
+    centerY: number,
+    supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
+    isPathClear: TickSquareAttachJumpParams['isPathClear']
+): boolean => {
+    const currentCenterX = physicsBody.x + (physicsBody.width * 0.5);
+    const currentCenterY = physicsBody.y + (physicsBody.height * 0.5);
+    return isPathClear(currentCenterX, currentCenterY, centerX, centerY, supportBody);
+};
+
+const beginBlockedAttachJumpReturn = (
+    physicsBody: Physics.Arcade.Body,
+    state: PlayerSquareAttachJumpState
+): void => {
+    state.phase = 'return';
+    state.elapsedMs = 0;
+    state.peakCenterX = physicsBody.x + (physicsBody.width * 0.5);
+    state.peakCenterY = physicsBody.y + (physicsBody.height * 0.5);
+};
+
+const restartAttachJumpReturnFromCurrentCenter = (
+    physicsBody: Physics.Arcade.Body,
+    state: PlayerSquareAttachJumpState
+): void => {
+    state.phase = 'return';
+    state.elapsedMs = 0;
+    state.peakCenterX = physicsBody.x + (physicsBody.width * 0.5);
+    state.peakCenterY = physicsBody.y + (physicsBody.height * 0.5);
 };

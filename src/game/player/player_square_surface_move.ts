@@ -1,6 +1,8 @@
 import type { PlayerInputSnapshot } from './player_input';
 
 interface SquareAttachSurfaceVelocity {
+    holdVelocityX: number;
+    holdVelocityY: number;
     velocityX: number;
     velocityY: number;
 }
@@ -17,19 +19,19 @@ export const resolveSquareAttachSurfaceVelocity = (
     const horizontalDir = (input.moveRight ? 1 : 0) - (input.moveLeft ? 1 : 0);
     const verticalDir = (input.moveDown ? 1 : 0) - (input.moveUp ? 1 : 0);
 
-    let surfaceVelocityX = 0;
-    let surfaceVelocityY = 0;
+    let velocityX = holdVelocityX;
+    let velocityY = holdVelocityY;
 
     if (attachNormalY !== 0) {
-        surfaceVelocityX = horizontalDir * surfaceMoveSpeed;
-    } else {
-        if (verticalDir !== 0) {
-            surfaceVelocityY = verticalDir * surfaceMoveSpeed;
-        }
+        velocityX += horizontalDir * surfaceMoveSpeed;
+    } else if (verticalDir !== 0) {
+        velocityY += verticalDir * surfaceMoveSpeed;
     }
 
     return {
-        velocityX: holdVelocityX + surfaceVelocityX,
-        velocityY: holdVelocityY + surfaceVelocityY
+        holdVelocityX,
+        holdVelocityY,
+        velocityX,
+        velocityY
     };
 };

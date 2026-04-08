@@ -31,6 +31,7 @@ export interface PlayerSquareShellState {
     isAttached: boolean;
     attachNormalX: -1 | 0 | 1;
     attachNormalY: -1 | 0 | 1;
+    attachSupportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
     attachContactGraceMs: number;
     trailSegments: PlayerSquareTrailSegment[];
     trailResourceCurrent: number;

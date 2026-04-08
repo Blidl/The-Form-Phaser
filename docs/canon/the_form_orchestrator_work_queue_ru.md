@@ -21,7 +21,10 @@
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| Never Embed Contract | todo | Особый акцент на square attach/carry/pit |
+| Never Embed Contract | blocked | Старый post-tick/depenetration путь отвергнут как неверная архитектура; текущий курс: valid attach pose or detach, без координатных коррекций после тика |
+| Square Attach/Carry Invalid World Pose Resolution | in_progress | Оставлены snapped-pose validation и immediate break attach; `lastValidSquarePose` и directed escape удалены как symptom-driven ветка |
+| Square Attach Face Snap Regression on Moving Supports | in_progress | Убраны corner-allowance hack и post-tick escape-слой; нужен ручной retest normal face-snap на moving supports |
+| Square Attach Commit Path Collision | in_progress | Новая рабочая гипотеза: проблема может быть не в финальной attach-pose, а в том, что commit/snap в attach или возврат attach-jump не проверяет пересечение пути с wall/floor/ceiling |
 | Square Rollover by Input | todo | Input intent должен побеждать |
 | Square Trail Continuity | todo | Убрать микродыры и плохой reconnect |
 | Triangle Break Wall Stability | todo | Устранить нестабильность break |
@@ -112,4 +115,3 @@
 1. обновить статус задачи;
 2. коротко вписать итог в лог;
 3. если изменился канон — обновить `the_form_orchestrator_state_ru.md`.
-

@@ -285,6 +285,14 @@
 - снижает риск путаницы между несколькими параллельными реализациями;
 - помогает быстро обновлять log и work queue без копирования целых диалогов.
 
+### Codex Prompt Pack (Game Studio)
+**Файл:** `the_form_codex_prompt_pack_game_studio_ru.md`
+
+**Назначение:**
+- полный набор рабочих prompt-ов для внешних Codex-чатов;
+- встраивает `Game Studio` как явную рабочую рамку;
+- связывает каждый prompt с нужным specialist skill и canon проекта.
+
 ### 13. Parameters Registry
 **Файл:** `the_form_prototype_parameters_registry_ru.md`
 

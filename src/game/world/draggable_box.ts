@@ -75,8 +75,15 @@ export const createDraggableBox = (scene: Scene, config: DraggableBoxConfig): Dr
             }
 
             const playerBody = player.arcadeBodyObject.body as Physics.Arcade.Body;
-            const targetX = playerBody.x + (playerBody.width * 0.5);
-            const targetY = playerBody.y + (playerBody.height * 0.5);
+            const targetPoint = resolveDragBoxPullTarget(
+                box.x,
+                box.y,
+                body.width,
+                body.height,
+                playerBody
+            );
+            const targetX = targetPoint.x;
+            const targetY = targetPoint.y;
             const deltaX = targetX - box.x;
             const deltaY = targetY - box.y;
             const distance = Math.hypot(deltaX, deltaY);
@@ -97,5 +104,35 @@ export const createDraggableBox = (scene: Scene, config: DraggableBoxConfig): Dr
             scene.matter.world.remove(matterBody);
             box.destroy();
         }
+    };
+};
+
+const resolveDragBoxPullTarget = (
+    boxCenterX: number,
+    boxCenterY: number,
+    boxWidth: number,
+    boxHeight: number,
+    playerBody: Physics.Arcade.Body
+): { x: number; y: number } => {
+    const playerCenterX = playerBody.x + (playerBody.width * 0.5);
+    const playerCenterY = playerBody.y + (playerBody.height * 0.5);
+    const separationX = (playerBody.width + boxWidth) * 0.5;
+    const separationY = (playerBody.height + boxHeight) * 0.5;
+    let deltaX = boxCenterX - playerCenterX;
+    let deltaY = boxCenterY - playerCenterY;
+
+    if (Math.abs(deltaX) <= 0.001 && Math.abs(deltaY) <= 0.001) {
+        deltaY = -1;
+    }
+
+    const scale = 1 / Math.max(
+        Math.abs(deltaX) / Math.max(separationX, 0.001),
+        Math.abs(deltaY) / Math.max(separationY, 0.001),
+        1
+    );
+
+    return {
+        x: playerCenterX + (deltaX * scale),
+        y: playerCenterY + (deltaY * scale)
     };
 };

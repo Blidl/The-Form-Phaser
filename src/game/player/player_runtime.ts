@@ -7,7 +7,6 @@ import {
     PLAYER_MAX_FORM_MOVE_SPEED,
     PLAYER_GRAVITY_Y,
     PLAYER_PLACEHOLDER_RADIUS,
-    PLAYER_SQUARE_ROLLOVER_SURFACE_VALIDATION_RANGE_PX,
     PLAYER_SQUARE_TRAIL_RESOURCE_MAX,
     PLAYER_START_FORM
 } from './player_constants';
@@ -35,14 +34,17 @@ import type {
 } from './player_types';
 import {
     createPlayerRectSnapshot,
+    doesConvexPolygonOverlapRect,
     resolveSquarePoseClear,
     resolvePlayerHazardHitShape,
     resolvePlayerLocomotionBodyConfig,
     resolvePlayerFormAnchor,
+    resolveSquareWorldPoints,
     resolveSquareSupportIntervalFromKnownBody,
     resolveSquareSupportIntervalFromOverlap,
     resolveSquareSupportProbe,
-    resolveSquareTrailSurfacePoint
+    resolveSquareTrailSurfacePoint,
+    resolveWorldPointBounds
 } from './geometry/player_geometry_queries';
 import { squareSupportLocalToWorld } from './player_square_support_space';
 import {
@@ -63,6 +65,7 @@ import type {
 } from './geometry/player_geometry_types';
 import type { PlayerSquareDebugView, PlayerSquareDebugZoneId } from './player_runtime_contracts';
 import { PlayerView } from './view/player_view';
+import { isPlatformSurfaceGameObject } from '../world/world_surface_tags';
 import {
     createBallReboundRuntimeState,
     type BallReboundRuntimeState
@@ -375,6 +378,8 @@ export class PfPlayerRuntime {
             getTransformLockMs: () => this.timers.transformLockMs,
             resolveSquareTrailSurfacePoint: (normalX, normalY) => this.resolveSquareTrailSurfacePoint(normalX, normalY),
             querySquareAttachPose: (centerX, centerY, normalX, normalY) => this.querySquareAttachPose(centerX, centerY, normalX, normalY),
+            isSquareAttachPathClear: (fromCenterX, fromCenterY, toCenterX, toCenterY, supportBody) => this.isSquareAttachPathClear(fromCenterX, fromCenterY, toCenterX, toCenterY, supportBody),
+            isSquareRolloverPoseClear: (centerX, centerY, orientationRad, ignoreBodyA, ignoreBodyB) => this.isSquareRolloverPoseClear(centerX, centerY, orientationRad, ignoreBodyA, ignoreBodyB),
             isCurrentlyGrounded: () => this.computeIsCurrentlyGrounded()
         };
 
@@ -459,9 +464,8 @@ export class PfPlayerRuntime {
             true,
             true
         ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
-        const supportInterval = resolveSquareSupportIntervalFromOverlap(
+        const supportInterval = this.resolvePreferredSquareSupportInterval(
             overlapBodies,
-            this.physicsBody,
             normalX,
             normalY,
             playerRect,
@@ -523,9 +527,8 @@ export class PfPlayerRuntime {
             true,
             true
         ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
-        const supportInterval = resolveSquareSupportIntervalFromOverlap(
+        const supportInterval = this.resolvePreferredSquareSupportInterval(
             supportBodies,
-            this.physicsBody,
             normalX,
             normalY,
             playerRect,
@@ -552,12 +555,11 @@ export class PfPlayerRuntime {
             supportInterval,
             null
         );
-        const interiorInset = PLAYER_SQUARE_ROLLOVER_SURFACE_VALIDATION_RANGE_PX;
-        const interiorBodies = this.physicsSprite.scene.physics.overlapRect(
-            snappedCenter.left + interiorInset,
-            snappedCenter.top + interiorInset,
-            Math.max(1, snappedCenter.width - (interiorInset * 2)),
-            Math.max(1, snappedCenter.height - (interiorInset * 2)),
+        const poseBodies = this.physicsSprite.scene.physics.overlapRect(
+            snappedCenter.left,
+            snappedCenter.top,
+            snappedCenter.width,
+            snappedCenter.height,
             true,
             true
         ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
@@ -570,8 +572,146 @@ export class PfPlayerRuntime {
             rect: snappedCenter,
             supportInterval,
             surfacePoint,
-            isPoseClear: resolveSquarePoseClear(interiorBodies, this.physicsBody)
+            isPoseClear: resolveSquarePoseClear(
+                poseBodies,
+                this.physicsBody,
+                snappedCenter,
+                supportInterval?.ownerBody ?? null,
+                normalX,
+                normalY
+            )
         };
+    }
+
+    private resolvePreferredSquareSupportInterval(
+        overlapBodies: Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>,
+        normalX: -1 | 0 | 1,
+        normalY: -1 | 0 | 1,
+        playerRect: PlayerSquareAttachPoseQuery['rect'],
+        probe: ReturnType<typeof resolveSquareSupportProbe>
+    ): PlayerSquareAttachPoseQuery['supportInterval'] | null {
+        const squareShell = this.state.squareShell;
+        const shouldPreferAttachedSupport = squareShell.isAttached
+            && squareShell.attachSupportBody !== null
+            && normalX === squareShell.attachNormalX
+            && normalY === squareShell.attachNormalY;
+        if (shouldPreferAttachedSupport) {
+            const attachedSupportInterval = resolveSquareSupportIntervalFromKnownBody(
+                squareShell.attachSupportBody,
+                this.physicsBody,
+                normalX,
+                normalY,
+                playerRect
+            );
+            if (attachedSupportInterval !== null) {
+                return attachedSupportInterval;
+            }
+        }
+
+        return resolveSquareSupportIntervalFromOverlap(
+            overlapBodies,
+            this.physicsBody,
+            normalX,
+            normalY,
+            playerRect,
+            probe
+        );
+    }
+
+    private isSquareAttachPathClear(
+        fromCenterX: number,
+        fromCenterY: number,
+        toCenterX: number,
+        toCenterY: number,
+        supportBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+    ): boolean {
+        const distancePx = Math.hypot(toCenterX - fromCenterX, toCenterY - fromCenterY);
+        if (distancePx <= 0.001) {
+            return true;
+        }
+
+        const stepDistancePx = Math.max(2, this.physicsBody.width * 0.125);
+        const sampleCount = Math.max(1, Math.ceil(distancePx / stepDistancePx));
+
+        // Attach and attach-jump may disable Arcade collision briefly, so path validity
+        // must be checked before every reset into a snapped or interpolated pose.
+        for (let sampleIndex = 1; sampleIndex <= sampleCount; sampleIndex += 1) {
+            const t = sampleIndex / sampleCount;
+            const centerX = PhaserMath.Linear(fromCenterX, toCenterX, t);
+            const centerY = PhaserMath.Linear(fromCenterY, toCenterY, t);
+            const sampledRect = createPlayerRectSnapshot(
+                centerX - (this.physicsBody.width * 0.5),
+                centerY - (this.physicsBody.height * 0.5),
+                this.physicsBody.width,
+                this.physicsBody.height
+            );
+            const overlapBodies = this.physicsSprite.scene.physics.overlapRect(
+                sampledRect.left,
+                sampledRect.top,
+                sampledRect.width,
+                sampledRect.height,
+                true,
+                true
+            ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
+
+            if (!resolveSquarePoseClear(
+                overlapBodies,
+                this.physicsBody,
+                sampledRect,
+                supportBody,
+                0,
+                0
+            )) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private isSquareRolloverPoseClear(
+        centerX: number,
+        centerY: number,
+        orientationRad: number,
+        ignoreBodyA: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
+        ignoreBodyB: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
+    ): boolean {
+        const worldPoints = resolveSquareWorldPoints(
+            centerX,
+            centerY,
+            this.physicsBody.width * 0.5,
+            orientationRad
+        );
+        const worldBounds = resolveWorldPointBounds(worldPoints);
+        const overlapBodies = this.physicsSprite.scene.physics.overlapRect(
+            worldBounds.left,
+            worldBounds.top,
+            worldBounds.width,
+            worldBounds.height,
+            true,
+            true
+        ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
+
+        return !overlapBodies.some((candidateBody) => {
+            if (
+                candidateBody === this.physicsBody
+                || candidateBody === ignoreBodyA
+                || candidateBody === ignoreBodyB
+                || candidateBody.enable === false
+                || candidateBody.gameObject?.active !== true
+                || !isPlatformSurfaceGameObject(candidateBody.gameObject)
+            ) {
+                return false;
+            }
+
+            const candidateRect = createPlayerRectSnapshot(
+                candidateBody.x,
+                candidateBody.y,
+                candidateBody.width,
+                candidateBody.height
+            );
+            return doesConvexPolygonOverlapRect(worldPoints, candidateRect);
+        });
     }
 
     private computeIsCurrentlyGrounded(): boolean {

@@ -18,6 +18,7 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         isAttached: false,
         attachNormalX: 0,
         attachNormalY: -1,
+        attachSupportBody: null,
         attachContactGraceMs: 0,
         trailSegments: [],
         trailResourceCurrent: PLAYER_SQUARE_TRAIL_RESOURCE_MAX,
@@ -59,6 +60,7 @@ export const resetSquareShellState = (
     squareShell.isAttached = false;
     squareShell.attachNormalX = 0;
     squareShell.attachNormalY = -1;
+    squareShell.attachSupportBody = null;
     squareShell.attachContactGraceMs = 0;
     squareShell.trailSegments.length = 0;
     squareShell.trailResourceMax = PLAYER_SQUARE_TRAIL_RESOURCE_MAX;
