@@ -204,6 +204,55 @@
 
 ## Support docs
 
+### Demo Production Spec
+**Файл:** `the_form_demo_production_spec_ru.md`
+
+**Назначение:**
+- фиксирует реальный demo-scope на текущем Phaser-прототипе;
+- даёт решение по движку именно для demo;
+- связывает ответы пользователя с фактической текущей реализацией проекта;
+- фиксирует архитектурные границы, риски и acceptance criteria для demo-production.
+
+### Mini Spec: Ball Distance Coyote
+**Файл:** `the_form_mini_spec_ball_distance_coyote_ru.md`
+
+**Назначение:**
+- фиксирует контракт distance-based coyote для мяча;
+- задаёт границы между обычным jump и rebound;
+- служит source of truth для доработки ball feel.
+
+### Mini Spec: Square Rollover & Trail
+**Файл:** `the_form_mini_spec_square_rollover_trail_ru.md`
+
+**Назначение:**
+- фиксирует rollover как input-driven механику;
+- задаёт требования к непрерывности trail;
+- фиксирует collision safety для square.
+
+### Mini Spec: NPC Archetypes
+**Файл:** `the_form_mini_spec_npc_archetypes_ru.md`
+
+**Назначение:**
+- фиксирует first-pass NPC authoring model;
+- задаёт минимальные passive/enemy archetypes для demo;
+- служит source of truth для profile-driven NPC runtime.
+
+### Mini Spec: Cutscene Vocabulary
+**Файл:** `the_form_mini_spec_cutscene_vocabulary_ru.md`
+
+**Назначение:**
+- задаёт минимальный словарь команд cutscene runtime;
+- разделяет in-level и overlay cutscenes;
+- фиксирует границы первой версии без giant editor.
+
+### Mini Spec: Lighting Direction
+**Файл:** `the_form_mini_spec_lighting_direction_ru.md`
+
+**Назначение:**
+- фиксирует художественное и техническое направление света для demo;
+- задаёт profile-driven lighting contract;
+- служит source of truth для live tuning и scene atmosphere.
+
 ### 13. Parameters Registry
 **Файл:** `the_form_prototype_parameters_registry_ru.md`
 
