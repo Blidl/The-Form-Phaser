@@ -7,6 +7,18 @@
     "width": 2200,
     "height": 900
   },
+  "background": {
+    "mode": "static",
+    "color": 2503224,
+    "staticImage": {
+      "textureKey": "demo_bg_static",
+      "textureAsset": "assets/bg.png",
+      "fillColor": 2043190,
+      "tintColor": 16777215,
+      "alpha": 0.22,
+      "scale": 1
+    }
+  },
   "playerSpawn": {
     "x": 96,
     "y": 112,

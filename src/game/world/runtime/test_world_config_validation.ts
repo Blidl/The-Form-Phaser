@@ -1,5 +1,8 @@
 import {
     TEST_WORLD_CONFIG,
+    type TestWorldBackgroundConfig,
+    type TestWorldBackgroundImageConfig,
+    type TestWorldParallaxLayerConfig,
     cloneTestWorldConfig,
     type TestWorldBoundsConfig,
     type TestWorldCheckpointConfig,
@@ -20,6 +23,8 @@ import {
 const MIN_RECT_SIZE = 8;
 const MIN_PICKUP_RADIUS = 4;
 const MIN_WORLD_SIZE = 64;
+const MAX_BACKGROUND_LAYERS = 6;
+const DEFAULT_BACKGROUND_COLOR = 0x263238;
 
 const asNumber = (value: unknown, fallback: number): number => {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -35,6 +40,10 @@ const asColor = (value: unknown, fallback: number | undefined): number | undefin
 
 const asBoolean = (value: unknown, fallback: boolean = false): boolean => {
     return typeof value === 'boolean' ? value : fallback;
+};
+
+const asOptionalString = (value: unknown): string | undefined => {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined;
 };
 
 const asString = (value: unknown, fallback: string): string => {
@@ -55,6 +64,30 @@ const clampRectSize = (value: number): number => {
 
 const clampPickupRadius = (value: number): number => {
     return Math.max(MIN_PICKUP_RADIUS, Math.round(value));
+};
+
+const clampAlpha = (value: unknown, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0, Math.min(1, value));
+};
+
+const clampScale = (value: unknown, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0.1, Math.min(8, value));
+};
+
+const clampScrollFactor = (value: unknown, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0, Math.min(2, value));
 };
 
 const ensureUniqueId = (id: string, usedIds: Set<string>, prefix: string): string => {
@@ -95,6 +128,85 @@ const normalizeWorldBounds = (
     return {
         width: Math.max(MIN_WORLD_SIZE, Math.round(asNumber(raw?.width, fallback.width))),
         height: Math.max(MIN_WORLD_SIZE, Math.round(asNumber(raw?.height, fallback.height)))
+    };
+};
+
+const normalizeBackgroundImage = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldBackgroundImageConfig | undefined
+): TestWorldBackgroundImageConfig | undefined => {
+    const textureKey = asString(raw?.textureKey, fallback?.textureKey ?? '');
+    const textureAsset = asOptionalString(raw?.textureAsset) ?? fallback?.textureAsset;
+    const tintColor = asColor(raw?.tintColor, fallback?.tintColor);
+    const fillColor = asColor(raw?.fillColor, fallback?.fillColor);
+    const alpha = clampAlpha(raw?.alpha, fallback?.alpha ?? 1);
+    const scale = clampScale(raw?.scale, fallback?.scale ?? 1);
+    const hasRenderableContent = textureKey.length > 0 || textureAsset !== undefined || fillColor !== undefined;
+
+    if (!hasRenderableContent) {
+        return undefined;
+    }
+
+    return {
+        textureKey,
+        textureAsset,
+        tintColor,
+        alpha,
+        scale,
+        width: Math.max(MIN_RECT_SIZE, Math.round(asNumber(raw?.width, fallback?.width ?? 256))),
+        height: Math.max(MIN_RECT_SIZE, Math.round(asNumber(raw?.height, fallback?.height ?? 256))),
+        repeat: asBoolean(raw?.repeat, fallback?.repeat ?? false),
+        fillColor,
+        x: asNumber(raw?.x, fallback?.x ?? 0),
+        y: asNumber(raw?.y, fallback?.y ?? 0)
+    };
+};
+
+const normalizeParallaxLayer = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldParallaxLayerConfig | undefined,
+    index: number
+): TestWorldParallaxLayerConfig | null => {
+    const image = normalizeBackgroundImage(raw, fallback);
+    if (!image) {
+        return null;
+    }
+
+    return {
+        id: asString(raw?.id, fallback?.id ?? `layer_${index + 1}`),
+        height: clampRectSize(asNumber(raw?.height, fallback?.height ?? 256)),
+        scrollFactorX: clampScrollFactor(raw?.scrollFactorX, fallback?.scrollFactorX ?? 0.4),
+        scrollFactorY: clampScrollFactor(raw?.scrollFactorY, fallback?.scrollFactorY ?? fallback?.scrollFactorX ?? 0.4),
+        ...image
+    };
+};
+
+const normalizeBackground = (
+    rawValue: unknown,
+    fallback: TestWorldBackgroundConfig | null
+): TestWorldBackgroundConfig | null => {
+    if (rawValue === undefined || rawValue === null) {
+        return null;
+    }
+
+    const raw = asObject(rawValue);
+    if (!raw) {
+        return null;
+    }
+
+    const color = asColor(raw.color, fallback?.color ?? DEFAULT_BACKGROUND_COLOR);
+    const staticImage = normalizeBackgroundImage(asObject(raw.staticImage), fallback?.staticImage);
+
+    const rawLayers = asArray(raw.layers).slice(0, MAX_BACKGROUND_LAYERS);
+    const fallbackLayers = fallback?.layers ?? [];
+    const normalizedLayers = rawLayers
+        .map((entry, index) => normalizeParallaxLayer(asObject(entry), fallbackLayers[index], index))
+        .filter((entry): entry is TestWorldParallaxLayerConfig => entry !== null);
+
+    return {
+        color,
+        staticImage,
+        layers: normalizedLayers
     };
 };
 
@@ -377,6 +489,7 @@ export const normalizeTestWorldConfig = (
     const normalized: TestWorldConfig = {
         meta: normalizeMeta(asObject(root?.meta), defaults.meta),
         worldBounds: normalizeWorldBounds(asObject(root?.worldBounds), defaults.worldBounds),
+        background: normalizeBackground(root?.background, defaults.background),
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
         surfaces: normalizeArray(root?.surfaces, defaults.surfaces, normalizeSurface, usedIds),
         hazards: normalizeArray(root?.hazards, defaults.hazards, normalizeHazard, usedIds),
@@ -438,6 +551,7 @@ export const createMinimalTestWorldConfig = (
             width: 1600,
             height: 900
         },
+        background: null,
         playerSpawn: {
             x: 128,
             y: 128,

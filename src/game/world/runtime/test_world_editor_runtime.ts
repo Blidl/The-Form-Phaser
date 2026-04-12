@@ -1,12 +1,19 @@
 import { Input, Scene } from 'phaser';
 import { setupBaselineFollowCamera } from '../../camera/follow_camera';
 import type { PfPlayer } from '../../player/PfPlayer';
-import type { TestWorldConfig } from './test_world_config';
+import type {
+    TestWorldBackgroundConfig,
+    TestWorldBackgroundImageConfig,
+    TestWorldConfig,
+    TestWorldParallaxLayerConfig
+} from './test_world_config';
 import { createDefaultTestWorldConfig, parseTestWorldConfigJson } from './test_world_config_validation';
 import {
+    TEST_WORLD_EDITOR_ADAPTERS,
     TEST_WORLD_EDITOR_PALETTE,
     type TestWorldEditorBounds,
-    type TestWorldEditorObjectType
+    type TestWorldEditorObjectType,
+    type TestWorldEditorSelectionPart
 } from './test_world_editor_adapters';
 import { TestWorldEditorSidebar, type TestWorldEditorSidebarSection, type TestWorldEditorSidebarState } from './test_world_editor_sidebar';
 import { clearTestWorldEditorDraft, saveTestWorldEditorDraft } from './test_world_editor_storage';
@@ -42,6 +49,298 @@ const CAMERA_PAN_SPEED = 480;
 const ZOOM_STEP = 0.08;
 const DRAFT_AUTOSAVE_DELAY_MS = 500;
 const PLACEMENT_PREVIEW_SIZE = 18;
+const MIN_EDITOR_RECT_SIZE = 8;
+const EDITOR_FALLBACK_BACKGROUND_COLOR = 0x263238;
+
+interface TestWorldEditorEdges {
+    left: number;
+    right: number;
+    top: number;
+    bottom: number;
+}
+
+interface TestWorldPlacementPreviewRect {
+    bounds: TestWorldEditorBounds;
+    part: TestWorldEditorSelectionPart;
+}
+
+interface TestWorldPlacementPreview {
+    anchorX: number;
+    anchorY: number;
+    rects: TestWorldPlacementPreviewRect[];
+}
+
+type BackgroundLevelFieldKey =
+    | 'backgroundColor'
+    | 'backgroundStaticTextureKey'
+    | 'backgroundStaticTextureAsset'
+    | 'backgroundStaticFillColor'
+    | 'backgroundStaticTintColor'
+    | 'backgroundStaticAlpha'
+    | 'backgroundStaticScale'
+    | 'backgroundStaticWidth'
+    | 'backgroundStaticHeight'
+    | 'backgroundStaticRepeat'
+    | 'backgroundStaticX'
+    | 'backgroundStaticY'
+    | `backgroundLayer${1 | 2}TextureKey`
+    | `backgroundLayer${1 | 2}TextureAsset`
+    | `backgroundLayer${1 | 2}FillColor`
+    | `backgroundLayer${1 | 2}TintColor`
+    | `backgroundLayer${1 | 2}Alpha`
+    | `backgroundLayer${1 | 2}Scale`
+    | `backgroundLayer${1 | 2}Width`
+    | `backgroundLayer${1 | 2}Repeat`
+    | `backgroundLayer${1 | 2}X`
+    | `backgroundLayer${1 | 2}Y`
+    | `backgroundLayer${1 | 2}Height`
+    | `backgroundLayer${1 | 2}ScrollFactorX`
+    | `backgroundLayer${1 | 2}ScrollFactorY`;
+
+const EDITOR_BACKGROUND_LAYER_COUNT = 2;
+
+const sanitizeOptionalText = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const clampUnitInterval = (value: number, fallback: number): number => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0, Math.min(1, value));
+};
+
+const clampPositiveScale = (value: number, fallback: number): number => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0.1, Math.min(8, value));
+};
+
+const clampScrollFactor = (value: number, fallback: number): number => {
+    if (!Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0, Math.min(2, value));
+};
+
+const clampBackgroundColor = (value: unknown, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(0, Math.min(0xffffff, Math.round(value)));
+};
+
+const createDefaultBackgroundLayer = (index: number): TestWorldParallaxLayerConfig => ({
+    id: `layer_${index + 1}`,
+    textureKey: '',
+    x: 0,
+    y: 220 + (index * 180),
+    width: 1920,
+    height: 256,
+    repeat: true,
+    scrollFactorX: 0.25 + (index * 0.2),
+    scrollFactorY: 0.25 + (index * 0.2),
+    alpha: 1,
+    scale: 1
+});
+
+const cloneBackgroundLayer = (layer: TestWorldParallaxLayerConfig | undefined, index: number): TestWorldParallaxLayerConfig => ({
+    ...createDefaultBackgroundLayer(index),
+    ...layer
+});
+
+const cloneStaticBackgroundImage = (image: TestWorldBackgroundImageConfig | undefined): TestWorldBackgroundImageConfig => ({
+    textureKey: image?.textureKey ?? '',
+    textureAsset: image?.textureAsset,
+    tintColor: image?.tintColor,
+    alpha: image?.alpha ?? 1,
+    scale: image?.scale ?? 1,
+    width: image?.width ?? 1600,
+    height: image?.height ?? 900,
+    repeat: image?.repeat ?? false,
+    fillColor: image?.fillColor,
+    x: image?.x ?? 0,
+    y: image?.y ?? 0
+});
+
+const getEditableBackground = (config: TestWorldConfig): TestWorldBackgroundConfig => {
+    const background = config.background;
+    if (!background) {
+        return {
+            color: EDITOR_FALLBACK_BACKGROUND_COLOR,
+            staticImage: cloneStaticBackgroundImage(undefined),
+            layers: Array.from({ length: EDITOR_BACKGROUND_LAYER_COUNT }, (_, index) => createDefaultBackgroundLayer(index))
+        };
+    }
+
+    const layers = Array.from({ length: EDITOR_BACKGROUND_LAYER_COUNT }, (_, index) => {
+        return cloneBackgroundLayer(background.layers?.[index], index);
+    });
+
+    return {
+        color: background.color ?? EDITOR_FALLBACK_BACKGROUND_COLOR,
+        staticImage: cloneStaticBackgroundImage(background.staticImage),
+        layers
+    };
+};
+
+const compactBackgroundImage = (image: TestWorldBackgroundImageConfig): TestWorldBackgroundImageConfig | undefined => {
+    const textureKey = sanitizeOptionalText(image.textureKey) ?? '';
+    const textureAsset = sanitizeOptionalText(image.textureAsset);
+    const fillColor = image.fillColor;
+    const hasContent = textureKey.length > 0 || textureAsset !== undefined || fillColor !== undefined;
+    if (!hasContent) {
+        return undefined;
+    }
+
+    return {
+        textureKey,
+        textureAsset,
+        tintColor: image.tintColor,
+        alpha: clampUnitInterval(image.alpha ?? 1, 1),
+        scale: clampPositiveScale(image.scale ?? 1, 1),
+        width: Math.max(MIN_EDITOR_RECT_SIZE, Math.round(Number.isFinite(image.width) ? image.width : 256)),
+        height: Math.max(MIN_EDITOR_RECT_SIZE, Math.round(Number.isFinite(image.height) ? image.height : 256)),
+        repeat: image.repeat ?? false,
+        fillColor,
+        x: Number.isFinite(image.x) ? image.x : 0,
+        y: Number.isFinite(image.y) ? image.y : 0
+    };
+};
+
+const compactBackgroundLayer = (layer: TestWorldParallaxLayerConfig, index: number): TestWorldParallaxLayerConfig | null => {
+    const image = compactBackgroundImage(layer);
+    if (!image) {
+        return null;
+    }
+
+    return {
+        id: sanitizeOptionalText(layer.id) ?? `layer_${index + 1}`,
+        y: Number.isFinite(layer.y) ? layer.y : createDefaultBackgroundLayer(index).y,
+        height: Math.max(8, Math.round(Number.isFinite(layer.height) ? layer.height : createDefaultBackgroundLayer(index).height)),
+        scrollFactorX: clampScrollFactor(layer.scrollFactorX, createDefaultBackgroundLayer(index).scrollFactorX),
+        scrollFactorY: clampScrollFactor(layer.scrollFactorY ?? layer.scrollFactorX, createDefaultBackgroundLayer(index).scrollFactorY ?? createDefaultBackgroundLayer(index).scrollFactorX),
+        ...image
+    };
+};
+
+const applyBackgroundLevelField = (
+    config: TestWorldConfig,
+    key: BackgroundLevelFieldKey,
+    value: string | number | boolean
+): boolean => {
+    const editable = getEditableBackground(config);
+    if (key === 'backgroundColor') {
+        editable.color = clampBackgroundColor(value, editable.color ?? EDITOR_FALLBACK_BACKGROUND_COLOR);
+    } else if (key === 'backgroundStaticTextureKey') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.textureKey = typeof value === 'string' ? value : editable.staticImage.textureKey;
+    } else if (key === 'backgroundStaticTextureAsset') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.textureAsset = typeof value === 'string' ? value : editable.staticImage.textureAsset;
+    } else if (key === 'backgroundStaticFillColor') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.fillColor = typeof value === 'number' ? clampBackgroundColor(value, 0) : editable.staticImage.fillColor;
+    } else if (key === 'backgroundStaticTintColor') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.tintColor = typeof value === 'number' ? clampBackgroundColor(value, 0xffffff) : editable.staticImage.tintColor;
+    } else if (key === 'backgroundStaticAlpha') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.alpha = typeof value === 'number' ? clampUnitInterval(value, 1) : editable.staticImage.alpha;
+    } else if (key === 'backgroundStaticScale') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.scale = typeof value === 'number' ? clampPositiveScale(value, 1) : editable.staticImage.scale;
+    } else if (key === 'backgroundStaticWidth') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.width = typeof value === 'number' && Number.isFinite(value)
+            ? Math.max(MIN_EDITOR_RECT_SIZE, Math.round(value))
+            : editable.staticImage.width;
+    } else if (key === 'backgroundStaticHeight') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.height = typeof value === 'number' && Number.isFinite(value)
+            ? Math.max(MIN_EDITOR_RECT_SIZE, Math.round(value))
+            : editable.staticImage.height;
+    } else if (key === 'backgroundStaticRepeat') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.repeat = typeof value === 'boolean' ? value : editable.staticImage.repeat;
+    } else if (key === 'backgroundStaticX') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.x = typeof value === 'number' && Number.isFinite(value) ? value : editable.staticImage.x;
+    } else if (key === 'backgroundStaticY') {
+        editable.staticImage = cloneStaticBackgroundImage(editable.staticImage);
+        editable.staticImage.y = typeof value === 'number' && Number.isFinite(value) ? value : editable.staticImage.y;
+    } else {
+        const layerMatch = /^backgroundLayer(\d+)(TextureKey|TextureAsset|FillColor|TintColor|Alpha|Scale|Width|Repeat|X|Y|Height|ScrollFactorX|ScrollFactorY)$/.exec(key);
+        if (!layerMatch) {
+            return false;
+        }
+        const layerIndex = Math.max(0, Number.parseInt(layerMatch[1] ?? '1', 10) - 1);
+        const layerField = layerMatch[2];
+        const layers = editable.layers ?? [];
+        while (layers.length <= layerIndex) {
+            layers.push(createDefaultBackgroundLayer(layers.length));
+        }
+        const layer = layers[layerIndex] ?? createDefaultBackgroundLayer(layerIndex);
+        if (layerField === 'TextureKey' && typeof value === 'string') {
+            layer.textureKey = value;
+        } else if (layerField === 'TextureAsset' && typeof value === 'string') {
+            layer.textureAsset = value;
+        } else if (layerField === 'FillColor' && typeof value === 'number') {
+            layer.fillColor = clampBackgroundColor(value, 0);
+        } else if (layerField === 'TintColor' && typeof value === 'number') {
+            layer.tintColor = clampBackgroundColor(value, 0xffffff);
+        } else if (layerField === 'Alpha' && typeof value === 'number') {
+            layer.alpha = clampUnitInterval(value, 1);
+        } else if (layerField === 'Scale' && typeof value === 'number') {
+            layer.scale = clampPositiveScale(value, 1);
+        } else if (layerField === 'Width' && typeof value === 'number' && Number.isFinite(value)) {
+            layer.width = Math.max(MIN_EDITOR_RECT_SIZE, Math.round(value));
+        } else if (layerField === 'Repeat' && typeof value === 'boolean') {
+            layer.repeat = value;
+        } else if (layerField === 'X' && typeof value === 'number' && Number.isFinite(value)) {
+            layer.x = value;
+        } else if (layerField === 'Y' && typeof value === 'number' && Number.isFinite(value)) {
+            layer.y = value;
+        } else if (layerField === 'Height' && typeof value === 'number' && Number.isFinite(value)) {
+            layer.height = Math.max(8, Math.round(value));
+        } else if (layerField === 'ScrollFactorX' && typeof value === 'number') {
+            layer.scrollFactorX = clampScrollFactor(value, 0.4);
+        } else if (layerField === 'ScrollFactorY' && typeof value === 'number') {
+            layer.scrollFactorY = clampScrollFactor(value, layer.scrollFactorX);
+        } else {
+            return false;
+        }
+        editable.layers = layers;
+    }
+
+    const compactStaticImage = compactBackgroundImage(editable.staticImage ?? cloneStaticBackgroundImage(undefined));
+    const compactLayers = (editable.layers ?? [])
+        .map((layer, index) => compactBackgroundLayer(layer, index))
+        .filter((layer): layer is TestWorldParallaxLayerConfig => layer !== null);
+    const hasBackground = compactStaticImage !== undefined || compactLayers.length > 0;
+
+    if (!hasBackground) {
+        config.background = null;
+        return true;
+    }
+
+    config.background = {
+        color: clampBackgroundColor(editable.color, EDITOR_FALLBACK_BACKGROUND_COLOR),
+        staticImage: compactStaticImage,
+        layers: compactLayers
+    };
+    return true;
+};
 
 export const createTestWorldEditorRuntime = (
     scene: Scene,
@@ -50,7 +349,8 @@ export const createTestWorldEditorRuntime = (
     levelId: string,
     defaultConfig: TestWorldConfig,
     initialOpen: boolean = false,
-    initialStatus: string | null = null
+    initialStatus: string | null = null,
+    onLevelConfigChanged?: (config: TestWorldConfig) => void
 ): TestWorldEditorRuntime => {
     const keyboard = scene.input.keyboard;
     if (!keyboard) {
@@ -165,6 +465,7 @@ export const createTestWorldEditorRuntime = (
             levelId,
             pendingPlacementType,
             levelSections: buildLevelSections(config, getCampaignLevelSummaries()),
+            backgroundSections: buildBackgroundSections(config),
             palette: TEST_WORLD_EDITOR_PALETTE,
             objectItems: worldRuntime.getEditorObjects()
                 .filter((entry) => {
@@ -242,6 +543,7 @@ export const createTestWorldEditorRuntime = (
             syncCameraBoundsToWorld();
             redoStack.length = 0;
             selectRoot(parsed.config.finish?.id ?? 'player_spawn');
+            onLevelConfigChanged?.(worldRuntime.getConfig());
             markConfigDirty();
             setStatus('imported json');
         },
@@ -253,6 +555,7 @@ export const createTestWorldEditorRuntime = (
             syncCameraBoundsToWorld();
             redoStack.length = 0;
             selectRoot('player_spawn');
+            onLevelConfigChanged?.(worldRuntime.getConfig());
             markConfigDirty();
             setStatus('reset to default');
         },
@@ -326,6 +629,7 @@ export const createTestWorldEditorRuntime = (
                 player.refreshWorldGeometryState();
                 syncCampaignLevelHeader(config);
                 redoStack.length = 0;
+                onLevelConfigChanged?.(worldRuntime.getConfig());
                 markConfigDirty();
                 return;
             }
@@ -340,6 +644,7 @@ export const createTestWorldEditorRuntime = (
                 player.refreshWorldGeometryState();
                 syncCameraBoundsToWorld();
                 redoStack.length = 0;
+                onLevelConfigChanged?.(worldRuntime.getConfig());
                 markConfigDirty();
                 setStatus('world bounds updated');
                 return;
@@ -350,7 +655,20 @@ export const createTestWorldEditorRuntime = (
                 worldRuntime.setConfig(config);
                 syncCampaignLevelHeader(config);
                 redoStack.length = 0;
+                onLevelConfigChanged?.(worldRuntime.getConfig());
                 markConfigDirty();
+                return;
+            }
+            pushUndoSnapshot();
+            if (applyBackgroundLevelField(config, key as BackgroundLevelFieldKey, value)) {
+                worldRuntime.setConfig(config);
+                syncCampaignLevelHeader(config);
+                redoStack.length = 0;
+                onLevelConfigChanged?.(worldRuntime.getConfig());
+                markConfigDirty({
+                    refreshGeometry: false,
+                    syncSidebar: false
+                });
                 return;
             }
         },
@@ -404,8 +722,9 @@ export const createTestWorldEditorRuntime = (
             return;
         }
         const placementType = pendingPlacementType;
-        const worldX = pointer.worldX;
-        const worldY = pointer.worldY;
+        const preview = buildPlacementPreview(placementType, pointer.worldX, pointer.worldY);
+        const worldX = preview?.anchorX ?? pointer.worldX;
+        const worldY = preview?.anchorY ?? pointer.worldY;
         pushUndoSnapshot();
         const createdId = worldRuntime.createObject(placementType, worldX, worldY);
         redoStack.length = 0;
@@ -443,10 +762,19 @@ export const createTestWorldEditorRuntime = (
         saveTestWorldEditorDraft(levelId, worldRuntime.getConfig());
     };
 
-    const markConfigDirty = (): void => {
-        player.refreshWorldGeometryState();
+    const markConfigDirty = (
+        options: {
+            refreshGeometry?: boolean;
+            syncSidebar?: boolean;
+        } = {}
+    ): void => {
+        if (options.refreshGeometry ?? true) {
+            player.refreshWorldGeometryState();
+        }
         scheduleAutosave();
-        syncSidebar();
+        if (options.syncSidebar ?? true) {
+            syncSidebar();
+        }
     };
 
     const setStatus = (message: string): void => {
@@ -476,12 +804,155 @@ export const createTestWorldEditorRuntime = (
         return Math.round(value / gridSize) * gridSize;
     };
 
-    const snapBounds = (bounds: TestWorldEditorBounds): TestWorldEditorBounds => ({
-        x: snapValue(bounds.x),
-        y: snapValue(bounds.y),
-        width: Math.max(4, snapValue(bounds.width)),
-        height: Math.max(4, snapValue(bounds.height))
+    const boundsToEdges = (bounds: TestWorldEditorBounds): TestWorldEditorEdges => ({
+        left: bounds.x - (bounds.width * 0.5),
+        right: bounds.x + (bounds.width * 0.5),
+        top: bounds.y - (bounds.height * 0.5),
+        bottom: bounds.y + (bounds.height * 0.5)
     });
+
+    const edgesToBounds = (edges: TestWorldEditorEdges): TestWorldEditorBounds => ({
+        x: (edges.left + edges.right) * 0.5,
+        y: (edges.top + edges.bottom) * 0.5,
+        width: Math.max(MIN_EDITOR_RECT_SIZE, edges.right - edges.left),
+        height: Math.max(MIN_EDITOR_RECT_SIZE, edges.bottom - edges.top)
+    });
+
+    const snapMoveAxis = (min: number, max: number): { min: number; max: number } => {
+        if (!gridEnabled || gridSize <= 1) {
+            return { min, max };
+        }
+
+        const size = max - min;
+        const snappedMin = snapValue(min);
+        const snappedMax = snapValue(max);
+        const minError = Math.abs(snappedMin - min);
+        const maxError = Math.abs(snappedMax - max);
+        if (minError <= maxError) {
+            return {
+                min: snappedMin,
+                max: snappedMin + size
+            };
+        }
+
+        return {
+            min: snappedMax - size,
+            max: snappedMax
+        };
+    };
+
+    const snapMoveBounds = (bounds: TestWorldEditorBounds): TestWorldEditorBounds => {
+        const edges = boundsToEdges(bounds);
+        const horizontal = snapMoveAxis(edges.left, edges.right);
+        const vertical = snapMoveAxis(edges.top, edges.bottom);
+        return edgesToBounds({
+            left: horizontal.min,
+            right: horizontal.max,
+            top: vertical.min,
+            bottom: vertical.max
+        });
+    };
+
+    const snapResizeBounds = (
+        bounds: TestWorldEditorBounds,
+        handle: ResizeHandle,
+        dx: number,
+        dy: number
+    ): TestWorldEditorBounds => {
+        const edges = boundsToEdges(bounds);
+        const nextEdges = { ...edges };
+
+        if (handle === 'nw' || handle === 'sw') {
+            nextEdges.left = edges.left + dx;
+            if (gridEnabled && gridSize > 1) {
+                nextEdges.left = snapValue(nextEdges.left);
+            }
+            nextEdges.left = Math.min(nextEdges.left, edges.right - MIN_EDITOR_RECT_SIZE);
+        } else {
+            nextEdges.right = edges.right + dx;
+            if (gridEnabled && gridSize > 1) {
+                nextEdges.right = snapValue(nextEdges.right);
+            }
+            nextEdges.right = Math.max(nextEdges.right, edges.left + MIN_EDITOR_RECT_SIZE);
+        }
+
+        if (handle === 'nw' || handle === 'ne') {
+            nextEdges.top = edges.top + dy;
+            if (gridEnabled && gridSize > 1) {
+                nextEdges.top = snapValue(nextEdges.top);
+            }
+            nextEdges.top = Math.min(nextEdges.top, edges.bottom - MIN_EDITOR_RECT_SIZE);
+        } else {
+            nextEdges.bottom = edges.bottom + dy;
+            if (gridEnabled && gridSize > 1) {
+                nextEdges.bottom = snapValue(nextEdges.bottom);
+            }
+            nextEdges.bottom = Math.max(nextEdges.bottom, edges.top + MIN_EDITOR_RECT_SIZE);
+        }
+
+        return edgesToBounds(nextEdges);
+    };
+
+    const getPlacementAnchorPart = (type: TestWorldEditorObjectType): TestWorldEditorSelectionPart => {
+        return type === 'triggerPlatform' ? 'platform' : 'main';
+    };
+
+    const buildPlacementPreview = (type: TestWorldEditorObjectType, anchorX: number, anchorY: number): TestWorldPlacementPreview | null => {
+        if (type === 'playerSpawn') {
+            const spawnBounds = snapMoveBounds({
+                x: anchorX,
+                y: anchorY,
+                width: worldRuntime.getConfig().playerSpawn.width,
+                height: worldRuntime.getConfig().playerSpawn.height
+            });
+            return {
+                anchorX: spawnBounds.x,
+                anchorY: spawnBounds.y,
+                rects: [{
+                    bounds: spawnBounds,
+                    part: 'main'
+                }]
+            };
+        }
+
+        const adapter = TEST_WORLD_EDITOR_ADAPTERS[type];
+        const previewConfig = adapter.createDefault({
+            id: '__placement_preview__',
+            x: anchorX,
+            y: anchorY
+        });
+        if (!previewConfig) {
+            return null;
+        }
+
+        const handleDefinitions = adapter.getHandles(previewConfig);
+        const anchorHandle = handleDefinitions.find((entry) => entry.part === getPlacementAnchorPart(type)) ?? handleDefinitions[0];
+        if (!anchorHandle) {
+            return null;
+        }
+
+        const rawAnchorBounds = anchorHandle.getBounds(previewConfig);
+        const snappedAnchorBounds = snapMoveBounds(rawAnchorBounds);
+        const snappedAnchorX = anchorX + (snappedAnchorBounds.x - rawAnchorBounds.x);
+        const snappedAnchorY = anchorY + (snappedAnchorBounds.y - rawAnchorBounds.y);
+        const snappedConfig = adapter.createDefault({
+            id: '__placement_preview__',
+            x: snappedAnchorX,
+            y: snappedAnchorY
+        });
+        if (!snappedConfig) {
+            return null;
+        }
+
+        return {
+            anchorX: snappedAnchorX,
+            anchorY: snappedAnchorY,
+            rects: adapter.getHandles(snappedConfig).map((entry) => ({
+                bounds: entry.getBounds(snappedConfig),
+                part: entry.part
+            }))
+        };
+    };
 
     const getCameraCenter = (): { x: number; y: number } => {
         const camera = scene.cameras.main;
@@ -576,19 +1047,15 @@ export const createTestWorldEditorRuntime = (
         }
         const dx = pointer.worldX - pointerDragState.startWorldX;
         const dy = pointer.worldY - pointerDragState.startWorldY;
-        const nextBounds = { ...pointerDragState.initialBounds };
+        let nextBounds = { ...pointerDragState.initialBounds };
         if (pointerDragState.mode === 'move') {
             nextBounds.x += dx;
             nextBounds.y += dy;
+            nextBounds = snapMoveBounds(nextBounds);
         } else {
-            const signX = pointerDragState.handle === 'ne' || pointerDragState.handle === 'se' ? 1 : -1;
-            const signY = pointerDragState.handle === 'sw' || pointerDragState.handle === 'se' ? 1 : -1;
-            nextBounds.width = Math.max(4, pointerDragState.initialBounds.width + (dx * signX));
-            nextBounds.height = Math.max(4, pointerDragState.initialBounds.height + (dy * signY));
-            nextBounds.x = pointerDragState.initialBounds.x + ((dx * 0.5) * signX);
-            nextBounds.y = pointerDragState.initialBounds.y + ((dy * 0.5) * signY);
+            nextBounds = snapResizeBounds(pointerDragState.initialBounds, pointerDragState.handle ?? 'se', dx, dy);
         }
-        worldRuntime.patchObjectBounds(selectedHandle.id, snapBounds(nextBounds));
+        worldRuntime.patchObjectBounds(selectedHandle.id, nextBounds);
         markConfigDirty();
     };
 
@@ -782,6 +1249,7 @@ export const createTestWorldEditorRuntime = (
                         redoStack.push(worldRuntime.getConfig());
                         worldRuntime.setConfig(previous);
                         syncCameraBoundsToWorld();
+                        onLevelConfigChanged?.(worldRuntime.getConfig());
                         syncSidebar();
                     }
                 }
@@ -791,6 +1259,7 @@ export const createTestWorldEditorRuntime = (
                         undoStack.push(worldRuntime.getConfig());
                         worldRuntime.setConfig(next);
                         syncCameraBoundsToWorld();
+                        onLevelConfigChanged?.(worldRuntime.getConfig());
                         syncSidebar();
                     }
                 }
@@ -827,7 +1296,13 @@ export const createTestWorldEditorRuntime = (
             drawWorldBoundsOverlay(boundsGraphics, camera, worldBounds);
             drawGrid(gridGraphics, camera, worldBounds, gridEnabled ? gridSize : 0);
             drawSelection(selectionGraphics, getSelectedHandle());
-            drawPlacementPreview(placementGraphics, camera, pendingPlacementType, scene.input.activePointer);
+            drawPlacementPreview(
+                placementGraphics,
+                camera,
+                pendingPlacementType,
+                scene.input.activePointer,
+                (type, worldX, worldY) => buildPlacementPreview(type, worldX, worldY)
+            );
         },
         isActive: (): boolean => active,
         open: (): void => {
@@ -938,18 +1413,43 @@ const drawPlacementPreview = (
     graphics: Phaser.GameObjects.Graphics,
     camera: Phaser.Cameras.Scene2D.Camera,
     pendingPlacementType: TestWorldEditorObjectType | null,
-    pointer: Input.Pointer
+    pointer: Input.Pointer,
+    resolvePreview: (type: TestWorldEditorObjectType, worldX: number, worldY: number) => TestWorldPlacementPreview | null
 ): void => {
     graphics.clear();
     if (!pendingPlacementType || !pointer.withinGame) {
         return;
     }
 
+    const preview = resolvePreview(pendingPlacementType, pointer.worldX, pointer.worldY);
+    if (!preview) {
+        return;
+    }
+
     const size = PLACEMENT_PREVIEW_SIZE / camera.zoom;
+    preview.rects.forEach((entry) => {
+        const isPrimary = entry.part === 'main' || entry.part === 'platform';
+        const color = isPrimary ? 0x8cffd1 : 0xb8fff0;
+        const alpha = isPrimary ? 0.95 : 0.65;
+        graphics.lineStyle(2, color, alpha);
+        graphics.fillStyle(color, 0.08);
+        graphics.fillRect(
+            entry.bounds.x - (entry.bounds.width * 0.5),
+            entry.bounds.y - (entry.bounds.height * 0.5),
+            entry.bounds.width,
+            entry.bounds.height
+        );
+        graphics.strokeRect(
+            entry.bounds.x - (entry.bounds.width * 0.5),
+            entry.bounds.y - (entry.bounds.height * 0.5),
+            entry.bounds.width,
+            entry.bounds.height
+        );
+    });
+
     graphics.lineStyle(2, 0x8cffd1, 0.95);
-    graphics.strokeRect(pointer.worldX - size, pointer.worldY - size, size * 2, size * 2);
-    graphics.lineBetween(pointer.worldX - size * 1.4, pointer.worldY, pointer.worldX + size * 1.4, pointer.worldY);
-    graphics.lineBetween(pointer.worldX, pointer.worldY - size * 1.4, pointer.worldX, pointer.worldY + size * 1.4);
+    graphics.lineBetween(preview.anchorX - size * 1.4, preview.anchorY, preview.anchorX + size * 1.4, preview.anchorY);
+    graphics.lineBetween(preview.anchorX, preview.anchorY - size * 1.4, preview.anchorX, preview.anchorY + size * 1.4);
 };
 
 const buildInspectorSections = (
@@ -1117,7 +1617,7 @@ const buildInspectorSections = (
     return [];
 };
 
-const buildLevelSections = (
+const buildLevelSectionsLegacy = (
     config: TestWorldConfig,
     campaignLevels: ReadonlyArray<{ id: string; displayName: string }>
 ): TestWorldEditorSidebarSection[] => {
@@ -1152,4 +1652,103 @@ const buildLevelSections = (
             ]
         }
     ];
+};
+
+const buildLevelSections = (
+    config: TestWorldConfig,
+    campaignLevels: ReadonlyArray<{ id: string; displayName: string }>
+): TestWorldEditorSidebarSection[] => {
+    const nextLevelOptions = [
+        { value: '', label: 'None' },
+        ...campaignLevels
+            .filter((entry) => entry.id !== config.meta.id)
+            .map((entry) => ({
+                value: entry.id,
+                label: `${entry.id} - ${entry.displayName}`
+            }))
+    ];
+    const switchLevelOptions = campaignLevels.map((entry) => ({
+        value: entry.id,
+        label: `${entry.id} - ${entry.displayName}`
+    }));
+
+    return [
+        {
+            title: 'Metadata',
+            fields: [
+                { key: 'displayName', label: 'Display Name', input: 'text', value: config.meta.displayName },
+                { key: 'nextLevelId', label: 'Next Level', input: 'select', value: config.nextLevelId ?? '', options: nextLevelOptions },
+                { key: 'switchLevelId', label: 'Open Level', input: 'select', value: config.meta.id, options: switchLevelOptions }
+            ]
+        },
+        {
+            title: 'World',
+            fields: [
+                { key: 'worldWidth', label: 'Width', input: 'number', value: config.worldBounds.width, min: 64, step: 1 },
+                { key: 'worldHeight', label: 'Height', input: 'number', value: config.worldBounds.height, min: 64, step: 1 }
+            ]
+        }
+    ];
+};
+
+const buildBackgroundSections = (config: TestWorldConfig): TestWorldEditorSidebarSection[] => {
+    const editableBackground = getEditableBackground(config);
+    const staticImage = cloneStaticBackgroundImage(editableBackground.staticImage);
+    const layers = Array.from({ length: EDITOR_BACKGROUND_LAYER_COUNT }, (_, index) => {
+        return cloneBackgroundLayer(editableBackground.layers?.[index], index);
+    });
+
+    const sections: TestWorldEditorSidebarSection[] = [
+        {
+            title: 'Profile',
+            fields: [
+                {
+                    key: 'backgroundColor',
+                    label: 'Base Color',
+                    input: 'color',
+                    value: editableBackground.color ?? EDITOR_FALLBACK_BACKGROUND_COLOR
+                }
+            ]
+        },
+        {
+            title: 'Static',
+            fields: [
+                { key: 'backgroundStaticTextureKey', label: 'Texture Key', input: 'text', value: staticImage.textureKey },
+                { key: 'backgroundStaticTextureAsset', label: 'Texture Asset', input: 'text', value: staticImage.textureAsset ?? '' },
+                { key: 'backgroundStaticFillColor', label: 'Fallback Fill', input: 'color', value: staticImage.fillColor ?? 0x1f2d36 },
+                { key: 'backgroundStaticTintColor', label: 'Tint', input: 'color', value: staticImage.tintColor ?? 0xffffff },
+                { key: 'backgroundStaticAlpha', label: 'Alpha', input: 'number', value: staticImage.alpha ?? 1, min: 0, step: 0.05 },
+                { key: 'backgroundStaticScale', label: 'Scale', input: 'number', value: staticImage.scale ?? 1, min: 0.1, step: 0.1 },
+                { key: 'backgroundStaticWidth', label: 'Width', input: 'number', value: staticImage.width ?? 1600, min: 8, step: 1 },
+                { key: 'backgroundStaticHeight', label: 'Height', input: 'number', value: staticImage.height ?? 900, min: 8, step: 1 },
+                { key: 'backgroundStaticRepeat', label: 'Repeat', input: 'checkbox', value: staticImage.repeat ?? false },
+                { key: 'backgroundStaticX', label: 'Center X', input: 'number', value: staticImage.x ?? 0, step: 1 },
+                { key: 'backgroundStaticY', label: 'Center Y', input: 'number', value: staticImage.y ?? 0, step: 1 }
+            ]
+        }
+    ];
+
+    layers.forEach((layer, index) => {
+        const layerNumber = index + 1;
+        sections.push({
+            title: `Parallax ${layerNumber}`,
+            fields: [
+                { key: `backgroundLayer${layerNumber}TextureKey`, label: 'Texture Key', input: 'text', value: layer.textureKey },
+                { key: `backgroundLayer${layerNumber}TextureAsset`, label: 'Texture Asset', input: 'text', value: layer.textureAsset ?? '' },
+                { key: `backgroundLayer${layerNumber}FillColor`, label: 'Fallback Fill', input: 'color', value: layer.fillColor ?? 0x24343d },
+                { key: `backgroundLayer${layerNumber}TintColor`, label: 'Tint', input: 'color', value: layer.tintColor ?? 0xffffff },
+                { key: `backgroundLayer${layerNumber}Alpha`, label: 'Alpha', input: 'number', value: layer.alpha ?? 1, min: 0, step: 0.05 },
+                { key: `backgroundLayer${layerNumber}Scale`, label: 'Scale', input: 'number', value: layer.scale ?? 1, min: 0.1, step: 0.1 },
+                { key: `backgroundLayer${layerNumber}Width`, label: 'Width', input: 'number', value: layer.width ?? 1920, min: 8, step: 1 },
+                { key: `backgroundLayer${layerNumber}Repeat`, label: 'Repeat', input: 'checkbox', value: layer.repeat ?? true },
+                { key: `backgroundLayer${layerNumber}X`, label: 'Center X', input: 'number', value: layer.x ?? 0, step: 1 },
+                { key: `backgroundLayer${layerNumber}Y`, label: 'Center Y', input: 'number', value: layer.y, step: 1 },
+                { key: `backgroundLayer${layerNumber}Height`, label: 'Height', input: 'number', value: layer.height, min: 8, step: 1 },
+                { key: `backgroundLayer${layerNumber}ScrollFactorX`, label: 'Scroll X', input: 'number', value: layer.scrollFactorX, min: 0, step: 0.05 },
+                { key: `backgroundLayer${layerNumber}ScrollFactorY`, label: 'Scroll Y', input: 'number', value: layer.scrollFactorY ?? layer.scrollFactorX, min: 0, step: 0.05 }
+            ]
+        });
+    });
+
+    return sections;
 };

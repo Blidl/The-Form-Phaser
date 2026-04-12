@@ -40,6 +40,7 @@ import {
     type TestDevHelperRuntime
 } from '../../ui/runtime/test_dev_helper_runtime';
 import { getCampaignLevelConfig, getInitialCampaignLevelId } from '../../game/world/runtime/test_campaign_registry';
+import { createTestSceneBackgroundRuntime } from './test_scene_background_runtime';
 
 export interface TestSceneBootstrapRuntime {
     player: PfPlayer;
@@ -55,12 +56,12 @@ export interface TestSceneBootstrapRuntime {
 }
 
 export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, editorOpen: boolean = false): TestSceneBootstrapRuntime => {
-    scene.cameras.main.setBackgroundColor('#263238');
     bootstrapPersistedPlayerTuning();
 
     const resolvedLevelId = levelId ?? getInitialCampaignLevelId();
     const defaultConfig = getCampaignLevelConfig(resolvedLevelId);
     const initialWorldLoad = loadTestWorldEditorDraft(resolvedLevelId, defaultConfig);
+    const backgroundRuntime = createTestSceneBackgroundRuntime(scene, initialWorldLoad.config);
     const initialRespawnPoint: RespawnPoint = {
         x: initialWorldLoad.config.playerSpawn.x,
         y: initialWorldLoad.config.playerSpawn.y
@@ -118,7 +119,10 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
             ? 'loaded saved draft'
             : initialWorldLoad.error
                 ? 'draft invalid, loaded default'
-                : null
+                : null,
+        (config) => {
+            backgroundRuntime.applyConfig(config);
+        }
     );
     const devHelperRuntime = createTestDevHelperRuntime({
         scene,

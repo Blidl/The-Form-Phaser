@@ -37,6 +37,7 @@ export interface TestWorldEditorSidebarState {
     levelId: string;
     pendingPlacementType: TestWorldEditorObjectType | null;
     levelSections: TestWorldEditorSidebarSection[];
+    backgroundSections: TestWorldEditorSidebarSection[];
     palette: ReadonlyArray<{ type: TestWorldEditorObjectType; label: string }>;
     objectItems: TestWorldEditorSidebarObjectItem[];
     inspectorId: string | null;
@@ -62,6 +63,8 @@ export interface TestWorldEditorSidebarCallbacks {
     onLevelFieldChange: (key: string, value: string | number | boolean) => void;
     onInspectorFieldChange: (key: string, value: string | number | boolean) => void;
 }
+
+type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'inspector';
 
 const escapeHtml = (value: string): string => {
     return value
@@ -126,6 +129,7 @@ export class TestWorldEditorSidebar {
     private readonly root: HTMLDivElement;
     private readonly fileInput: HTMLInputElement;
     private state: TestWorldEditorSidebarState;
+    private activeTab: TestWorldEditorTabId = 'level';
     private pendingScrollRestore: { inner: number; list: number } | null = null;
     private pendingFocusRestore: { selector: string; selectionStart: number | null; selectionEnd: number | null } | null = null;
 
@@ -164,6 +168,7 @@ export class TestWorldEditorSidebar {
             levelId: '',
             pendingPlacementType: null,
             levelSections: [],
+            backgroundSections: [],
             palette: [],
             objectItems: [],
             inspectorId: null,
@@ -173,6 +178,10 @@ export class TestWorldEditorSidebar {
         };
         this.root.addEventListener('click', this.handleClick);
         this.root.addEventListener('change', this.handleChange);
+        this.root.addEventListener('input', this.handleInput);
+        this.root.addEventListener('keydown', this.handleKeyboardEvent, true);
+        this.root.addEventListener('keyup', this.handleKeyboardEvent, true);
+        this.root.addEventListener('keypress', this.handleKeyboardEvent, true);
         this.render();
     }
 
@@ -186,6 +195,10 @@ export class TestWorldEditorSidebar {
     public destroy(): void {
         this.root.removeEventListener('click', this.handleClick);
         this.root.removeEventListener('change', this.handleChange);
+        this.root.removeEventListener('input', this.handleInput);
+        this.root.removeEventListener('keydown', this.handleKeyboardEvent, true);
+        this.root.removeEventListener('keyup', this.handleKeyboardEvent, true);
+        this.root.removeEventListener('keypress', this.handleKeyboardEvent, true);
         this.root.remove();
     }
 
@@ -237,23 +250,61 @@ export class TestWorldEditorSidebar {
 
         const paletteType = target?.closest<HTMLElement>('[data-editor-palette-type]')?.dataset.editorPaletteType;
         if (paletteType) {
+            this.activeTab = 'objects';
             this.callbacks.onCreateObject(paletteType as TestWorldEditorObjectType);
             return;
         }
 
         const objectId = target?.closest<HTMLElement>('[data-editor-object-id]')?.dataset.editorObjectId;
         if (objectId) {
+            this.activeTab = 'inspector';
             this.callbacks.onSelectObject(objectId);
+            this.render();
+            return;
+        }
+
+        const tabId = target?.closest<HTMLElement>('[data-editor-tab]')?.dataset.editorTab as TestWorldEditorTabId | undefined;
+        if (tabId) {
+            this.activeTab = tabId;
+            this.render();
         }
     };
 
     private readonly handleChange = (event: Event): void => {
+        this.handleFieldEvent(event, false);
+    };
+
+    private readonly handleInput = (event: Event): void => {
+        this.handleFieldEvent(event, true);
+    };
+
+    private readonly handleKeyboardEvent = (event: Event): void => {
+        const target = event.target as HTMLElement | null;
+        if (!target) {
+            return;
+        }
+
+        const isEditorTextInput = target instanceof HTMLInputElement
+            || target instanceof HTMLTextAreaElement
+            || target instanceof HTMLSelectElement
+            || target.isContentEditable;
+        if (!isEditorTextInput) {
+            return;
+        }
+
+        event.stopPropagation();
+    };
+
+    private handleFieldEvent(event: Event, fromInput: boolean): void {
         const target = event.target as HTMLInputElement | HTMLSelectElement | null;
         if (!target) {
             return;
         }
 
         if (target.matches('[data-editor-search]')) {
+            if (!fromInput && !(target instanceof HTMLInputElement)) {
+                return;
+            }
             this.callbacks.onSearchChange(target.value);
             return;
         }
@@ -262,6 +313,13 @@ export class TestWorldEditorSidebar {
         const levelFieldKey = target.dataset.editorLevelField;
 
         if (!fieldKey && !levelFieldKey) {
+            return;
+        }
+
+        if (fromInput && target instanceof HTMLSelectElement) {
+            return;
+        }
+        if (fromInput && target instanceof HTMLInputElement && target.type === 'checkbox') {
             return;
         }
 
@@ -282,7 +340,7 @@ export class TestWorldEditorSidebar {
         }
 
         callback(resolvedFieldKey, target.value);
-    };
+    }
 
     private captureScrollPosition(): void {
         const inner = this.root.querySelector<HTMLElement>('.test-world-editor__inner');
@@ -380,6 +438,19 @@ export class TestWorldEditorSidebar {
     private render(): void {
         const state = this.state;
         this.root.classList.toggle('test-world-editor--hidden', !state.visible);
+        if (this.activeTab === 'background' && state.backgroundSections.length === 0) {
+            this.activeTab = 'level';
+        }
+        if (this.activeTab === 'inspector' && state.inspectorSections.length === 0 && !state.inspectorId) {
+            this.activeTab = 'level';
+        }
+
+        const buildTabButton = (tabId: TestWorldEditorTabId, label: string): string => {
+            const className = tabId === this.activeTab
+                ? 'test-world-editor__button is-active'
+                : 'test-world-editor__button';
+            return `<button type="button" class="${className}" data-editor-tab="${tabId}">${escapeHtml(label)}</button>`;
+        };
 
         const paletteMarkup = state.palette.map((entry) => {
             const className = entry.type === state.pendingPlacementType
@@ -422,6 +493,86 @@ export class TestWorldEditorSidebar {
                 </section>
             `;
         }).join('');
+        const backgroundMarkup = state.backgroundSections.map((section) => {
+            return `
+                <section class="test-world-editor__section">
+                    <h3>${escapeHtml(section.title)}</h3>
+                    <div class="test-world-editor__fields">
+                        ${section.fields.map((field) => buildFieldMarkup(field, 'data-editor-level-field')).join('')}
+                    </div>
+                </section>
+            `;
+        }).join('');
+        const tabBarMarkup = `
+            <div class="test-world-editor__toolbar">
+                ${buildTabButton('level', 'Level')}
+                ${buildTabButton('background', 'Background')}
+                ${buildTabButton('objects', 'Objects')}
+                ${buildTabButton('inspector', 'Inspector')}
+            </div>
+        `;
+        const levelPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Level</h3>
+                <div class="test-world-editor__meta">
+                    <div><strong>Current Level</strong> ${escapeHtml(state.levelId || 'None')}</div>
+                </div>
+                <div class="test-world-editor__toolbar">
+                    <button type="button" class="test-world-editor__button" data-editor-action="create-level">Create Level</button>
+                    <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-level">Delete Level</button>
+                </div>
+                ${levelMarkup}
+            </section>
+        `;
+        const backgroundPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Background</h3>
+                ${backgroundMarkup || '<div class="test-world-editor__empty">No background settings</div>'}
+            </section>
+        `;
+        const objectsPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Object Palette</h3>
+                <div class="test-world-editor__palette">${paletteMarkup}</div>
+            </section>
+
+            <section class="test-world-editor__section">
+                <h3>Objects</h3>
+                <label class="test-world-editor__field">
+                    <span>Search</span>
+                    <input type="text" value="${escapeHtml(state.search)}" data-editor-search="true" />
+                </label>
+                <div class="test-world-editor__list">${objectMarkup || '<div class="test-world-editor__empty">No objects</div>'}</div>
+            </section>
+
+            <section class="test-world-editor__section">
+                <h3>Actions</h3>
+                <div class="test-world-editor__toolbar">
+                    <button type="button" class="test-world-editor__button" data-editor-action="duplicate-selected">Duplicate</button>
+                    <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-selected">Delete</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="toggle-selected-lock">${state.selectedLocked ? 'Unlock' : 'Lock'}</button>
+                </div>
+            </section>
+        `;
+        const inspectorPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Inspector</h3>
+                <div class="test-world-editor__meta">
+                    <div><strong>ID</strong> ${escapeHtml(state.inspectorId ?? 'None')}</div>
+                    <div><strong>Type</strong> ${escapeHtml(state.inspectorType ?? 'None')}</div>
+                </div>
+                ${inspectorMarkup || '<div class="test-world-editor__empty">Nothing selected</div>'}
+            </section>
+        `;
+
+        let activePanelMarkup = levelPanelMarkup;
+        if (this.activeTab === 'background') {
+            activePanelMarkup = backgroundPanelMarkup;
+        } else if (this.activeTab === 'objects') {
+            activePanelMarkup = objectsPanelMarkup;
+        } else if (this.activeTab === 'inspector') {
+            activePanelMarkup = inspectorPanelMarkup;
+        }
 
         this.root.innerHTML = `
             <div class="test-world-editor__inner">
@@ -439,50 +590,8 @@ export class TestWorldEditorSidebar {
                         <span class="test-world-editor__status">Undo ${state.canUndo ? 'yes' : 'no'} / Redo ${state.canRedo ? 'yes' : 'no'}</span>
                     </div>
                 </section>
-
-                <section class="test-world-editor__section">
-                    <h3>Level</h3>
-                    <div class="test-world-editor__meta">
-                        <div><strong>Current Level</strong> ${escapeHtml(state.levelId || 'None')}</div>
-                    </div>
-                    <div class="test-world-editor__toolbar">
-                        <button type="button" class="test-world-editor__button" data-editor-action="create-level">Create Level</button>
-                        <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-level">Delete Level</button>
-                    </div>
-                    ${levelMarkup}
-                </section>
-
-                <section class="test-world-editor__section">
-                    <h3>Object Palette</h3>
-                    <div class="test-world-editor__palette">${paletteMarkup}</div>
-                </section>
-
-                <section class="test-world-editor__section">
-                    <h3>Objects</h3>
-                    <label class="test-world-editor__field">
-                        <span>Search</span>
-                        <input type="text" value="${escapeHtml(state.search)}" data-editor-search="true" />
-                    </label>
-                    <div class="test-world-editor__list">${objectMarkup || '<div class="test-world-editor__empty">No objects</div>'}</div>
-                </section>
-
-                <section class="test-world-editor__section">
-                    <h3>Inspector</h3>
-                    <div class="test-world-editor__meta">
-                        <div><strong>ID</strong> ${escapeHtml(state.inspectorId ?? 'None')}</div>
-                        <div><strong>Type</strong> ${escapeHtml(state.inspectorType ?? 'None')}</div>
-                    </div>
-                    ${inspectorMarkup || '<div class="test-world-editor__empty">Nothing selected</div>'}
-                </section>
-
-                <section class="test-world-editor__section">
-                    <h3>Actions</h3>
-                    <div class="test-world-editor__toolbar">
-                        <button type="button" class="test-world-editor__button" data-editor-action="duplicate-selected">Duplicate</button>
-                        <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-selected">Delete</button>
-                        <button type="button" class="test-world-editor__button" data-editor-action="toggle-selected-lock">${state.selectedLocked ? 'Unlock' : 'Lock'}</button>
-                    </div>
-                </section>
+                ${tabBarMarkup}
+                ${activePanelMarkup}
             </div>
         `;
         this.root.appendChild(this.fileInput);

@@ -14,6 +14,33 @@ export interface TestWorldBoundsConfig {
     height: number;
 }
 
+export interface TestWorldBackgroundImageConfig {
+    textureKey: string;
+    textureAsset?: string;
+    tintColor?: number;
+    alpha?: number;
+    scale?: number;
+    width?: number;
+    height?: number;
+    repeat?: boolean;
+    fillColor?: number;
+    x?: number;
+    y?: number;
+}
+
+export interface TestWorldParallaxLayerConfig extends TestWorldBackgroundImageConfig {
+    id: string;
+    height: number;
+    scrollFactorX: number;
+    scrollFactorY?: number;
+}
+
+export interface TestWorldBackgroundConfig {
+    color?: number;
+    staticImage?: TestWorldBackgroundImageConfig;
+    layers?: TestWorldParallaxLayerConfig[];
+}
+
 export interface TestWorldPlayerSpawnConfig extends TestWorldEditorLockable {
     x: number;
     y: number;
@@ -154,6 +181,7 @@ export interface TestWorldTrianglePickupConfig extends TestWorldEditorLockable {
 export interface TestWorldConfig {
     meta: TestWorldMetaConfig;
     worldBounds: TestWorldBoundsConfig;
+    background: TestWorldBackgroundConfig | null;
     playerSpawn: TestWorldPlayerSpawnConfig;
     surfaces: TestWorldSurfaceConfig[];
     hazards: TestWorldHazardConfig[];

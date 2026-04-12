@@ -7,6 +7,38 @@
     "width": 1600,
     "height": 960
   },
+  "background": {
+    "mode": "parallax",
+    "color": 1779504,
+    "layers": [
+      {
+        "id": "sky_far",
+        "textureKey": "demo_bg_layer_far",
+        "textureAsset": "assets/bg.png",
+        "fillColor": 2372669,
+        "tintColor": 3229008,
+        "alpha": 0.18,
+        "scale": 0.85,
+        "y": 260,
+        "height": 360,
+        "scrollFactorX": 0.15,
+        "scrollFactorY": 0.15
+      },
+      {
+        "id": "mist_near",
+        "textureKey": "demo_bg_layer_near",
+        "textureAsset": "assets/bg.png",
+        "fillColor": 2834250,
+        "tintColor": 4349034,
+        "alpha": 0.28,
+        "scale": 1.15,
+        "y": 520,
+        "height": 520,
+        "scrollFactorX": 0.45,
+        "scrollFactorY": 0.45
+      }
+    ]
+  },
   "playerSpawn": {
     "x": 120,
     "y": 780,

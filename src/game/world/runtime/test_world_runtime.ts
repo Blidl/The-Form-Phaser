@@ -39,6 +39,7 @@ import {
     type TestWorldWindZoneConfig
 } from './test_world_config';
 import { normalizeTestWorldConfig } from './test_world_config_validation';
+import { createTestWorldSurfaceOutlineRenderer } from './test_world_surface_outline_renderer';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -432,10 +433,12 @@ const buildWorldInstance = (
     let activeCheckpointId = config.checkpoints[0]?.id ?? null;
     let finishReached = false;
     let wasTriangleGrounded = false;
+    const surfaceOutlineRenderer = createTestWorldSurfaceOutlineRenderer(scene, config.surfaces);
 
     const addCleanup = (cleanupFn: () => void): void => {
         cleanup.push(cleanupFn);
     };
+    addCleanup(() => surfaceOutlineRenderer.destroy());
 
     const destroyColliderList = (colliders: Physics.Arcade.Collider[]): void => {
         colliders.splice(0, colliders.length).forEach((collider) => collider.destroy());
@@ -629,18 +632,21 @@ const buildWorldInstance = (
                 },
                 refresh: () => {
                     syncSurfaceObject(scene, surface, surfaceConfig);
+                    surfaceOutlineRenderer.refresh();
                     rebuildDragBoxWorldColliders();
                 },
                 patchFields: (patch) => {
                     TEST_WORLD_EDITOR_ADAPTERS.surface.patchFields(surfaceConfig, patch);
                     replaceSurfaceMatterBody(scene, surface, surfaceConfig);
                     syncSurfaceObject(scene, surface, surfaceConfig);
+                    surfaceOutlineRenderer.refresh();
                     rebuildPlayerPlatformColliders();
                     rebuildDragBoxWorldColliders();
                 },
                 patchColors: (patch) => {
                     TEST_WORLD_EDITOR_ADAPTERS.surface.patchColors(surfaceConfig, patch);
                     syncSurfaceObject(scene, surface, surfaceConfig);
+                    surfaceOutlineRenderer.refresh();
                 }
             },
             TEST_WORLD_EDITOR_ADAPTERS.surface.getHandles(surfaceConfig)
@@ -1204,7 +1210,6 @@ const syncSurfaceObject = (
 ): void => {
     refreshRectangleGameObject(scene, surface, config.x, config.y, config.width, config.height);
     surface.setFillStyle(config.fillColor);
-    surface.setStrokeStyle(2, config.strokeColor);
 };
 
 const syncHazardObject = (
@@ -1290,7 +1295,6 @@ const createPlayerSpawnMarker = (scene: Scene, config: TestWorldPlayerSpawnConfi
 const createSurface = (scene: Scene, config: TestWorldSurfaceConfig): Phaser.GameObjects.Rectangle => {
     const surface = scene.add.rectangle(config.x, config.y, config.width, config.height, config.fillColor)
         .setName(config.id)
-        .setStrokeStyle(2, config.strokeColor)
         .setDepth(4200);
 
     scene.physics.add.existing(surface, true);
