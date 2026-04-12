@@ -1,4 +1,5 @@
 import type {
+    TestWorldFinishConfig,
     TestWorldCheckpointConfig,
     TestWorldConfig,
     TestWorldDragBoxConfig,
@@ -14,6 +15,7 @@ import type {
 
 export type TestWorldEditorObjectType =
     | 'playerSpawn'
+    | 'finish'
     | 'surface'
     | 'hazard'
     | 'checkpoint'
@@ -342,6 +344,50 @@ const checkpointAdapter: TestWorldEditorAdapter<TestWorldCheckpointConfig> = {
         if (typeof patch.respawnY === 'number') {
             config.respawnY = patch.respawnY;
         }
+    },
+    patchColors: (config, patch) => {
+        if (typeof patch.fillColor === 'number') {
+            config.fillColor = patch.fillColor;
+        }
+        if (typeof patch.strokeColor === 'number') {
+            config.strokeColor = patch.strokeColor;
+        }
+    },
+    serialize: (config) => ({ ...config })
+};
+
+const finishAdapter: TestWorldEditorAdapter<TestWorldFinishConfig> = {
+    type: 'finish',
+    createDefault: ({ id, x, y }) => ({
+        id,
+        x,
+        y,
+        width: 72,
+        height: 120,
+        fillColor: 0x99ff99,
+        strokeColor: 0x00aa66
+    }),
+    duplicate: (config) => ({ ...config }),
+    getId: (config) => config.id,
+    setId: (config, id) => {
+        config.id = id;
+    },
+    getLocked: (config) => config.editorLocked ?? false,
+    setLocked: (config, locked) => {
+        config.editorLocked = locked;
+    },
+    getHandles: (config) => [
+        createRectHandle({
+            id: config.id,
+            rootId: config.id,
+            type: 'finish',
+            label: config.id,
+            getBounds: (entry) => ({ x: entry.x, y: entry.y, width: entry.width, height: entry.height }),
+            setBounds: (entry, bounds) => setRectBounds(entry, bounds)
+        })
+    ],
+    patchFields: (config, patch) => {
+        patchRectFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -813,6 +859,7 @@ const pickupAdapter: TestWorldEditorAdapter<TestWorldTrianglePickupConfig> = {
 
 export const TEST_WORLD_EDITOR_ADAPTERS = {
     playerSpawn: playerSpawnAdapter,
+    finish: finishAdapter,
     surface: surfaceAdapter,
     hazard: hazardAdapter,
     checkpoint: checkpointAdapter,
@@ -829,6 +876,7 @@ export const TEST_WORLD_EDITOR_PALETTE: ReadonlyArray<{
     label: string;
 }> = [
     { type: 'playerSpawn', label: 'Player Spawn' },
+    { type: 'finish', label: 'Finish' },
     { type: 'surface', label: 'Surface' },
     { type: 'hazard', label: 'Hazard' },
     { type: 'checkpoint', label: 'Checkpoint' },
@@ -842,6 +890,7 @@ export const TEST_WORLD_EDITOR_PALETTE: ReadonlyArray<{
 
 export const getAllWorldObjectIds = (config: TestWorldConfig): string[] => {
     return [
+        ...(config.finish ? [config.finish] : []),
         ...config.surfaces,
         ...config.hazards,
         ...config.checkpoints,
@@ -857,6 +906,22 @@ export const getAllWorldObjectIds = (config: TestWorldConfig): string[] => {
 export const createNextWorldObjectId = (type: TestWorldEditorObjectType, config: TestWorldConfig): string => {
     if (type === 'playerSpawn') {
         return 'player_spawn';
+    }
+    if (type === 'finish') {
+        if (config.finish) {
+            return config.finish.id;
+        }
+        const allIds = new Set(getAllWorldObjectIds(config));
+        if (!allIds.has('finish')) {
+            return 'finish';
+        }
+        let nextIndex = 1;
+        let candidate = `finish_${nextIndex}`;
+        while (allIds.has(candidate)) {
+            nextIndex += 1;
+            candidate = `finish_${nextIndex}`;
+        }
+        return candidate;
     }
 
     const allIds = new Set(getAllWorldObjectIds(config));

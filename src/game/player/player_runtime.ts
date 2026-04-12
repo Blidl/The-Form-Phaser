@@ -51,6 +51,7 @@ import {
     createTriangleCollisionState,
     createTriangleMatterRuntime,
     destroyTriangleMatterRuntime,
+    hardResetTriangleWorldGeometryState,
     primeTriangleMatterKinematicState,
     stepTriangleMatterKinematicRuntime,
     syncTriangleArcadeBodyMode,
@@ -77,6 +78,8 @@ import {
 } from './player_lifecycle_runtime';
 import { tickPlayerRuntime } from './player_tick_runtime';
 import type { PlayerLifecycleRuntimeContext, PlayerMutableRuntimeState, PlayerTickRuntimeContext } from './player_runtime_types';
+import { clearSquareAttach } from './player_square_attach';
+import { resetTriangleCollisionState } from './geometry/player_triangle_collision_runtime';
 
 export class PfPlayerRuntime {
     private readonly scene: Scene;
@@ -349,6 +352,20 @@ export class PfPlayerRuntime {
         this.lifecycleContext.mutable = this.mutableState;
         respawnPlayerAt(this.lifecycleContext, x, y);
         this.mutableState = this.lifecycleContext.mutable;
+    }
+
+    public refreshWorldGeometryState(): void {
+        hardResetTriangleWorldGeometryState(this.triangleMatterRuntime, this.state.triangleCollision);
+        clearSquareAttach(this.state.squareShell);
+        this.state.squareShell.hasContact = false;
+        this.state.squareShell.contactNormalX = 0;
+        this.state.squareShell.contactNormalY = -1;
+        this.state.squareShell.trailAnchorSupportBody = null;
+        this.state.squareShell.trailLatchSupportBody = null;
+        this.physicsBody.checkCollision.none = false;
+        this.applyCurrentFormCollisionBody();
+        this.refreshTrianglePhysicsState();
+        this.syncVisualPosition();
     }
 
     public tick(deltaMs: number, input: PlayerInputSnapshot, externalHorizontalInfluenceX: number = 0): void {

@@ -1,0 +1,11 @@
+{
+  "initialLevelId": "test-world-01",
+  "levels": [
+    {
+      "id": "test-world-01"
+    },
+    {
+      "id": "test-world-02"
+    }
+  ]
+}

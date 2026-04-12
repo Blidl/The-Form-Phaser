@@ -1,6 +1,11 @@
 import { Scene } from 'phaser';
 import { createTestSceneRuntime, type TestSceneRuntime } from './runtime/test_scene_runtime';
 
+export interface TestSceneStartData {
+    levelId?: string;
+    editorOpen?: boolean;
+}
+
 export class TestScene extends Scene {
     public static readonly KEY = 'sc_test';
     private runtime!: TestSceneRuntime;
@@ -21,9 +26,11 @@ export class TestScene extends Scene {
         });
     }
 
-    public create(): void {
+    public create(data: TestSceneStartData = {}): void {
         this.runtime = createTestSceneRuntime({
-            scene: this
+            scene: this,
+            levelId: data.levelId,
+            editorOpen: data.editorOpen
         });
     }
 

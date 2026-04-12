@@ -1,4 +1,5 @@
 import { Input, Scene } from 'phaser';
+import { isDomTextInputFocused, relaxKeyboardCapture } from '../../shared/dom_input_focus';
 
 export interface PlayerInputSnapshot {
     moveLeft: boolean;
@@ -52,6 +53,18 @@ export const createPlayerInputKeys = (scene: Scene): PlayerInputKeys => {
         throw new Error('KeyboardPlugin is not available in this scene.');
     }
 
+    relaxKeyboardCapture(keyboard, [
+        Input.Keyboard.KeyCodes.A,
+        Input.Keyboard.KeyCodes.D,
+        Input.Keyboard.KeyCodes.W,
+        Input.Keyboard.KeyCodes.S,
+        Input.Keyboard.KeyCodes.SPACE,
+        Input.Keyboard.KeyCodes.E,
+        Input.Keyboard.KeyCodes.Q,
+        Input.Keyboard.KeyCodes.K,
+        Input.Keyboard.KeyCodes.O
+    ]);
+
     return {
         left: keyboard.addKey(Input.Keyboard.KeyCodes.A),
         right: keyboard.addKey(Input.Keyboard.KeyCodes.D),
@@ -66,6 +79,10 @@ export const createPlayerInputKeys = (scene: Scene): PlayerInputKeys => {
 };
 
 export const pollPlayerInputSnapshot = (keys: PlayerInputKeys): PlayerInputSnapshot => {
+    if (isDomTextInputFocused()) {
+        return EMPTY_PLAYER_INPUT_SNAPSHOT;
+    }
+
     const forcePointX = ((keys.right.isDown ? 1 : 0) - (keys.left.isDown ? 1 : 0)) as -1 | 0 | 1;
     const forcePointY = ((keys.down.isDown ? 1 : 0) - (keys.up.isDown ? 1 : 0)) as -1 | 0 | 1;
     const forcePointActive = forcePointX !== 0 || forcePointY !== 0;

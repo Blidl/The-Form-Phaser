@@ -99,7 +99,15 @@ export class PfPlayer {
         this.runtime.respawnAt(x, y);
     }
 
+    public refreshWorldGeometryState(): void {
+        this.runtime.refreshWorldGeometryState();
+    }
+
     public tick(deltaMs: number, input: import('./player_input').PlayerInputSnapshot, externalHorizontalInfluenceX: number = 0): void {
         this.runtime.tick(deltaMs, input, externalHorizontalInfluenceX);
+    }
+
+    public destroy(): void {
+        this.runtime.destroy();
     }
 }

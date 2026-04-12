@@ -24,9 +24,11 @@ import {
 } from './test_world_editor_adapters';
 import {
     cloneTestWorldConfig,
+    type TestWorldBoundsConfig,
     type TestWorldCheckpointConfig,
     type TestWorldConfig,
     type TestWorldDragBoxConfig,
+    type TestWorldFinishConfig,
     type TestWorldHazardConfig,
     type TestWorldMovingPlatformConfig,
     type TestWorldPlayerSpawnConfig,
@@ -37,9 +39,6 @@ import {
     type TestWorldWindZoneConfig
 } from './test_world_config';
 import { normalizeTestWorldConfig } from './test_world_config_validation';
-import { TEST_WORLD_HEIGHT, TEST_WORLD_WIDTH } from './test_world_layout';
-
-export { TEST_WORLD_WIDTH, TEST_WORLD_HEIGHT } from './test_world_layout';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -65,7 +64,11 @@ export interface TestWorldRuntime {
     postPlayerTickUpdate: () => void;
     resetRespawnObjects: () => void;
     syncPlayerCollisionMode: () => void;
+    consumeFinishReached: () => boolean;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
+    getWorldBounds: () => TestWorldBoundsConfig;
+    getLevelId: () => string;
+    getNextLevelId: () => string | null;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     getEditorHandles: () => readonly TestWorldEditorHandle[];
@@ -80,6 +83,7 @@ export interface TestWorldRuntime {
     removeObject: (rootId: string) => boolean;
     focusObjectPoint: (targetId: string) => { x: number; y: number } | null;
     rebuildFromCurrentConfig: () => void;
+    destroy: () => void;
 }
 
 interface CreateTestWorldRuntimeParams {
@@ -115,6 +119,7 @@ interface BuiltWorldInstance {
     postPlayerTickUpdate: () => void;
     resetRespawnObjects: () => void;
     syncPlayerCollisionMode: (useArcadePlatformCollisions: boolean) => void;
+    consumeFinishReached: () => boolean;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
     getEditorHandles: () => readonly TestWorldEditorHandle[];
     getEditorObjects: () => readonly TestWorldEditorObjectSummary[];
@@ -127,15 +132,23 @@ interface BuiltWorldInstance {
     destroy: () => void;
 }
 
+interface FinishTriggerObject {
+    trigger: Phaser.GameObjects.Rectangle;
+    refresh: () => void;
+    destroy: () => void;
+}
+
 const DRAG_BOX_TRIGGER_RELEASE_SPEED_EPSILON = 16;
+
+const applyWorldBounds = (scene: Scene, bounds: TestWorldBoundsConfig): void => {
+    scene.physics.world.setBounds(0, 0, bounds.width, bounds.height);
+    scene.matter.world.setBounds(0, 0, bounds.width, bounds.height, 64, true, true, true, true);
+};
 
 export const createTestWorldRuntime = (
     params: CreateTestWorldRuntimeParams
 ): TestWorldRuntime => {
     const { scene, player, onCheckpointActivated } = params;
-    scene.physics.world.setBounds(0, 0, TEST_WORLD_WIDTH, TEST_WORLD_HEIGHT);
-    scene.matter.world.setBounds(0, 0, TEST_WORLD_WIDTH, TEST_WORLD_HEIGHT, 64, true, true, true, true);
-
     let currentConfig = normalizeTestWorldConfig(params.initialConfig);
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let instance = buildWorldInstance(scene, player, onCheckpointActivated, currentConfig, useArcadePlatformCollisions);
@@ -148,6 +161,10 @@ export const createTestWorldRuntime = (
     const removeByRootId = (rootId: string): boolean => {
         if (rootId === 'player_spawn') {
             return false;
+        }
+        if (currentConfig.finish?.id === rootId) {
+            currentConfig.finish = null;
+            return true;
         }
 
         const removeFrom = <T extends { id: string }>(items: T[]): boolean => {
@@ -177,6 +194,7 @@ export const createTestWorldRuntime = (
         | TestWorldSurfaceConfig
         | TestWorldHazardConfig
         | TestWorldCheckpointConfig
+        | TestWorldFinishConfig
         | TestWorldMovingPlatformConfig
         | TestWorldTriggerPlatformConfig
         | TestWorldDragBoxConfig
@@ -186,6 +204,9 @@ export const createTestWorldRuntime = (
         | null => {
         if (rootId === 'player_spawn') {
             return currentConfig.playerSpawn;
+        }
+        if (currentConfig.finish?.id === rootId) {
+            return currentConfig.finish;
         }
 
         return currentConfig.surfaces.find((entry) => entry.id === rootId)
@@ -217,9 +238,15 @@ export const createTestWorldRuntime = (
             useArcadePlatformCollisions = player.currentForm !== 'triangle';
             instance.syncPlayerCollisionMode(useArcadePlatformCollisions);
         },
+        consumeFinishReached: (): boolean => {
+            return instance.consumeFinishReached();
+        },
         resolveWindInfluenceX: (playerObject: GameObjects.GameObject): number => {
             return instance.resolveWindInfluenceX(playerObject);
         },
+        getWorldBounds: (): TestWorldBoundsConfig => ({ ...currentConfig.worldBounds }),
+        getLevelId: (): string => currentConfig.meta.id,
+        getNextLevelId: (): string | null => currentConfig.nextLevelId,
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
             currentConfig = normalizeTestWorldConfig(config);
@@ -246,6 +273,19 @@ export const createTestWorldRuntime = (
                 currentConfig.playerSpawn.y = worldY;
                 instance.patchObjectFields('player_spawn', { x: worldX, y: worldY });
                 return 'player_spawn';
+            }
+            if (type === 'finish') {
+                if (currentConfig.finish) {
+                    return currentConfig.finish.id;
+                }
+                const nextId = createNextWorldObjectId(type, currentConfig);
+                const nextObject = TEST_WORLD_EDITOR_ADAPTERS.finish.createDefault({ id: nextId, x: worldX, y: worldY });
+                if (!nextObject) {
+                    return null;
+                }
+                currentConfig.finish = nextObject;
+                rebuildFromCurrentConfig();
+                return nextId;
             }
 
             const nextId = createNextWorldObjectId(type, currentConfig);
@@ -281,7 +321,7 @@ export const createTestWorldRuntime = (
             return nextId;
         },
         duplicateObject: (rootId: string): string | null => {
-            if (rootId === 'player_spawn') {
+            if (rootId === 'player_spawn' || currentConfig.finish?.id === rootId) {
                 return null;
             }
 
@@ -352,7 +392,10 @@ export const createTestWorldRuntime = (
         focusObjectPoint: (targetId: string): { x: number; y: number } | null => {
             return instance.focusObjectPoint(targetId);
         },
-        rebuildFromCurrentConfig
+        rebuildFromCurrentConfig,
+        destroy: (): void => {
+            instance.destroy();
+        }
     };
 };
 
@@ -363,6 +406,7 @@ const buildWorldInstance = (
     config: TestWorldConfig,
     useArcadePlatformCollisions: boolean
 ): BuiltWorldInstance => {
+    applyWorldBounds(scene, config.worldBounds);
     const cleanup: Array<() => void> = [];
     const hazards: HazardObject[] = [];
     const movingPlatforms: MovingPlatformObject[] = [];
@@ -386,6 +430,7 @@ const buildWorldInstance = (
     const overlapColliders: Physics.Arcade.Collider[] = [];
     const pickupOverlapColliders = new Map<string, Physics.Arcade.Collider>();
     let activeCheckpointId = config.checkpoints[0]?.id ?? null;
+    let finishReached = false;
     let wasTriangleGrounded = false;
 
     const addCleanup = (cleanupFn: () => void): void => {
@@ -520,6 +565,47 @@ const buildWorldInstance = (
         },
         TEST_WORLD_EDITOR_ADAPTERS.playerSpawn.getHandles(config.playerSpawn)
     );
+
+    if (config.finish) {
+        const finishTrigger = createFinishTrigger(scene, config.finish);
+        overlapColliders.push(scene.physics.add.overlap(player.arcadeBodyObject, finishTrigger.trigger, () => {
+            finishReached = true;
+        }));
+        addCleanup(() => finishTrigger.destroy());
+        addBinding(
+            config.finish,
+            {
+                rootId: config.finish.id,
+                type: 'finish',
+                label: config.finish.id,
+                isLocked: () => TEST_WORLD_EDITOR_ADAPTERS.finish.getLocked(config.finish!),
+                setLocked: (locked) => {
+                    if (!config.finish) {
+                        return;
+                    }
+                    TEST_WORLD_EDITOR_ADAPTERS.finish.setLocked(config.finish, locked);
+                },
+                refresh: () => {
+                    finishTrigger.refresh();
+                },
+                patchFields: (patch) => {
+                    if (!config.finish) {
+                        return;
+                    }
+                    TEST_WORLD_EDITOR_ADAPTERS.finish.patchFields(config.finish, patch);
+                    finishTrigger.refresh();
+                },
+                patchColors: (patch) => {
+                    if (!config.finish) {
+                        return;
+                    }
+                    TEST_WORLD_EDITOR_ADAPTERS.finish.patchColors(config.finish, patch);
+                    finishTrigger.refresh();
+                }
+            },
+            TEST_WORLD_EDITOR_ADAPTERS.finish.getHandles(config.finish)
+        );
+    }
 
     config.surfaces.forEach((surfaceConfig) => {
         const surface = createSurface(scene, surfaceConfig);
@@ -979,6 +1065,13 @@ const buildWorldInstance = (
                 collider.active = shouldUseArcadePlatformCollisions;
             });
         },
+        consumeFinishReached: (): boolean => {
+            if (!finishReached) {
+                return false;
+            }
+            finishReached = false;
+            return true;
+        },
         resolveWindInfluenceX: (playerObject: GameObjects.GameObject): number => {
             let horizontalInfluenceX = 0;
             windZones.forEach((zone) => {
@@ -1124,6 +1217,16 @@ const syncHazardObject = (
     hazard.trigger.setStrokeStyle(2, config.strokeColor ?? 0xb71c1c);
 };
 
+const syncFinishTriggerObject = (
+    scene: Scene,
+    finish: { trigger: Phaser.GameObjects.Rectangle },
+    config: TestWorldFinishConfig
+): void => {
+    refreshRectangleGameObject(scene, finish.trigger, config.x, config.y, config.width, config.height);
+    finish.trigger.setFillStyle(config.fillColor ?? 0x99ff99, 0.28);
+    finish.trigger.setStrokeStyle(2, config.strokeColor ?? 0x00aa66);
+};
+
 const syncBreakWallObject = (
     scene: Scene,
     wall: TriangleFlightBreakWallObject,
@@ -1198,9 +1301,30 @@ const createSurface = (scene: Scene, config: TestWorldSurfaceConfig): Phaser.Gam
     return surface;
 };
 
+const createFinishTrigger = (scene: Scene, config: TestWorldFinishConfig): FinishTriggerObject => {
+    const trigger = scene.add.rectangle(config.x, config.y, config.width, config.height, config.fillColor ?? 0x99ff99, 0.28)
+        .setStrokeStyle(2, config.strokeColor ?? 0x00aa66)
+        .setDepth(4195);
+    scene.physics.add.existing(trigger, true);
+    syncFinishTriggerObject(scene, { trigger }, config);
+
+    return {
+        trigger,
+        refresh: () => {
+            syncFinishTriggerObject(scene, { trigger }, config);
+        },
+        destroy: () => {
+            trigger.destroy();
+        }
+    };
+};
+
 const getConfigReference = (config: TestWorldConfig, type: TestWorldEditorObjectType, rootId: string): unknown => {
     if (type === 'playerSpawn') {
         return config.playerSpawn;
+    }
+    if (type === 'finish') {
+        return config.finish?.id === rootId ? config.finish : null;
     }
     if (type === 'surface') {
         return config.surfaces.find((entry) => entry.id === rootId) ?? null;

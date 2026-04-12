@@ -1,5 +1,6 @@
 import { Scene } from 'phaser';
-import { TestScene } from './TestScene';
+import { type TestSceneStartData } from './TestScene';
+import { MAIN_MENU_SCENE_KEY, startLevelScene, resolveBootRoute } from './demo_flow';
 
 export class BootScene extends Scene {
     public static readonly KEY = 'sc_bootstrap';
@@ -8,7 +9,13 @@ export class BootScene extends Scene {
         super(BootScene.KEY);
     }
 
-    public create(): void {
-        this.scene.start(TestScene.KEY);
+    public create(data: TestSceneStartData = {}): void {
+        const route = resolveBootRoute(data);
+        if (route.levelStart) {
+            startLevelScene(this, route.levelStart);
+            return;
+        }
+
+        this.scene.start(MAIN_MENU_SCENE_KEY);
     }
 }

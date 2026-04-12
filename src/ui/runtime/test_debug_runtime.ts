@@ -3,6 +3,7 @@ import type { PlayerDebugModel } from '../../game/player/player_runtime_contract
 import type { HazardObject } from '../../game/world/hazard';
 import type { TestDebugRuntime } from './ui_runtime_types';
 import { createTestDebugDrawRuntime } from './test_debug_draw_runtime';
+import { isDomTextInputFocused, relaxKeyboardCapture } from '../../shared/dom_input_focus';
 
 interface CreateTestDebugRuntimeParams {
     scene: Scene;
@@ -19,6 +20,7 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
     }
 
     const toggleKey = keyboard.addKey(Input.Keyboard.KeyCodes.NINE);
+    relaxKeyboardCapture(keyboard, [Input.Keyboard.KeyCodes.NINE]);
     const debugDrawRuntime = createTestDebugDrawRuntime({
         scene,
         player,
@@ -37,7 +39,7 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
     };
 
     const toggleVisibility = (): void => {
-        if (isTypingIntoDomElement()) {
+        if (isDomTextInputFocused()) {
             return;
         }
         applyVisibility(!visible);
@@ -69,19 +71,6 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
             debugDrawRuntime.destroy();
         }
     };
-};
-
-const isTypingIntoDomElement = (): boolean => {
-    const activeElement = document.activeElement;
-    if (!(activeElement instanceof HTMLElement)) {
-        return false;
-    }
-
-    const tagName = activeElement.tagName;
-    return activeElement.isContentEditable
-        || tagName === 'INPUT'
-        || tagName === 'TEXTAREA'
-        || tagName === 'SELECT';
 };
 
 export type { TestDebugRuntime } from './ui_runtime_types';

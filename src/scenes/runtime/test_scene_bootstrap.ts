@@ -22,8 +22,6 @@ import {
 import { loadTestWorldEditorDraft } from '../../game/world/runtime/test_world_editor_storage';
 import {
     createTestWorldRuntime,
-    TEST_WORLD_HEIGHT,
-    TEST_WORLD_WIDTH,
     type TestWorldRuntime
 } from '../../game/world/runtime/test_world_runtime';
 import type { RespawnPoint } from '../../game/world/runtime/world_runtime_types';
@@ -37,6 +35,11 @@ import {
     createPlayerTuningPanelRuntime,
     type PlayerTuningPanelRuntime
 } from '../../ui/runtime/player_tuning_panel_runtime';
+import {
+    createTestDevHelperRuntime,
+    type TestDevHelperRuntime
+} from '../../ui/runtime/test_dev_helper_runtime';
+import { getCampaignLevelConfig, getInitialCampaignLevelId } from '../../game/world/runtime/test_campaign_registry';
 
 export interface TestSceneBootstrapRuntime {
     player: PfPlayer;
@@ -46,15 +49,18 @@ export interface TestSceneBootstrapRuntime {
     hudRuntime: TestHudRuntime;
     debugRuntime: TestDebugRuntime;
     editorRuntime: TestWorldEditorRuntime;
+    devHelperRuntime: TestDevHelperRuntime;
     tuningRuntime: PlayerTuningRuntime;
     tuningPanelRuntime: PlayerTuningPanelRuntime;
 }
 
-export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstrapRuntime => {
+export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, editorOpen: boolean = false): TestSceneBootstrapRuntime => {
     scene.cameras.main.setBackgroundColor('#263238');
     bootstrapPersistedPlayerTuning();
 
-    const initialWorldLoad = loadTestWorldEditorDraft();
+    const resolvedLevelId = levelId ?? getInitialCampaignLevelId();
+    const defaultConfig = getCampaignLevelConfig(resolvedLevelId);
+    const initialWorldLoad = loadTestWorldEditorDraft(resolvedLevelId, defaultConfig);
     const initialRespawnPoint: RespawnPoint = {
         x: initialWorldLoad.config.playerSpawn.x,
         y: initialWorldLoad.config.playerSpawn.y
@@ -84,8 +90,8 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
     });
 
     const camera = setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
-        width: TEST_WORLD_WIDTH,
-        height: TEST_WORLD_HEIGHT
+        width: initialWorldLoad.config.worldBounds.width,
+        height: initialWorldLoad.config.worldBounds.height
     });
 
     const hudRuntime = createTestHudRuntime({
@@ -105,12 +111,22 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
         scene,
         worldRuntime,
         player,
+        resolvedLevelId,
+        defaultConfig,
+        editorOpen,
         initialWorldLoad.source === 'draft'
             ? 'loaded saved draft'
             : initialWorldLoad.error
                 ? 'draft invalid, loaded default'
                 : null
     );
+    const devHelperRuntime = createTestDevHelperRuntime({
+        scene,
+        player: worldActor,
+        worldRuntime,
+        respawnRuntime,
+        isEditorActive: () => editorRuntime.isActive()
+    });
     const tuningRuntime = createPlayerTuningRuntime();
     tuningRuntime.subscribe(() => {
         refreshBaselineFollowCameraLerp(camera);
@@ -131,6 +147,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene): TestSceneBootstra
         hudRuntime,
         debugRuntime,
         editorRuntime,
+        devHelperRuntime,
         tuningRuntime,
         tuningPanelRuntime
     };

@@ -3,12 +3,14 @@ import { PLAYER_TUNING_TABS } from '../../game/player/tuning/player_tuning_schem
 import type { PlayerTuningTabId } from '../../game/player/tuning/player_tuning_types';
 import type { PlayerTuningRuntime } from '../../game/player/tuning/player_tuning_runtime';
 import { PlayerTuningSidebar } from './player_tuning_sidebar';
+import { isDomTextInputFocused, relaxKeyboardCapture } from '../../shared/dom_input_focus';
 
 export interface PlayerTuningPanelRuntime {
     update: (deltaMs: number) => void;
     isActive: () => boolean;
     close: () => void;
     shouldMuteGameplayInput: () => boolean;
+    destroy: () => void;
 }
 
 interface CreatePlayerTuningPanelRuntimeParams {
@@ -32,6 +34,7 @@ export const createPlayerTuningPanelRuntime = (
     }
 
     const toggleKey = keyboard.addKey(Input.Keyboard.KeyCodes.ZERO);
+    relaxKeyboardCapture(keyboard, [Input.Keyboard.KeyCodes.ZERO]);
     const sidebar = new PlayerTuningSidebar(appRoot, {
         onSelectTab: (tabId) => {
             activeTabId = tabId;
@@ -114,6 +117,9 @@ export const createPlayerTuningPanelRuntime = (
 
     return {
         update: (): void => {
+            if (isDomTextInputFocused()) {
+                return;
+            }
             if (Input.Keyboard.JustDown(toggleKey)) {
                 toggle();
             }
@@ -122,6 +128,10 @@ export const createPlayerTuningPanelRuntime = (
         close: (): void => {
             close();
         },
-        shouldMuteGameplayInput: (): boolean => false
+        shouldMuteGameplayInput: (): boolean => active || isDomTextInputFocused(),
+        destroy: (): void => {
+            close();
+            sidebar.destroy();
+        }
     };
 };

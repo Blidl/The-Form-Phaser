@@ -1,15 +1,15 @@
-# The Form — Orchestrator Work Queue
+﻿# The Form вЂ” Orchestrator Work Queue
 
-## Назначение
-Это рабочая очередь оркестратора.
+## РќР°Р·РЅР°С‡РµРЅРёРµ
+Р­С‚Рѕ СЂР°Р±РѕС‡Р°СЏ РѕС‡РµСЂРµРґСЊ РѕСЂРєРµСЃС‚СЂР°С‚РѕСЂР°.
 
-Здесь фиксируется:
-- какие эпики и задачи уже завершены;
-- что сейчас активно;
-- что заблокировано;
-- что можно запускать следующим внешним чатом.
+Р—РґРµСЃСЊ С„РёРєСЃРёСЂСѓРµС‚СЃСЏ:
+- РєР°РєРёРµ СЌРїРёРєРё Рё Р·Р°РґР°С‡Рё СѓР¶Рµ Р·Р°РІРµСЂС€РµРЅС‹;
+- С‡С‚Рѕ СЃРµР№С‡Р°СЃ Р°РєС‚РёРІРЅРѕ;
+- С‡С‚Рѕ Р·Р°Р±Р»РѕРєРёСЂРѕРІР°РЅРѕ;
+- С‡С‚Рѕ РјРѕР¶РЅРѕ Р·Р°РїСѓСЃРєР°С‚СЊ СЃР»РµРґСѓСЋС‰РёРј РІРЅРµС€РЅРёРј С‡Р°С‚РѕРј.
 
-Статусы:
+РЎС‚Р°С‚СѓСЃС‹:
 - `todo`
 - `in_progress`
 - `blocked`
@@ -17,74 +17,77 @@
 
 ---
 
-## Epic 1 — Core Stability
+## Epic 1 вЂ” Core Stability
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| Never Embed Contract | blocked | Старый post-tick/depenetration путь отвергнут как неверная архитектура; текущий курс: valid attach pose or detach, без координатных коррекций после тика |
-| Square Attach/Carry Invalid World Pose Resolution | in_progress | Оставлены snapped-pose validation и immediate break attach; `lastValidSquarePose` и directed escape удалены как symptom-driven ветка |
-| Square Attach Face Snap Regression on Moving Supports | in_progress | Убраны corner-allowance hack и post-tick escape-слой; нужен ручной retest normal face-snap на moving supports |
-| Square Attach Commit Path Collision | in_progress | Новая рабочая гипотеза: проблема может быть не в финальной attach-pose, а в том, что commit/snap в attach или возврат attach-jump не проверяет пересечение пути с wall/floor/ceiling |
-| Square Rollover by Input | todo | Input intent должен побеждать |
-| Square Trail Continuity | todo | Убрать микродыры и плохой reconnect |
-| Triangle Break Wall Stability | todo | Устранить нестабильность break |
-| Ball Distance Coyote + Wall Impulse | todo | Distance-led coyote и честный wall hit |
-| Marker / Point of Force Alignment | todo | Маркер должен соответствовать input |
-| Trigger Build Parity | todo | Dev/prod должны совпадать |
+| Never Embed Contract | blocked | РЎС‚Р°СЂС‹Р№ post-tick/depenetration РїСѓС‚СЊ РѕС‚РІРµСЂРіРЅСѓС‚ РєР°Рє РЅРµРІРµСЂРЅР°СЏ Р°СЂС…РёС‚РµРєС‚СѓСЂР°; С‚РµРєСѓС‰РёР№ РєСѓСЂСЃ: valid attach pose or detach, Р±РµР· РєРѕРѕСЂРґРёРЅР°С‚РЅС‹С… РєРѕСЂСЂРµРєС†РёР№ РїРѕСЃР»Рµ С‚РёРєР° |
+| Square Attach/Carry Invalid World Pose Resolution | in_progress | РћСЃС‚Р°РІР»РµРЅС‹ snapped-pose validation Рё immediate break attach; `lastValidSquarePose` Рё directed escape СѓРґР°Р»РµРЅС‹ РєР°Рє symptom-driven РІРµС‚РєР° |
+| Square Attach Face Snap Regression on Moving Supports | in_progress | РЈР±СЂР°РЅС‹ corner-allowance hack Рё post-tick escape-СЃР»РѕР№; РЅСѓР¶РµРЅ СЂСѓС‡РЅРѕР№ retest normal face-snap РЅР° moving supports |
+| Square Attach Commit Path Collision | in_progress | РќРѕРІР°СЏ СЂР°Р±РѕС‡Р°СЏ РіРёРїРѕС‚РµР·Р°: РїСЂРѕР±Р»РµРјР° РјРѕР¶РµС‚ Р±С‹С‚СЊ РЅРµ РІ С„РёРЅР°Р»СЊРЅРѕР№ attach-pose, Р° РІ С‚РѕРј, С‡С‚Рѕ commit/snap РІ attach РёР»Рё РІРѕР·РІСЂР°С‚ attach-jump РЅРµ РїСЂРѕРІРµСЂСЏРµС‚ РїРµСЂРµСЃРµС‡РµРЅРёРµ РїСѓС‚Рё СЃ wall/floor/ceiling |
+| Square Rollover by Input | todo | Input intent РґРѕР»Р¶РµРЅ РїРѕР±РµР¶РґР°С‚СЊ |
+| Square Trail Continuity | todo | РЈР±СЂР°С‚СЊ РјРёРєСЂРѕРґС‹СЂС‹ Рё РїР»РѕС…РѕР№ reconnect |
+| Triangle Break Wall Stability | todo | РЈСЃС‚СЂР°РЅРёС‚СЊ РЅРµСЃС‚Р°Р±РёР»СЊРЅРѕСЃС‚СЊ break |
+| Ball Distance Coyote + Wall Impulse | todo | Distance-led coyote Рё С‡РµСЃС‚РЅС‹Р№ wall hit |
+| Marker / Point of Force Alignment | todo | РњР°СЂРєРµСЂ РґРѕР»Р¶РµРЅ СЃРѕРѕС‚РІРµС‚СЃС‚РІРѕРІР°С‚СЊ input |
+| Trigger Build Parity | todo | Dev/prod РґРѕР»Р¶РЅС‹ СЃРѕРІРїР°РґР°С‚СЊ |
 
-## Epic 2 — Demo Data Backbone
-
-| Task | Status | Notes |
-| --- | --- | --- |
-| Campaign + Level Metadata | todo | `finish`, `nextLevelId`, `campaign.json` |
-| Data Validator | todo | Cross references и profile ids |
-
-## Epic 3 — Demo Flow
+## Epic 2 вЂ” Demo Data Backbone
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| Main Menu + Pause + End Screen | todo | Связать с campaign progression |
+| Campaign + Level Metadata | done | `campaign.json`, level json files, `finish`, `nextLevelId`, level-bound draft storage |
+| Data Validator | done | Narrow demo-safe validation for level ids, `nextLevelId`, `finish`, `worldBounds` |
+| Runtime Editor Level Authoring | done | Sidebar level controls, per-level scene restart, `worldBounds`, `finish`, `nextLevelId` |
+| Runtime Editor Usability Contract | done | DOM input focus guard, scene placement mode, world bounds overlay/readability |
+| Runtime Editor Authoring Contract Finalization | done | Placement/list semantics, create level, single-editor cleanup, shared topology refresh |
 
-## Epic 4 — NPC Foundation
+## Epic 3 вЂ” Demo Flow
+
+| Task | Status | Notes |
+| --- | --- | --- |
+| Main Menu + Pause + End Screen | done | Scene-first `Boot -> MainMenu -> TestScene`, pause overlay РїРѕ `Esc`, `finish -> nextLevelId/end screen`, direct `levelId` boot override СЃРѕС…СЂР°РЅС‘РЅ РґР»СЏ dev |
+
+## Epic 4 вЂ” NPC Foundation
 
 | Task | Status | Notes |
 | --- | --- | --- |
 | NPC Runtime Foundation | todo | passive + enemy archetypes |
 | NPC Interaction + Reactions | todo | interaction nearby + reactions + cutscene hook |
 
-## Epic 5 — Cutscene System
+## Epic 5 вЂ” Cutscene System
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| Cutscene Runtime Foundation | todo | JSON runtime, не editor |
+| Cutscene Runtime Foundation | todo | JSON runtime, РЅРµ editor |
 | NPC-triggered Cutscenes | todo | NPC interaction -> cutscene |
 
-## Epic 6 — Presentation Backbone
+## Epic 6 вЂ” Presentation Backbone
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| Animation Profiles | todo | Начать с NPC |
+| Animation Profiles | todo | РќР°С‡Р°С‚СЊ СЃ NPC |
 | Lighting Profiles + Debug Tuning | todo | Atmosphere-first |
 | Parallax Profiles | todo | Background profiles |
 | VFX Profiles | todo | Square attach + triangle break |
 
-## Epic 7 — Audio
+## Epic 7 вЂ” Audio
 
 | Task | Status | Notes |
 | --- | --- | --- |
 | Audio Manifest + Level Music | todo | Event-driven audio |
 | Audio Debug Preview | todo | Dev-only panel |
 
-## Epic 8 — Integration
+## Epic 8 вЂ” Integration
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| First Vertical Slice Level | todo | Проверка всей цепочки |
+| First Vertical Slice Level | todo | РџСЂРѕРІРµСЂРєР° РІСЃРµР№ С†РµРїРѕС‡РєРё |
 | Web Build Readiness | todo | Demo-safe web path |
 
 ---
 
-## Рекомендуемый порядок запуска внешних чатов
+## Р РµРєРѕРјРµРЅРґСѓРµРјС‹Р№ РїРѕСЂСЏРґРѕРє Р·Р°РїСѓСЃРєР° РІРЅРµС€РЅРёС… С‡Р°С‚РѕРІ
 1. Never Embed Contract
 2. Square Rollover by Input
 3. Square Trail Continuity
@@ -110,8 +113,16 @@
 
 ---
 
-## Правило обновления
-После каждого внешнего чата:
-1. обновить статус задачи;
-2. коротко вписать итог в лог;
-3. если изменился канон — обновить `the_form_orchestrator_state_ru.md`.
+## РџСЂР°РІРёР»Рѕ РѕР±РЅРѕРІР»РµРЅРёСЏ
+РџРѕСЃР»Рµ РєР°Р¶РґРѕРіРѕ РІРЅРµС€РЅРµРіРѕ С‡Р°С‚Р°:
+1. РѕР±РЅРѕРІРёС‚СЊ СЃС‚Р°С‚СѓСЃ Р·Р°РґР°С‡Рё;
+2. РєРѕСЂРѕС‚РєРѕ РІРїРёСЃР°С‚СЊ РёС‚РѕРі РІ Р»РѕРі;
+3. РµСЃР»Рё РёР·РјРµРЅРёР»СЃСЏ РєР°РЅРѕРЅ вЂ” РѕР±РЅРѕРІРёС‚СЊ `the_form_orchestrator_state_ru.md`.
+
+## Latest Queue Update
+- Date: 2026-04-12
+- Task: Dev Helper Overlay + Level Jump + Click-Spawn
+- Status: done
+- Notes: Dev-only Numpad + overlay ? TestScene, prev/next level jump ?? campaign order ????? existing levelId scene-flow, click-spawn ????????? respawn point ? ?? ??????????? ? runtime editor.
+- Next: ????? ??????? smoke ?? helper ???????????? ? NPC/cutscene/presentation ???????.
+

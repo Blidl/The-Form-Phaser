@@ -37,6 +37,15 @@ export const resetTriangleCollisionState = (triangleCollision: PlayerShellState[
     triangleCollision.groundSupportBody = null;
 };
 
+export const hardResetTriangleWorldGeometryState = (
+    runtime: PlayerTriangleMatterRuntime,
+    triangleCollision: PlayerShellState['triangleCollision']
+): void => {
+    resetTriangleCollisionState(triangleCollision);
+    triangleCollision.groundSupportEdgeIndex = null;
+    clearTriangleGroundPivot(runtime);
+};
+
 export interface PlayerTriangleMatterRuntime {
     readonly body: MatterJS.BodyType;
     readonly debugPoints: Array<{ x: number; y: number }>;

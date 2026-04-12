@@ -34,6 +34,9 @@ export interface TestWorldEditorSidebarState {
     status: string;
     canUndo: boolean;
     canRedo: boolean;
+    levelId: string;
+    pendingPlacementType: TestWorldEditorObjectType | null;
+    levelSections: TestWorldEditorSidebarSection[];
     palette: ReadonlyArray<{ type: TestWorldEditorObjectType; label: string }>;
     objectItems: TestWorldEditorSidebarObjectItem[];
     inspectorId: string | null;
@@ -44,6 +47,8 @@ export interface TestWorldEditorSidebarState {
 
 export interface TestWorldEditorSidebarCallbacks {
     onSaveDraft: () => void;
+    onCreateLevel: () => void;
+    onDeleteLevel: () => void;
     onExportJson: () => void;
     onImportJson: (jsonText: string) => void;
     onResetDefault: () => void;
@@ -54,6 +59,7 @@ export interface TestWorldEditorSidebarCallbacks {
     onDuplicateSelected: () => void;
     onDeleteSelected: () => void;
     onToggleSelectedLock: () => void;
+    onLevelFieldChange: (key: string, value: string | number | boolean) => void;
     onInspectorFieldChange: (key: string, value: string | number | boolean) => void;
 }
 
@@ -70,8 +76,8 @@ const toColorInputValue = (value: string | number | boolean): string => {
     return `#${numericValue.toString(16).padStart(6, '0')}`;
 };
 
-const buildFieldMarkup = (field: TestWorldEditorSidebarField): string => {
-    const baseAttributes = `data-editor-field="${escapeHtml(field.key)}"`;
+const buildFieldMarkup = (field: TestWorldEditorSidebarField, attributeName: string): string => {
+    const baseAttributes = `${attributeName}="${escapeHtml(field.key)}"`;
     if (field.input === 'checkbox') {
         return `
             <label class="test-world-editor__field test-world-editor__field--checkbox">
@@ -121,6 +127,7 @@ export class TestWorldEditorSidebar {
     private readonly fileInput: HTMLInputElement;
     private state: TestWorldEditorSidebarState;
     private pendingScrollRestore: { inner: number; list: number } | null = null;
+    private pendingFocusRestore: { selector: string; selectionStart: number | null; selectionEnd: number | null } | null = null;
 
     public constructor(
         parent: HTMLElement,
@@ -154,6 +161,9 @@ export class TestWorldEditorSidebar {
             status: '',
             canUndo: false,
             canRedo: false,
+            levelId: '',
+            pendingPlacementType: null,
+            levelSections: [],
             palette: [],
             objectItems: [],
             inspectorId: null,
@@ -168,6 +178,7 @@ export class TestWorldEditorSidebar {
 
     public setState(nextState: TestWorldEditorSidebarState): void {
         this.captureScrollPosition();
+        this.captureFocusedField();
         this.state = nextState;
         this.render();
     }
@@ -181,41 +192,47 @@ export class TestWorldEditorSidebar {
     private readonly handleClick = (event: Event): void => {
         const target = event.target as HTMLElement | null;
         const action = target?.closest<HTMLElement>('[data-editor-action]')?.dataset.editorAction;
-        if (!action) {
-            return;
-        }
-
-        if (action === 'save-draft') {
-            this.callbacks.onSaveDraft();
-            return;
-        }
-        if (action === 'export-json') {
-            this.callbacks.onExportJson();
-            return;
-        }
-        if (action === 'import-json') {
-            this.fileInput.click();
-            return;
-        }
-        if (action === 'reset-default') {
-            this.callbacks.onResetDefault();
-            return;
-        }
-        if (action === 'clear-draft') {
-            this.callbacks.onClearSavedDraft();
-            return;
-        }
-        if (action === 'duplicate-selected') {
-            this.callbacks.onDuplicateSelected();
-            return;
-        }
-        if (action === 'delete-selected') {
-            this.callbacks.onDeleteSelected();
-            return;
-        }
-        if (action === 'toggle-selected-lock') {
-            this.callbacks.onToggleSelectedLock();
-            return;
+        if (action) {
+            if (action === 'save-draft') {
+                this.callbacks.onSaveDraft();
+                return;
+            }
+            if (action === 'create-level') {
+                this.callbacks.onCreateLevel();
+                return;
+            }
+            if (action === 'delete-level') {
+                this.callbacks.onDeleteLevel();
+                return;
+            }
+            if (action === 'export-json') {
+                this.callbacks.onExportJson();
+                return;
+            }
+            if (action === 'import-json') {
+                this.fileInput.click();
+                return;
+            }
+            if (action === 'reset-default') {
+                this.callbacks.onResetDefault();
+                return;
+            }
+            if (action === 'clear-draft') {
+                this.callbacks.onClearSavedDraft();
+                return;
+            }
+            if (action === 'duplicate-selected') {
+                this.callbacks.onDuplicateSelected();
+                return;
+            }
+            if (action === 'delete-selected') {
+                this.callbacks.onDeleteSelected();
+                return;
+            }
+            if (action === 'toggle-selected-lock') {
+                this.callbacks.onToggleSelectedLock();
+                return;
+            }
         }
 
         const paletteType = target?.closest<HTMLElement>('[data-editor-palette-type]')?.dataset.editorPaletteType;
@@ -242,24 +259,29 @@ export class TestWorldEditorSidebar {
         }
 
         const fieldKey = target.dataset.editorField;
-        if (!fieldKey) {
+        const levelFieldKey = target.dataset.editorLevelField;
+
+        if (!fieldKey && !levelFieldKey) {
             return;
         }
 
+        const callback = levelFieldKey ? this.callbacks.onLevelFieldChange : this.callbacks.onInspectorFieldChange;
+        const resolvedFieldKey = levelFieldKey ?? fieldKey;
+
         if (target instanceof HTMLInputElement && target.type === 'checkbox') {
-            this.callbacks.onInspectorFieldChange(fieldKey, target.checked);
+            callback(resolvedFieldKey, target.checked);
             return;
         }
         if (target instanceof HTMLInputElement && target.type === 'color') {
-            this.callbacks.onInspectorFieldChange(fieldKey, Number.parseInt(target.value.slice(1), 16));
+            callback(resolvedFieldKey, Number.parseInt(target.value.slice(1), 16));
             return;
         }
         if (target instanceof HTMLInputElement && target.type === 'number') {
-            this.callbacks.onInspectorFieldChange(fieldKey, Number(target.value));
+            callback(resolvedFieldKey, Number(target.value));
             return;
         }
 
-        this.callbacks.onInspectorFieldChange(fieldKey, target.value);
+        callback(resolvedFieldKey, target.value);
     };
 
     private captureScrollPosition(): void {
@@ -269,6 +291,54 @@ export class TestWorldEditorSidebar {
             inner: inner?.scrollTop ?? 0,
             list: list?.scrollTop ?? 0
         };
+    }
+
+    private captureFocusedField(): void {
+        const activeElement = document.activeElement;
+        if (!(activeElement instanceof HTMLElement) || !this.root.contains(activeElement)) {
+            this.pendingFocusRestore = null;
+            return;
+        }
+
+        if (activeElement.matches('[data-editor-search]')) {
+            this.pendingFocusRestore = {
+                selector: '[data-editor-search]',
+                selectionStart: activeElement instanceof HTMLInputElement ? activeElement.selectionStart : null,
+                selectionEnd: activeElement instanceof HTMLInputElement ? activeElement.selectionEnd : null
+            };
+            return;
+        }
+
+        const inputElement = activeElement as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+        const fieldKey = inputElement.dataset.editorField;
+        if (fieldKey) {
+            this.pendingFocusRestore = {
+                selector: `[data-editor-field="${fieldKey}"]`,
+                selectionStart: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionStart
+                    : null,
+                selectionEnd: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionEnd
+                    : null
+            };
+            return;
+        }
+
+        const levelFieldKey = inputElement.dataset.editorLevelField;
+        if (levelFieldKey) {
+            this.pendingFocusRestore = {
+                selector: `[data-editor-level-field="${levelFieldKey}"]`,
+                selectionStart: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionStart
+                    : null,
+                selectionEnd: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionEnd
+                    : null
+            };
+            return;
+        }
+
+        this.pendingFocusRestore = null;
     }
 
     private restoreScrollPosition(): void {
@@ -289,12 +359,33 @@ export class TestWorldEditorSidebar {
         this.pendingScrollRestore = null;
     }
 
+    private restoreFocusedField(): void {
+        if (!this.pendingFocusRestore) {
+            return;
+        }
+
+        const target = this.root.querySelector<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>(this.pendingFocusRestore.selector);
+        if (target) {
+            target.focus({ preventScroll: true });
+            if ((target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)
+                && this.pendingFocusRestore.selectionStart !== null
+                && this.pendingFocusRestore.selectionEnd !== null) {
+                target.setSelectionRange(this.pendingFocusRestore.selectionStart, this.pendingFocusRestore.selectionEnd);
+            }
+        }
+
+        this.pendingFocusRestore = null;
+    }
+
     private render(): void {
         const state = this.state;
         this.root.classList.toggle('test-world-editor--hidden', !state.visible);
 
         const paletteMarkup = state.palette.map((entry) => {
-            return `<button type="button" class="test-world-editor__button" data-editor-palette-type="${entry.type}">${escapeHtml(entry.label)}</button>`;
+            const className = entry.type === state.pendingPlacementType
+                ? 'test-world-editor__button is-active'
+                : 'test-world-editor__button';
+            return `<button type="button" class="${className}" data-editor-palette-type="${entry.type}">${escapeHtml(entry.label)}</button>`;
         }).join('');
 
         const objectMarkup = state.objectItems.map((entry) => {
@@ -316,7 +407,17 @@ export class TestWorldEditorSidebar {
                 <section class="test-world-editor__section">
                     <h3>${escapeHtml(section.title)}</h3>
                     <div class="test-world-editor__fields">
-                        ${section.fields.map(buildFieldMarkup).join('')}
+                        ${section.fields.map((field) => buildFieldMarkup(field, 'data-editor-field')).join('')}
+                    </div>
+                </section>
+            `;
+        }).join('');
+        const levelMarkup = state.levelSections.map((section) => {
+            return `
+                <section class="test-world-editor__section">
+                    <h3>${escapeHtml(section.title)}</h3>
+                    <div class="test-world-editor__fields">
+                        ${section.fields.map((field) => buildFieldMarkup(field, 'data-editor-level-field')).join('')}
                     </div>
                 </section>
             `;
@@ -337,6 +438,18 @@ export class TestWorldEditorSidebar {
                         <span class="test-world-editor__status">${escapeHtml(state.status || 'Editor ready')}</span>
                         <span class="test-world-editor__status">Undo ${state.canUndo ? 'yes' : 'no'} / Redo ${state.canRedo ? 'yes' : 'no'}</span>
                     </div>
+                </section>
+
+                <section class="test-world-editor__section">
+                    <h3>Level</h3>
+                    <div class="test-world-editor__meta">
+                        <div><strong>Current Level</strong> ${escapeHtml(state.levelId || 'None')}</div>
+                    </div>
+                    <div class="test-world-editor__toolbar">
+                        <button type="button" class="test-world-editor__button" data-editor-action="create-level">Create Level</button>
+                        <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-level">Delete Level</button>
+                    </div>
+                    ${levelMarkup}
                 </section>
 
                 <section class="test-world-editor__section">
@@ -374,5 +487,6 @@ export class TestWorldEditorSidebar {
         `;
         this.root.appendChild(this.fileInput);
         this.restoreScrollPosition();
+        this.restoreFocusedField();
     }
 }

@@ -17,28 +17,35 @@ export interface LoadTestWorldDraftResult {
     error: string | null;
 }
 
-export const loadTestWorldEditorDraft = (): LoadTestWorldDraftResult => {
+const getLevelDraftStorageKey = (levelId: string): string => {
+    return `${TEST_WORLD_EDITOR_DRAFT_STORAGE_KEY}:${levelId}`;
+};
+
+export const loadTestWorldEditorDraft = (
+    levelId: string,
+    fallbackConfig: TestWorldConfig
+): LoadTestWorldDraftResult => {
     if (!canUseStorage()) {
         return {
-            config: createDefaultTestWorldConfig(),
+            config: createDefaultTestWorldConfig(fallbackConfig),
             source: 'default',
             error: null
         };
     }
 
-    const raw = window.localStorage.getItem(TEST_WORLD_EDITOR_DRAFT_STORAGE_KEY);
+    const raw = window.localStorage.getItem(getLevelDraftStorageKey(levelId));
     if (raw === null) {
         return {
-            config: createDefaultTestWorldConfig(),
+            config: createDefaultTestWorldConfig(fallbackConfig),
             source: 'default',
             error: null
         };
     }
 
-    const parsed = parseTestWorldConfigJson(raw);
+    const parsed = parseTestWorldConfigJson(raw, { fallbackConfig });
     if (parsed.config === null) {
         return {
-            config: createDefaultTestWorldConfig(),
+            config: createDefaultTestWorldConfig(fallbackConfig),
             source: 'default',
             error: parsed.error
         };
@@ -51,10 +58,10 @@ export const loadTestWorldEditorDraft = (): LoadTestWorldDraftResult => {
     };
 };
 
-export const saveTestWorldEditorDraft = (config: TestWorldConfig): ParseTestWorldConfigResult => {
+export const saveTestWorldEditorDraft = (levelId: string, config: TestWorldConfig): ParseTestWorldConfigResult => {
     const safeConfig = JSON.stringify(config, null, 2);
     if (canUseStorage()) {
-        window.localStorage.setItem(TEST_WORLD_EDITOR_DRAFT_STORAGE_KEY, safeConfig);
+        window.localStorage.setItem(getLevelDraftStorageKey(levelId), safeConfig);
     }
 
     return {
@@ -63,10 +70,27 @@ export const saveTestWorldEditorDraft = (config: TestWorldConfig): ParseTestWorl
     };
 };
 
-export const clearTestWorldEditorDraft = (): void => {
+export const clearTestWorldEditorDraft = (levelId: string): void => {
     if (!canUseStorage()) {
         return;
     }
 
-    window.localStorage.removeItem(TEST_WORLD_EDITOR_DRAFT_STORAGE_KEY);
+    window.localStorage.removeItem(getLevelDraftStorageKey(levelId));
+};
+
+export const readSavedTestWorldEditorDraft = (
+    levelId: string,
+    fallbackConfig: TestWorldConfig
+): TestWorldConfig | null => {
+    if (!canUseStorage()) {
+        return null;
+    }
+
+    const raw = window.localStorage.getItem(getLevelDraftStorageKey(levelId));
+    if (raw === null) {
+        return null;
+    }
+
+    const parsed = parseTestWorldConfigJson(raw, { fallbackConfig });
+    return parsed.config;
 };

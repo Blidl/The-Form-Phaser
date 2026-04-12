@@ -1,5 +1,8 @@
 import { AUTO, type Types } from 'phaser';
 import { BootScene } from '../scenes/BootScene';
+import { EndScreenScene } from '../scenes/EndScreenScene';
+import { MainMenuScene } from '../scenes/MainMenuScene';
+import { PauseMenuScene } from '../scenes/PauseMenuScene';
 import { TestScene } from '../scenes/TestScene';
 
 export const createGameConfig = (parent: string): Types.Core.GameConfig => {
@@ -20,6 +23,6 @@ export const createGameConfig = (parent: string): Types.Core.GameConfig => {
                 debug: false
             }
         },
-        scene: [BootScene, TestScene]
+        scene: [BootScene, MainMenuScene, TestScene, PauseMenuScene, EndScreenScene]
     };
 };

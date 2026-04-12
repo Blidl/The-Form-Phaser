@@ -1,10 +1,13 @@
 import {
     TEST_WORLD_CONFIG,
     cloneTestWorldConfig,
+    type TestWorldBoundsConfig,
     type TestWorldCheckpointConfig,
     type TestWorldConfig,
     type TestWorldDragBoxConfig,
+    type TestWorldFinishConfig,
     type TestWorldHazardConfig,
+    type TestWorldMetaConfig,
     type TestWorldMovingPlatformConfig,
     type TestWorldPlayerSpawnConfig,
     type TestWorldSurfaceConfig,
@@ -16,6 +19,7 @@ import {
 
 const MIN_RECT_SIZE = 8;
 const MIN_PICKUP_RADIUS = 4;
+const MIN_WORLD_SIZE = 64;
 
 const asNumber = (value: unknown, fallback: number): number => {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -77,6 +81,23 @@ const normalizePlayerSpawn = (raw: Record<string, unknown> | null): TestWorldPla
     };
 };
 
+const normalizeMeta = (raw: Record<string, unknown> | null, fallback: TestWorldMetaConfig): TestWorldMetaConfig => {
+    return {
+        id: asString(raw?.id, fallback.id),
+        displayName: asString(raw?.displayName, fallback.displayName)
+    };
+};
+
+const normalizeWorldBounds = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldBoundsConfig
+): TestWorldBoundsConfig => {
+    return {
+        width: Math.max(MIN_WORLD_SIZE, Math.round(asNumber(raw?.width, fallback.width))),
+        height: Math.max(MIN_WORLD_SIZE, Math.round(asNumber(raw?.height, fallback.height)))
+    };
+};
+
 const normalizeSurface = (
     raw: Record<string, unknown> | null,
     fallback: TestWorldSurfaceConfig,
@@ -129,6 +150,33 @@ const normalizeCheckpoint = (
         respawnY: asNumber(raw?.respawnY, fallback.respawnY),
         fillColor: asColor(raw?.fillColor, fallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor),
+        editorLocked: asBoolean(raw?.editorLocked, false)
+    };
+};
+
+const normalizeFinish = (
+    rawValue: unknown,
+    fallback: TestWorldFinishConfig | null,
+    usedIds: Set<string>
+): TestWorldFinishConfig | null => {
+    if (rawValue === null) {
+        return null;
+    }
+
+    const raw = asObject(rawValue);
+    if (raw === null && fallback === null) {
+        return null;
+    }
+
+    const safeFallback = fallback ?? TEST_WORLD_CONFIG.finish;
+    return {
+        id: ensureUniqueId(asString(raw?.id, safeFallback.id), usedIds, 'finish'),
+        x: asNumber(raw?.x, safeFallback.x),
+        y: asNumber(raw?.y, safeFallback.y),
+        width: clampRectSize(asNumber(raw?.width, safeFallback.width)),
+        height: clampRectSize(asNumber(raw?.height, safeFallback.height)),
+        fillColor: asColor(raw?.fillColor, safeFallback.fillColor),
+        strokeColor: asColor(raw?.strokeColor, safeFallback.strokeColor),
         editorLocked: asBoolean(raw?.editorLocked, false)
     };
 };
@@ -283,8 +331,9 @@ const normalizeArray = <T>(
     normalizeItem: (raw: Record<string, unknown> | null, fallback: T, usedIds: Set<string>, index: number) => T,
     usedIds: Set<string>
 ): T[] => {
+    const rawArrayProvided = Array.isArray(rawItems);
     const sourceItems = asArray(rawItems);
-    const safeLength = Math.max(sourceItems.length, defaults.length);
+    const safeLength = rawArrayProvided ? sourceItems.length : defaults.length;
     const normalized: T[] = [];
 
     for (let index = 0; index < safeLength; index += 1) {
@@ -314,15 +363,25 @@ export interface ParseTestWorldConfigResult {
     error: string | null;
 }
 
-export const normalizeTestWorldConfig = (input: unknown): TestWorldConfig => {
-    const defaults = cloneTestWorldConfig(TEST_WORLD_CONFIG);
+export interface NormalizeTestWorldConfigOptions {
+    fallbackConfig?: TestWorldConfig;
+}
+
+export const normalizeTestWorldConfig = (
+    input: unknown,
+    options?: NormalizeTestWorldConfigOptions
+): TestWorldConfig => {
+    const defaults = cloneTestWorldConfig(options?.fallbackConfig ?? TEST_WORLD_CONFIG);
     const root = asObject(input);
     const usedIds = new Set<string>();
     const normalized: TestWorldConfig = {
+        meta: normalizeMeta(asObject(root?.meta), defaults.meta),
+        worldBounds: normalizeWorldBounds(asObject(root?.worldBounds), defaults.worldBounds),
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
         surfaces: normalizeArray(root?.surfaces, defaults.surfaces, normalizeSurface, usedIds),
         hazards: normalizeArray(root?.hazards, defaults.hazards, normalizeHazard, usedIds),
         checkpoints: normalizeArray(root?.checkpoints, defaults.checkpoints, normalizeCheckpoint, usedIds),
+        finish: normalizeFinish(root?.finish, defaults.finish, usedIds),
         movingPlatforms: normalizeArray(root?.movingPlatforms, defaults.movingPlatforms, normalizeMovingPlatform, usedIds),
         triggerPlatforms: normalizeArray(root?.triggerPlatforms, defaults.triggerPlatforms, normalizeTriggerPlatform, usedIds),
         dragBoxes: normalizeArray(root?.dragBoxes, defaults.dragBoxes, normalizeDragBox, usedIds),
@@ -333,17 +392,25 @@ export const normalizeTestWorldConfig = (input: unknown): TestWorldConfig => {
             normalizeBreakWall,
             usedIds
         ),
-        trianglePickups: normalizeArray(root?.trianglePickups, defaults.trianglePickups, normalizePickup, usedIds)
+        trianglePickups: normalizeArray(root?.trianglePickups, defaults.trianglePickups, normalizePickup, usedIds),
+        nextLevelId: root?.nextLevelId === null
+            ? null
+            : typeof root?.nextLevelId === 'string' && root.nextLevelId.trim().length > 0
+                ? root.nextLevelId.trim()
+                : defaults.nextLevelId
     };
     fixDanglingDragBoxTargets(normalized);
     return normalized;
 };
 
-export const parseTestWorldConfigJson = (jsonText: string): ParseTestWorldConfigResult => {
+export const parseTestWorldConfigJson = (
+    jsonText: string,
+    options?: NormalizeTestWorldConfigOptions
+): ParseTestWorldConfigResult => {
     try {
         const parsed = JSON.parse(jsonText) as unknown;
         return {
-            config: normalizeTestWorldConfig(parsed),
+            config: normalizeTestWorldConfig(parsed, options),
             error: null
         };
     } catch (error) {
@@ -354,6 +421,41 @@ export const parseTestWorldConfigJson = (jsonText: string): ParseTestWorldConfig
     }
 };
 
-export const createDefaultTestWorldConfig = (): TestWorldConfig => {
-    return cloneTestWorldConfig(TEST_WORLD_CONFIG);
+export const createDefaultTestWorldConfig = (fallbackConfig: TestWorldConfig = TEST_WORLD_CONFIG): TestWorldConfig => {
+    return cloneTestWorldConfig(fallbackConfig);
+};
+
+export const createMinimalTestWorldConfig = (
+    levelId: string,
+    displayName: string
+): TestWorldConfig => {
+    return normalizeTestWorldConfig({
+        meta: {
+            id: levelId,
+            displayName
+        },
+        worldBounds: {
+            width: 1600,
+            height: 900
+        },
+        playerSpawn: {
+            x: 128,
+            y: 128,
+            width: 32,
+            height: 64,
+            fillColor: 0x81d4fa,
+            strokeColor: 0x0277bd
+        },
+        surfaces: [],
+        hazards: [],
+        checkpoints: [],
+        finish: null,
+        movingPlatforms: [],
+        triggerPlatforms: [],
+        dragBoxes: [],
+        windZones: [],
+        triangleFlightBreakWalls: [],
+        trianglePickups: [],
+        nextLevelId: null
+    });
 };

@@ -81,6 +81,7 @@ body {
 }
 
 .test-world-editor__button:hover,
+.test-world-editor__button.is-active,
 .test-world-editor__list-item:hover,
 .test-world-editor__list-item.is-selected {
     background: rgba(129, 212, 250, 0.16);

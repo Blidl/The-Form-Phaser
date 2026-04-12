@@ -3,22 +3,30 @@ import { setupBaselineFollowCamera } from '../../camera/follow_camera';
 import type { PfPlayer } from '../../player/PfPlayer';
 import type { TestWorldConfig } from './test_world_config';
 import { createDefaultTestWorldConfig, parseTestWorldConfigJson } from './test_world_config_validation';
-import { TEST_WORLD_EDITOR_PALETTE, type TestWorldEditorBounds, type TestWorldEditorObjectType } from './test_world_editor_adapters';
+import {
+    TEST_WORLD_EDITOR_PALETTE,
+    type TestWorldEditorBounds,
+    type TestWorldEditorObjectType
+} from './test_world_editor_adapters';
 import { TestWorldEditorSidebar, type TestWorldEditorSidebarSection, type TestWorldEditorSidebarState } from './test_world_editor_sidebar';
 import { clearTestWorldEditorDraft, saveTestWorldEditorDraft } from './test_world_editor_storage';
-import { TEST_WORLD_HEIGHT, TEST_WORLD_WIDTH, type TestWorldEditorHandle, type TestWorldRuntime } from './test_world_runtime';
+import { createCampaignLevel, deleteCampaignLevel, getCampaignLevelSummaries, syncCampaignLevelHeader } from './test_campaign_registry';
+import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runtime';
+import { TestScene } from '../../../scenes/TestScene';
+import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
 
 export interface TestWorldEditorRuntime {
     update: (deltaMs: number) => void;
     isActive: () => boolean;
+    open: () => void;
     close: () => void;
+    destroy: () => void;
 }
 
 type DragMode = 'move' | 'resize' | 'pan';
 type ResizeHandle = 'nw' | 'ne' | 'sw' | 'se';
 
 interface PointerDragState {
-    pointerId: number;
     mode: DragMode;
     handle?: ResizeHandle;
     startWorldX: number;
@@ -33,11 +41,15 @@ const RESIZE_HANDLE_SIZE = 10;
 const CAMERA_PAN_SPEED = 480;
 const ZOOM_STEP = 0.08;
 const DRAFT_AUTOSAVE_DELAY_MS = 500;
+const PLACEMENT_PREVIEW_SIZE = 18;
 
 export const createTestWorldEditorRuntime = (
     scene: Scene,
     worldRuntime: TestWorldRuntime,
     player: PfPlayer,
+    levelId: string,
+    defaultConfig: TestWorldConfig,
+    initialOpen: boolean = false,
     initialStatus: string | null = null
 ): TestWorldEditorRuntime => {
     const keyboard = scene.input.keyboard;
@@ -66,9 +78,34 @@ export const createTestWorldEditorRuntime = (
         keyboard.addKey(Input.Keyboard.KeyCodes.THREE),
         keyboard.addKey(Input.Keyboard.KeyCodes.FOUR)
     ];
+    const cancelPlacementKey = keyboard.addKey(Input.Keyboard.KeyCodes.ESC);
 
+    relaxKeyboardCapture(keyboard, [
+        Input.Keyboard.KeyCodes.DELETE,
+        Input.Keyboard.KeyCodes.BACKSPACE,
+        Input.Keyboard.KeyCodes.D,
+        Input.Keyboard.KeyCodes.Z,
+        Input.Keyboard.KeyCodes.Y,
+        Input.Keyboard.KeyCodes.G,
+        Input.Keyboard.KeyCodes.F,
+        Input.Keyboard.KeyCodes.P,
+        Input.Keyboard.KeyCodes.SPACE,
+        Input.Keyboard.KeyCodes.LEFT,
+        Input.Keyboard.KeyCodes.RIGHT,
+        Input.Keyboard.KeyCodes.UP,
+        Input.Keyboard.KeyCodes.DOWN,
+        Input.Keyboard.KeyCodes.ONE,
+        Input.Keyboard.KeyCodes.TWO,
+        Input.Keyboard.KeyCodes.THREE,
+        Input.Keyboard.KeyCodes.FOUR,
+        Input.Keyboard.KeyCodes.ESC
+    ]);
+
+    scene.input.mouse?.disableContextMenu();
     const selectionGraphics = scene.add.graphics().setDepth(4990);
+    const placementGraphics = scene.add.graphics().setDepth(4992);
     const gridGraphics = scene.add.graphics().setDepth(4985);
+    const boundsGraphics = scene.add.graphics().setDepth(4980);
     const overlayText = scene.add.text(18, 18, '', {
         fontFamily: 'monospace',
         fontSize: '13px',
@@ -85,6 +122,7 @@ export const createTestWorldEditorRuntime = (
     }
 
     let active = false;
+    let destroyed = false;
     let selectedHandleId: string | null = null;
     let searchTerm = '';
     let gridEnabled = true;
@@ -92,6 +130,7 @@ export const createTestWorldEditorRuntime = (
     let status = initialStatus ?? '';
     let autosaveTimer: number | null = null;
     let pointerDragState: PointerDragState | null = null;
+    let pendingPlacementType: TestWorldEditorObjectType | null = null;
     const undoStack: TestWorldConfig[] = [];
     const redoStack: TestWorldConfig[] = [];
     const inspectorColorKeys = new Set<string>([
@@ -104,7 +143,6 @@ export const createTestWorldEditorRuntime = (
         'platformFillColor',
         'platformStrokeColor'
     ]);
-
     const getHandles = (): readonly TestWorldEditorHandle[] => worldRuntime.getEditorHandles();
     const getSelectedHandle = (): TestWorldEditorHandle | null => {
         if (!selectedHandleId) {
@@ -124,6 +162,9 @@ export const createTestWorldEditorRuntime = (
             status,
             canUndo: undoStack.length > 0,
             canRedo: redoStack.length > 0,
+            levelId,
+            pendingPlacementType,
+            levelSections: buildLevelSections(config, getCampaignLevelSummaries()),
             palette: TEST_WORLD_EDITOR_PALETTE,
             objectItems: worldRuntime.getEditorObjects()
                 .filter((entry) => {
@@ -149,57 +190,95 @@ export const createTestWorldEditorRuntime = (
             saveDraftNow();
             setStatus('draft saved');
         },
+        onCreateLevel: () => {
+            saveDraftNow();
+            const createdLevel = createCampaignLevel();
+            saveTestWorldEditorDraft(createdLevel.meta.id, createdLevel);
+            scene.scene.restart({
+                levelId: createdLevel.meta.id,
+                editorOpen: active
+            });
+        },
+        onDeleteLevel: () => {
+            const levelSummaries = getCampaignLevelSummaries();
+            if (levelSummaries.length <= 1) {
+                setStatus('cannot delete the last remaining level');
+                return;
+            }
+            const confirmed = window.confirm(`Delete level '${levelId}'? This cannot be undone.`);
+            if (!confirmed) {
+                return;
+            }
+
+            const deleted = deleteCampaignLevel(levelId);
+            if (!deleted) {
+                setStatus('failed to delete level');
+                return;
+            }
+
+            scene.scene.restart({
+                levelId: deleted.switchedToLevelId,
+                editorOpen: active
+            });
+        },
         onExportJson: () => {
             const blob = new Blob([JSON.stringify(worldRuntime.getConfig(), null, 2)], { type: 'application/json' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = 'test-world-config.json';
+            link.download = `${levelId}.json`;
             link.click();
             URL.revokeObjectURL(link.href);
             setStatus('exported json');
         },
         onImportJson: (jsonText) => {
-            const parsed = parseTestWorldConfigJson(jsonText);
+            const parsed = parseTestWorldConfigJson(jsonText, { fallbackConfig: defaultConfig });
             if (parsed.config === null) {
                 setStatus(`import failed: ${parsed.error ?? 'invalid json'}`);
                 return;
             }
             pushUndoSnapshot();
             worldRuntime.setConfig(parsed.config);
+            syncCampaignLevelHeader(parsed.config);
+            syncCameraBoundsToWorld();
             redoStack.length = 0;
-            selectRoot('player_spawn');
+            selectRoot(parsed.config.finish?.id ?? 'player_spawn');
             markConfigDirty();
             setStatus('imported json');
         },
         onResetDefault: () => {
+            const resetConfig = createDefaultTestWorldConfig(defaultConfig);
             pushUndoSnapshot();
-            worldRuntime.setConfig(createDefaultTestWorldConfig());
+            worldRuntime.setConfig(resetConfig);
+            syncCampaignLevelHeader(resetConfig);
+            syncCameraBoundsToWorld();
             redoStack.length = 0;
             selectRoot('player_spawn');
             markConfigDirty();
             setStatus('reset to default');
         },
         onClearSavedDraft: () => {
-            clearTestWorldEditorDraft();
+            clearTestWorldEditorDraft(levelId);
             setStatus('saved draft cleared');
         },
         onCreateObject: (type) => {
-            pushUndoSnapshot();
-            const center = getCameraCenter();
-            const createdId = worldRuntime.createObject(type, center.x, center.y);
-            redoStack.length = 0;
-            selectRoot(createdId);
-            markConfigDirty();
-            if (createdId) {
-                setStatus(`created ${createdId}`);
+            if (type === 'finish' && worldRuntime.getConfig().finish) {
+                selectRoot(worldRuntime.getConfig().finish?.id ?? null);
+                setStatus('finish already exists');
+                return;
             }
+            pendingPlacementType = type;
+            pointerDragState = null;
+            syncSidebar();
+            setStatus(`placing ${type}: click scene to place, Esc or RMB to cancel`);
         },
         onSearchChange: (search) => {
             searchTerm = search;
             syncSidebar();
         },
         onSelectObject: (id) => {
+            pendingPlacementType = null;
             selectRoot(id);
+            focusTarget(id);
         },
         onDuplicateSelected: () => {
             const rootId = getSelectedRootId();
@@ -225,6 +304,56 @@ export const createTestWorldEditorRuntime = (
             markConfigDirty();
             setStatus(nextLocked ? 'locked' : 'unlocked');
         },
+        onLevelFieldChange: (key, value) => {
+            if (key === 'switchLevelId') {
+                const nextLevelId = String(value).trim();
+                if (!nextLevelId || nextLevelId === levelId) {
+                    return;
+                }
+                saveDraftNow();
+                scene.scene.restart({
+                    levelId: nextLevelId,
+                    editorOpen: true
+                });
+                return;
+            }
+
+            const config = worldRuntime.getConfig();
+            if (key === 'displayName' && typeof value === 'string') {
+                pushUndoSnapshot();
+                config.meta.displayName = value.trim() || config.meta.displayName;
+                worldRuntime.setConfig(config);
+                player.refreshWorldGeometryState();
+                syncCampaignLevelHeader(config);
+                redoStack.length = 0;
+                markConfigDirty();
+                return;
+            }
+            if ((key === 'worldWidth' || key === 'worldHeight') && typeof value === 'number') {
+                pushUndoSnapshot();
+                if (key === 'worldWidth') {
+                    config.worldBounds.width = value;
+                } else {
+                    config.worldBounds.height = value;
+                }
+                worldRuntime.setConfig(config);
+                player.refreshWorldGeometryState();
+                syncCameraBoundsToWorld();
+                redoStack.length = 0;
+                markConfigDirty();
+                setStatus('world bounds updated');
+                return;
+            }
+            if (key === 'nextLevelId') {
+                pushUndoSnapshot();
+                config.nextLevelId = typeof value === 'string' && value.length > 0 ? value : null;
+                worldRuntime.setConfig(config);
+                syncCampaignLevelHeader(config);
+                redoStack.length = 0;
+                markConfigDirty();
+                return;
+            }
+        },
         onInspectorFieldChange: (key, value) => {
             const rootId = getSelectedRootId();
             if (!rootId) {
@@ -243,7 +372,51 @@ export const createTestWorldEditorRuntime = (
     });
 
     const syncSidebar = (): void => {
+        if (destroyed) {
+            return;
+        }
         sidebar.setState(buildSidebarState());
+    };
+
+    const syncCameraBoundsToWorld = (): void => {
+        const worldBounds = worldRuntime.getWorldBounds();
+        const camera = scene.cameras.main;
+        camera.setBounds(0, 0, worldBounds.width, worldBounds.height);
+        const maxScrollX = Math.max(0, worldBounds.width - (camera.width / camera.zoom));
+        const maxScrollY = Math.max(0, worldBounds.height - (camera.height / camera.zoom));
+        camera.setScroll(
+            Math.max(0, Math.min(camera.scrollX, maxScrollX)),
+            Math.max(0, Math.min(camera.scrollY, maxScrollY))
+        );
+    };
+
+    const cancelPlacementMode = (): void => {
+        if (!pendingPlacementType) {
+            return;
+        }
+        pendingPlacementType = null;
+        syncSidebar();
+        setStatus('placement cancelled');
+    };
+
+    const placePendingObject = (pointer: Input.Pointer): void => {
+        if (!pendingPlacementType) {
+            return;
+        }
+        const placementType = pendingPlacementType;
+        const worldX = pointer.worldX;
+        const worldY = pointer.worldY;
+        pushUndoSnapshot();
+        const createdId = worldRuntime.createObject(placementType, worldX, worldY);
+        redoStack.length = 0;
+        pendingPlacementType = null;
+        selectRoot(createdId);
+        markConfigDirty();
+        if (createdId) {
+            setStatus(`placed ${createdId}`);
+        } else {
+            setStatus(`failed to place ${placementType}`);
+        }
     };
 
     const pushUndoSnapshot = (): void => {
@@ -267,15 +440,19 @@ export const createTestWorldEditorRuntime = (
             window.clearTimeout(autosaveTimer);
             autosaveTimer = null;
         }
-        saveTestWorldEditorDraft(worldRuntime.getConfig());
+        saveTestWorldEditorDraft(levelId, worldRuntime.getConfig());
     };
 
     const markConfigDirty = (): void => {
+        player.refreshWorldGeometryState();
         scheduleAutosave();
         syncSidebar();
     };
 
     const setStatus = (message: string): void => {
+        if (destroyed) {
+            return;
+        }
         status = message;
         syncSidebar();
     };
@@ -327,7 +504,6 @@ export const createTestWorldEditorRuntime = (
 
     const beginCameraPan = (pointer: Input.Pointer): void => {
         pointerDragState = {
-            pointerId: pointer.id,
             mode: 'pan',
             startWorldX: pointer.worldX,
             startWorldY: pointer.worldY,
@@ -345,7 +521,6 @@ export const createTestWorldEditorRuntime = (
             if (resizeHandle) {
                 pushUndoSnapshot();
                 pointerDragState = {
-                    pointerId: pointer.id,
                     mode: 'resize',
                     handle: resizeHandle,
                     startWorldX: worldX,
@@ -372,7 +547,6 @@ export const createTestWorldEditorRuntime = (
         }
         pushUndoSnapshot();
         pointerDragState = {
-            pointerId: pointer.id,
             mode: 'move',
             startWorldX: worldX,
             startWorldY: worldY,
@@ -387,7 +561,7 @@ export const createTestWorldEditorRuntime = (
             return;
         }
         const pointer = scene.input.activePointer;
-        if (!pointer.isDown || pointer.id !== pointerDragState.pointerId) {
+        if (!pointer.isDown) {
             return;
         }
         if (pointerDragState.mode === 'pan') {
@@ -440,6 +614,9 @@ export const createTestWorldEditorRuntime = (
     };
 
     const toggleEditor = (): void => {
+        if (destroyed) {
+            return;
+        }
         active = !active;
         overlayText.setVisible(active);
         if (active) {
@@ -447,39 +624,105 @@ export const createTestWorldEditorRuntime = (
             setStatus('editor mode on');
         } else {
             pointerDragState = null;
+            pendingPlacementType = null;
+            const worldBounds = worldRuntime.getWorldBounds();
             setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
-                width: TEST_WORLD_WIDTH,
-                height: TEST_WORLD_HEIGHT
+                width: worldBounds.width,
+                height: worldBounds.height
             });
             setStatus('editor mode off');
         }
         syncSidebar();
     };
 
-    scene.input.on('pointerdown', (pointer: Input.Pointer) => {
+    if (initialOpen) {
+        toggleEditor();
+    }
+
+    const getWorldPointFromClientPosition = (clientX: number, clientY: number): { x: number; y: number } | null => {
+        const canvas = scene.game.canvas;
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+            return null;
+        }
+
+        const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
+        const canvasY = (clientY - rect.top) * (canvas.height / rect.height);
+        return scene.cameras.main.getWorldPoint(canvasX, canvasY);
+    };
+
+    const handleCanvasPointerDown = (event: PointerEvent): void => {
         if (!active) {
             return;
         }
-        if (pointer.middleButtonDown() || (pointer.button === 0 && spaceKey.isDown)) {
+
+        const worldPoint = getWorldPointFromClientPosition(event.clientX, event.clientY);
+        if (!worldPoint) {
+            return;
+        }
+
+        const pointer = scene.input.activePointer;
+        pointer.worldX = worldPoint.x;
+        pointer.worldY = worldPoint.y;
+
+        if (event.button === 2) {
+            event.preventDefault();
+            cancelPlacementMode();
+            return;
+        }
+        if (pendingPlacementType && event.button === 0) {
+            placePendingObject(pointer);
+            return;
+        }
+        if (event.button === 1 || (event.button === 0 && spaceKey.isDown)) {
             beginCameraPan(pointer);
             return;
         }
-        if (pointer.button === 0) {
+        if (event.button === 0) {
             beginObjectInteraction(pointer);
         }
-    });
+    };
 
-    scene.input.on('pointerup', () => {
+    const handlePointerUp = (): void => {
         pointerDragState = null;
-    });
+    };
 
-    scene.input.on('wheel', (_pointer: Input.Pointer, _gameObjects: unknown, _dx: number, dy: number) => {
+    const handleWheel = (_pointer: Input.Pointer, _gameObjects: unknown, _dx: number, dy: number): void => {
         if (!active) {
             return;
         }
         const camera = scene.cameras.main;
         camera.setZoom(Math.max(0.25, Math.min(2.5, camera.zoom - (Math.sign(dy) * ZOOM_STEP))));
-    });
+    };
+
+    scene.input.on('pointerup', handlePointerUp);
+    scene.input.on('wheel', handleWheel);
+    scene.game.canvas.addEventListener('pointerdown', handleCanvasPointerDown);
+    window.addEventListener('pointerup', handlePointerUp);
+
+    const destroy = (): void => {
+        if (destroyed) {
+            return;
+        }
+        destroyed = true;
+        if (autosaveTimer !== null) {
+            window.clearTimeout(autosaveTimer);
+            autosaveTimer = null;
+        }
+        scene.input.off('pointerup', handlePointerUp);
+        scene.input.off('wheel', handleWheel);
+        scene.game.canvas.removeEventListener('pointerdown', handleCanvasPointerDown);
+        window.removeEventListener('pointerup', handlePointerUp);
+        selectionGraphics.destroy();
+        placementGraphics.destroy();
+        gridGraphics.destroy();
+        boundsGraphics.destroy();
+        overlayText.destroy();
+        sidebar.destroy();
+    };
+
+    scene.events.once('shutdown', destroy);
+    scene.events.once('destroy', destroy);
 
     syncSidebar();
 
@@ -490,92 +733,116 @@ export const createTestWorldEditorRuntime = (
             }
             if (!active) {
                 selectionGraphics.clear();
+                placementGraphics.clear();
                 gridGraphics.clear();
+                boundsGraphics.clear();
                 overlayText.setVisible(false);
                 return;
             }
 
+            const domTextInputFocused = isDomTextInputFocused();
             overlayText.setText([
                 'F2 toggle  Del delete  Ctrl+D duplicate  Ctrl+Z/Y undo redo',
-                `LMB select/move  drag corners resize  wheel zoom  middle or Space+drag pan`,
+                pendingPlacementType
+                    ? `Placement ${pendingPlacementType}: LMB place  Esc/RMB cancel  wheel zoom`
+                    : 'LMB select/move  drag corners resize  wheel zoom  middle or Space+drag pan',
                 `Arrows pan camera  G grid  1/2/3/4 = ${GRID_SIZES.join('/')}  F focus  P spawn`
             ].join('\n'));
 
-            digitKeys.forEach((key, index) => {
-                if (Input.Keyboard.JustDown(key)) {
-                    gridSize = GRID_SIZES[index] ?? gridSize;
-                    setStatus(`grid ${gridSize}`);
+            if (!domTextInputFocused) {
+                digitKeys.forEach((key, index) => {
+                    if (Input.Keyboard.JustDown(key)) {
+                        gridSize = GRID_SIZES[index] ?? gridSize;
+                        setStatus(`grid ${gridSize}`);
+                    }
+                });
+                if (Input.Keyboard.JustDown(gridKey)) {
+                    gridEnabled = !gridEnabled;
+                    setStatus(gridEnabled ? 'grid on' : 'grid off');
                 }
-            });
-            if (Input.Keyboard.JustDown(gridKey)) {
-                gridEnabled = !gridEnabled;
-                setStatus(gridEnabled ? 'grid on' : 'grid off');
-            }
-            if (Input.Keyboard.JustDown(deleteKey) || Input.Keyboard.JustDown(backspaceKey)) {
-                deleteSelected();
-            }
-            if (ctrlKey.isDown && Input.Keyboard.JustDown(duplicateKey)) {
-                const rootId = getSelectedRootId();
-                if (rootId) {
-                    pushUndoSnapshot();
-                    const duplicatedId = worldRuntime.duplicateObject(rootId);
-                    redoStack.length = 0;
-                    selectRoot(duplicatedId);
-                    markConfigDirty();
+                if (Input.Keyboard.JustDown(cancelPlacementKey)) {
+                    cancelPlacementMode();
                 }
-            }
-            if (ctrlKey.isDown && Input.Keyboard.JustDown(undoKey) && undoStack.length > 0) {
-                const previous = undoStack.pop();
-                if (previous) {
-                    redoStack.push(worldRuntime.getConfig());
-                    worldRuntime.setConfig(previous);
-                    syncSidebar();
+                if (!pendingPlacementType && (Input.Keyboard.JustDown(deleteKey) || Input.Keyboard.JustDown(backspaceKey))) {
+                    deleteSelected();
                 }
-            }
-            if (ctrlKey.isDown && Input.Keyboard.JustDown(redoKey) && redoStack.length > 0) {
-                const next = redoStack.pop();
-                if (next) {
-                    undoStack.push(worldRuntime.getConfig());
-                    worldRuntime.setConfig(next);
-                    syncSidebar();
+                if (!pendingPlacementType && ctrlKey.isDown && Input.Keyboard.JustDown(duplicateKey)) {
+                    const rootId = getSelectedRootId();
+                    if (rootId) {
+                        pushUndoSnapshot();
+                        const duplicatedId = worldRuntime.duplicateObject(rootId);
+                        redoStack.length = 0;
+                        selectRoot(duplicatedId);
+                        markConfigDirty();
+                    }
                 }
-            }
-            if (Input.Keyboard.JustDown(focusKey)) {
-                const rootId = getSelectedRootId();
-                if (rootId) {
-                    focusTarget(rootId);
+                if (ctrlKey.isDown && Input.Keyboard.JustDown(undoKey) && undoStack.length > 0) {
+                    const previous = undoStack.pop();
+                    if (previous) {
+                        redoStack.push(worldRuntime.getConfig());
+                        worldRuntime.setConfig(previous);
+                        syncCameraBoundsToWorld();
+                        syncSidebar();
+                    }
                 }
-            }
-            if (Input.Keyboard.JustDown(focusSpawnKey)) {
-                focusTarget('player_spawn');
+                if (ctrlKey.isDown && Input.Keyboard.JustDown(redoKey) && redoStack.length > 0) {
+                    const next = redoStack.pop();
+                    if (next) {
+                        undoStack.push(worldRuntime.getConfig());
+                        worldRuntime.setConfig(next);
+                        syncCameraBoundsToWorld();
+                        syncSidebar();
+                    }
+                }
+                if (!pendingPlacementType && Input.Keyboard.JustDown(focusKey)) {
+                    const rootId = getSelectedRootId();
+                    if (rootId) {
+                        focusTarget(rootId);
+                    }
+                }
+                if (!pendingPlacementType && Input.Keyboard.JustDown(focusSpawnKey)) {
+                    focusTarget('player_spawn');
+                }
             }
 
             const camera = scene.cameras.main;
             const panStep = (CAMERA_PAN_SPEED * deltaMs) / 1000;
-            if (leftKey.isDown) {
-                camera.scrollX -= panStep;
-            }
-            if (rightKey.isDown) {
-                camera.scrollX += panStep;
-            }
-            if (upKey.isDown) {
-                camera.scrollY -= panStep;
-            }
-            if (downKey.isDown) {
-                camera.scrollY += panStep;
+            if (!domTextInputFocused) {
+                if (leftKey.isDown) {
+                    camera.scrollX -= panStep;
+                }
+                if (rightKey.isDown) {
+                    camera.scrollX += panStep;
+                }
+                if (upKey.isDown) {
+                    camera.scrollY -= panStep;
+                }
+                if (downKey.isDown) {
+                    camera.scrollY += panStep;
+                }
             }
 
             applyPointerDrag();
-            drawGrid(gridGraphics, camera, gridEnabled ? gridSize : 0);
+            const worldBounds = worldRuntime.getWorldBounds();
+            drawWorldBoundsOverlay(boundsGraphics, camera, worldBounds);
+            drawGrid(gridGraphics, camera, worldBounds, gridEnabled ? gridSize : 0);
             drawSelection(selectionGraphics, getSelectedHandle());
+            drawPlacementPreview(placementGraphics, camera, pendingPlacementType, scene.input.activePointer);
         },
         isActive: (): boolean => active,
-        close: (): void => {
-            if (!active) {
+        open: (): void => {
+            if (destroyed || active) {
                 return;
             }
             toggleEditor();
-        }
+        },
+        close: (): void => {
+            if (destroyed || !active) {
+                return;
+            }
+            toggleEditor();
+        },
+        destroy
     };
 };
 
@@ -599,15 +866,62 @@ const drawSelection = (graphics: Phaser.GameObjects.Graphics, handle: TestWorldE
     });
 };
 
-const drawGrid = (graphics: Phaser.GameObjects.Graphics, camera: Phaser.Cameras.Scene2D.Camera, gridSize: number): void => {
+const drawWorldBoundsOverlay = (
+    graphics: Phaser.GameObjects.Graphics,
+    camera: Phaser.Cameras.Scene2D.Camera,
+    bounds: { width: number; height: number }
+): void => {
+    graphics.clear();
+    const viewLeft = camera.worldView.left;
+    const viewRight = camera.worldView.right;
+    const viewTop = camera.worldView.top;
+    const viewBottom = camera.worldView.bottom;
+    const innerLeft = 0;
+    const innerTop = 0;
+    const innerRight = bounds.width;
+    const innerBottom = bounds.height;
+    const visibleInnerTop = Math.max(viewTop, innerTop);
+    const visibleInnerBottom = Math.min(viewBottom, innerBottom);
+
+    graphics.fillStyle(0x041017, 0.22);
+    if (viewTop < innerTop) {
+        graphics.fillRect(viewLeft, viewTop, viewRight - viewLeft, innerTop - viewTop);
+    }
+    if (viewBottom > innerBottom) {
+        graphics.fillRect(viewLeft, innerBottom, viewRight - viewLeft, viewBottom - innerBottom);
+    }
+    if (viewLeft < innerLeft && visibleInnerBottom > visibleInnerTop) {
+        graphics.fillRect(viewLeft, visibleInnerTop, innerLeft - viewLeft, visibleInnerBottom - visibleInnerTop);
+    }
+    if (viewRight > innerRight && visibleInnerBottom > visibleInnerTop) {
+        graphics.fillRect(innerRight, visibleInnerTop, viewRight - innerRight, visibleInnerBottom - visibleInnerTop);
+    }
+
+    graphics.lineStyle(3, 0x7ee0ff, 0.95);
+    graphics.strokeRect(innerLeft, innerTop, bounds.width, bounds.height);
+    graphics.lineStyle(1, 0xb3ecff, 0.5);
+    graphics.strokeRect(innerLeft + 2, innerTop + 2, Math.max(0, bounds.width - 4), Math.max(0, bounds.height - 4));
+};
+
+const drawGrid = (
+    graphics: Phaser.GameObjects.Graphics,
+    camera: Phaser.Cameras.Scene2D.Camera,
+    bounds: { width: number; height: number },
+    gridSize: number
+): void => {
     graphics.clear();
     if (gridSize <= 1) {
         return;
     }
-    const left = Math.floor(camera.worldView.left / gridSize) * gridSize;
-    const right = Math.ceil(camera.worldView.right / gridSize) * gridSize;
-    const top = Math.floor(camera.worldView.top / gridSize) * gridSize;
-    const bottom = Math.ceil(camera.worldView.bottom / gridSize) * gridSize;
+
+    const left = Math.max(0, Math.floor(camera.worldView.left / gridSize) * gridSize);
+    const right = Math.min(bounds.width, Math.ceil(camera.worldView.right / gridSize) * gridSize);
+    const top = Math.max(0, Math.floor(camera.worldView.top / gridSize) * gridSize);
+    const bottom = Math.min(bounds.height, Math.ceil(camera.worldView.bottom / gridSize) * gridSize);
+    if (right <= left || bottom <= top) {
+        return;
+    }
+
     graphics.lineStyle(1, 0xffffff, 0.08);
     for (let x = left; x <= right; x += gridSize) {
         graphics.moveTo(x, top);
@@ -618,6 +932,24 @@ const drawGrid = (graphics: Phaser.GameObjects.Graphics, camera: Phaser.Cameras.
         graphics.lineTo(right, y);
     }
     graphics.strokePath();
+};
+
+const drawPlacementPreview = (
+    graphics: Phaser.GameObjects.Graphics,
+    camera: Phaser.Cameras.Scene2D.Camera,
+    pendingPlacementType: TestWorldEditorObjectType | null,
+    pointer: Input.Pointer
+): void => {
+    graphics.clear();
+    if (!pendingPlacementType || !pointer.withinGame) {
+        return;
+    }
+
+    const size = PLACEMENT_PREVIEW_SIZE / camera.zoom;
+    graphics.lineStyle(2, 0x8cffd1, 0.95);
+    graphics.strokeRect(pointer.worldX - size, pointer.worldY - size, size * 2, size * 2);
+    graphics.lineBetween(pointer.worldX - size * 1.4, pointer.worldY, pointer.worldX + size * 1.4, pointer.worldY);
+    graphics.lineBetween(pointer.worldX, pointer.worldY - size * 1.4, pointer.worldX, pointer.worldY + size * 1.4);
 };
 
 const buildInspectorSections = (
@@ -641,6 +973,20 @@ const buildInspectorSections = (
                 { key: 'strokeColor', label: 'Stroke', input: 'color', value: config.playerSpawn.strokeColor ?? 0x0277bd }
             ]
         }];
+    }
+    if (type === 'finish') {
+        const entry = config.finish?.id === rootId ? config.finish : null;
+        return entry ? [{
+            title: 'Finish',
+            fields: [
+                { key: 'x', label: 'X', input: 'number', value: entry.x, step: 1 },
+                { key: 'y', label: 'Y', input: 'number', value: entry.y, step: 1 },
+                { key: 'width', label: 'Width', input: 'number', value: entry.width, min: 8, step: 1 },
+                { key: 'height', label: 'Height', input: 'number', value: entry.height, min: 8, step: 1 },
+                { key: 'fillColor', label: 'Fill', input: 'color', value: entry.fillColor ?? 0x99ff99 },
+                { key: 'strokeColor', label: 'Stroke', input: 'color', value: entry.strokeColor ?? 0x00aa66 }
+            ]
+        }] : [];
     }
 
     const findById = <T extends { id: string }>(items: readonly T[]): T | null => items.find((entry) => entry.id === rootId) ?? null;
@@ -769,4 +1115,41 @@ const buildInspectorSections = (
         ] : [];
     }
     return [];
+};
+
+const buildLevelSections = (
+    config: TestWorldConfig,
+    campaignLevels: ReadonlyArray<{ id: string; displayName: string }>
+): TestWorldEditorSidebarSection[] => {
+    const nextLevelOptions = [
+        { value: '', label: 'None' },
+        ...campaignLevels
+            .filter((entry) => entry.id !== config.meta.id)
+            .map((entry) => ({
+                value: entry.id,
+                label: `${entry.id} — ${entry.displayName}`
+            }))
+    ];
+    const switchLevelOptions = campaignLevels.map((entry) => ({
+        value: entry.id,
+        label: `${entry.id} — ${entry.displayName}`
+    }));
+
+    return [
+        {
+            title: 'Metadata',
+            fields: [
+                { key: 'displayName', label: 'Display Name', input: 'text', value: config.meta.displayName },
+                { key: 'nextLevelId', label: 'Next Level', input: 'select', value: config.nextLevelId ?? '', options: nextLevelOptions },
+                { key: 'switchLevelId', label: 'Open Level', input: 'select', value: config.meta.id, options: switchLevelOptions }
+            ]
+        },
+        {
+            title: 'World',
+            fields: [
+                { key: 'worldWidth', label: 'Width', input: 'number', value: config.worldBounds.width, min: 64, step: 1 },
+                { key: 'worldHeight', label: 'Height', input: 'number', value: config.worldBounds.height, min: 64, step: 1 }
+            ]
+        }
+    ];
 };
