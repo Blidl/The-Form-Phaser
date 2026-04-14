@@ -30,16 +30,21 @@ import {
     type TestWorldDragBoxConfig,
     type TestWorldFinishConfig,
     type TestWorldHazardConfig,
+    type TestWorldMovingPlatformMotionState,
     type TestWorldMovingPlatformConfig,
     type TestWorldPlayerSpawnConfig,
     type TestWorldSurfaceConfig,
     type TestWorldTriangleFlightBreakWallConfig,
     type TestWorldTrianglePickupConfig,
     type TestWorldTriggerPlatformConfig,
+    type TestWorldTriggerVolumeConfig,
     type TestWorldWindZoneConfig
 } from './test_world_config';
 import { normalizeTestWorldConfig } from './test_world_config_validation';
 import { createTestWorldSurfaceOutlineRenderer } from './test_world_surface_outline_renderer';
+import { createTestWorldMovingPlatformRuntimeController } from './test_world_moving_platform_runtime';
+import { createTestWorldTriggerRuntime, type TestWorldTriggerVolumeRuntime } from './test_world_trigger_runtime';
+import { applyTestWorldVisualDepthEntries, type TestWorldVisualDepthEntry } from './test_world_visual_order';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -139,18 +144,40 @@ interface FinishTriggerObject {
     destroy: () => void;
 }
 
-const DRAG_BOX_TRIGGER_RELEASE_SPEED_EPSILON = 16;
+interface TriggerVolumeObject extends TestWorldTriggerVolumeRuntime {
+    refresh: () => void;
+    destroy: () => void;
+}
 
 const applyWorldBounds = (scene: Scene, bounds: TestWorldBoundsConfig): void => {
     scene.physics.world.setBounds(0, 0, bounds.width, bounds.height);
     scene.matter.world.setBounds(0, 0, bounds.width, bounds.height, 64, true, true, true, true);
 };
 
+const captureCreatedDisplayObjects = <T>(
+    scene: Scene,
+    factory: () => T
+): { result: T; createdObjects: Phaser.GameObjects.GameObject[] } => {
+    const before = new Set(scene.children.getChildren());
+    const result = factory();
+    const createdObjects = scene.children.getChildren().filter((entry) => !before.has(entry));
+    return {
+        result,
+        createdObjects
+    };
+};
+
+const isSurfaceSolid = (config: TestWorldSurfaceConfig): boolean => {
+    return (config.collisionMode ?? 'solid') === 'solid';
+};
+
 export const createTestWorldRuntime = (
     params: CreateTestWorldRuntimeParams
 ): TestWorldRuntime => {
     const { scene, player, onCheckpointActivated } = params;
-    let currentConfig = normalizeTestWorldConfig(params.initialConfig);
+    let currentConfig = normalizeTestWorldConfig(params.initialConfig, {
+        fallbackConfig: params.initialConfig
+    });
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let instance = buildWorldInstance(scene, player, onCheckpointActivated, currentConfig, useArcadePlatformCollisions);
 
@@ -182,6 +209,7 @@ export const createTestWorldRuntime = (
             || removeFrom(currentConfig.checkpoints)
             || removeFrom(currentConfig.movingPlatforms)
             || removeFrom(currentConfig.triggerPlatforms)
+            || removeFrom(currentConfig.triggerVolumes)
             || removeFrom(currentConfig.dragBoxes)
             || removeFrom(currentConfig.windZones)
             || removeFrom(currentConfig.triangleFlightBreakWalls)
@@ -198,6 +226,7 @@ export const createTestWorldRuntime = (
         | TestWorldFinishConfig
         | TestWorldMovingPlatformConfig
         | TestWorldTriggerPlatformConfig
+        | TestWorldTriggerVolumeConfig
         | TestWorldDragBoxConfig
         | TestWorldWindZoneConfig
         | TestWorldTriangleFlightBreakWallConfig
@@ -215,6 +244,7 @@ export const createTestWorldRuntime = (
             ?? currentConfig.checkpoints.find((entry) => entry.id === rootId)
             ?? currentConfig.movingPlatforms.find((entry) => entry.id === rootId)
             ?? currentConfig.triggerPlatforms.find((entry) => entry.id === rootId)
+            ?? currentConfig.triggerVolumes.find((entry) => entry.id === rootId)
             ?? currentConfig.dragBoxes.find((entry) => entry.id === rootId)
             ?? currentConfig.windZones.find((entry) => entry.id === rootId)
             ?? currentConfig.triangleFlightBreakWalls.find((entry) => entry.id === rootId)
@@ -250,7 +280,9 @@ export const createTestWorldRuntime = (
         getNextLevelId: (): string | null => currentConfig.nextLevelId,
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
-            currentConfig = normalizeTestWorldConfig(config);
+            currentConfig = normalizeTestWorldConfig(config, {
+                fallbackConfig: currentConfig
+            });
             rebuildFromCurrentConfig();
         },
         getEditorHandles: (): readonly TestWorldEditorHandle[] => instance.getEditorHandles(),
@@ -306,6 +338,8 @@ export const createTestWorldRuntime = (
                 currentConfig.movingPlatforms.push(nextObject as TestWorldMovingPlatformConfig);
             } else if (type === 'triggerPlatform') {
                 currentConfig.triggerPlatforms.push(nextObject as TestWorldTriggerPlatformConfig);
+            } else if (type === 'triggerVolume') {
+                currentConfig.triggerVolumes.push(nextObject as TestWorldTriggerVolumeConfig);
             } else if (type === 'dragBox') {
                 currentConfig.dragBoxes.push(nextObject as TestWorldDragBoxConfig);
             } else if (type === 'windZone') {
@@ -356,6 +390,14 @@ export const createTestWorldRuntime = (
                     platformX: triggerPlatform.platformX + 24,
                     platformY: triggerPlatform.platformY + 24
                 });
+            } else if (binding.type === 'triggerVolume') {
+                const triggerVolume = duplicated as TestWorldTriggerVolumeConfig;
+                adapter.patchFields(duplicated, {
+                    triggerX: triggerVolume.triggerX + 24,
+                    triggerY: triggerVolume.triggerY + 24,
+                    deactivateTriggerX: (triggerVolume.deactivateTriggerX ?? triggerVolume.triggerX) + 24,
+                    deactivateTriggerY: (triggerVolume.deactivateTriggerY ?? triggerVolume.triggerY) + 24
+                });
             }
 
             if (binding.type === 'surface') {
@@ -368,6 +410,8 @@ export const createTestWorldRuntime = (
                 currentConfig.movingPlatforms.push(duplicated as TestWorldMovingPlatformConfig);
             } else if (binding.type === 'triggerPlatform') {
                 currentConfig.triggerPlatforms.push(duplicated as TestWorldTriggerPlatformConfig);
+            } else if (binding.type === 'triggerVolume') {
+                currentConfig.triggerVolumes.push(duplicated as TestWorldTriggerVolumeConfig);
             } else if (binding.type === 'dragBox') {
                 currentConfig.dragBoxes.push(duplicated as TestWorldDragBoxConfig);
             } else if (binding.type === 'windZone') {
@@ -413,6 +457,7 @@ const buildWorldInstance = (
     const movingPlatforms: MovingPlatformObject[] = [];
     const dragBoxes: DraggableBoxObject[] = [];
     const triggerPlatforms: TriggerPlatformObject[] = [];
+    const triggerVolumes: TriggerVolumeObject[] = [];
     const windZones: WindZoneObject[] = [];
     const triangleFlightBreakWalls: TriangleFlightBreakWallObject[] = [];
     const trianglePickups: TriangleFlightPickupObject[] = [];
@@ -421,8 +466,12 @@ const buildWorldInstance = (
     const movingPlatformsById = new Map<string, MovingPlatformObject>();
     const dragBoxesById = new Map<string, DraggableBoxObject>();
     const triggerPlatformsById = new Map<string, TriggerPlatformObject>();
+    const triggerVolumesById = new Map<string, TriggerVolumeObject>();
     const windZonesById = new Map<string, WindZoneObject>();
+    const windZoneDecorationObjectsById = new Map<string, Phaser.GameObjects.GameObject[]>();
+    const triangleFlightBreakWallsById = new Map<string, TriangleFlightBreakWallObject>();
     const pickupsById = new Map<string, TriangleFlightPickupObject>();
+    const pickupDecorationObjectsById = new Map<string, Phaser.GameObjects.GameObject[]>();
     const bindings = new Map<string, RuntimeBinding>();
     const handleMap = new Map<string, TestWorldEditorHandle>();
     const objectSummaries: TestWorldEditorObjectSummary[] = [];
@@ -433,6 +482,7 @@ const buildWorldInstance = (
     let activeCheckpointId = config.checkpoints[0]?.id ?? null;
     let finishReached = false;
     let wasTriangleGrounded = false;
+    let finishTriggerObject: FinishTriggerObject | null = null;
     const surfaceOutlineRenderer = createTestWorldSurfaceOutlineRenderer(scene, config.surfaces);
 
     const addCleanup = (cleanupFn: () => void): void => {
@@ -446,7 +496,11 @@ const buildWorldInstance = (
 
     const rebuildPlayerPlatformColliders = (): void => {
         destroyColliderList(playerPlatformColliders);
-        surfaces.forEach((surface) => {
+        surfaces.forEach((surface, id) => {
+            const surfaceConfig = config.surfaces.find((entry) => entry.id === id);
+            if (!surfaceConfig || !isSurfaceSolid(surfaceConfig)) {
+                return;
+            }
             playerPlatformColliders.push(scene.physics.add.collider(player.arcadeBodyObject, surface));
         });
         movingPlatforms.forEach((entry) => {
@@ -469,7 +523,11 @@ const buildWorldInstance = (
     const rebuildDragBoxWorldColliders = (): void => {
         destroyColliderList(dragBoxWorldColliders);
         dragBoxes.forEach((dragBox) => {
-            surfaces.forEach((surface) => {
+            surfaces.forEach((surface, id) => {
+                const surfaceConfig = config.surfaces.find((entry) => entry.id === id);
+                if (!surfaceConfig || !isSurfaceSolid(surfaceConfig)) {
+                    return;
+                }
                 dragBoxWorldColliders.push(scene.physics.add.collider(dragBox.bodyObject, surface));
             });
             movingPlatforms.forEach((platform) => {
@@ -479,6 +537,123 @@ const buildWorldInstance = (
                 dragBoxWorldColliders.push(scene.physics.add.collider(dragBox.bodyObject, platform.platformBodyObject));
             });
         });
+    };
+
+    const refreshVisualDepths = (): void => {
+        const entries: TestWorldVisualDepthEntry[] = [];
+        const pushEntry = (
+            objectType: TestWorldEditorObjectType,
+            visualConfig: {
+                id: string;
+                visualLayer?: TestWorldSurfaceConfig['visualLayer'];
+                renderOrder?: TestWorldSurfaceConfig['renderOrder'];
+            },
+            partKey: string,
+            gameObject: Phaser.GameObjects.GameObject | null | undefined,
+            partOrder: number = 0
+        ): void => {
+            if (!gameObject) {
+                return;
+            }
+            entries.push({
+                gameObject,
+                objectType,
+                config: visualConfig,
+                partKey,
+                partOrder
+            });
+        };
+
+        if (config.finish) {
+            pushEntry('finish', config.finish, 'trigger', finishTriggerObject?.trigger, 0);
+        }
+
+        surfaces.forEach((surface, id) => {
+            const surfaceConfig = config.surfaces.find((entry) => entry.id === id);
+            if (surfaceConfig) {
+                pushEntry('surface', surfaceConfig, 'body', surface, 0);
+            }
+        });
+
+        hazards.forEach((hazard, index) => {
+            const hazardConfig = config.hazards[index];
+            if (hazardConfig) {
+                pushEntry('hazard', hazardConfig, 'trigger', hazard.trigger, 0);
+            }
+        });
+
+        config.checkpoints.forEach((checkpointConfig) => {
+            const checkpoint = checkpointsById.get(checkpointConfig.id);
+            if (!checkpoint) {
+                return;
+            }
+            pushEntry('checkpoint', checkpointConfig, 'trigger', checkpoint.trigger, 0);
+            pushEntry('checkpoint', checkpointConfig, 'beacon', checkpoint.beacon, 1);
+        });
+
+        config.movingPlatforms.forEach((platformConfig) => {
+            const platform = movingPlatformsById.get(platformConfig.id);
+            if (platform) {
+                pushEntry('movingPlatform', platformConfig, 'body', platform.bodyObject, 0);
+            }
+        });
+
+        config.dragBoxes.forEach((dragBoxConfig) => {
+            const dragBox = dragBoxesById.get(dragBoxConfig.id);
+            if (dragBox) {
+                pushEntry('dragBox', dragBoxConfig, 'body', dragBox.bodyObject, 0);
+            }
+        });
+
+        config.triggerPlatforms.forEach((triggerConfig) => {
+            const triggerPlatform = triggerPlatformsById.get(triggerConfig.id);
+            if (!triggerPlatform) {
+                return;
+            }
+            pushEntry('triggerPlatform', triggerConfig, 'trigger', triggerPlatform.triggerZone, 0);
+            pushEntry('triggerPlatform', triggerConfig, 'deactivate', triggerPlatform.deactivateTriggerZone, 1);
+            pushEntry('triggerPlatform', triggerConfig, 'platform', triggerPlatform.platformBodyObject, 2);
+        });
+
+        config.triggerVolumes.forEach((triggerVolumeConfig) => {
+            const triggerVolume = triggerVolumesById.get(triggerVolumeConfig.id);
+            if (!triggerVolume) {
+                return;
+            }
+            pushEntry('triggerVolume', triggerVolumeConfig, 'trigger', triggerVolume.triggerZone, 0);
+            pushEntry('triggerVolume', triggerVolumeConfig, 'deactivate', triggerVolume.deactivateTriggerZone, 1);
+        });
+
+        config.windZones.forEach((windZoneConfig) => {
+            const windZone = windZonesById.get(windZoneConfig.id);
+            if (!windZone) {
+                return;
+            }
+            pushEntry('windZone', windZoneConfig, 'trigger', windZone.trigger, 0);
+            (windZoneDecorationObjectsById.get(windZoneConfig.id) ?? []).forEach((gameObject, index) => {
+                pushEntry('windZone', windZoneConfig, `decoration_${index}`, gameObject, index + 1);
+            });
+        });
+
+        config.triangleFlightBreakWalls.forEach((wallConfig) => {
+            const wall = triangleFlightBreakWallsById.get(wallConfig.id);
+            if (wall) {
+                pushEntry('triangleFlightBreakWall', wallConfig, 'body', wall.bodyObject, 0);
+            }
+        });
+
+        config.trianglePickups.forEach((pickupConfig) => {
+            const pickup = pickupsById.get(pickupConfig.id);
+            if (!pickup) {
+                return;
+            }
+            pushEntry('trianglePickup', pickupConfig, 'visual', pickup.visual, 0);
+            (pickupDecorationObjectsById.get(pickupConfig.id) ?? []).forEach((gameObject, index) => {
+                pushEntry('trianglePickup', pickupConfig, `decoration_${index}`, gameObject, index + 1);
+            });
+        });
+
+        applyTestWorldVisualDepthEntries(entries);
     };
 
     const containsBoundsPoint = (bounds: TestWorldEditorBounds, worldX: number, worldY: number): boolean => {
@@ -571,6 +746,7 @@ const buildWorldInstance = (
 
     if (config.finish) {
         const finishTrigger = createFinishTrigger(scene, config.finish);
+        finishTriggerObject = finishTrigger;
         overlapColliders.push(scene.physics.add.overlap(player.arcadeBodyObject, finishTrigger.trigger, () => {
             finishReached = true;
         }));
@@ -764,6 +940,11 @@ const buildWorldInstance = (
             TEST_WORLD_EDITOR_ADAPTERS.movingPlatform.getHandles(platformConfig)
         );
     });
+    const movingPlatformRuntime = createTestWorldMovingPlatformRuntimeController({
+        scene,
+        platformConfigs: config.movingPlatforms,
+        getPlatform: (id) => movingPlatformsById.get(id) ?? null
+    });
 
     const rebuildDragBoxObject = (dragBoxConfig: TestWorldDragBoxConfig): void => {
         const existing = dragBoxesById.get(dragBoxConfig.id);
@@ -810,20 +991,6 @@ const buildWorldInstance = (
         );
     });
 
-    const resolveTriggerActionActiveState = (
-        triggerConfig: TestWorldTriggerPlatformConfig,
-        action: 'activate' | 'deactivate' | undefined
-    ): boolean => {
-        const initialActive = triggerConfig.initiallyActive ?? false;
-        if (action === 'activate') {
-            return true;
-        }
-        if (action === 'deactivate') {
-            return false;
-        }
-        return initialActive;
-    };
-
     const rebuildTriggerPlatformObject = (triggerConfig: TestWorldTriggerPlatformConfig): void => {
         const existing = triggerPlatformsById.get(triggerConfig.id);
         if (existing) {
@@ -868,6 +1035,48 @@ const buildWorldInstance = (
         );
     });
 
+    const rebuildTriggerVolumeObject = (triggerVolumeConfig: TestWorldTriggerVolumeConfig): void => {
+        const existing = triggerVolumesById.get(triggerVolumeConfig.id);
+        if (existing) {
+            const index = triggerVolumes.indexOf(existing);
+            if (index >= 0) {
+                triggerVolumes.splice(index, 1);
+            }
+            existing.destroy();
+        }
+        const triggerVolume = createTriggerVolume(scene, triggerVolumeConfig);
+        triggerVolumes.push(triggerVolume);
+        triggerVolumesById.set(triggerVolumeConfig.id, triggerVolume);
+    };
+
+    config.triggerVolumes.forEach((triggerVolumeConfig) => {
+        rebuildTriggerVolumeObject(triggerVolumeConfig);
+        addBinding(
+            triggerVolumeConfig,
+            {
+                rootId: triggerVolumeConfig.id,
+                type: 'triggerVolume',
+                label: triggerVolumeConfig.id,
+                isLocked: () => TEST_WORLD_EDITOR_ADAPTERS.triggerVolume.getLocked(triggerVolumeConfig),
+                setLocked: (locked) => {
+                    TEST_WORLD_EDITOR_ADAPTERS.triggerVolume.setLocked(triggerVolumeConfig, locked);
+                },
+                refresh: () => {
+                    rebuildTriggerVolumeObject(triggerVolumeConfig);
+                },
+                patchFields: (patch) => {
+                    TEST_WORLD_EDITOR_ADAPTERS.triggerVolume.patchFields(triggerVolumeConfig, patch);
+                    rebuildTriggerVolumeObject(triggerVolumeConfig);
+                },
+                patchColors: (patch) => {
+                    TEST_WORLD_EDITOR_ADAPTERS.triggerVolume.patchColors(triggerVolumeConfig, patch);
+                    rebuildTriggerVolumeObject(triggerVolumeConfig);
+                }
+            },
+            TEST_WORLD_EDITOR_ADAPTERS.triggerVolume.getHandles(triggerVolumeConfig)
+        );
+    });
+
     const rebuildWindZoneObject = (windZoneConfig: TestWorldWindZoneConfig): void => {
         const existing = windZonesById.get(windZoneConfig.id);
         if (existing) {
@@ -877,9 +1086,14 @@ const buildWorldInstance = (
             }
             existing.destroy();
         }
-        const windZone = createWindZone(scene, windZoneConfig);
+        windZoneDecorationObjectsById.delete(windZoneConfig.id);
+        const { result: windZone, createdObjects } = captureCreatedDisplayObjects(scene, () => createWindZone(scene, windZoneConfig));
         windZones.push(windZone);
         windZonesById.set(windZoneConfig.id, windZone);
+        windZoneDecorationObjectsById.set(
+            windZoneConfig.id,
+            createdObjects.filter((entry) => entry !== windZone.trigger)
+        );
     };
 
     config.windZones.forEach((windZoneConfig) => {
@@ -913,7 +1127,11 @@ const buildWorldInstance = (
     config.triangleFlightBreakWalls.forEach((wallConfig) => {
         const wall = createTriangleFlightBreakWall(scene, wallConfig);
         triangleFlightBreakWalls.push(wall);
-        addCleanup(() => wall.destroy());
+        triangleFlightBreakWallsById.set(wallConfig.id, wall);
+        addCleanup(() => {
+            triangleFlightBreakWallsById.delete(wallConfig.id);
+            wall.destroy();
+        });
         addBinding(
             wallConfig,
             {
@@ -951,11 +1169,16 @@ const buildWorldInstance = (
             }
             existing.destroy();
         }
+        pickupDecorationObjectsById.delete(pickupConfig.id);
         pickupOverlapColliders.get(pickupConfig.id)?.destroy();
         pickupOverlapColliders.delete(pickupConfig.id);
-        const pickup = createTriangleFlightPickup(scene, pickupConfig);
+        const { result: pickup, createdObjects } = captureCreatedDisplayObjects(scene, () => createTriangleFlightPickup(scene, pickupConfig));
         trianglePickups.push(pickup);
         pickupsById.set(pickupConfig.id, pickup);
+        pickupDecorationObjectsById.set(
+            pickupConfig.id,
+            createdObjects.filter((entry) => entry !== pickup.visual)
+        );
         const collider = scene.physics.add.overlap(player.arcadeBodyObject, pickup.trigger, () => {
             if (pickup.isCollected() || player.currentForm !== 'triangle') {
                 return;
@@ -998,47 +1221,32 @@ const buildWorldInstance = (
 
     rebuildPlayerPlatformColliders();
     rebuildDragBoxWorldColliders();
+    refreshVisualDepths();
+    const triggerRuntime = createTestWorldTriggerRuntime({
+        scene,
+        player,
+        triggerPlatformConfigs: config.triggerPlatforms,
+        triggerVolumeConfigs: config.triggerVolumes,
+        dragBoxConfigs: config.dragBoxes,
+        getTriggerPlatform: (id) => triggerPlatformsById.get(id) ?? null,
+        getTriggerVolume: (id) => triggerVolumesById.get(id) ?? null,
+        getDragBox: (id) => dragBoxesById.get(id) ?? null,
+        setTriggerPlatformActive: (id, active) => {
+            triggerPlatformsById.get(id)?.setActive(active);
+        },
+        setMovingPlatformMotionState: (id, mode) => {
+            movingPlatformRuntime.setMotionState(id, mode);
+        }
+    });
 
     return {
         hazards,
         updateMovingPlatforms: (): void => {
-            movingPlatforms.forEach((platform) => {
-                platform.update();
-            });
+            movingPlatformRuntime.update();
             dragBoxes.forEach((dragBox) => {
                 dragBox.update(player);
             });
-            config.triggerPlatforms.forEach((triggerConfig) => {
-                const triggerPlatform = triggerPlatformsById.get(triggerConfig.id);
-                if (!triggerPlatform) {
-                    return;
-                }
-
-                if (triggerConfig.activator === 'drag_box') {
-                    const targetDragBox = resolveTriggerDragBox(triggerConfig, config.dragBoxes, dragBoxes);
-                    const isBoxInside = targetDragBox !== null && scene.physics.overlap(targetDragBox.bodyObject, triggerPlatform.triggerZone);
-                    const isBoxStillMoving = targetDragBox !== null && isDragBoxStillMoving(targetDragBox);
-                    const activeWhenTriggered = resolveTriggerActionActiveState(triggerConfig, triggerConfig.triggerAction);
-                    const activeWhenIdle = triggerConfig.initiallyActive ?? false;
-                    const shouldUseTriggeredState = isBoxInside
-                        || (triggerPlatform.isActivated() === activeWhenTriggered && isBoxStillMoving);
-                    triggerPlatform.setActive(shouldUseTriggeredState ? activeWhenTriggered : activeWhenIdle);
-                    return;
-                }
-
-                const isInActivateZone = scene.physics.overlap(player.arcadeBodyObject, triggerPlatform.triggerZone);
-                const isInDeactivateZone = triggerPlatform.deactivateTriggerZone !== null
-                    && scene.physics.overlap(player.arcadeBodyObject, triggerPlatform.deactivateTriggerZone);
-                if (isInDeactivateZone) {
-                    triggerPlatform.setActive(
-                        resolveTriggerActionActiveState(triggerConfig, triggerConfig.deactivateTriggerAction)
-                    );
-                } else if (isInActivateZone) {
-                    triggerPlatform.setActive(
-                        resolveTriggerActionActiveState(triggerConfig, triggerConfig.triggerAction)
-                    );
-                }
-            });
+            triggerRuntime.update();
         },
         postPlayerTickUpdate: (): void => {
             if (player.currentForm === 'triangle' && player.isTriangleBreakWallActive) {
@@ -1116,6 +1324,7 @@ const buildWorldInstance = (
 
             definition.setBounds(targetConfig as never, bounds);
             binding.refresh();
+            refreshVisualDepths();
             return true;
         },
         patchObjectFields: (rootId: string, patch: Record<string, unknown>): boolean => {
@@ -1124,6 +1333,7 @@ const buildWorldInstance = (
                 return false;
             }
             binding.patchFields(patch);
+            refreshVisualDepths();
             return true;
         },
         patchObjectColors: (rootId: string, patch: Record<string, unknown>): boolean => {
@@ -1132,6 +1342,7 @@ const buildWorldInstance = (
                 return false;
             }
             binding.patchColors(patch);
+            refreshVisualDepths();
             return true;
         },
         setObjectLocked: (rootId: string, locked: boolean): boolean => {
@@ -1159,8 +1370,12 @@ const buildWorldInstance = (
             movingPlatforms.forEach((entry) => entry.destroy());
             dragBoxes.forEach((entry) => entry.destroy());
             triggerPlatforms.forEach((entry) => entry.destroy());
+            triggerVolumes.forEach((entry) => entry.destroy());
             windZones.forEach((entry) => entry.destroy());
             trianglePickups.forEach((entry) => entry.destroy());
+            windZoneDecorationObjectsById.clear();
+            pickupDecorationObjectsById.clear();
+            triangleFlightBreakWallsById.clear();
             cleanup.forEach((cleanupFn) => cleanupFn());
         }
     };
@@ -1198,8 +1413,14 @@ const replaceSurfaceMatterBody = (
     if (existingMatterBody) {
         scene.matter.world.remove(existingMatterBody);
     }
+    if (!isSurfaceSolid(config)) {
+        surface.setData('pf_world_surface_kind', null);
+        surface.setData('pf_matter_body', null);
+        return;
+    }
     const matterBody = scene.matter.add.rectangle(config.x, config.y, config.width, config.height, { isStatic: true });
     markMatterBodyAsPlatformSurface(matterBody);
+    markAsPlatformSurface(surface);
     surface.setData('pf_matter_body', matterBody);
 };
 
@@ -1209,7 +1430,16 @@ const syncSurfaceObject = (
     config: TestWorldSurfaceConfig
 ): void => {
     refreshRectangleGameObject(scene, surface, config.x, config.y, config.width, config.height);
-    surface.setFillStyle(config.fillColor);
+    const alpha = config.alpha ?? (isSurfaceSolid(config) ? 1 : 0.45);
+    surface.setFillStyle(config.fillColor, alpha);
+    surface.setStrokeStyle(0, config.strokeColor, 0);
+    const body = surface.body as Physics.Arcade.StaticBody | undefined;
+    if (body) {
+        body.enable = isSurfaceSolid(config);
+        if (body.enable) {
+            body.updateFromGameObject();
+        }
+    }
 };
 
 const syncHazardObject = (
@@ -1230,6 +1460,25 @@ const syncFinishTriggerObject = (
     refreshRectangleGameObject(scene, finish.trigger, config.x, config.y, config.width, config.height);
     finish.trigger.setFillStyle(config.fillColor ?? 0x99ff99, 0.28);
     finish.trigger.setStrokeStyle(2, config.strokeColor ?? 0x00aa66);
+};
+
+const syncTriggerVolumeObject = (
+    scene: Scene,
+    triggerVolume: TriggerVolumeObject,
+    config: TestWorldTriggerVolumeConfig
+): void => {
+    refreshRectangleGameObject(scene, triggerVolume.triggerZone, config.triggerX, config.triggerY, config.triggerWidth, config.triggerHeight);
+    triggerVolume.triggerZone.setFillStyle(config.triggerFillColor ?? 0xb3e5fc, 0.3);
+    triggerVolume.triggerZone.setStrokeStyle(2, config.triggerStrokeColor ?? 0x0277bd);
+    if (triggerVolume.deactivateTriggerZone) {
+        const x = config.deactivateTriggerX ?? config.triggerX;
+        const y = config.deactivateTriggerY ?? config.triggerY;
+        const width = config.deactivateTriggerWidth ?? config.triggerWidth;
+        const height = config.deactivateTriggerHeight ?? config.triggerHeight;
+        refreshRectangleGameObject(scene, triggerVolume.deactivateTriggerZone, x, y, width, height);
+        triggerVolume.deactivateTriggerZone.setFillStyle(config.deactivateTriggerFillColor ?? 0xffccbc, 0.28);
+        triggerVolume.deactivateTriggerZone.setStrokeStyle(2, config.deactivateTriggerStrokeColor ?? 0xe64a19);
+    }
 };
 
 const syncBreakWallObject = (
@@ -1298,10 +1547,16 @@ const createSurface = (scene: Scene, config: TestWorldSurfaceConfig): Phaser.Gam
         .setDepth(4200);
 
     scene.physics.add.existing(surface, true);
-    const matterBody = scene.matter.add.rectangle(surface.x, surface.y, surface.width, surface.height, { isStatic: true });
-    markMatterBodyAsPlatformSurface(matterBody);
-    markAsPlatformSurface(surface);
-    surface.setData('pf_matter_body', matterBody);
+    if (isSurfaceSolid(config)) {
+        const matterBody = scene.matter.add.rectangle(surface.x, surface.y, surface.width, surface.height, { isStatic: true });
+        markMatterBodyAsPlatformSurface(matterBody);
+        markAsPlatformSurface(surface);
+        surface.setData('pf_matter_body', matterBody);
+    } else {
+        surface.setData('pf_world_surface_kind', null);
+        surface.setData('pf_matter_body', null);
+    }
+    syncSurfaceObject(scene, surface, config);
     return surface;
 };
 
@@ -1321,6 +1576,71 @@ const createFinishTrigger = (scene: Scene, config: TestWorldFinishConfig): Finis
             trigger.destroy();
         }
     };
+};
+
+const createTriggerVolume = (
+    scene: Scene,
+    config: TestWorldTriggerVolumeConfig
+): TriggerVolumeObject => {
+    const triggerZone = scene.add.rectangle(
+        config.triggerX,
+        config.triggerY,
+        config.triggerWidth,
+        config.triggerHeight,
+        config.triggerFillColor ?? 0xb3e5fc,
+        0.3
+    )
+        .setStrokeStyle(2, config.triggerStrokeColor ?? 0x0277bd)
+        .setDepth(4201);
+    scene.physics.add.existing(triggerZone, true);
+    const triggerBody = triggerZone.body as Physics.Arcade.StaticBody;
+    triggerBody.checkCollision.none = false;
+    triggerBody.checkCollision.up = false;
+    triggerBody.checkCollision.down = false;
+    triggerBody.checkCollision.left = false;
+    triggerBody.checkCollision.right = false;
+
+    const deactivateTriggerZone = (
+        typeof config.deactivateTriggerX === 'number'
+        && typeof config.deactivateTriggerY === 'number'
+        && typeof config.deactivateTriggerWidth === 'number'
+        && typeof config.deactivateTriggerHeight === 'number'
+    )
+        ? scene.add.rectangle(
+            config.deactivateTriggerX,
+            config.deactivateTriggerY,
+            config.deactivateTriggerWidth,
+            config.deactivateTriggerHeight,
+            config.deactivateTriggerFillColor ?? 0xffccbc,
+            0.28
+        )
+            .setStrokeStyle(2, config.deactivateTriggerStrokeColor ?? 0xe64a19)
+            .setDepth(4201)
+        : null;
+    if (deactivateTriggerZone) {
+        scene.physics.add.existing(deactivateTriggerZone, true);
+        const deactivateBody = deactivateTriggerZone.body as Physics.Arcade.StaticBody;
+        deactivateBody.checkCollision.none = false;
+        deactivateBody.checkCollision.up = false;
+        deactivateBody.checkCollision.down = false;
+        deactivateBody.checkCollision.left = false;
+        deactivateBody.checkCollision.right = false;
+    }
+
+    const runtime: TriggerVolumeObject = {
+        id: config.id,
+        triggerZone,
+        deactivateTriggerZone,
+        refresh: () => {
+            syncTriggerVolumeObject(scene, runtime, config);
+        },
+        destroy: () => {
+            triggerZone.destroy();
+            deactivateTriggerZone?.destroy();
+        }
+    };
+    runtime.refresh();
+    return runtime;
 };
 
 const getConfigReference = (config: TestWorldConfig, type: TestWorldEditorObjectType, rootId: string): unknown => {
@@ -1345,6 +1665,9 @@ const getConfigReference = (config: TestWorldConfig, type: TestWorldEditorObject
     if (type === 'triggerPlatform') {
         return config.triggerPlatforms.find((entry) => entry.id === rootId) ?? null;
     }
+    if (type === 'triggerVolume') {
+        return config.triggerVolumes.find((entry) => entry.id === rootId) ?? null;
+    }
     if (type === 'dragBox') {
         return config.dragBoxes.find((entry) => entry.id === rootId) ?? null;
     }
@@ -1355,11 +1678,6 @@ const getConfigReference = (config: TestWorldConfig, type: TestWorldEditorObject
         return config.triangleFlightBreakWalls.find((entry) => entry.id === rootId) ?? null;
     }
     return config.trianglePickups.find((entry) => entry.id === rootId) ?? null;
-};
-
-const isDragBoxStillMoving = (dragBox: DraggableBoxObject): boolean => {
-    return Math.abs(dragBox.body.velocity.x) > DRAG_BOX_TRIGGER_RELEASE_SPEED_EPSILON
-        || Math.abs(dragBox.body.velocity.y) > DRAG_BOX_TRIGGER_RELEASE_SPEED_EPSILON;
 };
 
 const applyActiveCheckpointState = (
@@ -1381,17 +1699,4 @@ const applyActiveCheckpointState = (
     checkpointConfigs.forEach((checkpointConfig, index) => {
         checkpointsById.get(checkpointConfig.id)?.setActive(index === safeIndex);
     });
-};
-
-const resolveTriggerDragBox = (
-    triggerConfig: TestWorldTriggerPlatformConfig,
-    dragBoxConfigs: TestWorldDragBoxConfig[],
-    dragBoxes: DraggableBoxObject[]
-): DraggableBoxObject | null => {
-    const targetConfig = dragBoxConfigs.find((entry) => entry.targetTriggerPlatformId === triggerConfig.id) ?? null;
-    if (targetConfig === null) {
-        return null;
-    }
-
-    return dragBoxes.find((entry) => entry.bodyObject.name === targetConfig.id) ?? null;
 };

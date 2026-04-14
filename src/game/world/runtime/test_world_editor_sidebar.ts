@@ -62,9 +62,11 @@ export interface TestWorldEditorSidebarCallbacks {
     onToggleSelectedLock: () => void;
     onLevelFieldChange: (key: string, value: string | number | boolean) => void;
     onInspectorFieldChange: (key: string, value: string | number | boolean) => void;
+    onTabChanged: (tabId: TestWorldEditorTabId) => void;
 }
 
 type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'inspector';
+export type { TestWorldEditorTabId };
 
 const escapeHtml = (value: string): string => {
     return value
@@ -251,6 +253,7 @@ export class TestWorldEditorSidebar {
         const paletteType = target?.closest<HTMLElement>('[data-editor-palette-type]')?.dataset.editorPaletteType;
         if (paletteType) {
             this.activeTab = 'objects';
+            this.callbacks.onTabChanged(this.activeTab);
             this.callbacks.onCreateObject(paletteType as TestWorldEditorObjectType);
             return;
         }
@@ -258,6 +261,7 @@ export class TestWorldEditorSidebar {
         const objectId = target?.closest<HTMLElement>('[data-editor-object-id]')?.dataset.editorObjectId;
         if (objectId) {
             this.activeTab = 'inspector';
+            this.callbacks.onTabChanged(this.activeTab);
             this.callbacks.onSelectObject(objectId);
             this.render();
             return;
@@ -266,6 +270,7 @@ export class TestWorldEditorSidebar {
         const tabId = target?.closest<HTMLElement>('[data-editor-tab]')?.dataset.editorTab as TestWorldEditorTabId | undefined;
         if (tabId) {
             this.activeTab = tabId;
+            this.callbacks.onTabChanged(this.activeTab);
             this.render();
         }
     };
@@ -440,9 +445,7 @@ export class TestWorldEditorSidebar {
         this.root.classList.toggle('test-world-editor--hidden', !state.visible);
         if (this.activeTab === 'background' && state.backgroundSections.length === 0) {
             this.activeTab = 'level';
-        }
-        if (this.activeTab === 'inspector' && state.inspectorSections.length === 0 && !state.inspectorId) {
-            this.activeTab = 'level';
+            this.callbacks.onTabChanged(this.activeTab);
         }
 
         const buildTabButton = (tabId: TestWorldEditorTabId, label: string): string => {

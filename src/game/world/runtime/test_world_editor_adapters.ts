@@ -7,9 +7,13 @@ import type {
     TestWorldMovingPlatformConfig,
     TestWorldPlayerSpawnConfig,
     TestWorldSurfaceConfig,
+    type TestWorldTriggerCommandConfig,
     TestWorldTriangleFlightBreakWallConfig,
     TestWorldTrianglePickupConfig,
     TestWorldTriggerPlatformConfig,
+    TestWorldTriggerVolumeConfig,
+    TestWorldVisualLayer,
+    TestWorldVisualOrderConfig,
     TestWorldWindZoneConfig
 } from './test_world_config';
 
@@ -21,6 +25,7 @@ export type TestWorldEditorObjectType =
     | 'checkpoint'
     | 'movingPlatform'
     | 'triggerPlatform'
+    | 'triggerVolume'
     | 'dragBox'
     | 'windZone'
     | 'triangleFlightBreakWall'
@@ -90,6 +95,33 @@ const patchRectFields = (
     }
     if (typeof patch.height === 'number') {
         target.height = Math.max(8, patch.height);
+    }
+};
+
+const patchVisualOrderFields = (
+    target: Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'renderOrder' | 'playerVisualRelation'>,
+    patch: Record<string, unknown>
+): void => {
+    if (patch.visualLayer === 'default' || patch.visualLayer === '') {
+        target.visualLayer = undefined;
+    } else if (patch.visualLayer === 'background' || patch.visualLayer === 'gameplay' || patch.visualLayer === 'foreground') {
+        target.visualLayer = patch.visualLayer as TestWorldVisualLayer;
+    }
+
+    if (patch.renderOrderEnabled === false) {
+        target.renderOrder = undefined;
+    } else if (patch.renderOrderEnabled === true && target.renderOrder === undefined) {
+        target.renderOrder = 0;
+    }
+
+    if (typeof patch.renderOrder === 'number' && Number.isFinite(patch.renderOrder)) {
+        target.renderOrder = Math.max(-9999, Math.min(9999, Math.round(patch.renderOrder)));
+    }
+
+    if (patch.playerVisualRelation === 'default' || patch.playerVisualRelation === '') {
+        target.playerVisualRelation = undefined;
+    } else if (patch.playerVisualRelation === 'behind_player' || patch.playerVisualRelation === 'in_front_of_player') {
+        target.playerVisualRelation = patch.playerVisualRelation;
     }
 };
 
@@ -229,6 +261,13 @@ const surfaceAdapter: TestWorldEditorAdapter<TestWorldSurfaceConfig> = {
         if (typeof patch.height === 'number') {
             config.height = Math.max(8, patch.height);
         }
+        if (typeof patch.alpha === 'number' && Number.isFinite(patch.alpha)) {
+            config.alpha = Math.max(0, Math.min(1, patch.alpha));
+        }
+        if (patch.collisionMode === 'solid' || patch.collisionMode === 'visual_only') {
+            config.collisionMode = patch.collisionMode;
+        }
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -273,6 +312,7 @@ const hazardAdapter: TestWorldEditorAdapter<TestWorldHazardConfig> = {
     ],
     patchFields: (config, patch) => {
         patchRectFields(config, patch);
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -344,6 +384,7 @@ const checkpointAdapter: TestWorldEditorAdapter<TestWorldCheckpointConfig> = {
         if (typeof patch.respawnY === 'number') {
             config.respawnY = patch.respawnY;
         }
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -388,6 +429,7 @@ const finishAdapter: TestWorldEditorAdapter<TestWorldFinishConfig> = {
     ],
     patchFields: (config, patch) => {
         patchRectFields(config, patch);
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -411,6 +453,7 @@ const movingPlatformAdapter: TestWorldEditorAdapter<TestWorldMovingPlatformConfi
         axis: 'horizontal',
         travelDistance: 200,
         speed: 120,
+        initialMotionState: 'running_loop',
         fillColor: 0xffcc80,
         strokeColor: 0xef6c00
     }),
@@ -444,6 +487,10 @@ const movingPlatformAdapter: TestWorldEditorAdapter<TestWorldMovingPlatformConfi
         if (typeof patch.speed === 'number') {
             config.speed = Math.max(0, patch.speed);
         }
+        if (patch.initialMotionState === 'running_loop' || patch.initialMotionState === 'stopped' || patch.initialMotionState === 'run_once') {
+            config.initialMotionState = patch.initialMotionState;
+        }
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -628,6 +675,7 @@ const triggerPlatformAdapter: TestWorldEditorAdapter<TestWorldTriggerPlatformCon
             config.deactivateTriggerWidth = config.triggerWidth;
             config.deactivateTriggerHeight = config.triggerHeight;
         }
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.triggerFillColor === 'number') {
@@ -650,6 +698,253 @@ const triggerPlatformAdapter: TestWorldEditorAdapter<TestWorldTriggerPlatformCon
         }
     },
     serialize: (config) => ({ ...config })
+};
+
+const serializeTriggerCommand = (command: TestWorldTriggerCommandConfig | null | undefined): TestWorldTriggerCommandConfig | null => {
+    return command ? { ...command } : null;
+};
+
+const triggerVolumeAdapter: TestWorldEditorAdapter<TestWorldTriggerVolumeConfig> = {
+    type: 'triggerVolume',
+    createDefault: ({ id, x, y }) => ({
+        id,
+        triggerX: x,
+        triggerY: y,
+        triggerWidth: 112,
+        triggerHeight: 80,
+        deactivateTriggerX: x + 128,
+        deactivateTriggerY: y,
+        deactivateTriggerWidth: 112,
+        deactivateTriggerHeight: 80,
+        activator: 'player',
+        enterCommand: null,
+        exitCommand: null,
+        triggerFillColor: 0xb3e5fc,
+        triggerStrokeColor: 0x0277bd,
+        deactivateTriggerFillColor: 0xffccbc,
+        deactivateTriggerStrokeColor: 0xe64a19
+    }),
+    duplicate: (config, id) => ({
+        ...config,
+        id,
+        sourceIds: config.sourceIds ? [...config.sourceIds] : undefined,
+        enterCommand: serializeTriggerCommand(config.enterCommand),
+        exitCommand: serializeTriggerCommand(config.exitCommand)
+    }),
+    getId: (config) => config.id,
+    setId: (config, id) => {
+        config.id = id;
+    },
+    getLocked: (config) => config.editorLocked ?? false,
+    setLocked: (config, locked) => {
+        config.editorLocked = locked;
+    },
+    getHandles: (config) => {
+        const handles: TestWorldEditorHandleDefinition<TestWorldTriggerVolumeConfig>[] = [
+            createRectHandle({
+                id: `${config.id}:trigger`,
+                rootId: config.id,
+                type: 'triggerVolume',
+                part: 'trigger',
+                label: `${config.id}:trigger`,
+                getBounds: (entry) => ({
+                    x: entry.triggerX,
+                    y: entry.triggerY,
+                    width: entry.triggerWidth,
+                    height: entry.triggerHeight
+                }),
+                setBounds: (entry, bounds) => {
+                    entry.triggerX = bounds.x;
+                    entry.triggerY = bounds.y;
+                    entry.triggerWidth = Math.max(8, bounds.width);
+                    entry.triggerHeight = Math.max(8, bounds.height);
+                }
+            })
+        ];
+        if (
+            typeof config.deactivateTriggerX === 'number'
+            && typeof config.deactivateTriggerY === 'number'
+            && typeof config.deactivateTriggerWidth === 'number'
+            && typeof config.deactivateTriggerHeight === 'number'
+        ) {
+            handles.push(createRectHandle({
+                id: `${config.id}:deactivate`,
+                rootId: config.id,
+                type: 'triggerVolume',
+                part: 'deactivateTrigger',
+                label: `${config.id}:deactivate`,
+                getBounds: (entry) => ({
+                    x: entry.deactivateTriggerX ?? entry.triggerX,
+                    y: entry.deactivateTriggerY ?? entry.triggerY,
+                    width: entry.deactivateTriggerWidth ?? entry.triggerWidth,
+                    height: entry.deactivateTriggerHeight ?? entry.triggerHeight
+                }),
+                setBounds: (entry, bounds) => {
+                    entry.deactivateTriggerX = bounds.x;
+                    entry.deactivateTriggerY = bounds.y;
+                    entry.deactivateTriggerWidth = Math.max(8, bounds.width);
+                    entry.deactivateTriggerHeight = Math.max(8, bounds.height);
+                }
+            }));
+        }
+        return handles;
+    },
+    patchFields: (config, patch) => {
+        if (typeof patch.triggerX === 'number') {
+            config.triggerX = patch.triggerX;
+        }
+        if (typeof patch.triggerY === 'number') {
+            config.triggerY = patch.triggerY;
+        }
+        if (typeof patch.triggerWidth === 'number') {
+            config.triggerWidth = Math.max(8, patch.triggerWidth);
+        }
+        if (typeof patch.triggerHeight === 'number') {
+            config.triggerHeight = Math.max(8, patch.triggerHeight);
+        }
+        if (typeof patch.deactivateTriggerX === 'number') {
+            config.deactivateTriggerX = patch.deactivateTriggerX;
+        }
+        if (typeof patch.deactivateTriggerY === 'number') {
+            config.deactivateTriggerY = patch.deactivateTriggerY;
+        }
+        if (typeof patch.deactivateTriggerWidth === 'number') {
+            config.deactivateTriggerWidth = Math.max(8, patch.deactivateTriggerWidth);
+        }
+        if (typeof patch.deactivateTriggerHeight === 'number') {
+            config.deactivateTriggerHeight = Math.max(8, patch.deactivateTriggerHeight);
+        }
+        if (patch.activator === 'player' || patch.activator === 'drag_box') {
+            config.activator = patch.activator;
+        }
+        if (typeof patch.sourceIdsCsv === 'string') {
+            const sourceIds = patch.sourceIdsCsv
+                .split(',')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry.length > 0);
+            config.sourceIds = sourceIds.length > 0 ? sourceIds : undefined;
+        }
+        if (patch.hasDeactivateTrigger === false) {
+            config.deactivateTriggerX = undefined;
+            config.deactivateTriggerY = undefined;
+            config.deactivateTriggerWidth = undefined;
+            config.deactivateTriggerHeight = undefined;
+        }
+        if (
+            patch.hasDeactivateTrigger === true
+            && typeof config.deactivateTriggerX !== 'number'
+            && typeof config.deactivateTriggerY !== 'number'
+        ) {
+            config.deactivateTriggerX = config.triggerX + 128;
+            config.deactivateTriggerY = config.triggerY;
+            config.deactivateTriggerWidth = config.triggerWidth;
+            config.deactivateTriggerHeight = config.triggerHeight;
+        }
+
+        patchTriggerCommand(config, patch, 'enter');
+        patchTriggerCommand(config, patch, 'exit');
+        patchVisualOrderFields(config, patch);
+    },
+    patchColors: (config, patch) => {
+        if (typeof patch.triggerFillColor === 'number') {
+            config.triggerFillColor = patch.triggerFillColor;
+        }
+        if (typeof patch.triggerStrokeColor === 'number') {
+            config.triggerStrokeColor = patch.triggerStrokeColor;
+        }
+        if (typeof patch.deactivateTriggerFillColor === 'number') {
+            config.deactivateTriggerFillColor = patch.deactivateTriggerFillColor;
+        }
+        if (typeof patch.deactivateTriggerStrokeColor === 'number') {
+            config.deactivateTriggerStrokeColor = patch.deactivateTriggerStrokeColor;
+        }
+    },
+    serialize: (config) => ({
+        ...config,
+        sourceIds: config.sourceIds ? [...config.sourceIds] : undefined,
+        enterCommand: serializeTriggerCommand(config.enterCommand),
+        exitCommand: serializeTriggerCommand(config.exitCommand)
+    })
+};
+
+const patchTriggerCommand = (
+    config: TestWorldTriggerVolumeConfig,
+    patch: Record<string, unknown>,
+    prefix: 'enter' | 'exit'
+): void => {
+    const targetTypeKey = `${prefix}TargetType`;
+    const targetIdKey = `${prefix}TargetId`;
+    const operationKey = `${prefix}Operation`;
+    const valueKey = `${prefix}Value`;
+    const enabledKey = `${prefix}CommandEnabled`;
+    const current = prefix === 'enter' ? config.enterCommand : config.exitCommand;
+    const enabled = patch[enabledKey];
+
+    if (enabled === false) {
+        if (prefix === 'enter') {
+            config.enterCommand = null;
+        } else {
+            config.exitCommand = null;
+        }
+        return;
+    }
+
+    if (
+        enabled !== true
+        && patch[targetTypeKey] === undefined
+        && patch[targetIdKey] === undefined
+        && patch[operationKey] === undefined
+        && patch[valueKey] === undefined
+    ) {
+        return;
+    }
+
+    const nextCommand: TestWorldTriggerCommandConfig = current
+        ? { ...current }
+        : {
+            targetType: 'trigger_platform',
+            targetId: '',
+            operation: 'set_active',
+            value: true
+        };
+
+    if (patch[targetTypeKey] === 'trigger_platform' || patch[targetTypeKey] === 'moving_platform') {
+        nextCommand.targetType = patch[targetTypeKey];
+    }
+    if (typeof patch[targetIdKey] === 'string') {
+        nextCommand.targetId = patch[targetIdKey].trim();
+    }
+    if (patch[operationKey] === 'set_active' || patch[operationKey] === 'set_motion_state') {
+        nextCommand.operation = patch[operationKey];
+    }
+    if (nextCommand.operation === 'set_motion_state') {
+        if (patch[valueKey] === 'running_loop' || patch[valueKey] === 'stopped' || patch[valueKey] === 'run_once') {
+            nextCommand.value = patch[valueKey];
+        } else if (typeof nextCommand.value !== 'string') {
+            nextCommand.value = 'running_loop';
+        }
+    } else if (typeof patch[valueKey] === 'boolean') {
+        nextCommand.value = patch[valueKey];
+    } else if (patch[valueKey] === 'true' || patch[valueKey] === 'false') {
+        nextCommand.value = patch[valueKey] === 'true';
+    } else if (typeof nextCommand.value !== 'boolean') {
+        nextCommand.value = true;
+    }
+
+    if (nextCommand.targetId.length === 0) {
+        if (prefix === 'enter') {
+            config.enterCommand = null;
+        } else {
+            config.exitCommand = null;
+        }
+        return;
+    }
+
+    if (prefix === 'enter') {
+        config.enterCommand = nextCommand;
+    } else {
+        config.exitCommand = nextCommand;
+    }
 };
 
 const dragBoxAdapter: TestWorldEditorAdapter<TestWorldDragBoxConfig> = {
@@ -707,6 +1002,7 @@ const dragBoxAdapter: TestWorldEditorAdapter<TestWorldDragBoxConfig> = {
         if (typeof patch.dragX === 'number') {
             config.dragX = Math.max(0, patch.dragX);
         }
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -759,6 +1055,7 @@ const windZoneAdapter: TestWorldEditorAdapter<TestWorldWindZoneConfig> = {
         if (typeof patch.force === 'number') {
             config.force = Math.max(0, patch.force);
         }
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -803,6 +1100,7 @@ const breakWallAdapter: TestWorldEditorAdapter<TestWorldTriangleFlightBreakWallC
     ],
     patchFields: (config, patch) => {
         patchRectFields(config, patch);
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -845,6 +1143,7 @@ const pickupAdapter: TestWorldEditorAdapter<TestWorldTrianglePickupConfig> = {
         if (typeof patch.radius === 'number') {
             config.radius = Math.max(4, patch.radius);
         }
+        patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
         if (typeof patch.fillColor === 'number') {
@@ -865,6 +1164,7 @@ export const TEST_WORLD_EDITOR_ADAPTERS = {
     checkpoint: checkpointAdapter,
     movingPlatform: movingPlatformAdapter,
     triggerPlatform: triggerPlatformAdapter,
+    triggerVolume: triggerVolumeAdapter,
     dragBox: dragBoxAdapter,
     windZone: windZoneAdapter,
     triangleFlightBreakWall: breakWallAdapter,
@@ -882,6 +1182,7 @@ export const TEST_WORLD_EDITOR_PALETTE: ReadonlyArray<{
     { type: 'checkpoint', label: 'Checkpoint' },
     { type: 'movingPlatform', label: 'Moving Platform' },
     { type: 'triggerPlatform', label: 'Trigger Platform' },
+    { type: 'triggerVolume', label: 'Trigger Volume' },
     { type: 'dragBox', label: 'Drag Box' },
     { type: 'windZone', label: 'Wind Zone' },
     { type: 'triangleFlightBreakWall', label: 'Break Wall' },
@@ -896,6 +1197,7 @@ export const getAllWorldObjectIds = (config: TestWorldConfig): string[] => {
         ...config.checkpoints,
         ...config.movingPlatforms,
         ...config.triggerPlatforms,
+        ...config.triggerVolumes,
         ...config.dragBoxes,
         ...config.windZones,
         ...config.triangleFlightBreakWalls,

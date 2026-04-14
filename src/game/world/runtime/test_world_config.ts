@@ -4,6 +4,16 @@ export interface TestWorldEditorLockable {
     editorLocked?: boolean;
 }
 
+export type TestWorldVisualLayer = 'background' | 'gameplay' | 'foreground';
+export type TestWorldPlayerVisualRelation = 'behind_player' | 'in_front_of_player';
+
+export interface TestWorldVisualOrderConfig {
+    id: string;
+    visualLayer?: TestWorldVisualLayer;
+    renderOrder?: number;
+    playerVisualRelation?: TestWorldPlayerVisualRelation;
+}
+
 export interface TestWorldMetaConfig {
     id: string;
     displayName: string;
@@ -50,7 +60,7 @@ export interface TestWorldPlayerSpawnConfig extends TestWorldEditorLockable {
     strokeColor?: number;
 }
 
-export interface TestWorldSurfaceConfig extends TestWorldEditorLockable {
+export interface TestWorldSurfaceConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -58,9 +68,11 @@ export interface TestWorldSurfaceConfig extends TestWorldEditorLockable {
     height: number;
     fillColor: number;
     strokeColor: number;
+    alpha?: number;
+    collisionMode?: 'solid' | 'visual_only';
 }
 
-export interface TestWorldHazardConfig extends TestWorldEditorLockable {
+export interface TestWorldHazardConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -70,7 +82,7 @@ export interface TestWorldHazardConfig extends TestWorldEditorLockable {
     strokeColor?: number;
 }
 
-export interface TestWorldCheckpointConfig extends TestWorldEditorLockable {
+export interface TestWorldCheckpointConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -82,7 +94,7 @@ export interface TestWorldCheckpointConfig extends TestWorldEditorLockable {
     strokeColor?: number;
 }
 
-export interface TestWorldFinishConfig extends TestWorldEditorLockable {
+export interface TestWorldFinishConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -92,7 +104,7 @@ export interface TestWorldFinishConfig extends TestWorldEditorLockable {
     strokeColor?: number;
 }
 
-export interface TestWorldMovingPlatformConfig extends TestWorldEditorLockable {
+export interface TestWorldMovingPlatformConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -101,11 +113,25 @@ export interface TestWorldMovingPlatformConfig extends TestWorldEditorLockable {
     axis: 'horizontal' | 'vertical';
     travelDistance: number;
     speed: number;
+    initialMotionState?: TestWorldMovingPlatformMotionState;
     fillColor?: number;
     strokeColor?: number;
 }
 
-export interface TestWorldTriggerPlatformConfig extends TestWorldEditorLockable {
+export type TestWorldTriggerPlatformActivator = 'player' | 'drag_box';
+export type TestWorldTriggerPlatformAction = 'activate' | 'deactivate';
+export type TestWorldMovingPlatformMotionState = 'running_loop' | 'stopped' | 'run_once';
+export type TestWorldTriggerTargetType = 'trigger_platform' | 'moving_platform';
+export type TestWorldTriggerCommandOperation = 'set_active' | 'set_motion_state';
+
+export interface TestWorldTriggerCommandConfig {
+    targetType: TestWorldTriggerTargetType;
+    targetId: string;
+    operation: TestWorldTriggerCommandOperation;
+    value: boolean | TestWorldMovingPlatformMotionState;
+}
+
+export interface TestWorldTriggerPlatformConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     triggerX: number;
     triggerY: number;
@@ -119,10 +145,10 @@ export interface TestWorldTriggerPlatformConfig extends TestWorldEditorLockable 
     platformY: number;
     platformWidth: number;
     platformHeight: number;
-    activator?: 'player' | 'drag_box';
-    triggerAction?: 'activate' | 'deactivate';
-    deactivateTriggerAction?: 'activate' | 'deactivate';
-    initiallyActive?: boolean;
+    activator: TestWorldTriggerPlatformActivator;
+    triggerAction: TestWorldTriggerPlatformAction;
+    deactivateTriggerAction: TestWorldTriggerPlatformAction;
+    initiallyActive: boolean;
     triggerFillColor?: number;
     triggerStrokeColor?: number;
     deactivateTriggerFillColor?: number;
@@ -131,7 +157,27 @@ export interface TestWorldTriggerPlatformConfig extends TestWorldEditorLockable 
     platformStrokeColor?: number;
 }
 
-export interface TestWorldDragBoxConfig extends TestWorldEditorLockable {
+export interface TestWorldTriggerVolumeConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
+    id: string;
+    triggerX: number;
+    triggerY: number;
+    triggerWidth: number;
+    triggerHeight: number;
+    deactivateTriggerX?: number;
+    deactivateTriggerY?: number;
+    deactivateTriggerWidth?: number;
+    deactivateTriggerHeight?: number;
+    activator: TestWorldTriggerPlatformActivator;
+    sourceIds?: string[];
+    enterCommand?: TestWorldTriggerCommandConfig | null;
+    exitCommand?: TestWorldTriggerCommandConfig | null;
+    triggerFillColor?: number;
+    triggerStrokeColor?: number;
+    deactivateTriggerFillColor?: number;
+    deactivateTriggerStrokeColor?: number;
+}
+
+export interface TestWorldDragBoxConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -147,7 +193,7 @@ export interface TestWorldDragBoxConfig extends TestWorldEditorLockable {
     strokeColor?: number;
 }
 
-export interface TestWorldWindZoneConfig extends TestWorldEditorLockable {
+export interface TestWorldWindZoneConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -159,7 +205,7 @@ export interface TestWorldWindZoneConfig extends TestWorldEditorLockable {
     strokeColor?: number;
 }
 
-export interface TestWorldTriangleFlightBreakWallConfig extends TestWorldEditorLockable {
+export interface TestWorldTriangleFlightBreakWallConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -169,7 +215,7 @@ export interface TestWorldTriangleFlightBreakWallConfig extends TestWorldEditorL
     strokeColor?: number;
 }
 
-export interface TestWorldTrianglePickupConfig extends TestWorldEditorLockable {
+export interface TestWorldTrianglePickupConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
     y: number;
@@ -189,6 +235,7 @@ export interface TestWorldConfig {
     finish: TestWorldFinishConfig | null;
     movingPlatforms: TestWorldMovingPlatformConfig[];
     triggerPlatforms: TestWorldTriggerPlatformConfig[];
+    triggerVolumes: TestWorldTriggerVolumeConfig[];
     dragBoxes: TestWorldDragBoxConfig[];
     windZones: TestWorldWindZoneConfig[];
     triangleFlightBreakWalls: TestWorldTriangleFlightBreakWallConfig[];

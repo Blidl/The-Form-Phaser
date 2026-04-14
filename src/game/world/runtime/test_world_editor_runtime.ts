@@ -5,7 +5,9 @@ import type {
     TestWorldBackgroundConfig,
     TestWorldBackgroundImageConfig,
     TestWorldConfig,
-    TestWorldParallaxLayerConfig
+    TestWorldParallaxLayerConfig,
+    TestWorldVisualLayer,
+    TestWorldVisualOrderConfig
 } from './test_world_config';
 import { createDefaultTestWorldConfig, parseTestWorldConfigJson } from './test_world_config_validation';
 import {
@@ -15,12 +17,19 @@ import {
     type TestWorldEditorObjectType,
     type TestWorldEditorSelectionPart
 } from './test_world_editor_adapters';
-import { TestWorldEditorSidebar, type TestWorldEditorSidebarSection, type TestWorldEditorSidebarState } from './test_world_editor_sidebar';
+import { TestWorldEditorSidebar, type TestWorldEditorSidebarSection, type TestWorldEditorSidebarState, type TestWorldEditorTabId } from './test_world_editor_sidebar';
 import { clearTestWorldEditorDraft, saveTestWorldEditorDraft } from './test_world_editor_storage';
 import { createCampaignLevel, deleteCampaignLevel, getCampaignLevelSummaries, syncCampaignLevelHeader } from './test_campaign_registry';
 import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runtime';
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
+import {
+    TEST_WORLD_PLAYER_VISUAL_RELATION_OPTIONS,
+    TEST_WORLD_VISUAL_LAYER_OPTIONS,
+    resolveTestWorldPlayerVisualRelation,
+    resolveTestWorldRenderOrder,
+    resolveTestWorldVisualLayer
+} from './test_world_visual_order';
 
 export interface TestWorldEditorRuntime {
     update: (deltaMs: number) => void;
@@ -41,6 +50,20 @@ interface PointerDragState {
     startScrollX: number;
     startScrollY: number;
     initialBounds?: TestWorldEditorBounds;
+}
+
+interface EditorCameraSnapshot {
+    scrollX: number;
+    scrollY: number;
+    zoom: number;
+}
+
+type BackgroundSelectionId = 'static' | 'layer_1' | 'layer_2';
+
+interface BackgroundEditorHandle {
+    id: BackgroundSelectionId;
+    label: string;
+    bounds: TestWorldEditorBounds;
 }
 
 const GRID_SIZES = [1, 8, 16, 32] as const;
@@ -350,7 +373,8 @@ export const createTestWorldEditorRuntime = (
     defaultConfig: TestWorldConfig,
     initialOpen: boolean = false,
     initialStatus: string | null = null,
-    onLevelConfigChanged?: (config: TestWorldConfig) => void
+    onLevelConfigChanged?: (config: TestWorldConfig) => void,
+    onEditorPreviewCameraBasisChanged?: (basis: { scrollX: number; scrollY: number; zoom: number } | null) => void
 ): TestWorldEditorRuntime => {
     const keyboard = scene.input.keyboard;
     if (!keyboard) {
@@ -415,6 +439,20 @@ export const createTestWorldEditorRuntime = (
         .setDepth(4995)
         .setScrollFactor(0)
         .setVisible(false);
+    const backgroundSelectionText = scene.add.text(0, 0, '', {
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        color: '#081018',
+        backgroundColor: 'rgba(140, 255, 209, 0.92)',
+        padding: {
+            left: 6,
+            right: 6,
+            top: 3,
+            bottom: 3
+        }
+    })
+        .setDepth(4994)
+        .setVisible(false);
 
     const appRoot = document.getElementById('app');
     if (!appRoot) {
@@ -431,6 +469,9 @@ export const createTestWorldEditorRuntime = (
     let autosaveTimer: number | null = null;
     let pointerDragState: PointerDragState | null = null;
     let pendingPlacementType: TestWorldEditorObjectType | null = null;
+    let gameplayCameraSnapshot: EditorCameraSnapshot | null = null;
+    let activeTab: TestWorldEditorTabId = 'level';
+    let selectedBackgroundId: BackgroundSelectionId | null = null;
     const undoStack: TestWorldConfig[] = [];
     const redoStack: TestWorldConfig[] = [];
     const inspectorColorKeys = new Set<string>([
@@ -451,6 +492,55 @@ export const createTestWorldEditorRuntime = (
         return worldRuntime.getEditorHandle(selectedHandleId);
     };
     const getSelectedRootId = (): string | null => getSelectedHandle()?.rootId ?? null;
+    const isObjectsTabActive = (): boolean => activeTab === 'objects';
+    const isInspectorTabActive = (): boolean => activeTab === 'inspector';
+    const isObjectInteractionTabActive = (): boolean => isObjectsTabActive() || isInspectorTabActive();
+    const isBackgroundTabActive = (): boolean => activeTab === 'background';
+
+    const getBackgroundHandles = (): BackgroundEditorHandle[] => {
+        const background = worldRuntime.getConfig().background;
+        if (!background) {
+            return [];
+        }
+
+        const handles: BackgroundEditorHandle[] = [];
+        if (background.staticImage) {
+            const staticImage = cloneStaticBackgroundImage(background.staticImage);
+            handles.push({
+                id: 'static',
+                label: 'Static',
+                bounds: {
+                    x: staticImage.x ?? 0,
+                    y: staticImage.y ?? 0,
+                    width: staticImage.width ?? 1600,
+                    height: staticImage.height ?? 900
+                }
+            });
+        }
+
+        background.layers?.slice(0, EDITOR_BACKGROUND_LAYER_COUNT).forEach((layer, index) => {
+            const clonedLayer = cloneBackgroundLayer(layer, index);
+            handles.push({
+                id: `layer_${index + 1}` as BackgroundSelectionId,
+                label: `Parallax ${index + 1}`,
+                bounds: {
+                    x: clonedLayer.x ?? 0,
+                    y: clonedLayer.y,
+                    width: clonedLayer.width ?? 1920,
+                    height: clonedLayer.height
+                }
+            });
+        });
+
+        return handles;
+    };
+
+    const getSelectedBackgroundHandle = (): BackgroundEditorHandle | null => {
+        if (!selectedBackgroundId) {
+            return null;
+        }
+        return getBackgroundHandles().find((entry) => entry.id === selectedBackgroundId) ?? null;
+    };
 
     const buildSidebarState = (): TestWorldEditorSidebarState => {
         const config = worldRuntime.getConfig();
@@ -582,6 +672,17 @@ export const createTestWorldEditorRuntime = (
             pendingPlacementType = null;
             selectRoot(id);
             focusTarget(id);
+        },
+        onTabChanged: (tabId) => {
+            activeTab = tabId;
+            pointerDragState = null;
+            if (tabId === 'background') {
+                pendingPlacementType = null;
+                selectedHandleId = null;
+            } else if (tabId !== 'background') {
+                selectedBackgroundId = null;
+            }
+            syncSidebar();
         },
         onDuplicateSelected: () => {
             const rootId = getSelectedRootId();
@@ -1027,6 +1128,74 @@ export const createTestWorldEditorRuntime = (
         };
     };
 
+    const patchBackgroundBounds = (targetId: BackgroundSelectionId, bounds: TestWorldEditorBounds): TestWorldConfig => {
+        const config = worldRuntime.getConfig();
+        if (targetId === 'static') {
+            applyBackgroundLevelField(config, 'backgroundStaticX', bounds.x);
+            applyBackgroundLevelField(config, 'backgroundStaticY', bounds.y);
+            applyBackgroundLevelField(config, 'backgroundStaticWidth', bounds.width);
+            applyBackgroundLevelField(config, 'backgroundStaticHeight', bounds.height);
+            return config;
+        }
+
+        const layerNumber = targetId === 'layer_1' ? 1 : 2;
+        applyBackgroundLevelField(config, `backgroundLayer${layerNumber}X`, bounds.x);
+        applyBackgroundLevelField(config, `backgroundLayer${layerNumber}Y`, bounds.y);
+        applyBackgroundLevelField(config, `backgroundLayer${layerNumber}Width`, bounds.width);
+        applyBackgroundLevelField(config, `backgroundLayer${layerNumber}Height`, bounds.height);
+        return config;
+    };
+
+    const beginBackgroundInteraction = (pointer: Input.Pointer): void => {
+        const worldX = pointer.worldX;
+        const worldY = pointer.worldY;
+        const selectedBackgroundHandle = getSelectedBackgroundHandle();
+        if (selectedBackgroundHandle) {
+            const resizeHandle = getResizeHandleAtPointer({
+                getBounds: () => selectedBackgroundHandle.bounds
+            } as TestWorldEditorHandle, worldX, worldY);
+            if (resizeHandle) {
+                pushUndoSnapshot();
+                pointerDragState = {
+                    mode: 'resize',
+                    handle: resizeHandle,
+                    startWorldX: worldX,
+                    startWorldY: worldY,
+                    startScrollX: 0,
+                    startScrollY: 0,
+                    initialBounds: selectedBackgroundHandle.bounds
+                };
+                return;
+            }
+        }
+
+        const hit = [...getBackgroundHandles()].reverse().find((entry) => {
+            const bounds = entry.bounds;
+            const left = bounds.x - (bounds.width * 0.5);
+            const right = bounds.x + (bounds.width * 0.5);
+            const top = bounds.y - (bounds.height * 0.5);
+            const bottom = bounds.y + (bounds.height * 0.5);
+            return worldX >= left && worldX <= right && worldY >= top && worldY <= bottom;
+        }) ?? null;
+        if (!hit) {
+            selectedBackgroundId = null;
+            syncSidebar();
+            return;
+        }
+
+        selectedBackgroundId = hit.id;
+        syncSidebar();
+        pushUndoSnapshot();
+        pointerDragState = {
+            mode: 'move',
+            startWorldX: worldX,
+            startWorldY: worldY,
+            startScrollX: 0,
+            startScrollY: 0,
+            initialBounds: hit.bounds
+        };
+    };
+
     const applyPointerDrag = (): void => {
         if (!pointerDragState) {
             return;
@@ -1041,8 +1210,7 @@ export const createTestWorldEditorRuntime = (
             return;
         }
 
-        const selectedHandle = getSelectedHandle();
-        if (!selectedHandle || !pointerDragState.initialBounds) {
+        if (!pointerDragState.initialBounds) {
             return;
         }
         const dx = pointer.worldX - pointerDragState.startWorldX;
@@ -1054,6 +1222,23 @@ export const createTestWorldEditorRuntime = (
             nextBounds = snapMoveBounds(nextBounds);
         } else {
             nextBounds = snapResizeBounds(pointerDragState.initialBounds, pointerDragState.handle ?? 'se', dx, dy);
+        }
+
+            if (isBackgroundTabActive()) {
+                const selectedBackgroundHandle = getSelectedBackgroundHandle();
+                if (!selectedBackgroundHandle) {
+                    return;
+                }
+                const config = patchBackgroundBounds(selectedBackgroundHandle.id, nextBounds);
+                worldRuntime.setConfig(config);
+                onLevelConfigChanged?.(worldRuntime.getConfig());
+                markConfigDirty({ refreshGeometry: false });
+                return;
+            }
+
+        const selectedHandle = getSelectedHandle();
+        if (!selectedHandle) {
+            return;
         }
         worldRuntime.patchObjectBounds(selectedHandle.id, nextBounds);
         markConfigDirty();
@@ -1080,6 +1265,27 @@ export const createTestWorldEditorRuntime = (
         scene.cameras.main.centerOn(point.x, point.y);
     };
 
+    const captureGameplayCameraSnapshot = (): EditorCameraSnapshot => {
+        const camera = scene.cameras.main;
+        return {
+            scrollX: camera.scrollX,
+            scrollY: camera.scrollY,
+            zoom: camera.zoom
+        };
+    };
+
+    const syncEditorPreviewCameraBasis = (): void => {
+        onEditorPreviewCameraBasisChanged?.(
+            active && gameplayCameraSnapshot
+                ? {
+                    scrollX: gameplayCameraSnapshot.scrollX,
+                    scrollY: gameplayCameraSnapshot.scrollY,
+                    zoom: gameplayCameraSnapshot.zoom
+                }
+                : null
+        );
+    };
+
     const toggleEditor = (): void => {
         if (destroyed) {
             return;
@@ -1087,16 +1293,24 @@ export const createTestWorldEditorRuntime = (
         active = !active;
         overlayText.setVisible(active);
         if (active) {
+            gameplayCameraSnapshot = captureGameplayCameraSnapshot();
             scene.cameras.main.stopFollow();
+            syncEditorPreviewCameraBasis();
             setStatus('editor mode on');
         } else {
             pointerDragState = null;
             pendingPlacementType = null;
             const worldBounds = worldRuntime.getWorldBounds();
+            const camera = scene.cameras.main;
+            if (gameplayCameraSnapshot) {
+                camera.setZoom(gameplayCameraSnapshot.zoom);
+            }
             setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
                 width: worldBounds.width,
                 height: worldBounds.height
             });
+            gameplayCameraSnapshot = null;
+            syncEditorPreviewCameraBasis();
             setStatus('editor mode off');
         }
         syncSidebar();
@@ -1146,7 +1360,13 @@ export const createTestWorldEditorRuntime = (
             return;
         }
         if (event.button === 0) {
-            beginObjectInteraction(pointer);
+            if (isBackgroundTabActive()) {
+                beginBackgroundInteraction(pointer);
+                return;
+            }
+            if (isObjectInteractionTabActive()) {
+                beginObjectInteraction(pointer);
+            }
         }
     };
 
@@ -1172,6 +1392,7 @@ export const createTestWorldEditorRuntime = (
             return;
         }
         destroyed = true;
+        onEditorPreviewCameraBasisChanged?.(null);
         if (autosaveTimer !== null) {
             window.clearTimeout(autosaveTimer);
             autosaveTimer = null;
@@ -1185,6 +1406,7 @@ export const createTestWorldEditorRuntime = (
         gridGraphics.destroy();
         boundsGraphics.destroy();
         overlayText.destroy();
+        backgroundSelectionText.destroy();
         sidebar.destroy();
     };
 
@@ -1204,6 +1426,7 @@ export const createTestWorldEditorRuntime = (
                 gridGraphics.clear();
                 boundsGraphics.clear();
                 overlayText.setVisible(false);
+                backgroundSelectionText.setVisible(false);
                 return;
             }
 
@@ -1264,9 +1487,16 @@ export const createTestWorldEditorRuntime = (
                     }
                 }
                 if (!pendingPlacementType && Input.Keyboard.JustDown(focusKey)) {
-                    const rootId = getSelectedRootId();
-                    if (rootId) {
-                        focusTarget(rootId);
+                    if (isBackgroundTabActive()) {
+                        const backgroundHandle = getSelectedBackgroundHandle();
+                        if (backgroundHandle) {
+                            scene.cameras.main.centerOn(backgroundHandle.bounds.x, backgroundHandle.bounds.y);
+                        }
+                    } else if (isObjectInteractionTabActive()) {
+                        const rootId = getSelectedRootId();
+                        if (rootId) {
+                            focusTarget(rootId);
+                        }
                     }
                 }
                 if (!pendingPlacementType && Input.Keyboard.JustDown(focusSpawnKey)) {
@@ -1295,7 +1525,30 @@ export const createTestWorldEditorRuntime = (
             const worldBounds = worldRuntime.getWorldBounds();
             drawWorldBoundsOverlay(boundsGraphics, camera, worldBounds);
             drawGrid(gridGraphics, camera, worldBounds, gridEnabled ? gridSize : 0);
-            drawSelection(selectionGraphics, getSelectedHandle());
+            const selectedBackgroundHandle = getSelectedBackgroundHandle();
+            drawSelection(
+                selectionGraphics,
+                isBackgroundTabActive()
+                    ? (selectedBackgroundHandle
+                        ? ({
+                            getBounds: () => selectedBackgroundHandle.bounds
+                        } as TestWorldEditorHandle)
+                        : null)
+                    : getSelectedHandle(),
+                isBackgroundTabActive() ? 0x8cffd1 : 0xffeb3b,
+                isBackgroundTabActive() ? 0x8cffd1 : 0xffeb3b
+            );
+            if (isBackgroundTabActive() && selectedBackgroundHandle) {
+                const bounds = selectedBackgroundHandle.bounds;
+                backgroundSelectionText.setText(`Background: ${selectedBackgroundHandle.label}`);
+                backgroundSelectionText.setPosition(
+                    bounds.x - (bounds.width * 0.5),
+                    bounds.y - (bounds.height * 0.5) - 24
+                );
+                backgroundSelectionText.setVisible(true);
+            } else {
+                backgroundSelectionText.setVisible(false);
+            }
             drawPlacementPreview(
                 placementGraphics,
                 camera,
@@ -1321,13 +1574,18 @@ export const createTestWorldEditorRuntime = (
     };
 };
 
-const drawSelection = (graphics: Phaser.GameObjects.Graphics, handle: TestWorldEditorHandle | null): void => {
+const drawSelection = (
+    graphics: Phaser.GameObjects.Graphics,
+    handle: TestWorldEditorHandle | null,
+    strokeColor: number = 0xffeb3b,
+    fillColor: number = 0xffeb3b
+): void => {
     graphics.clear();
     if (!handle) {
         return;
     }
     const bounds = handle.getBounds();
-    graphics.lineStyle(2, 0xffeb3b, 1);
+    graphics.lineStyle(2, strokeColor, 1);
     graphics.strokeRect(bounds.x - (bounds.width * 0.5), bounds.y - (bounds.height * 0.5), bounds.width, bounds.height);
     const points = [
         { x: bounds.x - (bounds.width * 0.5), y: bounds.y - (bounds.height * 0.5) },
@@ -1336,7 +1594,7 @@ const drawSelection = (graphics: Phaser.GameObjects.Graphics, handle: TestWorldE
         { x: bounds.x + (bounds.width * 0.5), y: bounds.y + (bounds.height * 0.5) }
     ];
     points.forEach((point) => {
-        graphics.fillStyle(0xffeb3b, 1);
+        graphics.fillStyle(fillColor, 1);
         graphics.fillRect(point.x - 4, point.y - 4, 8, 8);
     });
 };
@@ -1486,7 +1744,7 @@ const buildInspectorSections = (
                 { key: 'fillColor', label: 'Fill', input: 'color', value: entry.fillColor ?? 0x99ff99 },
                 { key: 'strokeColor', label: 'Stroke', input: 'color', value: entry.strokeColor ?? 0x00aa66 }
             ]
-        }] : [];
+        }, buildVisualOrderSection(type, entry)] : [];
     }
 
     const findById = <T extends { id: string }>(items: readonly T[]): T | null => items.find((entry) => entry.id === rootId) ?? null;
@@ -1504,11 +1762,37 @@ const buildInspectorSections = (
 
     if (type === 'surface') {
         const entry = findById(config.surfaces);
-        return entry ? [rectSection(entry)] : [];
+        return entry ? [
+            rectSection(entry),
+            {
+                title: 'Surface',
+                fields: [
+                    {
+                        key: 'collisionMode',
+                        label: 'Collision',
+                        input: 'select',
+                        value: entry.collisionMode ?? 'solid',
+                        options: [
+                            { value: 'solid', label: 'Solid' },
+                            { value: 'visual_only', label: 'Visual Only' }
+                        ]
+                    },
+                    {
+                        key: 'alpha',
+                        label: 'Alpha',
+                        input: 'number',
+                        value: entry.alpha ?? ((entry.collisionMode ?? 'solid') === 'visual_only' ? 0.45 : 1),
+                        min: 0,
+                        step: 0.05
+                    }
+                ]
+            },
+            buildVisualOrderSection(type, entry)
+        ] : [];
     }
     if (type === 'hazard') {
         const entry = findById(config.hazards);
-        return entry ? [rectSection(entry)] : [];
+        return entry ? [rectSection(entry), buildVisualOrderSection(type, entry)] : [];
     }
     if (type === 'checkpoint') {
         const entry = findById(config.checkpoints);
@@ -1518,7 +1802,7 @@ const buildInspectorSections = (
                 { key: 'respawnX', label: 'Respawn X', input: 'number', value: entry.respawnX, step: 1 },
                 { key: 'respawnY', label: 'Respawn Y', input: 'number', value: entry.respawnY, step: 1 }
             ]
-        }] : [];
+        }, buildVisualOrderSection(type, entry)] : [];
     }
     if (type === 'movingPlatform') {
         const entry = findById(config.movingPlatforms);
@@ -1527,23 +1811,34 @@ const buildInspectorSections = (
             fields: [
                 { key: 'axis', label: 'Axis', input: 'select', value: entry.axis, options: [{ value: 'horizontal', label: 'Horizontal' }, { value: 'vertical', label: 'Vertical' }] },
                 { key: 'travelDistance', label: 'Travel', input: 'number', value: entry.travelDistance, min: 0, step: 1 },
-                { key: 'speed', label: 'Speed', input: 'number', value: entry.speed, min: 0, step: 1 }
+                { key: 'speed', label: 'Speed', input: 'number', value: entry.speed, min: 0, step: 1 },
+                {
+                    key: 'initialMotionState',
+                    label: 'Initial Motion',
+                    input: 'select',
+                    value: entry.initialMotionState ?? 'running_loop',
+                    options: [
+                        { value: 'running_loop', label: 'Running Loop' },
+                        { value: 'stopped', label: 'Stopped' },
+                        { value: 'run_once', label: 'Run Once' }
+                    ]
+                }
             ]
-        }] : [];
+        }, buildVisualOrderSection(type, entry)] : [];
     }
     if (type === 'dragBox') {
         const entry = findById(config.dragBoxes);
         return entry ? [rectSection(entry), {
             title: 'Drag Box',
             fields: [
-                { key: 'targetTriggerPlatformId', label: 'Target Trigger', input: 'text', value: entry.targetTriggerPlatformId ?? '' },
+                { key: 'targetTriggerPlatformId', label: 'Linked Trigger Id', input: 'text', value: entry.targetTriggerPlatformId ?? '' },
                 { key: 'gravityY', label: 'Gravity Y', input: 'number', value: entry.gravityY ?? 2200, min: 0, step: 1 },
                 { key: 'mass', label: 'Mass', input: 'number', value: entry.mass ?? 10, min: 1, step: 1 },
                 { key: 'pullAcceleration', label: 'Pull Accel', input: 'number', value: entry.pullAcceleration ?? 1400, min: 0, step: 1 },
                 { key: 'pullMaxSpeed', label: 'Pull Max Speed', input: 'number', value: entry.pullMaxSpeed ?? 150, min: 0, step: 1 },
                 { key: 'dragX', label: 'Drag X', input: 'number', value: entry.dragX ?? 900, min: 0, step: 1 }
             ]
-        }] : [];
+        }, buildVisualOrderSection(type, entry)] : [];
     }
     if (type === 'windZone') {
         const entry = findById(config.windZones);
@@ -1553,11 +1848,11 @@ const buildInspectorSections = (
                 { key: 'directionX', label: 'Direction', input: 'select', value: String(entry.directionX), options: [{ value: '1', label: 'Right' }, { value: '-1', label: 'Left' }] },
                 { key: 'force', label: 'Force', input: 'number', value: entry.force, min: 0, step: 1 }
             ]
-        }] : [];
+        }, buildVisualOrderSection(type, entry)] : [];
     }
     if (type === 'triangleFlightBreakWall') {
         const entry = findById(config.triangleFlightBreakWalls);
-        return entry ? [rectSection(entry)] : [];
+        return entry ? [rectSection(entry), buildVisualOrderSection(type, entry)] : [];
     }
     if (type === 'trianglePickup') {
         const entry = findById(config.trianglePickups);
@@ -1570,13 +1865,13 @@ const buildInspectorSections = (
                 { key: 'fillColor', label: 'Fill', input: 'color', value: entry.fillColor ?? 0xfff59d },
                 { key: 'strokeColor', label: 'Stroke', input: 'color', value: entry.strokeColor ?? 0xffca28 }
             ]
-        }] : [];
+        }, buildVisualOrderSection(type, entry)] : [];
     }
     if (type === 'triggerPlatform') {
         const entry = findById(config.triggerPlatforms);
         return entry ? [
             {
-                title: 'Trigger',
+                title: 'Trigger Zone',
                 fields: [
                     { key: 'triggerX', label: 'X', input: 'number', value: entry.triggerX, step: 1 },
                     { key: 'triggerY', label: 'Y', input: 'number', value: entry.triggerY, step: 1 },
@@ -1587,7 +1882,7 @@ const buildInspectorSections = (
                 ]
             },
             {
-                title: 'Deactivate Trigger',
+                title: 'Release Zone',
                 fields: [
                     { key: 'deactivateTriggerX', label: 'X', input: 'number', value: entry.deactivateTriggerX ?? 0, step: 1 },
                     { key: 'deactivateTriggerY', label: 'Y', input: 'number', value: entry.deactivateTriggerY ?? 0, step: 1 },
@@ -1607,11 +1902,59 @@ const buildInspectorSections = (
                     { key: 'platformFillColor', label: 'Fill', input: 'color', value: entry.platformFillColor ?? 0x616161 },
                     { key: 'platformStrokeColor', label: 'Stroke', input: 'color', value: entry.platformStrokeColor ?? 0xb0bec5 },
                     { key: 'activator', label: 'Activator', input: 'select', value: entry.activator ?? 'player', options: [{ value: 'player', label: 'Player' }, { value: 'drag_box', label: 'Drag Box' }] },
-                    { key: 'triggerAction', label: 'Trigger Action', input: 'select', value: entry.triggerAction ?? 'activate', options: [{ value: 'activate', label: 'Show' }, { value: 'deactivate', label: 'Hide' }] },
-                    { key: 'deactivateTriggerAction', label: 'Off Action', input: 'select', value: entry.deactivateTriggerAction ?? 'deactivate', options: [{ value: 'activate', label: 'Show' }, { value: 'deactivate', label: 'Hide' }] },
-                    { key: 'initiallyActive', label: 'Initially Visible', input: 'checkbox', value: entry.initiallyActive ?? false }
+                    { key: 'triggerAction', label: 'On Trigger', input: 'select', value: entry.triggerAction ?? 'activate', options: [{ value: 'activate', label: 'Activate' }, { value: 'deactivate', label: 'Deactivate' }] },
+                    { key: 'deactivateTriggerAction', label: 'On Release Zone', input: 'select', value: entry.deactivateTriggerAction ?? 'deactivate', options: [{ value: 'activate', label: 'Activate' }, { value: 'deactivate', label: 'Deactivate' }] },
+                    { key: 'initiallyActive', label: 'Initial Active', input: 'checkbox', value: entry.initiallyActive ?? false }
                 ]
-            }
+            },
+            buildVisualOrderSection(type, entry)
+        ] : [];
+    }
+    if (type === 'triggerVolume') {
+        const entry = findById(config.triggerVolumes);
+        const enterCommand = entry?.enterCommand ?? null;
+        const exitCommand = entry?.exitCommand ?? null;
+        return entry ? [
+            {
+                title: 'Trigger Zone',
+                fields: [
+                    { key: 'triggerX', label: 'X', input: 'number', value: entry.triggerX, step: 1 },
+                    { key: 'triggerY', label: 'Y', input: 'number', value: entry.triggerY, step: 1 },
+                    { key: 'triggerWidth', label: 'Width', input: 'number', value: entry.triggerWidth, min: 8, step: 1 },
+                    { key: 'triggerHeight', label: 'Height', input: 'number', value: entry.triggerHeight, min: 8, step: 1 },
+                    { key: 'triggerFillColor', label: 'Fill', input: 'color', value: entry.triggerFillColor ?? 0xb3e5fc },
+                    { key: 'triggerStrokeColor', label: 'Stroke', input: 'color', value: entry.triggerStrokeColor ?? 0x0277bd }
+                ]
+            },
+            {
+                title: 'Release Zone',
+                fields: [
+                    { key: 'deactivateTriggerX', label: 'X', input: 'number', value: entry.deactivateTriggerX ?? 0, step: 1 },
+                    { key: 'deactivateTriggerY', label: 'Y', input: 'number', value: entry.deactivateTriggerY ?? 0, step: 1 },
+                    { key: 'deactivateTriggerWidth', label: 'Width', input: 'number', value: entry.deactivateTriggerWidth ?? 8, min: 8, step: 1 },
+                    { key: 'deactivateTriggerHeight', label: 'Height', input: 'number', value: entry.deactivateTriggerHeight ?? 8, min: 8, step: 1 },
+                    { key: 'deactivateTriggerFillColor', label: 'Fill', input: 'color', value: entry.deactivateTriggerFillColor ?? 0xffccbc },
+                    { key: 'deactivateTriggerStrokeColor', label: 'Stroke', input: 'color', value: entry.deactivateTriggerStrokeColor ?? 0xe64a19 }
+                ]
+            },
+            {
+                title: 'Trigger Logic',
+                fields: [
+                    { key: 'activator', label: 'Activator', input: 'select', value: entry.activator, options: [{ value: 'player', label: 'Player' }, { value: 'drag_box', label: 'Drag Box' }] },
+                    { key: 'sourceIdsCsv', label: 'Source Ids CSV', input: 'text', value: (entry.sourceIds ?? []).join(', ') },
+                    { key: 'enterCommandEnabled', label: 'Enter Command', input: 'checkbox', value: enterCommand !== null },
+                    { key: 'enterTargetType', label: 'Enter Target Type', input: 'select', value: enterCommand?.targetType ?? 'trigger_platform', options: [{ value: 'trigger_platform', label: 'Trigger Platform' }, { value: 'moving_platform', label: 'Moving Platform' }] },
+                    { key: 'enterTargetId', label: 'Enter Target Id', input: 'text', value: enterCommand?.targetId ?? '' },
+                    { key: 'enterOperation', label: 'Enter Operation', input: 'select', value: enterCommand?.operation ?? 'set_active', options: [{ value: 'set_active', label: 'Set Active' }, { value: 'set_motion_state', label: 'Set Motion State' }] },
+                    { key: 'enterValue', label: 'Enter Value', input: 'select', value: typeof enterCommand?.value === 'boolean' ? String(enterCommand.value) : (enterCommand?.value ?? 'running_loop'), options: [{ value: 'true', label: 'True / Activate' }, { value: 'false', label: 'False / Deactivate' }, { value: 'running_loop', label: 'Running Loop' }, { value: 'stopped', label: 'Stopped' }, { value: 'run_once', label: 'Run Once' }] },
+                    { key: 'exitCommandEnabled', label: 'Exit Command', input: 'checkbox', value: exitCommand !== null },
+                    { key: 'exitTargetType', label: 'Exit Target Type', input: 'select', value: exitCommand?.targetType ?? 'trigger_platform', options: [{ value: 'trigger_platform', label: 'Trigger Platform' }, { value: 'moving_platform', label: 'Moving Platform' }] },
+                    { key: 'exitTargetId', label: 'Exit Target Id', input: 'text', value: exitCommand?.targetId ?? '' },
+                    { key: 'exitOperation', label: 'Exit Operation', input: 'select', value: exitCommand?.operation ?? 'set_active', options: [{ value: 'set_active', label: 'Set Active' }, { value: 'set_motion_state', label: 'Set Motion State' }] },
+                    { key: 'exitValue', label: 'Exit Value', input: 'select', value: typeof exitCommand?.value === 'boolean' ? String(exitCommand.value) : (exitCommand?.value ?? 'running_loop'), options: [{ value: 'true', label: 'True / Activate' }, { value: 'false', label: 'False / Deactivate' }, { value: 'running_loop', label: 'Running Loop' }, { value: 'stopped', label: 'Stopped' }, { value: 'run_once', label: 'Run Once' }] }
+                ]
+            },
+            buildVisualOrderSection(type, entry)
         ] : [];
     }
     return [];
@@ -1691,6 +2034,62 @@ const buildLevelSections = (
     ];
 };
 
+const buildVisualOrderSection = (
+    type: TestWorldEditorObjectType,
+    entry: Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'renderOrder' | 'playerVisualRelation'>
+): TestWorldEditorSidebarSection => {
+    const resolvedLayer = resolveTestWorldVisualLayer(type, entry);
+    const effectiveRenderOrder = resolveTestWorldRenderOrder(type, entry);
+    const resolvedPlayerRelation = resolveTestWorldPlayerVisualRelation(type, entry);
+    const fields: TestWorldEditorSidebarSection['fields'] = [
+        {
+            key: 'visualLayer',
+            label: 'Layer',
+            input: 'select',
+            value: entry.visualLayer ?? 'default',
+            options: TEST_WORLD_VISUAL_LAYER_OPTIONS.map((option) => ({
+                value: option.value,
+                label: option.value === 'default'
+                    ? `${option.label} (${resolvedLayer})`
+                    : option.label
+            }))
+        },
+        {
+            key: 'renderOrderEnabled',
+            label: 'Use Explicit Order',
+            input: 'checkbox',
+            value: entry.renderOrder !== undefined
+        },
+        {
+            key: 'renderOrder',
+            label: 'Render Order',
+            input: 'number',
+            value: entry.renderOrder ?? effectiveRenderOrder,
+            step: 1
+        }
+    ];
+
+    if (resolvedLayer === 'gameplay' || entry.visualLayer === undefined || entry.visualLayer === 'gameplay') {
+        fields.push({
+                key: 'playerVisualRelation',
+                label: 'Player Relation',
+                input: 'select',
+                value: entry.playerVisualRelation ?? 'default',
+                options: TEST_WORLD_PLAYER_VISUAL_RELATION_OPTIONS.map((option) => ({
+                    value: option.value,
+                    label: option.value === 'default'
+                        ? `${option.label} (${resolvedPlayerRelation === 'behind_player' ? 'Player In Front' : 'Player Behind'})`
+                        : option.label
+                }))
+            });
+    }
+
+    return {
+        title: 'Visual Order',
+        fields
+    };
+};
+
 const buildBackgroundSections = (config: TestWorldConfig): TestWorldEditorSidebarSection[] => {
     const editableBackground = getEditableBackground(config);
     const staticImage = cloneStaticBackgroundImage(editableBackground.staticImage);
@@ -1711,19 +2110,19 @@ const buildBackgroundSections = (config: TestWorldConfig): TestWorldEditorSideba
             ]
         },
         {
-            title: 'Static',
+            title: 'Static Layer',
             fields: [
                 { key: 'backgroundStaticTextureKey', label: 'Texture Key', input: 'text', value: staticImage.textureKey },
                 { key: 'backgroundStaticTextureAsset', label: 'Texture Asset', input: 'text', value: staticImage.textureAsset ?? '' },
                 { key: 'backgroundStaticFillColor', label: 'Fallback Fill', input: 'color', value: staticImage.fillColor ?? 0x1f2d36 },
                 { key: 'backgroundStaticTintColor', label: 'Tint', input: 'color', value: staticImage.tintColor ?? 0xffffff },
                 { key: 'backgroundStaticAlpha', label: 'Alpha', input: 'number', value: staticImage.alpha ?? 1, min: 0, step: 0.05 },
-                { key: 'backgroundStaticScale', label: 'Scale', input: 'number', value: staticImage.scale ?? 1, min: 0.1, step: 0.1 },
-                { key: 'backgroundStaticWidth', label: 'Width', input: 'number', value: staticImage.width ?? 1600, min: 8, step: 1 },
-                { key: 'backgroundStaticHeight', label: 'Height', input: 'number', value: staticImage.height ?? 900, min: 8, step: 1 },
-                { key: 'backgroundStaticRepeat', label: 'Repeat', input: 'checkbox', value: staticImage.repeat ?? false },
-                { key: 'backgroundStaticX', label: 'Center X', input: 'number', value: staticImage.x ?? 0, step: 1 },
-                { key: 'backgroundStaticY', label: 'Center Y', input: 'number', value: staticImage.y ?? 0, step: 1 }
+                { key: 'backgroundStaticScale', label: 'Editor Scale', input: 'number', value: staticImage.scale ?? 1, min: 0.1, step: 0.1 },
+                { key: 'backgroundStaticWidth', label: 'Editor Width', input: 'number', value: staticImage.width ?? 1600, min: 8, step: 1 },
+                { key: 'backgroundStaticHeight', label: 'Editor Height', input: 'number', value: staticImage.height ?? 900, min: 8, step: 1 },
+                { key: 'backgroundStaticRepeat', label: 'Tile Repeat', input: 'checkbox', value: staticImage.repeat ?? false },
+                { key: 'backgroundStaticX', label: 'Editor Center X', input: 'number', value: staticImage.x ?? 0, step: 1 },
+                { key: 'backgroundStaticY', label: 'Editor Center Y', input: 'number', value: staticImage.y ?? 0, step: 1 }
             ]
         }
     ];
@@ -1731,21 +2130,21 @@ const buildBackgroundSections = (config: TestWorldConfig): TestWorldEditorSideba
     layers.forEach((layer, index) => {
         const layerNumber = index + 1;
         sections.push({
-            title: `Parallax ${layerNumber}`,
+            title: `Parallax Layer ${layerNumber}`,
             fields: [
                 { key: `backgroundLayer${layerNumber}TextureKey`, label: 'Texture Key', input: 'text', value: layer.textureKey },
                 { key: `backgroundLayer${layerNumber}TextureAsset`, label: 'Texture Asset', input: 'text', value: layer.textureAsset ?? '' },
                 { key: `backgroundLayer${layerNumber}FillColor`, label: 'Fallback Fill', input: 'color', value: layer.fillColor ?? 0x24343d },
                 { key: `backgroundLayer${layerNumber}TintColor`, label: 'Tint', input: 'color', value: layer.tintColor ?? 0xffffff },
                 { key: `backgroundLayer${layerNumber}Alpha`, label: 'Alpha', input: 'number', value: layer.alpha ?? 1, min: 0, step: 0.05 },
-                { key: `backgroundLayer${layerNumber}Scale`, label: 'Scale', input: 'number', value: layer.scale ?? 1, min: 0.1, step: 0.1 },
-                { key: `backgroundLayer${layerNumber}Width`, label: 'Width', input: 'number', value: layer.width ?? 1920, min: 8, step: 1 },
-                { key: `backgroundLayer${layerNumber}Repeat`, label: 'Repeat', input: 'checkbox', value: layer.repeat ?? true },
-                { key: `backgroundLayer${layerNumber}X`, label: 'Center X', input: 'number', value: layer.x ?? 0, step: 1 },
-                { key: `backgroundLayer${layerNumber}Y`, label: 'Center Y', input: 'number', value: layer.y, step: 1 },
-                { key: `backgroundLayer${layerNumber}Height`, label: 'Height', input: 'number', value: layer.height, min: 8, step: 1 },
-                { key: `backgroundLayer${layerNumber}ScrollFactorX`, label: 'Scroll X', input: 'number', value: layer.scrollFactorX, min: 0, step: 0.05 },
-                { key: `backgroundLayer${layerNumber}ScrollFactorY`, label: 'Scroll Y', input: 'number', value: layer.scrollFactorY ?? layer.scrollFactorX, min: 0, step: 0.05 }
+                { key: `backgroundLayer${layerNumber}Scale`, label: 'Editor Scale', input: 'number', value: layer.scale ?? 1, min: 0.1, step: 0.1 },
+                { key: `backgroundLayer${layerNumber}Width`, label: 'Editor Width', input: 'number', value: layer.width ?? 1920, min: 8, step: 1 },
+                { key: `backgroundLayer${layerNumber}Repeat`, label: 'Tile Repeat', input: 'checkbox', value: layer.repeat ?? true },
+                { key: `backgroundLayer${layerNumber}X`, label: 'Editor Center X', input: 'number', value: layer.x ?? 0, step: 1 },
+                { key: `backgroundLayer${layerNumber}Y`, label: 'Editor Center Y', input: 'number', value: layer.y, step: 1 },
+                { key: `backgroundLayer${layerNumber}Height`, label: 'Editor Height', input: 'number', value: layer.height, min: 8, step: 1 },
+                { key: `backgroundLayer${layerNumber}ScrollFactorX`, label: 'Game Parallax X', input: 'number', value: layer.scrollFactorX, min: 0, step: 0.05 },
+                { key: `backgroundLayer${layerNumber}ScrollFactorY`, label: 'Game Parallax Y', input: 'number', value: layer.scrollFactorY ?? layer.scrollFactorX, min: 0, step: 0.05 }
             ]
         });
     });

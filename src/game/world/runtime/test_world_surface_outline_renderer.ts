@@ -1,5 +1,6 @@
 import type { Scene } from 'phaser';
 import type { TestWorldSurfaceConfig } from './test_world_config';
+import { resolveTestWorldPlayerVisualRelation, resolveTestWorldVisualLayer } from './test_world_visual_order';
 
 interface Interval {
     start: number;
@@ -66,14 +67,23 @@ const createTestWorldSurfaceBounds = (surface: TestWorldSurfaceConfig) => {
     return { left, right, top, bottom };
 };
 
+const isSolidSurface = (surface: TestWorldSurfaceConfig): boolean => {
+    return (surface.collisionMode ?? 'solid') === 'solid';
+};
+
 export const createTestWorldSurfaceOutlineRenderer = (
     scene: Scene,
     surfaces: readonly TestWorldSurfaceConfig[]
 ): TestWorldSurfaceOutlineRenderer => {
-    const graphics = scene.add.graphics().setDepth(4201);
+    const graphicsByGroup = new Map<string, Phaser.GameObjects.Graphics>([
+        ['background', scene.add.graphics().setDepth(4090)],
+        ['gameplay:behind_player', scene.add.graphics().setDepth(4490)],
+        ['gameplay:in_front_of_player', scene.add.graphics().setDepth(4690)],
+        ['foreground', scene.add.graphics().setDepth(4890)]
+    ]);
 
     const refresh = (): void => {
-        graphics.clear();
+        graphicsByGroup.forEach((graphics) => graphics.clear());
         if (surfaces.length === 0) {
             return;
         }
@@ -84,13 +94,24 @@ export const createTestWorldSurfaceOutlineRenderer = (
         }));
 
         outlinedSurfaces.forEach(({ surface, bounds }) => {
+            const layer = resolveTestWorldVisualLayer('surface', surface);
+            const relation = resolveTestWorldPlayerVisualRelation('surface', surface);
+            const groupKey = layer === 'gameplay' ? `${layer}:${relation}` : layer;
+            const graphics = graphicsByGroup.get(groupKey);
+            if (!graphics) {
+                return;
+            }
             const leftMasks: Interval[] = [];
             const rightMasks: Interval[] = [];
             const topMasks: Interval[] = [];
             const bottomMasks: Interval[] = [];
+            const allowSeamMasking = isSolidSurface(surface);
 
             outlinedSurfaces.forEach((candidate) => {
                 if (candidate.surface.id === surface.id) {
+                    return;
+                }
+                if (!allowSeamMasking || !isSolidSurface(candidate.surface)) {
                     return;
                 }
 
@@ -139,7 +160,7 @@ export const createTestWorldSurfaceOutlineRenderer = (
     return {
         refresh,
         destroy: () => {
-            graphics.destroy();
+            graphicsByGroup.forEach((graphics) => graphics.destroy());
         }
     };
 };

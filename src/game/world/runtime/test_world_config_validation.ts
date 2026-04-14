@@ -11,12 +11,18 @@ import {
     type TestWorldFinishConfig,
     type TestWorldHazardConfig,
     type TestWorldMetaConfig,
+    type TestWorldMovingPlatformMotionState,
     type TestWorldMovingPlatformConfig,
     type TestWorldPlayerSpawnConfig,
     type TestWorldSurfaceConfig,
+    type TestWorldTriggerCommandConfig,
     type TestWorldTriangleFlightBreakWallConfig,
     type TestWorldTrianglePickupConfig,
+    type TestWorldPlayerVisualRelation,
+    type TestWorldVisualLayer,
+    type TestWorldVisualOrderConfig,
     type TestWorldTriggerPlatformConfig,
+    type TestWorldTriggerVolumeConfig,
     type TestWorldWindZoneConfig
 } from './test_world_config';
 
@@ -25,6 +31,16 @@ const MIN_PICKUP_RADIUS = 4;
 const MIN_WORLD_SIZE = 64;
 const MAX_BACKGROUND_LAYERS = 6;
 const DEFAULT_BACKGROUND_COLOR = 0x263238;
+const DEFAULT_TRIGGER_PLATFORM_FILL_COLOR = 0xfff59d;
+const DEFAULT_TRIGGER_PLATFORM_STROKE_COLOR = 0xf9a825;
+const DEFAULT_TRIGGER_PLATFORM_DEACTIVATE_FILL_COLOR = 0xffccbc;
+const DEFAULT_TRIGGER_PLATFORM_DEACTIVATE_STROKE_COLOR = 0xe64a19;
+const DEFAULT_TRIGGER_PLATFORM_BODY_FILL_COLOR = 0x616161;
+const DEFAULT_TRIGGER_PLATFORM_BODY_STROKE_COLOR = 0xb0bec5;
+const DEFAULT_TRIGGER_VOLUME_FILL_COLOR = 0xb3e5fc;
+const DEFAULT_TRIGGER_VOLUME_STROKE_COLOR = 0x0277bd;
+const DEFAULT_TRIGGER_VOLUME_DEACTIVATE_FILL_COLOR = 0xffccbc;
+const DEFAULT_TRIGGER_VOLUME_DEACTIVATE_STROKE_COLOR = 0xe64a19;
 
 const asNumber = (value: unknown, fallback: number): number => {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -90,6 +106,43 @@ const clampScrollFactor = (value: unknown, fallback: number): number => {
     return Math.max(0, Math.min(2, value));
 };
 
+const asVisualLayer = (
+    value: unknown,
+    fallback: TestWorldVisualLayer | undefined
+): TestWorldVisualLayer | undefined => {
+    return value === 'background' || value === 'gameplay' || value === 'foreground'
+        ? value
+        : fallback;
+};
+
+const asPlayerVisualRelation = (
+    value: unknown,
+    fallback: TestWorldPlayerVisualRelation | undefined
+): TestWorldPlayerVisualRelation | undefined => {
+    return value === 'behind_player' || value === 'in_front_of_player'
+        ? value
+        : fallback;
+};
+
+const asRenderOrder = (value: unknown, fallback: number | undefined): number | undefined => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return fallback;
+    }
+
+    return Math.max(-9999, Math.min(9999, Math.round(value)));
+};
+
+const normalizeVisualOrder = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldVisualOrderConfig
+): Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'renderOrder'> => {
+    return {
+        visualLayer: asVisualLayer(raw?.visualLayer, fallback.visualLayer),
+        renderOrder: asRenderOrder(raw?.renderOrder, fallback.renderOrder),
+        playerVisualRelation: asPlayerVisualRelation(raw?.playerVisualRelation, fallback.playerVisualRelation)
+    };
+};
+
 const ensureUniqueId = (id: string, usedIds: Set<string>, prefix: string): string => {
     let candidate = id.length > 0 ? id : prefix;
     let nextIndex = 1;
@@ -99,6 +152,63 @@ const ensureUniqueId = (id: string, usedIds: Set<string>, prefix: string): strin
     }
     usedIds.add(candidate);
     return candidate;
+};
+
+const asMotionState = (
+    value: unknown,
+    fallback: TestWorldMovingPlatformMotionState
+): TestWorldMovingPlatformMotionState => {
+    if (value === 'stopped' || value === 'run_once' || value === 'running_loop') {
+        return value;
+    }
+    return fallback;
+};
+
+const asTriggerTargetType = (
+    value: unknown,
+    fallback: TestWorldTriggerCommandConfig['targetType']
+): TestWorldTriggerCommandConfig['targetType'] => {
+    return value === 'moving_platform' || value === 'trigger_platform' ? value : fallback;
+};
+
+const asTriggerOperation = (
+    value: unknown,
+    fallback: TestWorldTriggerCommandConfig['operation']
+): TestWorldTriggerCommandConfig['operation'] => {
+    return value === 'set_motion_state' || value === 'set_active' ? value : fallback;
+};
+
+const normalizeTriggerCommand = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldTriggerCommandConfig | null
+): TestWorldTriggerCommandConfig | null => {
+    if (!raw && !fallback) {
+        return null;
+    }
+
+    const safeFallback = fallback ?? {
+        targetType: 'trigger_platform',
+        targetId: '',
+        operation: 'set_active',
+        value: true
+    } satisfies TestWorldTriggerCommandConfig;
+    const targetId = asString(raw?.targetId, safeFallback.targetId);
+    if (targetId.length === 0) {
+        return null;
+    }
+
+    const targetType = asTriggerTargetType(raw?.targetType, safeFallback.targetType);
+    const operation = asTriggerOperation(raw?.operation, safeFallback.operation);
+    const value = operation === 'set_motion_state'
+        ? asMotionState(raw?.value, safeFallback.operation === 'set_motion_state' ? safeFallback.value as TestWorldMovingPlatformMotionState : 'running_loop')
+        : asBoolean(raw?.value, safeFallback.operation === 'set_active' ? safeFallback.value as boolean : true);
+
+    return {
+        targetType,
+        targetId,
+        operation,
+        value
+    };
 };
 
 const normalizePlayerSpawn = (raw: Record<string, unknown> | null): TestWorldPlayerSpawnConfig => {
@@ -224,7 +334,10 @@ const normalizeSurface = (
         height: clampRectSize(asNumber(raw?.height, fallback.height)),
         fillColor: asColor(raw?.fillColor, fallback.fillColor) ?? fallback.fillColor,
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor) ?? fallback.strokeColor,
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        alpha: clampAlpha(raw?.alpha, fallback.alpha ?? 1),
+        collisionMode: raw?.collisionMode === 'visual_only' ? 'visual_only' : 'solid',
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -242,7 +355,8 @@ const normalizeHazard = (
         height: clampRectSize(asNumber(raw?.height, fallback.height)),
         fillColor: asColor(raw?.fillColor, fallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -262,7 +376,8 @@ const normalizeCheckpoint = (
         respawnY: asNumber(raw?.respawnY, fallback.respawnY),
         fillColor: asColor(raw?.fillColor, fallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -289,7 +404,8 @@ const normalizeFinish = (
         height: clampRectSize(asNumber(raw?.height, safeFallback.height)),
         fillColor: asColor(raw?.fillColor, safeFallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, safeFallback.strokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, safeFallback)
     };
 };
 
@@ -309,9 +425,11 @@ const normalizeMovingPlatform = (
         axis,
         travelDistance: Math.max(0, asNumber(raw?.travelDistance, fallback.travelDistance)),
         speed: Math.max(0, asNumber(raw?.speed, fallback.speed)),
+        initialMotionState: asMotionState(raw?.initialMotionState, fallback.initialMotionState ?? 'running_loop'),
         fillColor: asColor(raw?.fillColor, fallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -347,14 +465,69 @@ const normalizeTriggerPlatform = (
         activator: raw?.activator === 'drag_box' ? 'drag_box' : 'player',
         triggerAction: raw?.triggerAction === 'deactivate' ? 'deactivate' : 'activate',
         deactivateTriggerAction: raw?.deactivateTriggerAction === 'activate' ? 'activate' : 'deactivate',
-        initiallyActive: asBoolean(raw?.initiallyActive, fallback.initiallyActive ?? false),
-        triggerFillColor: asColor(raw?.triggerFillColor, fallback.triggerFillColor),
-        triggerStrokeColor: asColor(raw?.triggerStrokeColor, fallback.triggerStrokeColor),
-        deactivateTriggerFillColor: asColor(raw?.deactivateTriggerFillColor, fallback.deactivateTriggerFillColor),
-        deactivateTriggerStrokeColor: asColor(raw?.deactivateTriggerStrokeColor, fallback.deactivateTriggerStrokeColor),
-        platformFillColor: asColor(raw?.platformFillColor, fallback.platformFillColor),
-        platformStrokeColor: asColor(raw?.platformStrokeColor, fallback.platformStrokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        initiallyActive: asBoolean(raw?.initiallyActive, false),
+        triggerFillColor: asColor(raw?.triggerFillColor, fallback.triggerFillColor ?? DEFAULT_TRIGGER_PLATFORM_FILL_COLOR),
+        triggerStrokeColor: asColor(raw?.triggerStrokeColor, fallback.triggerStrokeColor ?? DEFAULT_TRIGGER_PLATFORM_STROKE_COLOR),
+        deactivateTriggerFillColor: asColor(
+            raw?.deactivateTriggerFillColor,
+            fallback.deactivateTriggerFillColor ?? DEFAULT_TRIGGER_PLATFORM_DEACTIVATE_FILL_COLOR
+        ),
+        deactivateTriggerStrokeColor: asColor(
+            raw?.deactivateTriggerStrokeColor,
+            fallback.deactivateTriggerStrokeColor ?? DEFAULT_TRIGGER_PLATFORM_DEACTIVATE_STROKE_COLOR
+        ),
+        platformFillColor: asColor(raw?.platformFillColor, fallback.platformFillColor ?? DEFAULT_TRIGGER_PLATFORM_BODY_FILL_COLOR),
+        platformStrokeColor: asColor(raw?.platformStrokeColor, fallback.platformStrokeColor ?? DEFAULT_TRIGGER_PLATFORM_BODY_STROKE_COLOR),
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
+    };
+};
+
+const normalizeTriggerVolume = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldTriggerVolumeConfig,
+    usedIds: Set<string>,
+    index: number
+): TestWorldTriggerVolumeConfig => {
+    const hasDeactivate = typeof raw?.deactivateTriggerX === 'number'
+        && typeof raw?.deactivateTriggerY === 'number'
+        && typeof raw?.deactivateTriggerWidth === 'number'
+        && typeof raw?.deactivateTriggerHeight === 'number';
+    const sourceIds = asArray(raw?.sourceIds)
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+
+    return {
+        id: ensureUniqueId(asString(raw?.id, fallback.id), usedIds, `trigger_volume_${index + 1}`),
+        triggerX: asNumber(raw?.triggerX, fallback.triggerX),
+        triggerY: asNumber(raw?.triggerY, fallback.triggerY),
+        triggerWidth: clampRectSize(asNumber(raw?.triggerWidth, fallback.triggerWidth)),
+        triggerHeight: clampRectSize(asNumber(raw?.triggerHeight, fallback.triggerHeight)),
+        deactivateTriggerX: hasDeactivate ? asNumber(raw?.deactivateTriggerX, fallback.deactivateTriggerX ?? fallback.triggerX) : undefined,
+        deactivateTriggerY: hasDeactivate ? asNumber(raw?.deactivateTriggerY, fallback.deactivateTriggerY ?? fallback.triggerY) : undefined,
+        deactivateTriggerWidth: hasDeactivate
+            ? clampRectSize(asNumber(raw?.deactivateTriggerWidth, fallback.deactivateTriggerWidth ?? fallback.triggerWidth))
+            : undefined,
+        deactivateTriggerHeight: hasDeactivate
+            ? clampRectSize(asNumber(raw?.deactivateTriggerHeight, fallback.deactivateTriggerHeight ?? fallback.triggerHeight))
+            : undefined,
+        activator: raw?.activator === 'drag_box' ? 'drag_box' : 'player',
+        sourceIds: sourceIds.length > 0 ? sourceIds : fallback.sourceIds,
+        enterCommand: normalizeTriggerCommand(asObject(raw?.enterCommand), fallback.enterCommand ?? null),
+        exitCommand: normalizeTriggerCommand(asObject(raw?.exitCommand), fallback.exitCommand ?? null),
+        triggerFillColor: asColor(raw?.triggerFillColor, fallback.triggerFillColor ?? DEFAULT_TRIGGER_VOLUME_FILL_COLOR),
+        triggerStrokeColor: asColor(raw?.triggerStrokeColor, fallback.triggerStrokeColor ?? DEFAULT_TRIGGER_VOLUME_STROKE_COLOR),
+        deactivateTriggerFillColor: asColor(
+            raw?.deactivateTriggerFillColor,
+            fallback.deactivateTriggerFillColor ?? DEFAULT_TRIGGER_VOLUME_DEACTIVATE_FILL_COLOR
+        ),
+        deactivateTriggerStrokeColor: asColor(
+            raw?.deactivateTriggerStrokeColor,
+            fallback.deactivateTriggerStrokeColor ?? DEFAULT_TRIGGER_VOLUME_DEACTIVATE_STROKE_COLOR
+        ),
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -378,7 +551,8 @@ const normalizeDragBox = (
         dragX: Math.max(0, asNumber(raw?.dragX, fallback.dragX ?? 900)),
         fillColor: asColor(raw?.fillColor, fallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -398,7 +572,8 @@ const normalizeWindZone = (
         force: Math.max(0, asNumber(raw?.force, fallback.force)),
         fillColor: asColor(raw?.fillColor, fallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -416,7 +591,8 @@ const normalizeBreakWall = (
         height: clampRectSize(asNumber(raw?.height, fallback.height)),
         fillColor: asColor(raw?.fillColor, fallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -433,7 +609,8 @@ const normalizePickup = (
         radius: clampPickupRadius(asNumber(raw?.radius, fallback.radius)),
         fillColor: asColor(raw?.fillColor, fallback.fillColor),
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor),
-        editorLocked: asBoolean(raw?.editorLocked, false)
+        editorLocked: asBoolean(raw?.editorLocked, false),
+        ...normalizeVisualOrder(raw, fallback)
     };
 };
 
@@ -441,7 +618,8 @@ const normalizeArray = <T>(
     rawItems: unknown,
     defaults: readonly T[],
     normalizeItem: (raw: Record<string, unknown> | null, fallback: T, usedIds: Set<string>, index: number) => T,
-    usedIds: Set<string>
+    usedIds: Set<string>,
+    getId?: (fallback: T) => string
 ): T[] => {
     const rawArrayProvided = Array.isArray(rawItems);
     const sourceItems = asArray(rawItems);
@@ -449,12 +627,16 @@ const normalizeArray = <T>(
     const normalized: T[] = [];
 
     for (let index = 0; index < safeLength; index += 1) {
-        const fallback = defaults[index] ?? defaults[Math.max(0, defaults.length - 1)];
+        const raw = asObject(sourceItems[index]);
+        const rawId = typeof raw?.id === 'string' && raw.id.trim().length > 0 ? raw.id.trim() : null;
+        const matchedFallback = rawId && getId
+            ? defaults.find((entry) => getId(entry) === rawId)
+            : undefined;
+        const fallback = matchedFallback ?? defaults[index] ?? defaults[Math.max(0, defaults.length - 1)];
         if (!fallback) {
             break;
         }
 
-        const raw = asObject(sourceItems[index]);
         normalized.push(normalizeItem(raw, fallback, usedIds, index));
     }
 
@@ -466,6 +648,36 @@ const fixDanglingDragBoxTargets = (config: TestWorldConfig): void => {
     config.dragBoxes.forEach((dragBox) => {
         if (dragBox.targetTriggerPlatformId && !triggerPlatformIds.has(dragBox.targetTriggerPlatformId)) {
             dragBox.targetTriggerPlatformId = undefined;
+        }
+    });
+};
+
+const fixDanglingTriggerCommandTargets = (config: TestWorldConfig): void => {
+    const triggerPlatformIds = new Set(config.triggerPlatforms.map((entry) => entry.id));
+    const movingPlatformIds = new Set(config.movingPlatforms.map((entry) => entry.id));
+    const dragBoxIds = new Set(config.dragBoxes.map((entry) => entry.id));
+
+    const sanitizeCommand = (command: TestWorldTriggerCommandConfig | null | undefined): TestWorldTriggerCommandConfig | null => {
+        if (!command) {
+            return null;
+        }
+        if (command.targetType === 'trigger_platform' && !triggerPlatformIds.has(command.targetId)) {
+            return null;
+        }
+        if (command.targetType === 'moving_platform' && !movingPlatformIds.has(command.targetId)) {
+            return null;
+        }
+        return command;
+    };
+
+    config.triggerVolumes.forEach((triggerVolume) => {
+        triggerVolume.enterCommand = sanitizeCommand(triggerVolume.enterCommand);
+        triggerVolume.exitCommand = sanitizeCommand(triggerVolume.exitCommand);
+        if (triggerVolume.activator === 'drag_box' && triggerVolume.sourceIds) {
+            triggerVolume.sourceIds = triggerVolume.sourceIds.filter((entry) => dragBoxIds.has(entry));
+            if (triggerVolume.sourceIds.length === 0) {
+                triggerVolume.sourceIds = undefined;
+            }
         }
     });
 };
@@ -491,21 +703,23 @@ export const normalizeTestWorldConfig = (
         worldBounds: normalizeWorldBounds(asObject(root?.worldBounds), defaults.worldBounds),
         background: normalizeBackground(root?.background, defaults.background),
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
-        surfaces: normalizeArray(root?.surfaces, defaults.surfaces, normalizeSurface, usedIds),
-        hazards: normalizeArray(root?.hazards, defaults.hazards, normalizeHazard, usedIds),
-        checkpoints: normalizeArray(root?.checkpoints, defaults.checkpoints, normalizeCheckpoint, usedIds),
+        surfaces: normalizeArray(root?.surfaces, defaults.surfaces, normalizeSurface, usedIds, (entry) => entry.id),
+        hazards: normalizeArray(root?.hazards, defaults.hazards, normalizeHazard, usedIds, (entry) => entry.id),
+        checkpoints: normalizeArray(root?.checkpoints, defaults.checkpoints, normalizeCheckpoint, usedIds, (entry) => entry.id),
         finish: normalizeFinish(root?.finish, defaults.finish, usedIds),
-        movingPlatforms: normalizeArray(root?.movingPlatforms, defaults.movingPlatforms, normalizeMovingPlatform, usedIds),
-        triggerPlatforms: normalizeArray(root?.triggerPlatforms, defaults.triggerPlatforms, normalizeTriggerPlatform, usedIds),
-        dragBoxes: normalizeArray(root?.dragBoxes, defaults.dragBoxes, normalizeDragBox, usedIds),
-        windZones: normalizeArray(root?.windZones, defaults.windZones, normalizeWindZone, usedIds),
+        movingPlatforms: normalizeArray(root?.movingPlatforms, defaults.movingPlatforms, normalizeMovingPlatform, usedIds, (entry) => entry.id),
+        triggerPlatforms: normalizeArray(root?.triggerPlatforms, defaults.triggerPlatforms, normalizeTriggerPlatform, usedIds, (entry) => entry.id),
+        triggerVolumes: normalizeArray(root?.triggerVolumes, defaults.triggerVolumes ?? [], normalizeTriggerVolume, usedIds, (entry) => entry.id),
+        dragBoxes: normalizeArray(root?.dragBoxes, defaults.dragBoxes, normalizeDragBox, usedIds, (entry) => entry.id),
+        windZones: normalizeArray(root?.windZones, defaults.windZones, normalizeWindZone, usedIds, (entry) => entry.id),
         triangleFlightBreakWalls: normalizeArray(
             root?.triangleFlightBreakWalls,
             defaults.triangleFlightBreakWalls,
             normalizeBreakWall,
-            usedIds
+            usedIds,
+            (entry) => entry.id
         ),
-        trianglePickups: normalizeArray(root?.trianglePickups, defaults.trianglePickups, normalizePickup, usedIds),
+        trianglePickups: normalizeArray(root?.trianglePickups, defaults.trianglePickups, normalizePickup, usedIds, (entry) => entry.id),
         nextLevelId: root?.nextLevelId === null
             ? null
             : typeof root?.nextLevelId === 'string' && root.nextLevelId.trim().length > 0
@@ -513,6 +727,7 @@ export const normalizeTestWorldConfig = (
                 : defaults.nextLevelId
     };
     fixDanglingDragBoxTargets(normalized);
+    fixDanglingTriggerCommandTargets(normalized);
     return normalized;
 };
 
@@ -566,6 +781,7 @@ export const createMinimalTestWorldConfig = (
         finish: null,
         movingPlatforms: [],
         triggerPlatforms: [],
+        triggerVolumes: [],
         dragBoxes: [],
         windZones: [],
         triangleFlightBreakWalls: [],

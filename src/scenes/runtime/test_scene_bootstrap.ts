@@ -122,6 +122,9 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
                 : null,
         (config) => {
             backgroundRuntime.applyConfig(config);
+        },
+        (basis) => {
+            backgroundRuntime.setEditorPreviewCameraBasis(basis);
         }
     );
     const devHelperRuntime = createTestDevHelperRuntime({

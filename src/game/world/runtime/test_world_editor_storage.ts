@@ -1,5 +1,6 @@
 import {
     createDefaultTestWorldConfig,
+    normalizeTestWorldConfig,
     parseTestWorldConfigJson,
     type ParseTestWorldConfigResult
 } from './test_world_config_validation';
@@ -59,13 +60,14 @@ export const loadTestWorldEditorDraft = (
 };
 
 export const saveTestWorldEditorDraft = (levelId: string, config: TestWorldConfig): ParseTestWorldConfigResult => {
-    const safeConfig = JSON.stringify(config, null, 2);
+    const normalizedConfig = normalizeTestWorldConfig(config, { fallbackConfig: config });
+    const safeConfig = JSON.stringify(normalizedConfig, null, 2);
     if (canUseStorage()) {
         window.localStorage.setItem(getLevelDraftStorageKey(levelId), safeConfig);
     }
 
     return {
-        config,
+        config: normalizedConfig,
         error: null
     };
 };

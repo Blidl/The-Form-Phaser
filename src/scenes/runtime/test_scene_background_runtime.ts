@@ -15,8 +15,15 @@ interface PendingTextureRequest {
     asset: string;
 }
 
+interface EditorPreviewCameraBasis {
+    scrollX: number;
+    scrollY: number;
+    zoom: number;
+}
+
 export interface TestSceneBackgroundRuntime {
     applyConfig: (config: TestWorldConfig) => void;
+    setEditorPreviewCameraBasis: (basis: EditorPreviewCameraBasis | null) => void;
     destroy: () => void;
 }
 
@@ -61,10 +68,23 @@ const createFillBackdrop = (
         .setScrollFactor(scrollFactorX, scrollFactorY);
 };
 
+const resolveEditorPreviewOffset = (
+    basisValue: number | undefined,
+    scrollFactor: number,
+    editorPreviewBasis: EditorPreviewCameraBasis | null
+): number => {
+    if (!editorPreviewBasis || typeof basisValue !== 'number' || !Number.isFinite(basisValue)) {
+        return 0;
+    }
+
+    return basisValue * (1 - scrollFactor);
+};
+
 const createStaticImageBackdrop = (
     scene: Scene,
     worldConfig: TestWorldConfig,
-    backgroundConfig: TestWorldBackgroundConfig
+    backgroundConfig: TestWorldBackgroundConfig,
+    editorPreviewBasis: EditorPreviewCameraBasis | null
 ): GameObjects.GameObject | null => {
     const staticImage = backgroundConfig.staticImage;
     if (!staticImage || !scene.textures.exists(staticImage.textureKey)) {
@@ -76,11 +96,13 @@ const createStaticImageBackdrop = (
     const height = getBackgroundHeight(worldConfig, staticImage.height);
     const centerX = getBackgroundCenterX(worldConfig, staticImage.x);
     const centerY = getBackgroundCenterY(worldConfig, staticImage.y);
+    const previewScrollFactorX = 1;
+    const previewScrollFactorY = 1;
 
     if (staticImage.repeat) {
         const tile = scene.add.tileSprite(centerX, centerY, width, height, staticImage.textureKey)
             .setDepth(BACKGROUND_DEPTH + 1)
-            .setScrollFactor(1, 1)
+            .setScrollFactor(previewScrollFactorX, previewScrollFactorY)
             .setAlpha(staticImage.alpha ?? 1)
             .setTint(staticImage.tintColor ?? 0xffffff);
         tile.tileScaleX = scale;
@@ -90,7 +112,7 @@ const createStaticImageBackdrop = (
 
     return scene.add.image(centerX, centerY, staticImage.textureKey)
         .setDepth(BACKGROUND_DEPTH + 1)
-        .setScrollFactor(1, 1)
+        .setScrollFactor(previewScrollFactorX, previewScrollFactorY)
         .setDisplaySize(width * scale, height * scale)
         .setAlpha(staticImage.alpha ?? 1)
         .setTint(staticImage.tintColor ?? 0xffffff);
@@ -99,20 +121,33 @@ const createStaticImageBackdrop = (
 const createParallaxLayerBackdrop = (
     scene: Scene,
     worldConfig: TestWorldConfig,
-    layer: TestWorldParallaxLayerConfig
+    layer: TestWorldParallaxLayerConfig,
+    editorPreviewBasis: EditorPreviewCameraBasis | null
 ): GameObjects.GameObject[] => {
     const objects: GameObjects.GameObject[] = [];
+    const layerScrollFactorX = layer.scrollFactorX;
+    const layerScrollFactorY = layer.scrollFactorY ?? layer.scrollFactorX;
+    const renderScrollFactorX = editorPreviewBasis ? 1 : layerScrollFactorX;
+    const renderScrollFactorY = editorPreviewBasis ? 1 : layerScrollFactorY;
+    const centerX = getBackgroundCenterX(worldConfig, layer.x)
+        + resolveEditorPreviewOffset(editorPreviewBasis?.scrollX, layerScrollFactorX, editorPreviewBasis);
+    const centerY = getBackgroundCenterY(worldConfig, layer.y)
+        + resolveEditorPreviewOffset(editorPreviewBasis?.scrollY, layerScrollFactorY, editorPreviewBasis);
+    const width = getBackgroundWidth(scene, worldConfig, layer.width);
+    const height = getBackgroundHeight(worldConfig, layer.height);
+    const scale = layer.scale ?? 1;
+
     if (layer.fillColor !== undefined) {
         const fill = scene.add.rectangle(
-            getBackgroundCenterX(worldConfig, layer.x),
-            getBackgroundCenterY(worldConfig, layer.y),
-            getBackgroundWidth(scene, worldConfig, layer.width),
-            getBackgroundHeight(worldConfig, layer.height),
+            centerX,
+            centerY,
+            width,
+            height,
             layer.fillColor,
             BACKGROUND_FILL_ALPHA
         )
             .setDepth(BACKGROUND_DEPTH)
-            .setScrollFactor(layer.scrollFactorX, layer.scrollFactorY ?? layer.scrollFactorX);
+            .setScrollFactor(renderScrollFactorX, renderScrollFactorY);
         objects.push(fill);
     }
 
@@ -120,16 +155,10 @@ const createParallaxLayerBackdrop = (
         return objects;
     }
 
-    const width = getBackgroundWidth(scene, worldConfig, layer.width);
-    const height = getBackgroundHeight(worldConfig, layer.height);
-    const centerX = getBackgroundCenterX(worldConfig, layer.x);
-    const centerY = getBackgroundCenterY(worldConfig, layer.y);
-    const scale = layer.scale ?? 1;
-
     if (layer.repeat ?? true) {
         const tile = scene.add.tileSprite(centerX, centerY, width, height, layer.textureKey)
             .setDepth(BACKGROUND_DEPTH + 1)
-            .setScrollFactor(layer.scrollFactorX, layer.scrollFactorY ?? layer.scrollFactorX)
+            .setScrollFactor(renderScrollFactorX, renderScrollFactorY)
             .setAlpha(layer.alpha ?? 1)
             .setTint(layer.tintColor ?? 0xffffff);
         tile.tileScaleX = scale;
@@ -138,7 +167,7 @@ const createParallaxLayerBackdrop = (
     } else {
         const image = scene.add.image(centerX, centerY, layer.textureKey)
             .setDepth(BACKGROUND_DEPTH + 1)
-            .setScrollFactor(layer.scrollFactorX, layer.scrollFactorY ?? layer.scrollFactorX)
+            .setScrollFactor(renderScrollFactorX, renderScrollFactorY)
             .setDisplaySize(width * scale, height * scale)
             .setAlpha(layer.alpha ?? 1)
             .setTint(layer.tintColor ?? 0xffffff);
@@ -175,6 +204,7 @@ export const createTestSceneBackgroundRuntime = (
     let destroyed = false;
     let objects: GameObjects.GameObject[] = [];
     let pendingTextureKeys = new Set<string>();
+    let editorPreviewBasis: EditorPreviewCameraBasis | null = null;
     const loadedTextureAssets = new Map<string, string>();
 
     const clearObjects = (): void => {
@@ -193,23 +223,24 @@ export const createTestSceneBackgroundRuntime = (
 
         const staticFillColor = background.staticImage?.fillColor;
         if (staticFillColor !== undefined) {
-            objects.push(createFillBackdrop(
+            const fill = createFillBackdrop(
                 scene,
                 currentConfig.worldBounds.width,
                 currentConfig.worldBounds.height,
                 staticFillColor,
                 1,
                 1
-            ));
+            );
+            objects.push(fill);
         }
 
-        const staticImage = createStaticImageBackdrop(scene, currentConfig, background);
+        const staticImage = createStaticImageBackdrop(scene, currentConfig, background, editorPreviewBasis);
         if (staticImage) {
             objects.push(staticImage);
         }
 
         background.layers?.forEach((layer) => {
-            objects.push(...createParallaxLayerBackdrop(scene, currentConfig, layer));
+            objects.push(...createParallaxLayerBackdrop(scene, currentConfig, layer, editorPreviewBasis));
         });
     };
 
@@ -275,6 +306,13 @@ export const createTestSceneBackgroundRuntime = (
             }
             currentConfig = config;
             queueTextureRequests(config.background);
+            applyCurrentConfig();
+        },
+        setEditorPreviewCameraBasis: (basis: EditorPreviewCameraBasis | null): void => {
+            if (destroyed) {
+                return;
+            }
+            editorPreviewBasis = basis;
             applyCurrentConfig();
         },
         destroy: (): void => {
