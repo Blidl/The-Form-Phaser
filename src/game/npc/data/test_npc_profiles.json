@@ -1,0 +1,47 @@
+[
+  {
+    "id": "passive_observer",
+    "displayName": "Observer",
+    "archetype": "passive",
+    "visual": {
+      "label": "P",
+      "bodyWidth": 28,
+      "bodyHeight": 40,
+      "fillColor": 8186776,
+      "strokeColor": 1666210,
+      "accentColor": 14544446,
+      "textColor": "#ecfff5"
+    },
+    "passiveBehavior": {
+      "mode": "idle_patrol",
+      "patrolDistance": 64,
+      "moveSpeed": 28,
+      "idleDurationMs": 900,
+      "patrolPauseMs": 700
+    }
+  },
+  {
+    "id": "enemy_sentry",
+    "displayName": "Sentry",
+    "archetype": "enemy",
+    "visual": {
+      "label": "E",
+      "bodyWidth": 30,
+      "bodyHeight": 42,
+      "fillColor": 15032627,
+      "strokeColor": 7071740,
+      "accentColor": 16772778,
+      "textColor": "#fff7f4"
+    },
+    "enemyBehavior": {
+      "patrolDistance": 96,
+      "patrolSpeed": 34,
+      "alertDurationMs": 450,
+      "chaseSpeed": 82,
+      "senseRadius": 150,
+      "chaseReleaseRadius": 210,
+      "returnSpeed": 40,
+      "postTolerance": 4
+    }
+  }
+]

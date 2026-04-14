@@ -61,6 +61,19 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
     const resolvedLevelId = levelId ?? getInitialCampaignLevelId();
     const defaultConfig = getCampaignLevelConfig(resolvedLevelId);
     const initialWorldLoad = loadTestWorldEditorDraft(resolvedLevelId, defaultConfig);
+    if (
+        initialWorldLoad.source === 'draft'
+        && initialWorldLoad.config.npcs.length === 0
+        && defaultConfig.npcs.length > 0
+    ) {
+        initialWorldLoad.config = {
+            ...initialWorldLoad.config,
+            npcs: defaultConfig.npcs.map((entry) => ({
+                ...entry,
+                behavior: entry.behavior ? { ...entry.behavior } : undefined
+            }))
+        };
+    }
     const backgroundRuntime = createTestSceneBackgroundRuntime(scene, initialWorldLoad.config);
     const initialRespawnPoint: RespawnPoint = {
         x: initialWorldLoad.config.playerSpawn.x,
@@ -106,7 +119,8 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         setPlayerDebugVisualsVisible: (visible) => {
             player.setDebugVisualsVisible(visible);
         },
-        getHazards: () => worldRuntime.hazards
+        getHazards: () => worldRuntime.hazards,
+        getNpcDebugEntries: () => worldRuntime.getNpcDebugEntries()
     });
     const editorRuntime = createTestWorldEditorRuntime(
         scene,

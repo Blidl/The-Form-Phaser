@@ -28,6 +28,32 @@
     "strokeColor": 161725,
     "editorLocked": false
   },
+  "npcs": [
+    {
+      "id": "npc_passive_lookout",
+      "profileId": "passive_observer",
+      "x": 1248,
+      "y": 324,
+      "facing": "right",
+      "behavior": {
+        "patrolDistance": 84,
+        "moveSpeed": 32,
+        "patrolPauseMs": 600
+      }
+    },
+    {
+      "id": "npc_enemy_scout",
+      "profileId": "enemy_sentry",
+      "x": 2112,
+      "y": 699,
+      "facing": "left",
+      "behavior": {
+        "patrolDistance": 108,
+        "senseRadius": 176,
+        "chaseReleaseRadius": 240
+      }
+    }
+  ],
   "surfaces": [
     {
       "id": "ground",

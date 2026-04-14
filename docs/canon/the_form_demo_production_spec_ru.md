@@ -194,6 +194,7 @@ Dev и production build должны читать один и тот же world 
 - `game flow runtime`: main menu, pause, end-of-demo screen;
 - `cutscene runtime`: data-driven sequence player;
 - `npc runtime`: ограниченный state-machine layer;
+- `actor action layer`: shared actor-local actions поверх physics/contact;
 - `audio runtime`: data-driven event + ambience routing;
 - `visual presentation runtime`: background/parallax/VFX/light config на уровень;
 - `emotion state` у персонажа как общий persisted state между уровнями demo.
@@ -355,6 +356,7 @@ Editor нужен как внутренний инструмент под одн
 - запуск prepared sequence;
 - реакция на emotion/color state игрока;
 - ветвление результата через несколько outcome states, не через диалоговое дерево.
+- interaction остается узким gating/handoff слоем и не становится universal AI layer.
 
 NPC-враги:
 
@@ -363,6 +365,13 @@ NPC-враги:
 - patrol/alert/chase/attack/return;
 - возможность переключаться trigger-ами;
 - по сути это behavioural hazards, а не сложная combat AI.
+
+Authoring/model contract:
+
+- level `npcInstance` хранит placement, refs и narrow overrides;
+- profile хранит archetype behavior/presentation defaults;
+- shared actor-local actions живут в отдельном actor action layer;
+- cutscene runtime оркестрирует sequence, но не становится owner всей NPC-логики.
 
 ### 8.9 Cutscenes
 
@@ -383,6 +392,12 @@ NPC-враги:
 - tint/filter overlay;
 - subtitle/caption line;
 - wait / timeline step.
+
+Уточнение по границам:
+
+- `move actor by script`, `play animation clip` и подобные actor-local шаги должны вызывать shared actor action layer;
+- cutscene runtime владеет sequencing/orchestration, но не physics/contact, не базовым NPC behavior loop и не interaction gating;
+- `attach_start` / `attach_release` не входят в first-pass cutscene vocabulary.
 
 ### 8.10 Анимации
 

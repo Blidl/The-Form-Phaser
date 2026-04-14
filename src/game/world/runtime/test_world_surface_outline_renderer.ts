@@ -1,6 +1,6 @@
 import type { Scene } from 'phaser';
 import type { TestWorldSurfaceConfig } from './test_world_config';
-import { resolveTestWorldPlayerVisualRelation, resolveTestWorldVisualLayer } from './test_world_visual_order';
+import { resolveTestWorldVisualLayer } from './test_world_visual_order';
 
 interface Interval {
     start: number;
@@ -76,10 +76,11 @@ export const createTestWorldSurfaceOutlineRenderer = (
     surfaces: readonly TestWorldSurfaceConfig[]
 ): TestWorldSurfaceOutlineRenderer => {
     const graphicsByGroup = new Map<string, Phaser.GameObjects.Graphics>([
-        ['background', scene.add.graphics().setDepth(4090)],
-        ['gameplay:behind_player', scene.add.graphics().setDepth(4490)],
-        ['gameplay:in_front_of_player', scene.add.graphics().setDepth(4690)],
-        ['foreground', scene.add.graphics().setDepth(4890)]
+        ['layer_1', scene.add.graphics().setDepth(3595)],
+        ['layer_2', scene.add.graphics().setDepth(4045)],
+        ['layer_3', scene.add.graphics().setDepth(4488)],
+        ['layer_4', scene.add.graphics().setDepth(4695)],
+        ['layer_5', scene.add.graphics().setDepth(4895)]
     ]);
 
     const refresh = (): void => {
@@ -95,9 +96,7 @@ export const createTestWorldSurfaceOutlineRenderer = (
 
         outlinedSurfaces.forEach(({ surface, bounds }) => {
             const layer = resolveTestWorldVisualLayer('surface', surface);
-            const relation = resolveTestWorldPlayerVisualRelation('surface', surface);
-            const groupKey = layer === 'gameplay' ? `${layer}:${relation}` : layer;
-            const graphics = graphicsByGroup.get(groupKey);
+            const graphics = graphicsByGroup.get(layer);
             if (!graphics) {
                 return;
             }

@@ -1,4 +1,7 @@
 import type {
+    TestNpcInstanceConfig
+} from '../../npc/npc_types';
+import type {
     TestWorldFinishConfig,
     TestWorldCheckpointConfig,
     TestWorldConfig,
@@ -20,6 +23,7 @@ import type {
 export type TestWorldEditorObjectType =
     | 'playerSpawn'
     | 'finish'
+    | 'npc'
     | 'surface'
     | 'hazard'
     | 'checkpoint'
@@ -99,12 +103,18 @@ const patchRectFields = (
 };
 
 const patchVisualOrderFields = (
-    target: Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'renderOrder' | 'playerVisualRelation'>,
+    target: Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'renderOrder'>,
     patch: Record<string, unknown>
 ): void => {
     if (patch.visualLayer === 'default' || patch.visualLayer === '') {
         target.visualLayer = undefined;
-    } else if (patch.visualLayer === 'background' || patch.visualLayer === 'gameplay' || patch.visualLayer === 'foreground') {
+    } else if (
+        patch.visualLayer === 'layer_1'
+        || patch.visualLayer === 'layer_2'
+        || patch.visualLayer === 'layer_3'
+        || patch.visualLayer === 'layer_4'
+        || patch.visualLayer === 'layer_5'
+    ) {
         target.visualLayer = patch.visualLayer as TestWorldVisualLayer;
     }
 
@@ -116,12 +126,6 @@ const patchVisualOrderFields = (
 
     if (typeof patch.renderOrder === 'number' && Number.isFinite(patch.renderOrder)) {
         target.renderOrder = Math.max(-9999, Math.min(9999, Math.round(patch.renderOrder)));
-    }
-
-    if (patch.playerVisualRelation === 'default' || patch.playerVisualRelation === '') {
-        target.playerVisualRelation = undefined;
-    } else if (patch.playerVisualRelation === 'behind_player' || patch.playerVisualRelation === 'in_front_of_player') {
-        target.playerVisualRelation = patch.playerVisualRelation;
     }
 };
 
@@ -169,6 +173,34 @@ const createCircleHandle = (
             entry.radius = Math.max(4, Math.round(Math.max(bounds.width, bounds.height) * 0.5));
         },
         containsPoint: (entry, worldX, worldY) => Math.hypot(worldX - entry.x, worldY - entry.y) <= entry.radius
+    };
+};
+
+const createNpcHandle = (
+    config: TestNpcInstanceConfig
+): TestWorldEditorHandleDefinition<TestNpcInstanceConfig> => {
+    return {
+        id: config.id,
+        rootId: config.id,
+        type: 'npc',
+        part: 'main',
+        label: config.id,
+        getBounds: (entry) => ({
+            x: entry.x,
+            y: entry.y,
+            width: 32,
+            height: 48
+        }),
+        setBounds: (entry, bounds) => {
+            entry.x = bounds.x;
+            entry.y = bounds.y;
+        },
+        containsPoint: (entry, worldX, worldY) => containsRectPoint({
+            x: entry.x,
+            y: entry.y,
+            width: 32,
+            height: 48
+        }, worldX, worldY)
     };
 };
 
@@ -440,6 +472,72 @@ const finishAdapter: TestWorldEditorAdapter<TestWorldFinishConfig> = {
         }
     },
     serialize: (config) => ({ ...config })
+};
+
+const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
+    type: 'npc',
+    createDefault: ({ id, x, y }) => ({
+        id,
+        profileId: 'passive_observer',
+        x,
+        y,
+        facing: 'right',
+        behavior: {}
+    }),
+    duplicate: (config, id) => ({
+        ...config,
+        id,
+        behavior: config.behavior ? { ...config.behavior } : undefined
+    }),
+    getId: (config) => config.id,
+    setId: (config, id) => {
+        config.id = id;
+    },
+    getLocked: () => false,
+    setLocked: () => undefined,
+    getHandles: (config) => [createNpcHandle(config)],
+    patchFields: (config, patch) => {
+        if (typeof patch.x === 'number') {
+            config.x = patch.x;
+        }
+        if (typeof patch.y === 'number') {
+            config.y = patch.y;
+        }
+        if (typeof patch.profileId === 'string' && patch.profileId.trim().length > 0) {
+            config.profileId = patch.profileId.trim();
+        }
+        if (patch.facing === 'left' || patch.facing === 'right') {
+            config.facing = patch.facing;
+        }
+        const behavior = config.behavior ?? {};
+        if (patch.passiveMode === 'idle' || patch.passiveMode === 'idle_patrol') {
+            behavior.passiveMode = patch.passiveMode;
+        }
+        const assignBehaviorNumber = (key: keyof NonNullable<TestNpcInstanceConfig['behavior']>): void => {
+            const value = patch[key];
+            if (typeof value === 'number' && Number.isFinite(value)) {
+                behavior[key] = value;
+            }
+        };
+        assignBehaviorNumber('patrolDistance');
+        assignBehaviorNumber('moveSpeed');
+        assignBehaviorNumber('patrolSpeed');
+        assignBehaviorNumber('idleDurationMs');
+        assignBehaviorNumber('patrolPauseMs');
+        assignBehaviorNumber('alertDurationMs');
+        assignBehaviorNumber('chaseSpeed');
+        assignBehaviorNumber('senseRadius');
+        assignBehaviorNumber('chaseReleaseRadius');
+        assignBehaviorNumber('returnSpeed');
+        assignBehaviorNumber('postTolerance');
+        patchVisualOrderFields(config, patch);
+        config.behavior = behavior;
+    },
+    patchColors: () => undefined,
+    serialize: (config) => ({
+        ...config,
+        behavior: config.behavior ? { ...config.behavior } : undefined
+    })
 };
 
 const movingPlatformAdapter: TestWorldEditorAdapter<TestWorldMovingPlatformConfig> = {
@@ -1159,6 +1257,7 @@ const pickupAdapter: TestWorldEditorAdapter<TestWorldTrianglePickupConfig> = {
 export const TEST_WORLD_EDITOR_ADAPTERS = {
     playerSpawn: playerSpawnAdapter,
     finish: finishAdapter,
+    npc: npcAdapter,
     surface: surfaceAdapter,
     hazard: hazardAdapter,
     checkpoint: checkpointAdapter,
@@ -1177,6 +1276,7 @@ export const TEST_WORLD_EDITOR_PALETTE: ReadonlyArray<{
 }> = [
     { type: 'playerSpawn', label: 'Player Spawn' },
     { type: 'finish', label: 'Finish' },
+    { type: 'npc', label: 'NPC' },
     { type: 'surface', label: 'Surface' },
     { type: 'hazard', label: 'Hazard' },
     { type: 'checkpoint', label: 'Checkpoint' },
@@ -1192,6 +1292,7 @@ export const TEST_WORLD_EDITOR_PALETTE: ReadonlyArray<{
 export const getAllWorldObjectIds = (config: TestWorldConfig): string[] => {
     return [
         ...(config.finish ? [config.finish] : []),
+        ...config.npcs,
         ...config.surfaces,
         ...config.hazards,
         ...config.checkpoints,

@@ -40,9 +40,12 @@ export interface TestWorldEditorSidebarState {
     backgroundSections: TestWorldEditorSidebarSection[];
     palette: ReadonlyArray<{ type: TestWorldEditorObjectType; label: string }>;
     objectItems: TestWorldEditorSidebarObjectItem[];
+    npcItems: TestWorldEditorSidebarObjectItem[];
     inspectorId: string | null;
     inspectorType: string | null;
     inspectorSections: TestWorldEditorSidebarSection[];
+    npcInspectorId: string | null;
+    npcInspectorSections: TestWorldEditorSidebarSection[];
     selectedLocked: boolean;
 }
 
@@ -65,7 +68,7 @@ export interface TestWorldEditorSidebarCallbacks {
     onTabChanged: (tabId: TestWorldEditorTabId) => void;
 }
 
-type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'inspector';
+type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'npc' | 'inspector';
 export type { TestWorldEditorTabId };
 
 const escapeHtml = (value: string): string => {
@@ -173,9 +176,12 @@ export class TestWorldEditorSidebar {
             backgroundSections: [],
             palette: [],
             objectItems: [],
+            npcItems: [],
             inspectorId: null,
             inspectorType: null,
             inspectorSections: [],
+            npcInspectorId: null,
+            npcInspectorSections: [],
             selectedLocked: false
         };
         this.root.addEventListener('click', this.handleClick);
@@ -260,10 +266,7 @@ export class TestWorldEditorSidebar {
 
         const objectId = target?.closest<HTMLElement>('[data-editor-object-id]')?.dataset.editorObjectId;
         if (objectId) {
-            this.activeTab = 'inspector';
-            this.callbacks.onTabChanged(this.activeTab);
             this.callbacks.onSelectObject(objectId);
-            this.render();
             return;
         }
 
@@ -447,7 +450,6 @@ export class TestWorldEditorSidebar {
             this.activeTab = 'level';
             this.callbacks.onTabChanged(this.activeTab);
         }
-
         const buildTabButton = (tabId: TestWorldEditorTabId, label: string): string => {
             const className = tabId === this.activeTab
                 ? 'test-world-editor__button is-active'
@@ -475,8 +477,31 @@ export class TestWorldEditorSidebar {
                 </button>
             `;
         }).join('');
+        const npcObjectMarkup = state.npcItems.map((entry) => {
+            const classes = [
+                'test-world-editor__list-item',
+                entry.selected ? 'is-selected' : '',
+                entry.locked ? 'is-locked' : ''
+            ].filter(Boolean).join(' ');
+            return `
+                <button type="button" class="${classes}" data-editor-object-id="${escapeHtml(entry.id)}">
+                    <span>${escapeHtml(entry.label)}</span>
+                    <small>${escapeHtml(entry.type)}${entry.locked ? ' locked' : ''}</small>
+                </button>
+            `;
+        }).join('');
 
         const inspectorMarkup = state.inspectorSections.map((section) => {
+            return `
+                <section class="test-world-editor__section">
+                    <h3>${escapeHtml(section.title)}</h3>
+                    <div class="test-world-editor__fields">
+                        ${section.fields.map((field) => buildFieldMarkup(field, 'data-editor-field')).join('')}
+                    </div>
+                </section>
+            `;
+        }).join('');
+        const npcInspectorMarkup = state.npcInspectorSections.map((section) => {
             return `
                 <section class="test-world-editor__section">
                     <h3>${escapeHtml(section.title)}</h3>
@@ -511,6 +536,7 @@ export class TestWorldEditorSidebar {
                 ${buildTabButton('level', 'Level')}
                 ${buildTabButton('background', 'Background')}
                 ${buildTabButton('objects', 'Objects')}
+                ${buildTabButton('npc', 'NPC')}
                 ${buildTabButton('inspector', 'Inspector')}
             </div>
         `;
@@ -567,12 +593,25 @@ export class TestWorldEditorSidebar {
                 ${inspectorMarkup || '<div class="test-world-editor__empty">Nothing selected</div>'}
             </section>
         `;
+        const npcPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>NPCs</h3>
+                <div class="test-world-editor__meta">
+                    <div><strong>ID</strong> ${escapeHtml(state.npcInspectorId ?? 'None')}</div>
+                    <div><strong>Type</strong> ${escapeHtml(state.npcInspectorId ? 'npc' : 'None')}</div>
+                </div>
+                <div class="test-world-editor__list">${npcObjectMarkup || '<div class="test-world-editor__empty">No NPCs</div>'}</div>
+                ${npcInspectorMarkup || '<div class="test-world-editor__empty">Select an NPC</div>'}
+            </section>
+        `;
 
         let activePanelMarkup = levelPanelMarkup;
         if (this.activeTab === 'background') {
             activePanelMarkup = backgroundPanelMarkup;
         } else if (this.activeTab === 'objects') {
             activePanelMarkup = objectsPanelMarkup;
+        } else if (this.activeTab === 'npc') {
+            activePanelMarkup = npcPanelMarkup;
         } else if (this.activeTab === 'inspector') {
             activePanelMarkup = inspectorPanelMarkup;
         }

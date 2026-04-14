@@ -82,7 +82,7 @@ export class PlayerView {
             .setDepth(4501)
             .setVisible(false)
             .setOrigin(0.5, 0.5);
-        this.squareTrailGraphics = scene.add.graphics().setDepth(4400);
+        this.squareTrailGraphics = scene.add.graphics().setDepth(4900);
         this.squareAttachJumpTetherGraphics = scene.add.graphics().setDepth(4499);
     }
 

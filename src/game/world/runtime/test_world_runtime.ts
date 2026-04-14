@@ -30,7 +30,6 @@ import {
     type TestWorldDragBoxConfig,
     type TestWorldFinishConfig,
     type TestWorldHazardConfig,
-    type TestWorldMovingPlatformMotionState,
     type TestWorldMovingPlatformConfig,
     type TestWorldPlayerSpawnConfig,
     type TestWorldSurfaceConfig,
@@ -40,11 +39,22 @@ import {
     type TestWorldTriggerVolumeConfig,
     type TestWorldWindZoneConfig
 } from './test_world_config';
+import type { TestNpcInstanceConfig } from '../../npc/npc_types';
 import { normalizeTestWorldConfig } from './test_world_config_validation';
 import { createTestWorldSurfaceOutlineRenderer } from './test_world_surface_outline_renderer';
 import { createTestWorldMovingPlatformRuntimeController } from './test_world_moving_platform_runtime';
 import { createTestWorldTriggerRuntime, type TestWorldTriggerVolumeRuntime } from './test_world_trigger_runtime';
 import { applyTestWorldVisualDepthEntries, type TestWorldVisualDepthEntry } from './test_world_visual_order';
+import {
+    createTestWorldActorContactRuntime,
+    TEST_WORLD_PLAYER_ACTOR_ID
+} from './test_world_actor_contact_runtime';
+import {
+    createTestNpcRuntime,
+    type TestNpcRuntime,
+    type TestNpcWorldCollisionRuntime
+} from '../../npc/npc_runtime';
+import type { TestNpcDebugEntry } from '../../npc/npc_types';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -67,6 +77,7 @@ export interface TestWorldEditorObjectSummary {
 export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
+    updateNpcs: (deltaMs: number) => void;
     postPlayerTickUpdate: () => void;
     resetRespawnObjects: () => void;
     syncPlayerCollisionMode: () => void;
@@ -75,6 +86,7 @@ export interface TestWorldRuntime {
     getWorldBounds: () => TestWorldBoundsConfig;
     getLevelId: () => string;
     getNextLevelId: () => string | null;
+    getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     getEditorHandles: () => readonly TestWorldEditorHandle[];
@@ -122,11 +134,13 @@ interface RuntimeBinding {
 interface BuiltWorldInstance {
     hazards: HazardObject[];
     updateMovingPlatforms: () => void;
+    updateNpcs: (deltaMs: number) => void;
     postPlayerTickUpdate: () => void;
     resetRespawnObjects: () => void;
     syncPlayerCollisionMode: (useArcadePlatformCollisions: boolean) => void;
     consumeFinishReached: () => boolean;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
+    getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
     getEditorHandles: () => readonly TestWorldEditorHandle[];
     getEditorObjects: () => readonly TestWorldEditorObjectSummary[];
     getEditorHandle: (id: string) => TestWorldEditorHandle | null;
@@ -205,6 +219,7 @@ export const createTestWorldRuntime = (
         };
 
         return removeFrom(currentConfig.surfaces)
+            || removeFrom(currentConfig.npcs)
             || removeFrom(currentConfig.hazards)
             || removeFrom(currentConfig.checkpoints)
             || removeFrom(currentConfig.movingPlatforms)
@@ -224,6 +239,7 @@ export const createTestWorldRuntime = (
         | TestWorldHazardConfig
         | TestWorldCheckpointConfig
         | TestWorldFinishConfig
+        | TestNpcInstanceConfig
         | TestWorldMovingPlatformConfig
         | TestWorldTriggerPlatformConfig
         | TestWorldTriggerVolumeConfig
@@ -240,6 +256,7 @@ export const createTestWorldRuntime = (
         }
 
         return currentConfig.surfaces.find((entry) => entry.id === rootId)
+            ?? currentConfig.npcs.find((entry) => entry.id === rootId)
             ?? currentConfig.hazards.find((entry) => entry.id === rootId)
             ?? currentConfig.checkpoints.find((entry) => entry.id === rootId)
             ?? currentConfig.movingPlatforms.find((entry) => entry.id === rootId)
@@ -258,6 +275,9 @@ export const createTestWorldRuntime = (
         },
         updateMovingPlatforms: (): void => {
             instance.updateMovingPlatforms();
+        },
+        updateNpcs: (deltaMs: number): void => {
+            instance.updateNpcs(deltaMs);
         },
         postPlayerTickUpdate: (): void => {
             instance.postPlayerTickUpdate();
@@ -278,6 +298,7 @@ export const createTestWorldRuntime = (
         getWorldBounds: (): TestWorldBoundsConfig => ({ ...currentConfig.worldBounds }),
         getLevelId: (): string => currentConfig.meta.id,
         getNextLevelId: (): string | null => currentConfig.nextLevelId,
+        getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => instance.getNpcDebugEntries(),
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
             currentConfig = normalizeTestWorldConfig(config, {
@@ -330,6 +351,8 @@ export const createTestWorldRuntime = (
 
             if (type === 'surface') {
                 currentConfig.surfaces.push(nextObject as TestWorldSurfaceConfig);
+            } else if (type === 'npc') {
+                currentConfig.npcs.push(nextObject as TestNpcInstanceConfig);
             } else if (type === 'hazard') {
                 currentConfig.hazards.push(nextObject as TestWorldHazardConfig);
             } else if (type === 'checkpoint') {
@@ -377,6 +400,9 @@ export const createTestWorldRuntime = (
                 || binding.type === 'dragBox' || binding.type === 'windZone' || binding.type === 'triangleFlightBreakWall') {
                 const rectLike = duplicated as { x: number; y: number };
                 adapter.patchFields(duplicated, { x: rectLike.x + 24, y: rectLike.y + 24 });
+            } else if (binding.type === 'npc') {
+                const npc = duplicated as TestNpcInstanceConfig;
+                adapter.patchFields(duplicated, { x: npc.x + 24, y: npc.y });
             } else if (binding.type === 'trianglePickup') {
                 const pickup = duplicated as TestWorldTrianglePickupConfig;
                 adapter.patchFields(duplicated, { x: pickup.x + 24, y: pickup.y + 24 });
@@ -402,6 +428,8 @@ export const createTestWorldRuntime = (
 
             if (binding.type === 'surface') {
                 currentConfig.surfaces.push(duplicated as TestWorldSurfaceConfig);
+            } else if (binding.type === 'npc') {
+                currentConfig.npcs.push(duplicated as TestNpcInstanceConfig);
             } else if (binding.type === 'hazard') {
                 currentConfig.hazards.push(duplicated as TestWorldHazardConfig);
             } else if (binding.type === 'checkpoint') {
@@ -475,8 +503,8 @@ const buildWorldInstance = (
     const bindings = new Map<string, RuntimeBinding>();
     const handleMap = new Map<string, TestWorldEditorHandle>();
     const objectSummaries: TestWorldEditorObjectSummary[] = [];
-    const playerPlatformColliders: Physics.Arcade.Collider[] = [];
     const dragBoxWorldColliders: Physics.Arcade.Collider[] = [];
+    const playerDragBoxColliders: Physics.Arcade.Collider[] = [];
     const overlapColliders: Physics.Arcade.Collider[] = [];
     const pickupOverlapColliders = new Map<string, Physics.Arcade.Collider>();
     let activeCheckpointId = config.checkpoints[0]?.id ?? null;
@@ -494,30 +522,30 @@ const buildWorldInstance = (
         colliders.splice(0, colliders.length).forEach((collider) => collider.destroy());
     };
 
-    const rebuildPlayerPlatformColliders = (): void => {
-        destroyColliderList(playerPlatformColliders);
-        surfaces.forEach((surface, id) => {
-            const surfaceConfig = config.surfaces.find((entry) => entry.id === id);
-            if (!surfaceConfig || !isSurfaceSolid(surfaceConfig)) {
-                return;
-            }
-            playerPlatformColliders.push(scene.physics.add.collider(player.arcadeBodyObject, surface));
-        });
-        movingPlatforms.forEach((entry) => {
-            playerPlatformColliders.push(scene.physics.add.collider(player.arcadeBodyObject, entry.bodyObject));
-        });
-        dragBoxes.forEach((entry) => {
-            playerPlatformColliders.push(scene.physics.add.collider(player.arcadeBodyObject, entry.bodyObject));
-        });
-        triggerPlatforms.forEach((entry) => {
-            playerPlatformColliders.push(scene.physics.add.collider(player.arcadeBodyObject, entry.platformBodyObject));
-        });
-        triangleFlightBreakWalls.forEach((entry) => {
-            playerPlatformColliders.push(scene.physics.add.collider(player.arcadeBodyObject, entry.bodyObject));
-        });
-        playerPlatformColliders.forEach((collider) => {
-            collider.active = useArcadePlatformCollisions;
-        });
+    const actorContactRuntime = createTestWorldActorContactRuntime({
+        scene,
+        getSolidSurfaces: () => {
+            return config.surfaces
+                .filter((surfaceConfig) => isSurfaceSolid(surfaceConfig))
+                .map((surfaceConfig) => surfaces.get(surfaceConfig.id))
+                .filter((surface): surface is Phaser.GameObjects.Rectangle => surface !== undefined);
+        },
+        getMovingPlatformBodies: () => movingPlatforms.map((entry) => entry.bodyObject),
+        getTriggerPlatformBodies: () => triggerPlatforms.map((entry) => entry.platformBodyObject),
+        getBreakWallBodies: () => triangleFlightBreakWalls.map((entry) => entry.bodyObject)
+    });
+    addCleanup(() => actorContactRuntime.destroy());
+    actorContactRuntime.registerActor({
+        actorId: TEST_WORLD_PLAYER_ACTOR_ID,
+        kind: 'player',
+        bodyObject: player.arcadeBodyObject,
+        body: player.arcadeBodyObject.body as Physics.Arcade.Body,
+        worldCollisionEnabled: useArcadePlatformCollisions
+    });
+
+    const npcWorldCollisionRuntime: TestNpcWorldCollisionRuntime = {
+        registerActor: actorContactRuntime.registerActor,
+        getContactSnapshot: actorContactRuntime.getContactSnapshot
     };
 
     const rebuildDragBoxWorldColliders = (): void => {
@@ -536,6 +564,15 @@ const buildWorldInstance = (
             triggerPlatforms.forEach((platform) => {
                 dragBoxWorldColliders.push(scene.physics.add.collider(dragBox.bodyObject, platform.platformBodyObject));
             });
+        });
+    };
+
+    const rebuildPlayerDragBoxColliders = (): void => {
+        destroyColliderList(playerDragBoxColliders);
+        dragBoxes.forEach((dragBox) => {
+            const collider = scene.physics.add.collider(player.arcadeBodyObject, dragBox.bodyObject);
+            collider.active = useArcadePlatformCollisions;
+            playerDragBoxColliders.push(collider);
         });
     };
 
@@ -572,6 +609,13 @@ const buildWorldInstance = (
             const surfaceConfig = config.surfaces.find((entry) => entry.id === id);
             if (surfaceConfig) {
                 pushEntry('surface', surfaceConfig, 'body', surface, 0);
+            }
+        });
+
+        config.npcs.forEach((npcConfig) => {
+            const npcVisual = npcRuntime.getVisualObject(npcConfig.id);
+            if (npcVisual) {
+                pushEntry('npc', npcConfig, 'visual', npcVisual, 0);
             }
         });
 
@@ -666,6 +710,13 @@ const buildWorldInstance = (
         definition: TestWorldEditorHandleDefinition<TConfig>,
         configObject: TConfig
     ): TestWorldEditorBounds => {
+        if (binding.type === 'npc' && definition.part === 'main') {
+            const runtimeNpcBounds = npcRuntime.getActorBounds(binding.rootId);
+            if (runtimeNpcBounds) {
+                return runtimeNpcBounds;
+            }
+        }
+
         if (binding.type === 'dragBox' && definition.part === 'main') {
             const runtimeDragBox = dragBoxesById.get(binding.rootId);
             if (runtimeDragBox) {
@@ -707,7 +758,7 @@ const buildWorldInstance = (
                 isLocked: () => binding.isLocked(),
                 getBounds: () => getLiveHandleBounds(binding, definition, configObject),
                 containsPoint: (worldX, worldY) => {
-                    if (binding.type === 'dragBox' && definition.part === 'main') {
+                    if ((binding.type === 'dragBox' || binding.type === 'npc') && definition.part === 'main') {
                         return containsBoundsPoint(getLiveHandleBounds(binding, definition, configObject), worldX, worldY);
                     }
 
@@ -809,6 +860,7 @@ const buildWorldInstance = (
                 refresh: () => {
                     syncSurfaceObject(scene, surface, surfaceConfig);
                     surfaceOutlineRenderer.refresh();
+                    actorContactRuntime.rebuildColliders();
                     rebuildDragBoxWorldColliders();
                 },
                 patchFields: (patch) => {
@@ -816,7 +868,7 @@ const buildWorldInstance = (
                     replaceSurfaceMatterBody(scene, surface, surfaceConfig);
                     syncSurfaceObject(scene, surface, surfaceConfig);
                     surfaceOutlineRenderer.refresh();
-                    rebuildPlayerPlatformColliders();
+                    actorContactRuntime.rebuildColliders();
                     rebuildDragBoxWorldColliders();
                 },
                 patchColors: (patch) => {
@@ -826,6 +878,38 @@ const buildWorldInstance = (
                 }
             },
             TEST_WORLD_EDITOR_ADAPTERS.surface.getHandles(surfaceConfig)
+        );
+    });
+
+    const rebuildNpcObjects = (): void => {
+        npcRuntime.destroy();
+        npcRuntime = createTestNpcRuntime(scene, player, npcWorldCollisionRuntime, config.npcs);
+        refreshVisualDepths();
+    };
+
+    config.npcs.forEach((npcConfig) => {
+        addBinding(
+            npcConfig,
+            {
+                rootId: npcConfig.id,
+                type: 'npc',
+                label: npcConfig.id,
+                isLocked: () => TEST_WORLD_EDITOR_ADAPTERS.npc.getLocked(npcConfig),
+                setLocked: (locked) => {
+                    TEST_WORLD_EDITOR_ADAPTERS.npc.setLocked(npcConfig, locked);
+                },
+                refresh: () => {
+                    rebuildNpcObjects();
+                },
+                patchFields: (patch) => {
+                    TEST_WORLD_EDITOR_ADAPTERS.npc.patchFields(npcConfig, patch);
+                    rebuildNpcObjects();
+                },
+                patchColors: () => {
+                    rebuildNpcObjects();
+                }
+            },
+            TEST_WORLD_EDITOR_ADAPTERS.npc.getHandles(npcConfig)
         );
     });
 
@@ -909,7 +993,7 @@ const buildWorldInstance = (
         const platform = createMovingPlatform(scene, platformConfig);
         movingPlatforms.push(platform);
         movingPlatformsById.set(platformConfig.id, platform);
-        rebuildPlayerPlatformColliders();
+        actorContactRuntime.rebuildColliders();
         rebuildDragBoxWorldColliders();
     };
 
@@ -959,7 +1043,8 @@ const buildWorldInstance = (
         dragBox.bodyObject.setName(dragBoxConfig.id);
         dragBoxes.push(dragBox);
         dragBoxesById.set(dragBoxConfig.id, dragBox);
-        rebuildPlayerPlatformColliders();
+        actorContactRuntime.rebuildColliders();
+        rebuildPlayerDragBoxColliders();
         rebuildDragBoxWorldColliders();
     };
 
@@ -1003,7 +1088,7 @@ const buildWorldInstance = (
         const triggerPlatform = createTriggerPlatform(scene, triggerConfig);
         triggerPlatforms.push(triggerPlatform);
         triggerPlatformsById.set(triggerConfig.id, triggerPlatform);
-        rebuildPlayerPlatformColliders();
+        actorContactRuntime.rebuildColliders();
         rebuildDragBoxWorldColliders();
     };
 
@@ -1144,12 +1229,12 @@ const buildWorldInstance = (
                 },
                 refresh: () => {
                     syncBreakWallObject(scene, wall, wallConfig);
-                    rebuildPlayerPlatformColliders();
+                    actorContactRuntime.rebuildColliders();
                 },
                 patchFields: (patch) => {
                     TEST_WORLD_EDITOR_ADAPTERS.triangleFlightBreakWall.patchFields(wallConfig, patch);
                     syncBreakWallObject(scene, wall, wallConfig);
-                    rebuildPlayerPlatformColliders();
+                    actorContactRuntime.rebuildColliders();
                 },
                 patchColors: (patch) => {
                     TEST_WORLD_EDITOR_ADAPTERS.triangleFlightBreakWall.patchColors(wallConfig, patch);
@@ -1219,7 +1304,10 @@ const buildWorldInstance = (
         );
     });
 
-    rebuildPlayerPlatformColliders();
+    let npcRuntime: TestNpcRuntime = createTestNpcRuntime(scene, player, npcWorldCollisionRuntime, config.npcs);
+    addCleanup(() => npcRuntime.destroy());
+    actorContactRuntime.rebuildColliders();
+    rebuildPlayerDragBoxColliders();
     rebuildDragBoxWorldColliders();
     refreshVisualDepths();
     const triggerRuntime = createTestWorldTriggerRuntime({
@@ -1248,6 +1336,9 @@ const buildWorldInstance = (
             });
             triggerRuntime.update();
         },
+        updateNpcs: (deltaMs: number): void => {
+            npcRuntime.update(deltaMs);
+        },
         postPlayerTickUpdate: (): void => {
             if (player.currentForm === 'triangle' && player.isTriangleBreakWallActive) {
                 triangleFlightBreakWalls.forEach((wall) => {
@@ -1275,7 +1366,8 @@ const buildWorldInstance = (
             });
         },
         syncPlayerCollisionMode: (shouldUseArcadePlatformCollisions: boolean): void => {
-            playerPlatformColliders.forEach((collider) => {
+            actorContactRuntime.setActorWorldCollisionEnabled(TEST_WORLD_PLAYER_ACTOR_ID, shouldUseArcadePlatformCollisions);
+            playerDragBoxColliders.forEach((collider) => {
                 collider.active = shouldUseArcadePlatformCollisions;
             });
         },
@@ -1295,6 +1387,7 @@ const buildWorldInstance = (
             });
             return horizontalInfluenceX;
         },
+        getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => npcRuntime.getDebugEntries(),
         getEditorHandles: (): readonly TestWorldEditorHandle[] => [...handleMap.values()],
         getEditorObjects: (): readonly TestWorldEditorObjectSummary[] => {
             return objectSummaries.map((entry) => ({
@@ -1364,7 +1457,7 @@ const buildWorldInstance = (
             return { x: bounds.x, y: bounds.y };
         },
         destroy: (): void => {
-            destroyColliderList(playerPlatformColliders);
+            destroyColliderList(playerDragBoxColliders);
             destroyColliderList(dragBoxWorldColliders);
             destroyColliderList(overlapColliders);
             movingPlatforms.forEach((entry) => entry.destroy());
@@ -1652,6 +1745,9 @@ const getConfigReference = (config: TestWorldConfig, type: TestWorldEditorObject
     }
     if (type === 'surface') {
         return config.surfaces.find((entry) => entry.id === rootId) ?? null;
+    }
+    if (type === 'npc') {
+        return config.npcs.find((entry) => entry.id === rootId) ?? null;
     }
     if (type === 'hazard') {
         return config.hazards.find((entry) => entry.id === rootId) ?? null;

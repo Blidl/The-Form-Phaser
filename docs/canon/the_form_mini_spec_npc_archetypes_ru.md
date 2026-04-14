@@ -8,6 +8,8 @@
 
 - Уровень хранит только `npcInstance`.
 - Поведение, визуал, анимации и interaction лежат в `npc profile`.
+- `npcInstance` хранит placement + refs + narrow overrides, а не всю NPC-логику.
+- shared actor-local actions лежат в отдельном `actor action layer`, а не внутри cutscene runtime.
 
 ## Archetype A. Passive NPC
 
@@ -25,6 +27,7 @@
 - запуск cutscene
 - реакция на `player emotion/state`
 - outcome branches через заранее заданные result states
+- локальные actor actions выполняются через shared action layer, а interaction только решает доступность и handoff
 
 ### Обязательный first pass
 
@@ -69,6 +72,8 @@
 - Слишком ранняя попытка сделать универсальный AI toolkit.
 - Смешение animation logic, behavior logic и cutscene control без границ.
 - Перегруз interaction system лишними диалоговыми ветками.
+- Превращение interaction в universal AI layer.
+- Передача cutscene runtime владения всей NPC-логикой.
 
 ## Что потом можно уточнить
 

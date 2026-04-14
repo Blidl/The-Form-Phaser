@@ -52,15 +52,16 @@
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| NPC Runtime Foundation | todo | passive + enemy archetypes |
-| NPC Interaction + Reactions | todo | interaction nearby + reactions + cutscene hook |
+| NPC Runtime Foundation | todo | passive + enemy archetypes + narrow npcInstance contract |
+| NPC Interaction + Reactions | todo | interaction nearby + reactions; не universal AI layer |
+| Actor Action Layer Foundation | todo | shared actor-local actions отдельно от cutscene orchestration |
 
 ## Epic 5 вЂ” Cutscene System
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| Cutscene Runtime Foundation | todo | JSON runtime, РЅРµ editor |
-| NPC-triggered Cutscenes | todo | NPC interaction -> cutscene |
+| Cutscene Runtime Foundation | todo | JSON runtime, РЅРµ editor; orchestration-only commands |
+| NPC-triggered Cutscenes | todo | NPC interaction -> cutscene без переноса NPC логики в cutscene runtime |
 
 ## Epic 6 вЂ” Presentation Backbone
 
@@ -100,16 +101,17 @@
 10. Main Menu + Pause + End Screen
 11. NPC Runtime Foundation
 12. NPC Interaction + Reactions
-13. Cutscene Runtime Foundation
-14. NPC-triggered Cutscenes
-15. Animation Profiles
-16. Lighting Profiles + Debug Tuning
-17. Parallax Profiles
-18. VFX Profiles
-19. Audio Manifest + Level Music
-20. Audio Debug Preview
-21. First Vertical Slice Level
-22. Web Build Readiness
+13. Actor Action Layer Foundation
+14. Cutscene Runtime Foundation
+15. NPC-triggered Cutscenes
+16. Animation Profiles
+17. Lighting Profiles + Debug Tuning
+18. Parallax Profiles
+19. VFX Profiles
+20. Audio Manifest + Level Music
+21. Audio Debug Preview
+22. First Vertical Slice Level
+23. Web Build Readiness
 
 ---
 

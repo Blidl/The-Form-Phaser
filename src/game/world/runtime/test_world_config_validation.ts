@@ -18,13 +18,13 @@ import {
     type TestWorldTriggerCommandConfig,
     type TestWorldTriangleFlightBreakWallConfig,
     type TestWorldTrianglePickupConfig,
-    type TestWorldPlayerVisualRelation,
     type TestWorldVisualLayer,
     type TestWorldVisualOrderConfig,
     type TestWorldTriggerPlatformConfig,
     type TestWorldTriggerVolumeConfig,
     type TestWorldWindZoneConfig
 } from './test_world_config';
+import type { TestNpcInstanceConfig } from '../../npc/npc_types';
 
 const MIN_RECT_SIZE = 8;
 const MIN_PICKUP_RADIUS = 4;
@@ -110,16 +110,21 @@ const asVisualLayer = (
     value: unknown,
     fallback: TestWorldVisualLayer | undefined
 ): TestWorldVisualLayer | undefined => {
-    return value === 'background' || value === 'gameplay' || value === 'foreground'
-        ? value
-        : fallback;
-};
+    if (value === 'background') {
+        return 'layer_1';
+    }
+    if (value === 'gameplay') {
+        return 'layer_3';
+    }
+    if (value === 'foreground') {
+        return 'layer_5';
+    }
 
-const asPlayerVisualRelation = (
-    value: unknown,
-    fallback: TestWorldPlayerVisualRelation | undefined
-): TestWorldPlayerVisualRelation | undefined => {
-    return value === 'behind_player' || value === 'in_front_of_player'
+    return value === 'layer_1'
+        || value === 'layer_2'
+        || value === 'layer_3'
+        || value === 'layer_4'
+        || value === 'layer_5'
         ? value
         : fallback;
 };
@@ -138,8 +143,7 @@ const normalizeVisualOrder = (
 ): Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'renderOrder'> => {
     return {
         visualLayer: asVisualLayer(raw?.visualLayer, fallback.visualLayer),
-        renderOrder: asRenderOrder(raw?.renderOrder, fallback.renderOrder),
-        playerVisualRelation: asPlayerVisualRelation(raw?.playerVisualRelation, fallback.playerVisualRelation)
+        renderOrder: asRenderOrder(raw?.renderOrder, fallback.renderOrder)
     };
 };
 
@@ -614,6 +618,93 @@ const normalizePickup = (
     };
 };
 
+const normalizeNpcInstance = (
+    raw: Record<string, unknown> | null,
+    usedIds: Set<string>,
+    index: number
+): TestNpcInstanceConfig | null => {
+    const profileId = asString(raw?.profileId, '');
+    if (profileId.length === 0) {
+        return null;
+    }
+
+    const behaviorSource = asObject(raw?.behavior);
+    const behavior = behaviorSource
+        ? {
+            passiveMode: behaviorSource.passiveMode === 'idle_patrol' || behaviorSource.passiveMode === 'idle'
+                ? behaviorSource.passiveMode
+                : undefined,
+            patrolDistance: typeof behaviorSource.patrolDistance === 'number' && Number.isFinite(behaviorSource.patrolDistance)
+                ? Math.max(0, behaviorSource.patrolDistance)
+                : undefined,
+            moveSpeed: typeof behaviorSource.moveSpeed === 'number' && Number.isFinite(behaviorSource.moveSpeed)
+                ? Math.max(0, behaviorSource.moveSpeed)
+                : undefined,
+            patrolSpeed: typeof behaviorSource.patrolSpeed === 'number' && Number.isFinite(behaviorSource.patrolSpeed)
+                ? Math.max(0, behaviorSource.patrolSpeed)
+                : undefined,
+            idleDurationMs: typeof behaviorSource.idleDurationMs === 'number' && Number.isFinite(behaviorSource.idleDurationMs)
+                ? Math.max(0, behaviorSource.idleDurationMs)
+                : undefined,
+            patrolPauseMs: typeof behaviorSource.patrolPauseMs === 'number' && Number.isFinite(behaviorSource.patrolPauseMs)
+                ? Math.max(0, behaviorSource.patrolPauseMs)
+                : undefined,
+            alertDurationMs: typeof behaviorSource.alertDurationMs === 'number' && Number.isFinite(behaviorSource.alertDurationMs)
+                ? Math.max(0, behaviorSource.alertDurationMs)
+                : undefined,
+            chaseSpeed: typeof behaviorSource.chaseSpeed === 'number' && Number.isFinite(behaviorSource.chaseSpeed)
+                ? Math.max(0, behaviorSource.chaseSpeed)
+                : undefined,
+            senseRadius: typeof behaviorSource.senseRadius === 'number' && Number.isFinite(behaviorSource.senseRadius)
+                ? Math.max(0, behaviorSource.senseRadius)
+                : undefined,
+            chaseReleaseRadius: typeof behaviorSource.chaseReleaseRadius === 'number' && Number.isFinite(behaviorSource.chaseReleaseRadius)
+                ? Math.max(0, behaviorSource.chaseReleaseRadius)
+                : undefined,
+            returnSpeed: typeof behaviorSource.returnSpeed === 'number' && Number.isFinite(behaviorSource.returnSpeed)
+                ? Math.max(0, behaviorSource.returnSpeed)
+                : undefined,
+            postTolerance: typeof behaviorSource.postTolerance === 'number' && Number.isFinite(behaviorSource.postTolerance)
+                ? Math.max(1, behaviorSource.postTolerance)
+                : undefined
+        }
+        : undefined;
+
+    return {
+        id: ensureUniqueId(asString(raw?.id, `npc_${index + 1}`), usedIds, `npc_${index + 1}`),
+        profileId,
+        x: asNumber(raw?.x, 0),
+        y: asNumber(raw?.y, 0),
+        facing: raw?.facing === 'left' ? 'left' : raw?.facing === 'right' ? 'right' : undefined,
+        visualLayer: asVisualLayer(raw?.visualLayer, undefined),
+        renderOrder: typeof raw?.renderOrder === 'number' && Number.isFinite(raw.renderOrder)
+            ? Math.max(-9999, Math.min(9999, Math.round(raw.renderOrder)))
+            : undefined,
+        behavior
+    };
+};
+
+const normalizeNpcInstances = (
+    rawItems: unknown,
+    defaults: readonly TestNpcInstanceConfig[],
+    usedIds: Set<string>
+): TestNpcInstanceConfig[] => {
+    if (rawItems === undefined) {
+        return defaults.map((entry, index) => normalizeNpcInstance({
+            id: entry.id,
+            profileId: entry.profileId,
+            x: entry.x,
+            y: entry.y,
+            facing: entry.facing,
+            behavior: entry.behavior
+        }, usedIds, index)).filter((entry): entry is TestNpcInstanceConfig => entry !== null);
+    }
+
+    return asArray(rawItems)
+        .map((entry, index) => normalizeNpcInstance(asObject(entry), usedIds, index))
+        .filter((entry): entry is TestNpcInstanceConfig => entry !== null);
+};
+
 const normalizeArray = <T>(
     rawItems: unknown,
     defaults: readonly T[],
@@ -703,6 +794,7 @@ export const normalizeTestWorldConfig = (
         worldBounds: normalizeWorldBounds(asObject(root?.worldBounds), defaults.worldBounds),
         background: normalizeBackground(root?.background, defaults.background),
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
+        npcs: normalizeNpcInstances(root?.npcs, defaults.npcs, usedIds),
         surfaces: normalizeArray(root?.surfaces, defaults.surfaces, normalizeSurface, usedIds, (entry) => entry.id),
         hazards: normalizeArray(root?.hazards, defaults.hazards, normalizeHazard, usedIds, (entry) => entry.id),
         checkpoints: normalizeArray(root?.checkpoints, defaults.checkpoints, normalizeCheckpoint, usedIds, (entry) => entry.id),
@@ -775,6 +867,7 @@ export const createMinimalTestWorldConfig = (
             fillColor: 0x81d4fa,
             strokeColor: 0x0277bd
         },
+        npcs: [],
         surfaces: [],
         hazards: [],
         checkpoints: [],

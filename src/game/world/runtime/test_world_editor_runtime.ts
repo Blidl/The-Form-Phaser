@@ -24,9 +24,7 @@ import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runti
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
 import {
-    TEST_WORLD_PLAYER_VISUAL_RELATION_OPTIONS,
     TEST_WORLD_VISUAL_LAYER_OPTIONS,
-    resolveTestWorldPlayerVisualRelation,
     resolveTestWorldRenderOrder,
     resolveTestWorldVisualLayer
 } from './test_world_visual_order';
@@ -493,9 +491,20 @@ export const createTestWorldEditorRuntime = (
     };
     const getSelectedRootId = (): string | null => getSelectedHandle()?.rootId ?? null;
     const isObjectsTabActive = (): boolean => activeTab === 'objects';
+    const isNpcTabActive = (): boolean => activeTab === 'npc';
     const isInspectorTabActive = (): boolean => activeTab === 'inspector';
-    const isObjectInteractionTabActive = (): boolean => isObjectsTabActive() || isInspectorTabActive();
+    const isObjectInteractionTabActive = (): boolean => isObjectsTabActive() || isNpcTabActive() || isInspectorTabActive();
     const isBackgroundTabActive = (): boolean => activeTab === 'background';
+    const getSelectableHandles = (): readonly TestWorldEditorHandle[] => {
+        const handles = getHandles();
+        if (isNpcTabActive()) {
+            return handles.filter((entry) => entry.type === 'npc');
+        }
+        if (isObjectsTabActive()) {
+            return handles.filter((entry) => entry.type !== 'npc');
+        }
+        return handles;
+    };
 
     const getBackgroundHandles = (): BackgroundEditorHandle[] => {
         const background = worldRuntime.getConfig().background;
@@ -546,6 +555,15 @@ export const createTestWorldEditorRuntime = (
         const config = worldRuntime.getConfig();
         const selectedRootId = getSelectedRootId();
         const selectedType = worldRuntime.getEditorObjects().find((entry) => entry.id === selectedRootId)?.type ?? null;
+        const npcItems = worldRuntime.getEditorObjects()
+            .filter((entry) => entry.type === 'npc')
+            .map((entry) => ({
+                id: entry.id,
+                label: entry.label,
+                type: entry.type,
+                locked: entry.locked,
+                selected: entry.id === selectedRootId
+            }));
         return {
             visible: active,
             search: searchTerm,
@@ -558,6 +576,7 @@ export const createTestWorldEditorRuntime = (
             backgroundSections: buildBackgroundSections(config),
             palette: TEST_WORLD_EDITOR_PALETTE,
             objectItems: worldRuntime.getEditorObjects()
+                .filter((entry) => entry.type !== 'npc')
                 .filter((entry) => {
                     const haystack = `${entry.label} ${entry.type}`.toLowerCase();
                     return searchTerm.trim().length === 0 || haystack.includes(searchTerm.trim().toLowerCase());
@@ -569,9 +588,12 @@ export const createTestWorldEditorRuntime = (
                     locked: entry.locked,
                     selected: entry.id === selectedRootId
                 })),
+            npcItems,
             inspectorId: selectedRootId,
             inspectorType: selectedType,
             inspectorSections: buildInspectorSections(config, selectedRootId, selectedType),
+            npcInspectorId: selectedType === 'npc' ? selectedRootId : null,
+            npcInspectorSections: buildNpcInspectorSections(config, selectedType === 'npc' ? selectedRootId : null),
             selectedLocked: getSelectedHandle()?.isLocked() ?? false
         };
     };
@@ -671,6 +693,12 @@ export const createTestWorldEditorRuntime = (
         onSelectObject: (id) => {
             pendingPlacementType = null;
             selectRoot(id);
+            const selectedType = worldRuntime.getEditorObjects().find((entry) => entry.id === id)?.type ?? null;
+            if (isNpcTabActive()) {
+                activeTab = 'npc';
+            } else {
+                activeTab = selectedType === 'npc' ? 'npc' : 'inspector';
+            }
             focusTarget(id);
         },
         onTabChanged: (tabId) => {
@@ -894,6 +922,13 @@ export const createTestWorldEditorRuntime = (
                 ?? getHandles().find((entry) => entry.rootId === rootId)
                 ?? null;
             selectedHandleId = nextHandle?.id ?? null;
+            const selectedType = worldRuntime.getEditorObjects().find((entry) => entry.id === rootId)?.type ?? null;
+            if (selectedType === 'npc' && activeTab !== 'background' && activeTab !== 'level' && activeTab !== 'objects') {
+                activeTab = 'npc';
+            }
+            if (activeTab === 'npc' && selectedType !== 'npc') {
+                selectedHandleId = null;
+            }
         }
         syncSidebar();
     };
@@ -1105,7 +1140,7 @@ export const createTestWorldEditorRuntime = (
             }
         }
 
-        const hit = [...getHandles()].reverse().find((entry) => entry.containsPoint(worldX, worldY)) ?? null;
+        const hit = [...getSelectableHandles()].reverse().find((entry) => entry.containsPoint(worldX, worldY)) ?? null;
         if (!hit) {
             selectedHandleId = null;
             syncSidebar();
@@ -1759,6 +1794,64 @@ const buildInspectorSections = (
             { key: 'strokeColor', label: 'Stroke', input: 'color', value: entry.strokeColor ?? 0xffffff }
         ]
     });
+    const npcSections = (entry: NonNullable<ReturnType<typeof findById<TestWorldConfig['npcs'][number]>>>): TestWorldEditorSidebarSection[] => {
+        return [
+            {
+                title: 'NPC',
+                fields: [
+                    { key: 'x', label: 'Author X', input: 'number', value: entry.x, step: 1 },
+                    { key: 'y', label: 'Author Y', input: 'number', value: entry.y, step: 1 },
+                    {
+                        key: 'profileId',
+                        label: 'Profile',
+                        input: 'select',
+                        value: entry.profileId,
+                        options: [
+                            { value: 'passive_observer', label: 'passive_observer' },
+                            { value: 'enemy_sentry', label: 'enemy_sentry' }
+                        ]
+                    },
+                    {
+                        key: 'facing',
+                        label: 'Facing',
+                        input: 'select',
+                        value: entry.facing ?? 'right',
+                        options: [
+                            { value: 'right', label: 'Right' },
+                            { value: 'left', label: 'Left' }
+                        ]
+                    }
+                ]
+            },
+            {
+                title: 'Behavior',
+                fields: [
+                    {
+                        key: 'passiveMode',
+                        label: 'Passive Mode',
+                        input: 'select',
+                        value: entry.behavior?.passiveMode ?? 'idle',
+                        options: [
+                            { value: 'idle', label: 'Idle' },
+                            { value: 'idle_patrol', label: 'Idle Patrol' }
+                        ]
+                    },
+                    { key: 'patrolDistance', label: 'Patrol Distance', input: 'number', value: entry.behavior?.patrolDistance ?? 64, min: 0, step: 1 },
+                    { key: 'moveSpeed', label: 'Move Speed', input: 'number', value: entry.behavior?.moveSpeed ?? 28, min: 0, step: 1 },
+                    { key: 'patrolSpeed', label: 'Patrol Speed', input: 'number', value: entry.behavior?.patrolSpeed ?? 34, min: 0, step: 1 },
+                    { key: 'idleDurationMs', label: 'Idle Ms', input: 'number', value: entry.behavior?.idleDurationMs ?? 900, min: 0, step: 1 },
+                    { key: 'patrolPauseMs', label: 'Patrol Pause Ms', input: 'number', value: entry.behavior?.patrolPauseMs ?? 700, min: 0, step: 1 },
+                    { key: 'alertDurationMs', label: 'Alert Ms', input: 'number', value: entry.behavior?.alertDurationMs ?? 450, min: 0, step: 1 },
+                    { key: 'senseRadius', label: 'Sense Radius', input: 'number', value: entry.behavior?.senseRadius ?? 150, min: 0, step: 1 },
+                    { key: 'chaseSpeed', label: 'Chase Speed', input: 'number', value: entry.behavior?.chaseSpeed ?? 82, min: 0, step: 1 },
+                    { key: 'chaseReleaseRadius', label: 'Release Radius', input: 'number', value: entry.behavior?.chaseReleaseRadius ?? 210, min: 0, step: 1 },
+                    { key: 'returnSpeed', label: 'Return Speed', input: 'number', value: entry.behavior?.returnSpeed ?? 40, min: 0, step: 1 },
+                    { key: 'postTolerance', label: 'Post Tolerance', input: 'number', value: entry.behavior?.postTolerance ?? 4, min: 1, step: 1 }
+                ]
+            },
+            buildVisualOrderSection('npc', entry)
+        ];
+    };
 
     if (type === 'surface') {
         const entry = findById(config.surfaces);
@@ -1789,6 +1882,10 @@ const buildInspectorSections = (
             },
             buildVisualOrderSection(type, entry)
         ] : [];
+    }
+    if (type === 'npc') {
+        const entry = findById(config.npcs);
+        return entry ? npcSections(entry) : [];
     }
     if (type === 'hazard') {
         const entry = findById(config.hazards);
@@ -1960,6 +2057,20 @@ const buildInspectorSections = (
     return [];
 };
 
+const buildNpcInspectorSections = (
+    config: TestWorldConfig,
+    rootId: string | null
+): TestWorldEditorSidebarSection[] => {
+    if (!rootId) {
+        return [];
+    }
+    const entry = config.npcs.find((npc) => npc.id === rootId) ?? null;
+    if (!entry) {
+        return [];
+    }
+    return buildInspectorSections(config, rootId, 'npc');
+};
+
 const buildLevelSectionsLegacy = (
     config: TestWorldConfig,
     campaignLevels: ReadonlyArray<{ id: string; displayName: string }>
@@ -2036,11 +2147,10 @@ const buildLevelSections = (
 
 const buildVisualOrderSection = (
     type: TestWorldEditorObjectType,
-    entry: Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'renderOrder' | 'playerVisualRelation'>
+    entry: Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'renderOrder'>
 ): TestWorldEditorSidebarSection => {
     const resolvedLayer = resolveTestWorldVisualLayer(type, entry);
     const effectiveRenderOrder = resolveTestWorldRenderOrder(type, entry);
-    const resolvedPlayerRelation = resolveTestWorldPlayerVisualRelation(type, entry);
     const fields: TestWorldEditorSidebarSection['fields'] = [
         {
             key: 'visualLayer',
@@ -2068,21 +2178,6 @@ const buildVisualOrderSection = (
             step: 1
         }
     ];
-
-    if (resolvedLayer === 'gameplay' || entry.visualLayer === undefined || entry.visualLayer === 'gameplay') {
-        fields.push({
-                key: 'playerVisualRelation',
-                label: 'Player Relation',
-                input: 'select',
-                value: entry.playerVisualRelation ?? 'default',
-                options: TEST_WORLD_PLAYER_VISUAL_RELATION_OPTIONS.map((option) => ({
-                    value: option.value,
-                    label: option.value === 'default'
-                        ? `${option.label} (${resolvedPlayerRelation === 'behind_player' ? 'Player In Front' : 'Player Behind'})`
-                        : option.label
-                }))
-            });
-    }
 
     return {
         title: 'Visual Order',

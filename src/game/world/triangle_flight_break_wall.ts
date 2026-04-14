@@ -39,51 +39,54 @@ export const createTriangleFlightBreakWall = (
     markAsPlatformSurface(bodyObject);
     const arcadeBody = bodyObject.body as Physics.Arcade.StaticBody;
 
-    const matterBody = scene.matter.add.rectangle(
+    let currentMatterBody = scene.matter.add.rectangle(
         bodyObject.x,
         bodyObject.y,
         bodyObject.width,
         bodyObject.height,
         { isStatic: true }
     );
-    markMatterBodyAsPlatformSurface(matterBody);
+    markMatterBodyAsPlatformSurface(currentMatterBody);
 
     let broken = false;
 
-    const breakWall = (): void => {
-        if (broken) {
-            return;
-        }
-
-        broken = true;
-        arcadeBody.enable = false;
-        bodyObject.setVisible(false);
-        scene.matter.world.remove(matterBody);
-    };
-
-    const respawn = (): void => {
-        if (!broken) {
-            return;
-        }
-
-        broken = false;
-        arcadeBody.enable = true;
-        arcadeBody.updateFromGameObject();
-        bodyObject.setVisible(true);
-        scene.matter.world.add(matterBody);
-    };
-
-    return {
+    const wallRuntime: TriangleFlightBreakWallObject = {
         bodyObject,
-        matterBody,
+        get matterBody(): MatterJS.BodyType {
+            return currentMatterBody;
+        },
+        set matterBody(nextMatterBody: MatterJS.BodyType) {
+            currentMatterBody = nextMatterBody;
+        },
         isBroken: () => broken,
-        breakWall,
-        respawn,
+        breakWall: (): void => {
+            if (broken) {
+                return;
+            }
+
+            broken = true;
+            arcadeBody.enable = false;
+            bodyObject.setVisible(false);
+            scene.matter.world.remove(currentMatterBody);
+        },
+        respawn: (): void => {
+            if (!broken) {
+                return;
+            }
+
+            broken = false;
+            arcadeBody.enable = true;
+            arcadeBody.updateFromGameObject();
+            bodyObject.setVisible(true);
+            scene.matter.world.add(currentMatterBody);
+        },
         destroy: (): void => {
-            scene.matter.world.remove(matterBody);
+            scene.matter.world.remove(currentMatterBody);
             bodyObject.destroy();
         }
     };
+
+    return wallRuntime;
 };
 
 export const doesTriangleFlightBreakWallOverlapPlayerShape = (

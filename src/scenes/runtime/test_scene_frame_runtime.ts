@@ -54,6 +54,7 @@ export const createTestSceneFrameRuntime = (
                 tuningPanelRuntime.close();
             }
             if (editorRuntime.isActive()) {
+                worldRuntime.updateNpcs(deltaMs);
                 debugRuntime.update();
                 hudRuntime.update();
                 return;
@@ -76,6 +77,7 @@ export const createTestSceneFrameRuntime = (
             player.tick(deltaMs, input, windInfluenceX);
             worldRuntime.postPlayerTickUpdate();
             worldRuntime.syncPlayerCollisionMode();
+            worldRuntime.updateNpcs(deltaMs);
             if (worldRuntime.consumeFinishReached()) {
                 const nextLevelId = worldRuntime.getNextLevelId();
                 if (nextLevelId) {

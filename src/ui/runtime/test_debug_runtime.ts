@@ -4,16 +4,18 @@ import type { HazardObject } from '../../game/world/hazard';
 import type { TestDebugRuntime } from './ui_runtime_types';
 import { createTestDebugDrawRuntime } from './test_debug_draw_runtime';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../shared/dom_input_focus';
+import type { TestNpcDebugEntry } from '../../game/npc/npc_types';
 
 interface CreateTestDebugRuntimeParams {
     scene: Scene;
     player: PlayerDebugModel;
     setPlayerDebugVisualsVisible: (visible: boolean) => void;
     getHazards: () => readonly HazardObject[];
+    getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
 }
 
 export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): TestDebugRuntime => {
-    const { scene, player, setPlayerDebugVisualsVisible, getHazards } = params;
+    const { scene, player, setPlayerDebugVisualsVisible, getHazards, getNpcDebugEntries } = params;
     const keyboard = scene.input.keyboard;
     if (!keyboard) {
         throw new Error('KeyboardPlugin is not available in this scene.');
@@ -26,6 +28,21 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
         player,
         getHazards
     });
+    const npcStateText = scene.add.text(18, 96, '', {
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        color: '#d7fff2',
+        backgroundColor: 'rgba(5, 18, 22, 0.72)',
+        padding: {
+            left: 8,
+            right: 8,
+            top: 6,
+            bottom: 6
+        }
+    })
+        .setDepth(6002)
+        .setScrollFactor(0)
+        .setVisible(false);
 
     let visible = false;
 
@@ -33,8 +50,10 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
         visible = nextVisible;
         debugDrawRuntime.setVisible(visible);
         setPlayerDebugVisualsVisible(visible);
+        npcStateText.setVisible(visible);
         if (!visible) {
             debugDrawRuntime.reset();
+            npcStateText.setText('');
         }
     };
 
@@ -55,20 +74,34 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
 
             if (!visible) {
                 debugDrawRuntime.reset();
+                npcStateText.setText('');
                 return;
             }
 
             debugDrawRuntime.render();
+            const npcEntries = getNpcDebugEntries();
+            if (npcEntries.length === 0) {
+                npcStateText.setText('NPC runtime: none');
+                return;
+            }
+            npcStateText.setText([
+                'NPC runtime',
+                ...npcEntries.map((entry) => {
+                    return `${entry.id} | ${entry.archetype} | ${entry.state} | ${entry.locomotion} | blocked L:${entry.blockedLeft ? '1' : '0'} R:${entry.blockedRight ? '1' : '0'} | player:${entry.touchingPlayer ? '1' : '0'} actor:${entry.touchingOtherActor ? '1' : '0'}`;
+                })
+            ]);
         },
         setVisible: (nextVisible: boolean): void => {
             applyVisibility(nextVisible);
         },
         reset: (): void => {
             debugDrawRuntime.reset();
+            npcStateText.setText('');
         },
         destroy: (): void => {
             applyVisibility(false);
             debugDrawRuntime.destroy();
+            npcStateText.destroy();
         }
     };
 };

@@ -1,7 +1,6 @@
 import type { GameObjects } from 'phaser';
 import type { TestWorldEditorObjectType } from './test_world_editor_adapters';
 import type {
-    TestWorldPlayerVisualRelation,
     TestWorldVisualLayer,
     TestWorldVisualOrderConfig
 } from './test_world_config';
@@ -11,44 +10,37 @@ export const TEST_WORLD_VISUAL_LAYER_OPTIONS: ReadonlyArray<{
     label: string;
 }> = [
     { value: 'default', label: 'Default' },
-    { value: 'background', label: 'Behind Player' },
-    { value: 'gameplay', label: 'Gameplay Default' },
-    { value: 'foreground', label: 'Over Player' }
-] as const;
-
-export const TEST_WORLD_PLAYER_VISUAL_RELATION_OPTIONS: ReadonlyArray<{
-    value: 'default' | TestWorldPlayerVisualRelation;
-    label: string;
-}> = [
-    { value: 'default', label: 'Default' },
-    { value: 'behind_player', label: 'Player In Front' },
-    { value: 'in_front_of_player', label: 'Player Behind' }
+    { value: 'layer_1', label: 'Layer 1' },
+    { value: 'layer_2', label: 'Layer 2' },
+    { value: 'layer_3', label: 'Layer 3 (Player Base)' },
+    { value: 'layer_4', label: 'Layer 4' },
+    { value: 'layer_5', label: 'Layer 5' }
 ] as const;
 
 const VISUAL_LAYER_BASE_DEPTH: Record<TestWorldVisualLayer, number> = {
-    background: 3500,
-    gameplay: 4100,
-    foreground: 4700
+    layer_1: 3500,
+    layer_2: 3950,
+    layer_3: 4380,
+    layer_4: 4600,
+    layer_5: 4800
 };
 
-const GAMEPLAY_PLAYER_RELATION_BASE_DEPTH: Record<TestWorldPlayerVisualRelation, number> = {
-    behind_player: 4100,
-    in_front_of_player: 4600
-};
+const VISUAL_LAYER_DEPTH_STEP = 0.01;
 
 const DEFAULT_VISUAL_LAYER_BY_TYPE: Record<TestWorldEditorObjectType, TestWorldVisualLayer> = {
-    playerSpawn: 'gameplay',
-    finish: 'gameplay',
-    surface: 'gameplay',
-    hazard: 'gameplay',
-    checkpoint: 'background',
-    movingPlatform: 'gameplay',
-    triggerPlatform: 'gameplay',
-    triggerVolume: 'gameplay',
-    dragBox: 'gameplay',
-    windZone: 'background',
-    triangleFlightBreakWall: 'gameplay',
-    trianglePickup: 'gameplay'
+    playerSpawn: 'layer_3',
+    finish: 'layer_4',
+    surface: 'layer_3',
+    npc: 'layer_3',
+    hazard: 'layer_4',
+    checkpoint: 'layer_2',
+    movingPlatform: 'layer_3',
+    triggerPlatform: 'layer_3',
+    triggerVolume: 'layer_2',
+    dragBox: 'layer_3',
+    windZone: 'layer_2',
+    triangleFlightBreakWall: 'layer_3',
+    trianglePickup: 'layer_4'
 };
 
 const DEFAULT_RENDER_ORDER_BY_TYPE: Record<TestWorldEditorObjectType, number> = {
@@ -62,6 +54,7 @@ const DEFAULT_RENDER_ORDER_BY_TYPE: Record<TestWorldEditorObjectType, number> = 
     triangleFlightBreakWall: 180,
     dragBox: 200,
     movingPlatform: 220,
+    npc: 240,
     hazard: 260,
     trianglePickup: 280
 };
@@ -88,51 +81,30 @@ export const resolveTestWorldRenderOrder = (
     return config.renderOrder ?? DEFAULT_RENDER_ORDER_BY_TYPE[objectType];
 };
 
-export const resolveTestWorldPlayerVisualRelation = (
-    objectType: TestWorldEditorObjectType,
-    config: Pick<TestWorldVisualOrderConfig, 'visualLayer' | 'playerVisualRelation'>
-): TestWorldPlayerVisualRelation => {
-    const layer = resolveTestWorldVisualLayer(objectType, config);
-    if (layer === 'background') {
-        return 'behind_player';
-    }
-    if (layer === 'foreground') {
-        return 'in_front_of_player';
-    }
-    return config.playerVisualRelation ?? 'behind_player';
-};
-
 export const applyTestWorldVisualDepthEntries = (
     entries: readonly TestWorldVisualDepthEntry[]
 ): void => {
-    const groupedEntries = new Map<string, TestWorldVisualDepthEntry[]>();
+    const groupedEntries = new Map<TestWorldVisualLayer, TestWorldVisualDepthEntry[]>();
 
     entries.forEach((entry) => {
         const layer = resolveTestWorldVisualLayer(entry.objectType, entry.config);
-        const relation = resolveTestWorldPlayerVisualRelation(entry.objectType, entry.config);
-        const groupKey = layer === 'gameplay' ? `${layer}:${relation}` : layer;
-        const bucket = groupedEntries.get(groupKey);
+        const bucket = groupedEntries.get(layer);
         if (bucket) {
             bucket.push(entry);
             return;
         }
-        groupedEntries.set(groupKey, [entry]);
+        groupedEntries.set(layer, [entry]);
     });
 
-    [
-        'background',
-        'gameplay:behind_player',
-        'gameplay:in_front_of_player',
-        'foreground'
-    ].forEach((groupKey) => {
-            const layerEntries = groupedEntries.get(groupKey) ?? [];
-            const baseDepth = groupKey === 'background'
-                ? VISUAL_LAYER_BASE_DEPTH.background
-                : groupKey === 'foreground'
-                    ? VISUAL_LAYER_BASE_DEPTH.foreground
-                    : groupKey === 'gameplay:in_front_of_player'
-                        ? GAMEPLAY_PLAYER_RELATION_BASE_DEPTH.in_front_of_player
-                        : GAMEPLAY_PLAYER_RELATION_BASE_DEPTH.behind_player;
+    ([
+        'layer_1',
+        'layer_2',
+        'layer_3',
+        'layer_4',
+        'layer_5'
+    ] as const).forEach((layer) => {
+            const layerEntries = groupedEntries.get(layer) ?? [];
+            const baseDepth = VISUAL_LAYER_BASE_DEPTH[layer];
             layerEntries
                 .slice()
                 .sort((left, right) => {
@@ -157,7 +129,7 @@ export const applyTestWorldVisualDepthEntries = (
                     return left.partKey.localeCompare(right.partKey);
                 })
                 .forEach((entry, index) => {
-                    entry.gameObject.setDepth(baseDepth + index);
+                    entry.gameObject.setDepth(baseDepth + (index * VISUAL_LAYER_DEPTH_STEP));
                 });
         });
 };

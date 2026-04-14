@@ -1,17 +1,16 @@
 import defaultLevelJson from './data/levels/test_world_level_01.json';
+import type { TestNpcInstanceConfig } from '../../npc/npc_types';
 
 export interface TestWorldEditorLockable {
     editorLocked?: boolean;
 }
 
-export type TestWorldVisualLayer = 'background' | 'gameplay' | 'foreground';
-export type TestWorldPlayerVisualRelation = 'behind_player' | 'in_front_of_player';
+export type TestWorldVisualLayer = 'layer_1' | 'layer_2' | 'layer_3' | 'layer_4' | 'layer_5';
 
 export interface TestWorldVisualOrderConfig {
     id: string;
     visualLayer?: TestWorldVisualLayer;
     renderOrder?: number;
-    playerVisualRelation?: TestWorldPlayerVisualRelation;
 }
 
 export interface TestWorldMetaConfig {
@@ -229,6 +228,7 @@ export interface TestWorldConfig {
     worldBounds: TestWorldBoundsConfig;
     background: TestWorldBackgroundConfig | null;
     playerSpawn: TestWorldPlayerSpawnConfig;
+    npcs: TestNpcInstanceConfig[];
     surfaces: TestWorldSurfaceConfig[];
     hazards: TestWorldHazardConfig[];
     checkpoints: TestWorldCheckpointConfig[];
