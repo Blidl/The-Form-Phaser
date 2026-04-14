@@ -1,6 +1,7 @@
 import type {
     TestNpcInstanceConfig
 } from '../../npc/npc_types';
+import { isTestNpcScriptedSequenceRef } from '../../npc/npc_scripted_sequences';
 import type {
     TestWorldFinishConfig,
     TestWorldCheckpointConfig,
@@ -482,6 +483,7 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         x,
         y,
         facing: 'right',
+        playerBodyContactMode: undefined,
         behavior: {}
     }),
     duplicate: (config, id) => ({
@@ -508,6 +510,22 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         }
         if (patch.facing === 'left' || patch.facing === 'right') {
             config.facing = patch.facing;
+        }
+        if (patch.playerBodyContactMode === '' || patch.playerBodyContactMode === 'profile_default') {
+            config.playerBodyContactMode = undefined;
+        } else if (
+            patch.playerBodyContactMode === 'block'
+            || patch.playerBodyContactMode === 'overlap'
+            || patch.playerBodyContactMode === 'ignore'
+        ) {
+            config.playerBodyContactMode = patch.playerBodyContactMode;
+        }
+        if (patch.scriptedLoopRef === '' || patch.scriptedLoopRef === 'profile_default') {
+            config.scriptedLoopRef = undefined;
+        } else if (patch.scriptedLoopRef === 'none') {
+            config.scriptedLoopRef = null;
+        } else if (typeof patch.scriptedLoopRef === 'string' && isTestNpcScriptedSequenceRef(patch.scriptedLoopRef)) {
+            config.scriptedLoopRef = patch.scriptedLoopRef;
         }
         const behavior = config.behavior ?? {};
         if (patch.passiveMode === 'idle' || patch.passiveMode === 'idle_patrol') {

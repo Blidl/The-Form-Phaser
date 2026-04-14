@@ -3,6 +3,7 @@
     "id": "passive_observer",
     "displayName": "Observer",
     "archetype": "passive",
+    "playerBodyContactMode": "block",
     "visual": {
       "label": "P",
       "bodyWidth": 28,
@@ -24,6 +25,7 @@
     "id": "enemy_sentry",
     "displayName": "Sentry",
     "archetype": "enemy",
+    "playerBodyContactMode": "block",
     "visual": {
       "label": "E",
       "bodyWidth": 30,

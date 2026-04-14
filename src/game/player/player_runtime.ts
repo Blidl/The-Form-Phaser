@@ -33,6 +33,13 @@ import type {
     PlayerShellState
 } from './player_types';
 import {
+    createArcadeBodyContactShapeSnapshot,
+    createPolygonContactShapeSnapshot,
+    type TestWorldActorContactMode,
+    type TestWorldActorContactShapeSnapshot,
+    type TestWorldActorWorldContactSnapshot
+} from '../world/runtime/test_world_actor_contact_shapes';
+import {
     createPlayerRectSnapshot,
     doesConvexPolygonOverlapRect,
     resolveSquarePoseClear,
@@ -43,6 +50,7 @@ import {
     resolveSquareSupportIntervalFromKnownBody,
     resolveSquareSupportIntervalFromOverlap,
     resolveSquareSupportProbe,
+    resolveTriangleWorldPoints,
     resolveSquareTrailSurfacePoint,
     resolveWorldPointBounds
 } from './geometry/player_geometry_queries';
@@ -53,6 +61,7 @@ import {
     destroyTriangleMatterRuntime,
     hardResetTriangleWorldGeometryState,
     primeTriangleMatterKinematicState,
+    syncTriangleProxyFromMatter,
     stepTriangleMatterKinematicRuntime,
     syncTriangleArcadeBodyMode,
     syncTriangleMatterMode,
@@ -79,7 +88,6 @@ import {
 import { tickPlayerRuntime } from './player_tick_runtime';
 import type { PlayerLifecycleRuntimeContext, PlayerMutableRuntimeState, PlayerTickRuntimeContext } from './player_runtime_types';
 import { clearSquareAttach } from './player_square_attach';
-import { resetTriangleCollisionState } from './geometry/player_triangle_collision_runtime';
 
 export class PfPlayerRuntime {
     private readonly scene: Scene;
@@ -234,6 +242,90 @@ export class PfPlayerRuntime {
 
     public get arcadeBodyObject(): GameObjects.Arc {
         return this.physicsSprite;
+    }
+
+    public get contactMode(): TestWorldActorContactMode {
+        return this.state.currentForm === 'triangle' ? 'triangle_polygon' : 'arcade';
+    }
+
+    public get contactShapeSnapshot(): TestWorldActorContactShapeSnapshot {
+        if (this.state.currentForm !== 'triangle') {
+            return createArcadeBodyContactShapeSnapshot(this.physicsSprite, this.physicsBody);
+        }
+
+        const trianglePoints = this.triangleMatterRuntime.debugPoints.length >= 3
+            ? this.triangleMatterRuntime.debugPoints
+            : resolveTriangleWorldPoints(
+                this.formAnchor.x,
+                this.formAnchor.y,
+                this.state.triangleShell.orientationRad
+            );
+
+        return createPolygonContactShapeSnapshot(
+            trianglePoints.map((point) => ({ x: point.x, y: point.y }))
+        );
+    }
+
+    public get worldContactSnapshot(): TestWorldActorWorldContactSnapshot {
+        if (this.state.currentForm === 'triangle') {
+            return {
+                mode: 'triangle_polygon',
+                grounded: this.state.triangleCollision.hasGroundContact && this.state.triangleCollision.groundSupportEdgeIndex !== null,
+                blockedLeft: this.state.triangleCollision.hasLeftWallContact,
+                blockedRight: this.state.triangleCollision.hasRightWallContact
+            };
+        }
+
+        return {
+            mode: 'arcade',
+            grounded: this.physicsBody.blocked.down || this.physicsBody.touching.down || this.physicsBody.onFloor(),
+            blockedLeft: this.physicsBody.blocked.left,
+            blockedRight: this.physicsBody.blocked.right
+        };
+    }
+
+    public applyActorContactPush(deltaX: number, deltaY: number): { appliedDeltaX: number; appliedDeltaY: number } {
+        if (Math.abs(deltaX) <= 0.0001 && Math.abs(deltaY) <= 0.0001) {
+            return { appliedDeltaX: 0, appliedDeltaY: 0 };
+        }
+
+        if (this.state.currentForm !== 'triangle') {
+            const startX = this.physicsSprite.x;
+            const startY = this.physicsSprite.y;
+            const velocityX = this.physicsBody.velocity.x;
+            const velocityY = this.physicsBody.velocity.y;
+            this.physicsBody.reset(this.physicsBody.x + deltaX, this.physicsBody.y + deltaY);
+            this.physicsBody.setVelocity(velocityX, velocityY);
+            return {
+                appliedDeltaX: this.physicsSprite.x - startX,
+                appliedDeltaY: this.physicsSprite.y - startY
+            };
+        }
+
+        const startX = this.physicsSprite.x;
+        const startY = this.physicsSprite.y;
+        syncTriangleMatterMode(
+            this.scene,
+            this.triangleMatterRuntime,
+            this.state,
+            this.physicsSprite,
+            this.physicsBody,
+            this.frozenForRespawn
+        );
+        this.scene.matter.body.translate(this.triangleMatterRuntime.body, { x: deltaX, y: deltaY });
+        primeTriangleMatterKinematicState(
+            this.scene,
+            this.triangleMatterRuntime,
+            this.state.triangleCollision,
+            this.physicsSprite,
+            this.physicsBody
+        );
+        syncTriangleProxyFromMatter(this.triangleMatterRuntime, this.physicsSprite, this.physicsBody);
+        this.syncVisualPosition();
+        return {
+            appliedDeltaX: this.physicsSprite.x - startX,
+            appliedDeltaY: this.physicsSprite.y - startY
+        };
     }
 
     public get squareAttachJumpPullBody(): Physics.Arcade.Body | Physics.Arcade.StaticBody | null {

@@ -315,3 +315,81 @@
 - Risks / Open Items: Manual smoke is still required for pause/editor/click-spawn interaction on real canvas input.
 - Next Recommended Step: Run the dev-helper smoke checklist, then continue with the next demo/content tasks.
 
+### Entry
+- Date: 2026-04-14
+- Task: Player Contact Shape Adapter v1 - Triangle vs NPC Stability
+- Status: done
+- Summary: Fixed the long-running `Triangle ↔ NPC` contact instability after several failed symptom-driven iterations. The rejected approaches were scene-event depenetration in actor-contact runtime, remembered safe pose rollback, residual bounce resolve, and other post-factum coordinate correction layers. The accepted solution moved responsibility back to the movement owner: `actor contact runtime` stays detector-only, while `npc runtime` performs predictive horizontal guard / push-before-commit against the player triangle polygon.
+- Files:
+  - docs/canon/the_form_orchestrator_state_ru.md
+  - docs/canon/the_form_mini_spec_npc_archetypes_ru.md
+  - docs/canon/the_form_orchestrator_log_ru.md
+  - src/game/world/runtime/test_world_actor_contact_shapes.ts
+  - src/game/world/runtime/test_world_actor_contact_runtime.ts
+  - src/game/player/player_runtime_contracts.ts
+  - src/game/player/player_runtime.ts
+  - src/game/player/PfPlayer.ts
+  - src/game/world/runtime/test_world_runtime.ts
+  - src/game/npc/npc_runtime.ts
+  - src/game/npc/npc_types.ts
+  - src/ui/runtime/test_debug_runtime.ts
+- Manual Check: User confirmed in-thread that the final predictive-guard version fixed the visible gameplay issue after multiple reproductions against left-wall and right-wall triangle pressure cases.
+- Architecture Decisions: Canon rule for future chats: do not solve `Triangle ↔ NPC/actor bounds` by adding another post-tick/post-event correction layer on top of actor contact detection. If an actor owns movement, that actor runtime must clamp or validate its intended movement against triangle polygon before commit, and triangle push must happen before fallback stop. `actor contact runtime` is allowed to expose shape snapshots and contact state, but not to become a hidden pair-physics resolver.
+- Risks / Open Items: The current fix is still a narrow first-pass for `Triangle ↔ Arcade actor bounds`; it is not a general-purpose actor physics engine. If similar bugs appear for other moving actors, reuse the same architectural pattern rather than copying old depenetration hacks.
+- Next Recommended Step: If a future actor also needs triangle-aware motion, extract the predictive guard into a dedicated shared runtime helper instead of rebuilding scene-event overlap correction.
+
+### Entry
+- Date: 2026-04-14
+- Task: Triangle Support on NPC Surfaces
+- Status: done
+- Summary: Fixed the remaining invalid `Triangle ↔ NPC` interaction where Triangle could touch NPCs laterally but could not stand on them as a stable support surface. Root cause was architectural: triangle world-geometry runtime only trusts Matter platform surfaces for grounded/support logic, while NPCs existed only as Arcade actors. The accepted solution gives each NPC a synced Matter support-body, marked as a platform surface, and updates it in frame order before player tick and again after NPC movement.
+- Files:
+  - docs/canon/the_form_orchestrator_state_ru.md
+  - docs/canon/the_form_mini_spec_npc_archetypes_ru.md
+  - docs/canon/the_form_orchestrator_log_ru.md
+  - src/game/npc/npc_runtime.ts
+  - src/game/world/runtime/test_world_runtime.ts
+  - src/scenes/runtime/test_scene_frame_runtime.ts
+- Manual Check: User confirmed in-thread that after the sync support-body integration Triangle now interacts correctly with NPCs as support, instead of bouncing/rotating off them when trying to stand on top.
+- Architecture Decisions: “Normal interaction with Triangle” for NPCs now has an explicit canon meaning: NPCs must support both actor-contact semantics and triangle world-support semantics. If Triangle should be able to stand on an actor, that actor must expose a triangle-consumable support surface adapter; actor-contact flags alone are not sufficient.
+- Risks / Open Items: This remains a narrow adapter pattern for NPCs and other future moving actors; it is not a justification to migrate all actors onto triangle-style kinematic runtime.
+- Next Recommended Step: If another actor class should become a valid Triangle support surface, reuse the same synced Matter support-body pattern instead of inventing a new grounded workaround.
+
+### Entry
+- Date: 2026-04-14
+- Task: Actor Action Layer Foundation v1
+- Status: done
+- Summary: Added a separate shared `actor action layer` foundation instead of expanding the NPC planner into a universal controller. The first-pass vocabulary is limited to actor-local commands: `wait`, `face`, `walk_to_x`, `play_animation`, `set_emotion`, `trigger_event`, with execution running through a generic sequence runtime plus an NPC-only adapter. `npc_runtime` remains the owner of high-level behavior selection and movement policy, while the new layer owns only action execution and action-status inspection.
+- Files:
+  - docs/canon/the_form_orchestrator_log_ru.md
+  - src/game/actor_actions/actor_action_types.ts
+  - src/game/actor_actions/actor_action_runtime.ts
+  - src/game/npc/npc_actor_action_adapter.ts
+  - src/game/npc/npc_runtime.ts
+  - src/game/npc/npc_types.ts
+  - src/ui/runtime/test_debug_runtime.ts
+- Manual Check: `npm run build-nolog` passed. Browser/runtime smoke for live scripted execution and debug overlay inspection was not run in this chat.
+- Architecture Decisions: The action layer is now a separate runtime slice with a per-actor adapter boundary. `planner -> shared actions` is the intended next migration path; cutscene/interaction/orchestration ownership is intentionally not moved into this slice. Sequence runtime keeps terminal statuses visible for debug and supports in-place refresh of compatible running sequences instead of forcing JSON-signature restarts every frame.
+- Risks / Open Items: `play_animation` and `set_emotion` are still TEMPORARY presentation-stub bridges on NPC visuals, not a full presentation system. `walk_to_x` is intentionally narrow and ground-only; no pathfinding, follow, jump, or attach semantics were added here.
+- Next Recommended Step: Migrate current NPC planner outputs from ad-hoc movement branches to a fuller `planner -> shared actions` path without changing high-level NPC state ownership.
+
+### Entry
+- Date: 2026-04-14
+- Task: NPC Scripted Sequence Refs + Runtime Integration v1
+- Status: done
+- Summary: Added a reusable scripted-sequence refs layer for NPCs without introducing a second action runtime. `npc profile` now supports default `scriptedLoopRef`, `npcInstance` supports a narrow override/clear path, and `npc_runtime` can enter a dedicated `scripted_loop` planner state that resolves `sequenceRef -> ActorActionSequence` and drives the existing `ActorActionSequenceRuntime`. Loop restart is handled by re-ensuring the same resolved sequence after terminal completion, while cancellation stays a narrow `ensureSequence(null)` / runtime destroy path. Debug overlay now exposes configured scripted ref, active scripted ref, current step index, and existing sequence/action status fields together.
+- Files:
+  - src/game/npc/npc_scripted_sequences.ts
+  - src/game/npc/data/test_npc_scripted_sequences.json
+  - src/game/npc/npc_types.ts
+  - src/game/npc/npc_profiles.ts
+  - src/game/npc/npc_runtime.ts
+  - src/game/world/runtime/test_world_config_validation.ts
+  - src/scenes/runtime/test_scene_bootstrap.ts
+  - src/ui/runtime/test_debug_runtime.ts
+  - docs/canon/the_form_orchestrator_log_ru.md
+- Manual Check: Pending `npm run build-nolog` after integration. Browser/runtime smoke for a live NPC with non-null `scriptedLoopRef` was not run in this chat.
+- Architecture Decisions: Scripted NPC sequences remain a data/registry layer above the existing actor action execution contract. Planner ownership stays in `npc_runtime`; first pass uses a dedicated opt-in `scripted_loop` state instead of blending authored loops into a giant AI framework or cutscene controller. `scriptedLoopRef` is profile-first with narrow instance override semantics, and instance `null` can explicitly clear a profile default.
+- Risks / Open Items: Shipped profiles/levels are not forced onto scripted mode in this slice, so authored content still needs an explicit ref to exercise the new path. `play_animation` and `set_emotion` still route through TEMPORARY NPC presentation stubs, and missing/invalid refs currently fail quietly into an idle scripted-loop mode with debug visibility rather than a dedicated validation error surface.
+- Next Recommended Step: Add the first authored NPC content that opts into `scriptedLoopRef`, then run a browser smoke focused on loop start, restart after completion, and cancellation on level reload/editor rebuild.
+

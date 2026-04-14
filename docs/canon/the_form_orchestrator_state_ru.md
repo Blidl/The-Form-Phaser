@@ -63,6 +63,8 @@
 - новые системы добавлять узкими runtime-slices.
 - square collision safety не лечить post-tick coordinate correction-логикой, если можно удержать контракт `valid pose or detach` на уровне attach/runtime rules.
 - square corner stability считать отдельным attach-runtime контрактом: внешний угол нельзя лечить случайным overlap retarget или post-factum depenetration; attached pose должна сама ограничивать minimum contact с текущей surface.
+- `Triangle ↔ NPC/actor bounds` не лечить scene-event depenetration, remembered safe pose или post-factum bounce-resolve поверх actor contact runtime. Канонический путь: `actor contact runtime` остаётся detector-only, а модуль-владелец движения actor-а должен делать predictive movement clamp / push-before-commit против triangle polygon.
+- Нормальный `Triangle ↔ NPC` contract включает не только боковой actor contact, но и world-support semantics: если Triangle может физически стоять на NPC, NPC должен предоставлять triangle runtime валидную support surface того же класса, что и остальные world/platform surfaces. Канонический путь для этого — synced Matter support-body у NPC, а не попытка эмулировать grounded/support через actor-contact флаги.
 
 ---
 

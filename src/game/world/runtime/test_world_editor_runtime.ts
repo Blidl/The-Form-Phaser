@@ -24,6 +24,12 @@ import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runti
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
 import {
+    getTestNpcProfile,
+    getTestNpcProfiles,
+    resolveTestNpcConfig
+} from '../../npc/npc_profiles';
+import { getTestNpcScriptedSequenceRefs } from '../../npc/npc_scripted_sequences';
+import {
     TEST_WORLD_VISUAL_LAYER_OPTIONS,
     resolveTestWorldRenderOrder,
     resolveTestWorldVisualLayer
@@ -1795,6 +1801,25 @@ const buildInspectorSections = (
         ]
     });
     const npcSections = (entry: NonNullable<ReturnType<typeof findById<TestWorldConfig['npcs'][number]>>>): TestWorldEditorSidebarSection[] => {
+        const profile = getTestNpcProfile(entry.profileId);
+        const resolved = resolveTestNpcConfig(entry);
+        const profileDefaultScriptedLoopRef = profile?.scriptedLoopRef ?? null;
+        const effectiveScriptedLoopRef = resolved?.scriptedLoopRef ?? null;
+        const profileOptions = getTestNpcProfiles().map((candidate) => ({
+            value: candidate.id,
+            label: `${candidate.id} - ${candidate.displayName}`
+        }));
+        const scriptedLoopOptions = [
+            {
+                value: 'profile_default',
+                label: `Profile Default (${profileDefaultScriptedLoopRef ?? 'None'})`
+            },
+            { value: 'none', label: 'None' },
+            ...getTestNpcScriptedSequenceRefs().map((sequenceRef) => ({
+                value: sequenceRef,
+                label: sequenceRef
+            }))
+        ];
         return [
             {
                 title: 'NPC',
@@ -1806,10 +1831,7 @@ const buildInspectorSections = (
                         label: 'Profile',
                         input: 'select',
                         value: entry.profileId,
-                        options: [
-                            { value: 'passive_observer', label: 'passive_observer' },
-                            { value: 'enemy_sentry', label: 'enemy_sentry' }
-                        ]
+                        options: profileOptions
                     },
                     {
                         key: 'facing',
@@ -1820,6 +1842,25 @@ const buildInspectorSections = (
                             { value: 'right', label: 'Right' },
                             { value: 'left', label: 'Left' }
                         ]
+                    },
+                    {
+                        key: 'playerBodyContactMode',
+                        label: 'Player Body',
+                        input: 'select',
+                        value: entry.playerBodyContactMode ?? 'profile_default',
+                        options: [
+                            { value: 'profile_default', label: 'Profile Default' },
+                            { value: 'block', label: 'Block' },
+                            { value: 'overlap', label: 'Overlap' },
+                            { value: 'ignore', label: 'Ignore' }
+                        ]
+                    },
+                    {
+                        key: 'scriptedLoopRef',
+                        label: `Scripted Loop (Effective: ${effectiveScriptedLoopRef ?? 'None'})`,
+                        input: 'select',
+                        value: entry.scriptedLoopRef === null ? 'none' : (entry.scriptedLoopRef ?? 'profile_default'),
+                        options: scriptedLoopOptions
                     }
                 ]
             },

@@ -78,6 +78,7 @@ export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
     updateNpcs: (deltaMs: number) => void;
+    syncNpcTriangleSupportSurfaces: () => void;
     postPlayerTickUpdate: () => void;
     resetRespawnObjects: () => void;
     syncPlayerCollisionMode: () => void;
@@ -135,6 +136,7 @@ interface BuiltWorldInstance {
     hazards: HazardObject[];
     updateMovingPlatforms: () => void;
     updateNpcs: (deltaMs: number) => void;
+    syncNpcTriangleSupportSurfaces: () => void;
     postPlayerTickUpdate: () => void;
     resetRespawnObjects: () => void;
     syncPlayerCollisionMode: (useArcadePlatformCollisions: boolean) => void;
@@ -278,6 +280,9 @@ export const createTestWorldRuntime = (
         },
         updateNpcs: (deltaMs: number): void => {
             instance.updateNpcs(deltaMs);
+        },
+        syncNpcTriangleSupportSurfaces: (): void => {
+            instance.syncNpcTriangleSupportSurfaces();
         },
         postPlayerTickUpdate: (): void => {
             instance.postPlayerTickUpdate();
@@ -540,6 +545,9 @@ const buildWorldInstance = (
         kind: 'player',
         bodyObject: player.arcadeBodyObject,
         body: player.arcadeBodyObject.body as Physics.Arcade.Body,
+        getContactShapeSnapshot: () => player.contactShapeSnapshot,
+        getWorldContactSnapshot: () => player.worldContactSnapshot,
+        applyContactPush: (deltaX, deltaY) => player.applyActorContactPush(deltaX, deltaY),
         worldCollisionEnabled: useArcadePlatformCollisions
     });
 
@@ -1306,6 +1314,7 @@ const buildWorldInstance = (
 
     let npcRuntime: TestNpcRuntime = createTestNpcRuntime(scene, player, npcWorldCollisionRuntime, config.npcs);
     addCleanup(() => npcRuntime.destroy());
+    npcRuntime.syncTriangleSupportSurfaces();
     actorContactRuntime.rebuildColliders();
     rebuildPlayerDragBoxColliders();
     rebuildDragBoxWorldColliders();
@@ -1338,6 +1347,9 @@ const buildWorldInstance = (
         },
         updateNpcs: (deltaMs: number): void => {
             npcRuntime.update(deltaMs);
+        },
+        syncNpcTriangleSupportSurfaces: (): void => {
+            npcRuntime.syncTriangleSupportSurfaces();
         },
         postPlayerTickUpdate: (): void => {
             if (player.currentForm === 'triangle' && player.isTriangleBreakWallActive) {

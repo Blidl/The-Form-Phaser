@@ -70,6 +70,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
             ...initialWorldLoad.config,
             npcs: defaultConfig.npcs.map((entry) => ({
                 ...entry,
+                scriptedLoopRef: entry.scriptedLoopRef,
                 behavior: entry.behavior ? { ...entry.behavior } : undefined
             }))
         };

@@ -1,11 +1,21 @@
 import type { Scene } from 'phaser';
-import type { TestNpcArchetype, TestNpcState, TestNpcVisualConfig } from './npc_types';
+import type {
+    TestNpcArchetype,
+    TestNpcPresentationAnimation,
+    TestNpcPresentationEmotion,
+    TestNpcState,
+    TestNpcVisualConfig
+} from './npc_types';
 
 export interface TestNpcVisualRuntime {
     rootObject: Phaser.GameObjects.Container;
     setPosition: (x: number, y: number) => void;
     setFacing: (facing: -1 | 1) => void;
     setState: (state: TestNpcState) => void;
+    setPresentationStubState: (
+        animationId: TestNpcPresentationAnimation | null,
+        emotionId: TestNpcPresentationEmotion | null
+    ) => void;
     destroy: () => void;
 }
 
@@ -26,6 +36,8 @@ export const createTestNpcVisualRuntime = (
         color: visual.textColor ?? '#ffffff'
     }).setOrigin(0.5);
     const container = scene.add.container(x, y, [body, accent, eye, label]).setDepth(archetype === 'enemy' ? 4248 : 4244);
+    let presentationAnimation: TestNpcPresentationAnimation | null = null;
+    let presentationEmotion: TestNpcPresentationEmotion | null = null;
 
     const applyStateStyle = (state: TestNpcState): void => {
         if (state === 'chase') {
@@ -61,7 +73,26 @@ export const createTestNpcVisualRuntime = (
         eye.setFillStyle(0xf5f5f5, 0.88);
     };
 
+    const applyPresentationStyle = (): void => {
+        if (presentationEmotion === 'alert') {
+            eye.setScale(1.2);
+        } else if (presentationEmotion === 'calm') {
+            eye.setScale(0.9);
+        } else {
+            eye.setScale(1);
+        }
+
+        if (presentationAnimation === 'wave') {
+            accent.setScale(1.15, 1);
+        } else if (presentationAnimation === 'shake') {
+            accent.setScale(0.9, 1);
+        } else {
+            accent.setScale(1);
+        }
+    };
+
     applyStateStyle(archetype === 'enemy' ? 'patrol' : 'idle');
+    applyPresentationStyle();
 
     return {
         rootObject: container,
@@ -74,6 +105,12 @@ export const createTestNpcVisualRuntime = (
         },
         setState: (state): void => {
             applyStateStyle(state);
+            applyPresentationStyle();
+        },
+        setPresentationStubState: (animationId, emotionId): void => {
+            presentationAnimation = animationId;
+            presentationEmotion = emotionId;
+            applyPresentationStyle();
         },
         destroy: (): void => {
             container.destroy(true);

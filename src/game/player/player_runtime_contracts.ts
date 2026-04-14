@@ -1,10 +1,19 @@
 import type { GameObjects, Physics } from 'phaser';
 import type { PlayerFormAnchor, PlayerHazardHitShape } from './geometry/player_geometry_types';
 import type { PlayerFormId } from './player_types';
+import type {
+    TestWorldActorContactMode,
+    TestWorldActorContactShapeSnapshot,
+    TestWorldActorWorldContactSnapshot
+} from '../world/runtime/test_world_actor_contact_shapes';
 
 export interface PlayerWorldActor {
     currentForm: PlayerFormId;
     arcadeBodyObject: GameObjects.Arc;
+    contactMode: TestWorldActorContactMode;
+    contactShapeSnapshot: TestWorldActorContactShapeSnapshot;
+    worldContactSnapshot: TestWorldActorWorldContactSnapshot;
+    applyActorContactPush: (deltaX: number, deltaY: number) => { appliedDeltaX: number; appliedDeltaY: number };
     squareAttachJumpPullBody: Physics.Arcade.Body | Physics.Arcade.StaticBody | null;
     isCurrentlyGrounded: boolean;
     isTriangleFlightActive: boolean;
@@ -40,6 +49,7 @@ export interface PlayerSquareDebugView {
 export interface PlayerDebugModel {
     currentForm: PlayerFormId;
     arcadeBodyObject: GameObjects.Arc;
+    contactMode: TestWorldActorContactMode;
     triangleVisualObject: GameObjects.Triangle;
     trianglePhysicsPoints: ReadonlyArray<{ x: number; y: number }> | null;
     hazardHitShape: PlayerHazardHitShape;

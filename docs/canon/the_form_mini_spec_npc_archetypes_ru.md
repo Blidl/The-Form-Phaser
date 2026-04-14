@@ -66,6 +66,8 @@
 - Enemy NPC читается как угроза и имеет понятный patrol/chase loop.
 - NPC state можно дебажить в runtime.
 - NPC настраиваются через profiles, а не хардкодятся по месту.
+- `Triangle ↔ NPC` contact не должен чиниться post-factum выталкиванием из actor-contact слоя. Если NPC двигается и упирается в Triangle, authoritative решение должно жить в `npc runtime` как predictive movement clamp / push-before-commit, а `actor contact runtime` должен оставаться detector/debug слоем.
+- `Triangle ↔ NPC` считается корректным только если Triangle может и толкать NPC/получать push, и стоять на NPC как на валидной опоре. Для этого NPC должен экспортировать triangle-friendly support surface adapter; одного `touchingPlayer` или actor-contact snapshot недостаточно.
 
 ## Риски
 

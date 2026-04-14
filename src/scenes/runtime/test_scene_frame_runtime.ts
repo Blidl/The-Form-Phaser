@@ -67,6 +67,7 @@ export const createTestSceneFrameRuntime = (
             }
 
             worldRuntime.updateMovingPlatforms();
+            worldRuntime.syncNpcTriangleSupportSurfaces();
             worldRuntime.syncPlayerCollisionMode();
 
             const input = tuningPanelRuntime.shouldMuteGameplayInput()
@@ -78,6 +79,7 @@ export const createTestSceneFrameRuntime = (
             worldRuntime.postPlayerTickUpdate();
             worldRuntime.syncPlayerCollisionMode();
             worldRuntime.updateNpcs(deltaMs);
+            worldRuntime.syncNpcTriangleSupportSurfaces();
             if (worldRuntime.consumeFinishReached()) {
                 const nextLevelId = worldRuntime.getNextLevelId();
                 if (nextLevelId) {

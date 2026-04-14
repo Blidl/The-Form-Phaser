@@ -2,6 +2,7 @@ import profilesJson from './data/test_npc_profiles.json';
 import type {
     TestNpcEnemyProfileBehavior,
     TestNpcPassiveProfileBehavior,
+    TestNpcPlayerBodyContactMode,
     TestNpcProfile,
     TestNpcResolvedConfig,
     TestNpcInstanceConfig
@@ -24,6 +25,15 @@ const DEFAULT_ENEMY_BEHAVIOR: TestNpcEnemyProfileBehavior = {
     chaseReleaseRadius: 200,
     returnSpeed: 38,
     postTolerance: 4
+};
+
+const asPlayerBodyContactMode = (
+    value: unknown,
+    fallback: TestNpcPlayerBodyContactMode = 'block'
+): TestNpcPlayerBodyContactMode => {
+    return value === 'block' || value === 'overlap' || value === 'ignore'
+        ? value
+        : fallback;
 };
 
 const clampPositive = (value: unknown, fallback: number, minimum: number = 0): number => {
@@ -60,6 +70,10 @@ const asProfile = (value: unknown, index: number): TestNpcProfile | null => {
             ? raw.displayName.trim()
             : id,
         archetype,
+        scriptedLoopRef: typeof raw.scriptedLoopRef === 'string' && raw.scriptedLoopRef.trim().length > 0
+            ? raw.scriptedLoopRef.trim()
+            : undefined,
+        playerBodyContactMode: asPlayerBodyContactMode(raw.playerBodyContactMode, 'block'),
         visual: {
             label: typeof rawVisual.label === 'string' && rawVisual.label.trim().length > 0
                 ? rawVisual.label.trim()
@@ -101,6 +115,14 @@ const PROFILE_LIST = (Array.isArray(profilesJson) ? profilesJson : [])
 
 const PROFILE_MAP = new Map(PROFILE_LIST.map((profile) => [profile.id, profile] satisfies readonly [string, TestNpcProfile]));
 
+export const getTestNpcProfiles = (): readonly TestNpcProfile[] => {
+    return PROFILE_LIST;
+};
+
+export const getTestNpcProfileIds = (): readonly string[] => {
+    return PROFILE_LIST.map((profile) => profile.id);
+};
+
 export const getTestNpcProfile = (profileId: string): TestNpcProfile | null => {
     return PROFILE_MAP.get(profileId) ?? null;
 };
@@ -115,6 +137,12 @@ export const resolveTestNpcConfig = (instance: TestNpcInstanceConfig): TestNpcRe
         instance,
         profile,
         facing: instance.facing === 'left' ? 'left' : 'right',
+        scriptedLoopRef: instance.scriptedLoopRef === null
+            ? null
+            : (typeof instance.scriptedLoopRef === 'string' && instance.scriptedLoopRef.trim().length > 0
+                ? instance.scriptedLoopRef.trim()
+                : (profile.scriptedLoopRef ?? null)),
+        playerBodyContactMode: asPlayerBodyContactMode(instance.playerBodyContactMode, profile.playerBodyContactMode),
         passiveBehavior: profile.archetype === 'passive'
             ? {
                 mode: instance.behavior?.passiveMode ?? profile.passiveBehavior?.mode ?? DEFAULT_PASSIVE_BEHAVIOR.mode,

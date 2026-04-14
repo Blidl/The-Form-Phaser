@@ -25,6 +25,7 @@ import {
     type TestWorldWindZoneConfig
 } from './test_world_config';
 import type { TestNpcInstanceConfig } from '../../npc/npc_types';
+import { isTestNpcScriptedSequenceRef } from '../../npc/npc_scripted_sequences';
 
 const MIN_RECT_SIZE = 8;
 const MIN_PICKUP_RADIUS = 4;
@@ -670,12 +671,25 @@ const normalizeNpcInstance = (
         }
         : undefined;
 
+    const scriptedLoopRef = raw?.scriptedLoopRef === null
+        ? null
+        : (() => {
+            const ref = asOptionalString(raw?.scriptedLoopRef);
+            return ref && isTestNpcScriptedSequenceRef(ref) ? ref : undefined;
+        })();
+
     return {
         id: ensureUniqueId(asString(raw?.id, `npc_${index + 1}`), usedIds, `npc_${index + 1}`),
         profileId,
         x: asNumber(raw?.x, 0),
         y: asNumber(raw?.y, 0),
         facing: raw?.facing === 'left' ? 'left' : raw?.facing === 'right' ? 'right' : undefined,
+        scriptedLoopRef,
+        playerBodyContactMode: raw?.playerBodyContactMode === 'block'
+            || raw?.playerBodyContactMode === 'overlap'
+            || raw?.playerBodyContactMode === 'ignore'
+            ? raw.playerBodyContactMode
+            : undefined,
         visualLayer: asVisualLayer(raw?.visualLayer, undefined),
         renderOrder: typeof raw?.renderOrder === 'number' && Number.isFinite(raw.renderOrder)
             ? Math.max(-9999, Math.min(9999, Math.round(raw.renderOrder)))
@@ -696,6 +710,8 @@ const normalizeNpcInstances = (
             x: entry.x,
             y: entry.y,
             facing: entry.facing,
+            scriptedLoopRef: entry.scriptedLoopRef,
+            playerBodyContactMode: entry.playerBodyContactMode,
             behavior: entry.behavior
         }, usedIds, index)).filter((entry): entry is TestNpcInstanceConfig => entry !== null);
     }

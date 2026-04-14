@@ -1,0 +1,42 @@
+[
+  {
+    "id": "ambient_observer_loop",
+    "actions": [
+      {
+        "kind": "face",
+        "ref": "look_right",
+        "facing": 1
+      },
+      {
+        "kind": "wait",
+        "ref": "hold_right",
+        "durationMs": 900
+      },
+      {
+        "kind": "set_emotion",
+        "ref": "calm_emotion",
+        "emotionId": "calm"
+      },
+      {
+        "kind": "play_animation",
+        "ref": "wave_anim",
+        "animationId": "wave"
+      },
+      {
+        "kind": "wait",
+        "ref": "wave_hold",
+        "durationMs": 700
+      },
+      {
+        "kind": "face",
+        "ref": "look_left",
+        "facing": -1
+      },
+      {
+        "kind": "wait",
+        "ref": "hold_left",
+        "durationMs": 900
+      }
+    ]
+  }
+]

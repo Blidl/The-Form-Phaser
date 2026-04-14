@@ -28,7 +28,7 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
         player,
         getHazards
     });
-    const npcStateText = scene.add.text(18, 96, '', {
+    const runtimeStateText = scene.add.text(18, 96, '', {
         fontFamily: 'monospace',
         fontSize: '12px',
         color: '#d7fff2',
@@ -50,10 +50,10 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
         visible = nextVisible;
         debugDrawRuntime.setVisible(visible);
         setPlayerDebugVisualsVisible(visible);
-        npcStateText.setVisible(visible);
+        runtimeStateText.setVisible(visible);
         if (!visible) {
             debugDrawRuntime.reset();
-            npcStateText.setText('');
+            runtimeStateText.setText('');
         }
     };
 
@@ -74,20 +74,41 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
 
             if (!visible) {
                 debugDrawRuntime.reset();
-                npcStateText.setText('');
+                runtimeStateText.setText('');
                 return;
             }
 
             debugDrawRuntime.render();
             const npcEntries = getNpcDebugEntries();
+            const playerRuntimeLine = `Player runtime | form:${player.currentForm} | contact:${player.contactMode === 'arcade' ? 'arcade' : 'triangle polygon'}`;
             if (npcEntries.length === 0) {
-                npcStateText.setText('NPC runtime: none');
+                runtimeStateText.setText([
+                    playerRuntimeLine,
+                    'NPC runtime: none'
+                ]);
                 return;
             }
-            npcStateText.setText([
+            runtimeStateText.setText([
+                playerRuntimeLine,
                 'NPC runtime',
                 ...npcEntries.map((entry) => {
-                    return `${entry.id} | ${entry.archetype} | ${entry.state} | ${entry.locomotion} | blocked L:${entry.blockedLeft ? '1' : '0'} R:${entry.blockedRight ? '1' : '0'} | player:${entry.touchingPlayer ? '1' : '0'} actor:${entry.touchingOtherActor ? '1' : '0'}`;
+                    const actionLabel = entry.activeActionKind
+                        ? `${entry.activeActionKind}#${Math.max(0, entry.activeActionIndex)}:${entry.activeActionStatus ?? 'running'}`
+                        : `none:${entry.actionSequenceStatus ?? 'idle'}`;
+                    const targetLabel = entry.actionTargetDescription ?? entry.actionTargetRef ?? '-';
+                    const refLabel = entry.actionTargetRef ?? entry.actionSequenceTargetRef ?? '-';
+                    const sequenceLabel = entry.actionSequenceId
+                        ? `${entry.actionSequenceId}@${entry.actionSequenceSource ?? 'unknown'}`
+                        : '-';
+                    const scriptedLabel = entry.scriptedLoopRef ?? '-';
+                    const scriptedOverrideLabel = entry.scriptedLoopInstanceOverride === undefined
+                        ? 'profile_default'
+                        : (entry.scriptedLoopInstanceOverride ?? 'none');
+                    const scriptedProfileLabel = entry.profileScriptedLoopRef ?? '-';
+                    const activeScriptedLabel = entry.activeScriptedSequenceRef ?? '-';
+                    const failureLabel = entry.actionFailureReason ?? '-';
+                    const presentationLabel = `anim:${entry.presentationAnimation ?? '-'} emotion:${entry.presentationEmotion ?? '-'}`;
+                    return `${entry.id} | ${entry.archetype} | ${entry.state} | ${entry.locomotion} | scriptedLoop:${scriptedLabel} | scriptedSource:${entry.scriptedLoopSource} | scriptedProfile:${scriptedProfileLabel} | scriptedOverride:${scriptedOverrideLabel} | activeScripted:${activeScriptedLabel} | action:${actionLabel} | seq:${entry.actionSequenceStatus ?? 'none'} | seqRef:${sequenceLabel} | target:${targetLabel} | ref:${refLabel} | fail:${failureLabel} | ${presentationLabel} | playerBodyContactMode:${entry.playerBodyContactMode} | triangleSupport:${entry.exportsTriangleSupportSurface ? '1' : '0'} | blocked L:${entry.blockedLeft ? '1' : '0'} R:${entry.blockedRight ? '1' : '0'} | player:${entry.touchingPlayer ? '1' : '0'} actor:${entry.touchingOtherActor ? '1' : '0'}`;
                 })
             ]);
         },
@@ -96,12 +117,12 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
         },
         reset: (): void => {
             debugDrawRuntime.reset();
-            npcStateText.setText('');
+            runtimeStateText.setText('');
         },
         destroy: (): void => {
             applyVisibility(false);
             debugDrawRuntime.destroy();
-            npcStateText.destroy();
+            runtimeStateText.destroy();
         }
     };
 };

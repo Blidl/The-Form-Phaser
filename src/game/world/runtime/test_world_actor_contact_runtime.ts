@@ -1,8 +1,15 @@
 import { GameObjects, Physics, Scene, Scenes } from 'phaser';
+import {
+    createArcadeBodyContactShapeSnapshot,
+    doesActorContactShapeOverlap,
+    type TestWorldActorContactShapeSnapshot,
+    type TestWorldActorWorldContactSnapshot
+} from './test_world_actor_contact_shapes';
 
 export const TEST_WORLD_PLAYER_ACTOR_ID = 'player';
 
 export type TestWorldActorKind = 'player' | 'npc';
+export type TestWorldActorPairContactMode = 'block' | 'overlap' | 'ignore';
 
 export interface TestWorldRegisteredActor {
     actorId: string;
@@ -10,6 +17,13 @@ export interface TestWorldRegisteredActor {
     bodyObject: GameObjects.GameObject;
     body: Physics.Arcade.Body;
     worldCollisionEnabled?: boolean;
+    getContactShapeSnapshot?: () => TestWorldActorContactShapeSnapshot;
+    getWorldContactSnapshot?: () => TestWorldActorWorldContactSnapshot;
+    applyContactPush?: (deltaX: number, deltaY: number) => { appliedDeltaX: number; appliedDeltaY: number };
+    getPairContactMode?: (
+        otherActorKind: TestWorldActorKind,
+        otherActorId: string
+    ) => TestWorldActorPairContactMode;
 }
 
 export interface TestWorldActorContactSnapshot {
@@ -45,6 +59,13 @@ interface RegisteredActorEntry {
     bodyObject: GameObjects.GameObject;
     body: Physics.Arcade.Body;
     worldCollisionEnabled: boolean;
+    getContactShapeSnapshot: () => TestWorldActorContactShapeSnapshot;
+    getWorldContactSnapshot: (() => TestWorldActorWorldContactSnapshot) | null;
+    applyContactPush: ((deltaX: number, deltaY: number) => { appliedDeltaX: number; appliedDeltaY: number }) | null;
+    getPairContactMode: (
+        otherActorKind: TestWorldActorKind,
+        otherActorId: string
+    ) => TestWorldActorPairContactMode;
     touchingPlayer: boolean;
     touchingOtherActor: boolean;
 }
@@ -54,13 +75,41 @@ interface OwnedColliderEntry {
     collider: Physics.Arcade.Collider;
 }
 
+interface ActorPairColliderEntry {
+    firstActorId: string;
+    secondActorId: string;
+    pairContactMode: TestWorldActorPairContactMode;
+    collider: Physics.Arcade.Collider;
+}
+
+const resolveEffectivePairContactMode = (
+    firstActor: RegisteredActorEntry,
+    secondActor: RegisteredActorEntry
+): TestWorldActorPairContactMode => {
+    const firstMode = firstActor.getPairContactMode(secondActor.kind, secondActor.actorId);
+    const secondMode = secondActor.getPairContactMode(firstActor.kind, firstActor.actorId);
+    if (firstMode === 'ignore' || secondMode === 'ignore') {
+        return 'ignore';
+    }
+    if (firstMode === 'overlap' || secondMode === 'overlap') {
+        return 'overlap';
+    }
+    return 'block';
+};
+
 const buildContactSnapshot = (actor: RegisteredActorEntry): TestWorldActorContactSnapshot => {
-    const grounded = actor.body.blocked.down || actor.body.touching.down || actor.body.onFloor();
-    return {
-        grounded,
-        locomotion: grounded ? 'grounded' : 'airborne',
+    const worldContactSnapshot = actor.getWorldContactSnapshot?.() ?? {
+        mode: 'arcade',
+        grounded: actor.body.blocked.down || actor.body.touching.down || actor.body.onFloor(),
         blockedLeft: actor.body.blocked.left,
-        blockedRight: actor.body.blocked.right,
+        blockedRight: actor.body.blocked.right
+    };
+
+    return {
+        grounded: worldContactSnapshot.grounded,
+        locomotion: worldContactSnapshot.grounded ? 'grounded' : 'airborne',
+        blockedLeft: worldContactSnapshot.blockedLeft,
+        blockedRight: worldContactSnapshot.blockedRight,
         touchingPlayer: actor.touchingPlayer,
         touchingOtherActor: actor.touchingOtherActor
     };
@@ -72,14 +121,14 @@ export const createTestWorldActorContactRuntime = (
     const { scene, getSolidSurfaces, getMovingPlatformBodies, getTriggerPlatformBodies, getBreakWallBodies } = params;
     const actors = new Map<string, RegisteredActorEntry>();
     const worldColliders: OwnedColliderEntry[] = [];
-    const actorPairColliders: Physics.Arcade.Collider[] = [];
+    const actorPairColliders: ActorPairColliderEntry[] = [];
 
     const destroyWorldColliders = (): void => {
         worldColliders.splice(0, worldColliders.length).forEach(({ collider }) => collider.destroy());
     };
 
     const destroyActorPairColliders = (): void => {
-        actorPairColliders.splice(0, actorPairColliders.length).forEach((collider) => collider.destroy());
+        actorPairColliders.splice(0, actorPairColliders.length).forEach(({ collider }) => collider.destroy());
     };
 
     const clearPairContacts = (): void => {
@@ -92,6 +141,25 @@ export const createTestWorldActorContactRuntime = (
     const refreshOwnedColliderStates = (): void => {
         worldColliders.forEach(({ actorId, collider }) => {
             collider.active = actors.get(actorId)?.worldCollisionEnabled ?? false;
+        });
+    };
+
+    const refreshActorPairColliderStates = (): void => {
+        actorPairColliders.forEach((entry) => {
+            const firstActor = actors.get(entry.firstActorId);
+            const secondActor = actors.get(entry.secondActorId);
+            if (!firstActor || !secondActor) {
+                entry.collider.active = false;
+                return;
+            }
+            if (entry.pairContactMode === 'ignore') {
+                entry.collider.active = false;
+                return;
+            }
+
+            const firstShape = firstActor.getContactShapeSnapshot();
+            const secondShape = secondActor.getContactShapeSnapshot();
+            entry.collider.active = firstShape.kind === 'arcade_body' && secondShape.kind === 'arcade_body';
         });
     };
 
@@ -113,6 +181,36 @@ export const createTestWorldActorContactRuntime = (
         } else {
             secondActor.touchingOtherActor = true;
         }
+    };
+
+    const detectSpecialPairContacts = (): void => {
+        actorPairColliders.forEach((entry) => {
+            if (entry.collider.active) {
+                return;
+            }
+
+            const firstActor = actors.get(entry.firstActorId);
+            const secondActor = actors.get(entry.secondActorId);
+            if (!firstActor || !secondActor) {
+                return;
+            }
+            if (entry.pairContactMode === 'ignore') {
+                return;
+            }
+
+            const firstShape = firstActor.getContactShapeSnapshot();
+            const secondShape = secondActor.getContactShapeSnapshot();
+            if (firstShape.kind === 'arcade_body' && secondShape.kind === 'arcade_body') {
+                return;
+            }
+
+            // TEMPORARY: polygon-aware actor contacts are a detection-only bridge for
+            // Triangle player vs Arcade actor bounds. Physical pair resolution stays on
+            // the existing Arcade path until a broader actor-contact model exists.
+            if (doesActorContactShapeOverlap(firstShape, secondShape)) {
+                markActorPairContact(firstActor.actorId, secondActor.actorId);
+            }
+        });
     };
 
     const addOwnedWorldCollider = (actor: RegisteredActorEntry, target: GameObjects.GameObject): void => {
@@ -147,20 +245,44 @@ export const createTestWorldActorContactRuntime = (
             const firstActor = actorList[index];
             for (let nextIndex = index + 1; nextIndex < actorList.length; nextIndex += 1) {
                 const secondActor = actorList[nextIndex];
-                actorPairColliders.push(scene.physics.add.collider(
-                    firstActor.bodyObject,
-                    secondActor.bodyObject,
-                    () => {
-                        markActorPairContact(firstActor.actorId, secondActor.actorId);
-                    }
-                ));
+                const pairContactMode = resolveEffectivePairContactMode(firstActor, secondActor);
+                if (pairContactMode === 'ignore') {
+                    continue;
+                }
+
+                actorPairColliders.push({
+                    firstActorId: firstActor.actorId,
+                    secondActorId: secondActor.actorId,
+                    pairContactMode,
+                    collider: pairContactMode === 'overlap'
+                        ? scene.physics.add.overlap(
+                            firstActor.bodyObject,
+                            secondActor.bodyObject,
+                            () => {
+                                markActorPairContact(firstActor.actorId, secondActor.actorId);
+                            }
+                        )
+                        : scene.physics.add.collider(
+                            firstActor.bodyObject,
+                            secondActor.bodyObject,
+                            () => {
+                                markActorPairContact(firstActor.actorId, secondActor.actorId);
+                            }
+                        )
+                });
             }
         }
 
         refreshOwnedColliderStates();
+        refreshActorPairColliderStates();
     };
 
-    scene.events.on(Scenes.Events.PRE_UPDATE, clearPairContacts);
+    const handlePreUpdate = (): void => {
+        clearPairContacts();
+        refreshActorPairColliderStates();
+    };
+    scene.events.on(Scenes.Events.PRE_UPDATE, handlePreUpdate);
+    scene.events.on(Scenes.Events.POST_UPDATE, detectSpecialPairContacts);
 
     return {
         registerActor: (actor) => {
@@ -170,6 +292,10 @@ export const createTestWorldActorContactRuntime = (
                 bodyObject: actor.bodyObject,
                 body: actor.body,
                 worldCollisionEnabled: actor.worldCollisionEnabled ?? true,
+                getContactShapeSnapshot: actor.getContactShapeSnapshot ?? (() => createArcadeBodyContactShapeSnapshot(actor.bodyObject, actor.body)),
+                getWorldContactSnapshot: actor.getWorldContactSnapshot ?? null,
+                applyContactPush: actor.applyContactPush ?? null,
+                getPairContactMode: actor.getPairContactMode ?? (() => 'block'),
                 touchingPlayer: false,
                 touchingOtherActor: false
             });
@@ -218,7 +344,8 @@ export const createTestWorldActorContactRuntime = (
             refreshOwnedColliderStates();
         },
         destroy: () => {
-            scene.events.off(Scenes.Events.PRE_UPDATE, clearPairContacts);
+            scene.events.off(Scenes.Events.PRE_UPDATE, handlePreUpdate);
+            scene.events.off(Scenes.Events.POST_UPDATE, detectSpecialPairContacts);
             destroyWorldColliders();
             destroyActorPairColliders();
             actors.clear();

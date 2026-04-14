@@ -3,6 +3,11 @@ import type { PlayerFormAnchor, PlayerHazardHitShape } from './geometry/player_g
 import type { PlayerSquareDebugView } from './player_runtime_contracts';
 import type { PlayerFormId, PlayerShellState } from './player_types';
 import { PfPlayerRuntime } from './player_runtime';
+import type {
+    TestWorldActorContactMode,
+    TestWorldActorContactShapeSnapshot,
+    TestWorldActorWorldContactSnapshot
+} from '../world/runtime/test_world_actor_contact_shapes';
 
 export class PfPlayer {
     private readonly runtime: PfPlayerRuntime;
@@ -45,6 +50,22 @@ export class PfPlayer {
 
     public get arcadeBodyObject(): GameObjects.Arc {
         return this.runtime.arcadeBodyObject;
+    }
+
+    public get contactMode(): TestWorldActorContactMode {
+        return this.runtime.contactMode;
+    }
+
+    public get contactShapeSnapshot(): TestWorldActorContactShapeSnapshot {
+        return this.runtime.contactShapeSnapshot;
+    }
+
+    public get worldContactSnapshot(): TestWorldActorWorldContactSnapshot {
+        return this.runtime.worldContactSnapshot;
+    }
+
+    public applyActorContactPush(deltaX: number, deltaY: number): { appliedDeltaX: number; appliedDeltaY: number } {
+        return this.runtime.applyActorContactPush(deltaX, deltaY);
     }
 
     public get squareAttachJumpPullBody(): Physics.Arcade.Body | Physics.Arcade.StaticBody | null {
