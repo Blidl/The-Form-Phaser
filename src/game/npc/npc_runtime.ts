@@ -8,6 +8,9 @@ import {
     resolvePolygonRectSeparationDelta
 } from '../world/runtime/test_world_actor_contact_shapes';
 import {
+    createTestNpcHookSequence
+} from './npc_sequence_hooks';
+import {
     createActorActionSequenceRuntime,
     type ActorActionSequenceRuntime
 } from '../actor_actions/actor_action_runtime';
@@ -17,6 +20,8 @@ import type {
 } from '../actor_actions/actor_action_types';
 import { describeActorActionTarget } from '../actor_actions/actor_action_types';
 import type {
+    TestNpcInteractionDispatchResult,
+    TestNpcInteractionOutcome,
     TestNpcDebugEntry,
     TestNpcEnemyResolvedBehavior,
     TestNpcFacing,
@@ -25,19 +30,26 @@ import type {
     TestNpcPassiveResolvedBehavior,
     TestNpcPresentationAnimation,
     TestNpcPresentationEmotion,
+    TestNpcResolvedSequenceHooks,
     TestNpcResolvedConfig,
+    TestNpcInteractionOutcomeKind,
+    TestNpcSequenceHookId,
+    TestNpcSequenceHookRestartPolicy,
     TestNpcState
 } from './npc_types';
 import { createTestNpcVisualRuntime, type TestNpcVisualRuntime } from './npc_visuals';
 import { createTestNpcActorActionAdapter } from './npc_actor_action_adapter';
 import {
     NPC_SCRIPTED_SEQUENCE_SOURCE,
+    cloneTestNpcScriptedSequenceAction,
+    getTestNpcScriptedSequenceDefinition,
     resolveTestNpcScriptedSequence
 } from './npc_scripted_sequences';
 
 const NPC_GRAVITY_Y = 2200;
 const NPC_MAX_FALL_SPEED = 1600;
 const NPC_GROUND_TOLERANCE_PX = 2;
+const NPC_PLAYER_DISTANCE_HYSTERESIS_PX = 8;
 
 interface TestNpcActorRuntime {
     id: string;
@@ -64,14 +76,82 @@ interface TestNpcActorRuntime {
     profileScriptedLoopRef: string | null;
     scriptedLoopInstanceOverride: string | null | undefined;
     scriptedLoopRef: string | null;
+    hookRefOverrides: {
+        onSpawn: string | null | undefined;
+        onPlayerNear: string | null | undefined;
+        onPlayerFar: string | null | undefined;
+    };
+    sequenceHooks: TestNpcResolvedSequenceHooks;
+    activeHook: {
+        hookId: TestNpcSequenceHookId;
+        sequenceRef: string;
+        restartPolicy: TestNpcSequenceHookRestartPolicy;
+        reason: string;
+        source: 'profile_default' | 'instance_override';
+        sequenceId: string;
+        activationNonce: number;
+    } | null;
+    nextHookActivationNonce: number;
+    spawnHookConsumed: boolean;
+    playerNearWasInside: boolean | null;
+    playerFarWasInside: boolean | null;
+    activeInteraction: {
+        outcomeKind: TestNpcInteractionOutcomeKind;
+        outcomeRef: string;
+        sequenceId: string;
+        activationNonce: number;
+    } | null;
+    activeCutscene: {
+        cutsceneRef: string;
+        stepRef: string;
+        sequenceId: string;
+    } | null;
+    lastCutsceneCompletion: {
+        cutsceneRef: string;
+        stepRef: string;
+        sequenceId: string;
+        status: ActorActionExecutionSnapshot['sequenceStatus'];
+        failureReason: string | null;
+    } | null;
+    nextInteractionActivationNonce: number;
     actionRuntime: ActorActionSequenceRuntime;
+}
+
+interface PendingNpcTriggerEvent {
+    actorId: string;
+    eventId: string;
+    payload?: Record<string, unknown>;
 }
 
 export type TestNpcWorldCollisionRuntime = Pick<TestWorldActorContactRuntime, 'registerActor' | 'getContactSnapshot'>;
 
+export interface TestNpcCutsceneSequenceDispatchResult {
+    actorId: string;
+    result: 'dispatched' | 'unknown_actor' | 'busy';
+    detail: string;
+    sequenceId: string | null;
+}
+
+export interface TestNpcCutsceneSequenceSnapshot {
+    actorId: string;
+    cutsceneRef: string;
+    stepRef: string;
+    sequenceId: string;
+    status: ActorActionExecutionSnapshot['sequenceStatus'];
+    failureReason: string | null;
+}
+
 export interface TestNpcRuntime {
     update: (deltaMs: number) => void;
     syncTriangleSupportSurfaces: () => void;
+    dispatchInteractionOutcome: (actorId: string, outcome: TestNpcInteractionOutcome) => TestNpcInteractionDispatchResult;
+    dispatchCutsceneSequence: (
+        actorId: string,
+        sequence: ActorActionSequence,
+        cutsceneRef: string,
+        stepRef: string
+    ) => TestNpcCutsceneSequenceDispatchResult;
+    getCutsceneSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
     getDebugEntries: () => readonly TestNpcDebugEntry[];
     getActorBounds: (id: string) => { x: number; y: number; width: number; height: number } | null;
     getVisualObject: (id: string) => GameObjects.Container | null;
@@ -98,6 +178,18 @@ const getActorX = (actor: TestNpcActorRuntime): number => actor.bodyObject.x;
 const getActorY = (actor: TestNpcActorRuntime): number => actor.bodyObject.y;
 const shouldNpcBlockPlayerBody = (mode: TestNpcPlayerBodyContactMode): boolean => mode === 'block';
 const shouldNpcExportTriangleSupportSurface = (mode: TestNpcPlayerBodyContactMode): boolean => mode === 'block';
+
+const resolveIsWithinDistanceBand = (
+    distancePx: number,
+    thresholdPx: number,
+    wasInside: boolean | null
+): boolean => {
+    if (wasInside === true) {
+        return distancePx <= thresholdPx + NPC_PLAYER_DISTANCE_HYSTERESIS_PX;
+    }
+
+    return distancePx <= thresholdPx;
+};
 
 const isActorGrounded = (actor: TestNpcActorRuntime): boolean => {
     return actor.body.blocked.down || actor.body.touching.down || actor.body.onFloor();
@@ -301,6 +393,215 @@ const updateScriptedLoopActor = (actor: TestNpcActorRuntime): ActorActionSequenc
     setActorState(actor, 'scripted_loop');
     actor.waitMsRemaining = 0;
     return resolveTestNpcScriptedSequence(actor.id, actor.scriptedLoopRef);
+};
+
+const createInteractionSequence = (
+    actorId: string,
+    sequenceRef: string
+): ActorActionSequence | null => {
+    const definition = getTestNpcScriptedSequenceDefinition(sequenceRef);
+    if (!definition) {
+        return null;
+    }
+
+    return {
+        id: `${actorId}:interaction:${definition.id}`,
+        source: 'npc_interaction_outcome',
+        targetRef: definition.id,
+        actions: definition.actions.map(cloneTestNpcScriptedSequenceAction)
+    };
+};
+
+const clearCompletedInteraction = (actor: TestNpcActorRuntime): void => {
+    if (!actor.activeInteraction) {
+        return;
+    }
+
+    const snapshot = actor.actionRuntime.getSnapshot();
+    if (snapshot.sequenceId !== actor.activeInteraction.sequenceId || snapshot.sequenceStatus !== 'running') {
+        actor.activeInteraction = null;
+    }
+};
+
+const clearCompletedCutscene = (actor: TestNpcActorRuntime): void => {
+    if (!actor.activeCutscene) {
+        return;
+    }
+
+    const snapshot = actor.actionRuntime.getSnapshot();
+    if (snapshot.sequenceId !== actor.activeCutscene.sequenceId || snapshot.sequenceStatus !== 'running') {
+        actor.lastCutsceneCompletion = {
+            cutsceneRef: actor.activeCutscene.cutsceneRef,
+            stepRef: actor.activeCutscene.stepRef,
+            sequenceId: actor.activeCutscene.sequenceId,
+            status: snapshot.sequenceId === actor.activeCutscene.sequenceId
+                ? snapshot.sequenceStatus
+                : 'cancelled',
+            failureReason: snapshot.sequenceId === actor.activeCutscene.sequenceId
+                ? snapshot.failureReason
+                : 'sequence replaced before completion'
+        };
+        actor.activeCutscene = null;
+    }
+};
+
+const clearCompletedHook = (actor: TestNpcActorRuntime): void => {
+    if (!actor.activeHook) {
+        return;
+    }
+
+    const snapshot = actor.actionRuntime.getSnapshot();
+    if (snapshot.sequenceId !== actor.activeHook.sequenceId || snapshot.sequenceStatus !== 'running') {
+        actor.activeHook = null;
+    }
+};
+
+const getConfiguredHookSource = (
+    actor: TestNpcActorRuntime,
+    hookId: 'on_spawn' | 'on_player_near' | 'on_player_far'
+): 'profile_default' | 'instance_override' => {
+    const overrideValue = hookId === 'on_spawn'
+        ? actor.hookRefOverrides.onSpawn
+        : (hookId === 'on_player_near' ? actor.hookRefOverrides.onPlayerNear : actor.hookRefOverrides.onPlayerFar);
+    return overrideValue === undefined ? 'profile_default' : 'instance_override';
+};
+
+const tryStartHookSequence = (
+    actor: TestNpcActorRuntime,
+    hookId: TestNpcSequenceHookId,
+    sequenceRef: string,
+    restartPolicy: TestNpcSequenceHookRestartPolicy,
+    reason: string,
+    source: 'profile_default' | 'instance_override'
+): boolean => {
+    const nextSequence = createTestNpcHookSequence(actor.id, hookId, sequenceRef);
+    if (!nextSequence) {
+        return false;
+    }
+
+    if (
+        actor.activeHook
+        && actor.activeHook.hookId === hookId
+        && actor.activeHook.sequenceRef === sequenceRef
+        && actor.activeHook.restartPolicy === 'keep_running'
+        && restartPolicy === 'keep_running'
+    ) {
+        const snapshot = actor.actionRuntime.getSnapshot();
+        if (snapshot.sequenceId === actor.activeHook.sequenceId && snapshot.sequenceStatus === 'running') {
+            return false;
+        }
+    }
+
+    actor.activeHook = {
+        hookId,
+        sequenceRef,
+        restartPolicy,
+        reason,
+        source,
+        sequenceId: nextSequence.id,
+        activationNonce: actor.nextHookActivationNonce
+    };
+    actor.nextHookActivationNonce += 1;
+    actor.waitMsRemaining = 0;
+    setActorState(actor, 'hook_sequence');
+    actor.actionRuntime.startSequence(nextSequence);
+    return true;
+};
+
+const updateSpawnHook = (actor: TestNpcActorRuntime): void => {
+    if (actor.spawnHookConsumed) {
+        return;
+    }
+
+    actor.spawnHookConsumed = true;
+    const route = actor.sequenceHooks.onSpawn;
+    if (!route) {
+        return;
+    }
+
+    tryStartHookSequence(
+        actor,
+        'on_spawn',
+        route.sequenceRef,
+        route.restartPolicy ?? 'restart',
+        'spawn',
+        getConfiguredHookSource(actor, 'on_spawn')
+    );
+};
+
+const updatePlayerDistanceHooks = (
+    actor: TestNpcActorRuntime,
+    player: PlayerWorldActor
+): void => {
+    const actorDistanceToPlayer = playerDistanceTo(player, getActorX(actor), getActorY(actor));
+    const nearRoute = actor.sequenceHooks.onPlayerNear;
+    if (nearRoute) {
+        const isInsideNear = resolveIsWithinDistanceBand(
+            actorDistanceToPlayer,
+            nearRoute.distancePx,
+            actor.playerNearWasInside
+        );
+        if (actor.playerNearWasInside === false && isInsideNear) {
+            tryStartHookSequence(
+                actor,
+                'on_player_near',
+                nearRoute.sequenceRef,
+                nearRoute.restartPolicy ?? 'restart',
+                `player_near:${Math.round(nearRoute.distancePx)}`,
+                getConfiguredHookSource(actor, 'on_player_near')
+            );
+        }
+        actor.playerNearWasInside = isInsideNear;
+    } else {
+        actor.playerNearWasInside = null;
+    }
+
+    const farRoute = actor.sequenceHooks.onPlayerFar;
+    if (farRoute) {
+        const isInsideFar = resolveIsWithinDistanceBand(
+            actorDistanceToPlayer,
+            farRoute.distancePx,
+            actor.playerFarWasInside
+        );
+        if (actor.playerFarWasInside === true && !isInsideFar) {
+            tryStartHookSequence(
+                actor,
+                'on_player_far',
+                farRoute.sequenceRef,
+                farRoute.restartPolicy ?? 'restart',
+                `player_far:${Math.round(farRoute.distancePx)}`,
+                getConfiguredHookSource(actor, 'on_player_far')
+            );
+        }
+        actor.playerFarWasInside = isInsideFar;
+    } else {
+        actor.playerFarWasInside = null;
+    }
+};
+
+const updateTriggerEventHooks = (
+    actor: TestNpcActorRuntime,
+    triggerEvents: readonly PendingNpcTriggerEvent[]
+): void => {
+    if (triggerEvents.length <= 0 || actor.sequenceHooks.onTriggerEvent.length <= 0) {
+        return;
+    }
+
+    triggerEvents.forEach((entry) => {
+        const route = actor.sequenceHooks.onTriggerEvent.find((candidate) => candidate.eventId === entry.eventId);
+        if (!route) {
+            return;
+        }
+
+        tryStartHookSequence(
+            actor,
+            'on_trigger_event',
+            route.sequenceRef,
+            route.restartPolicy ?? 'restart',
+            `trigger_event:${entry.eventId}:${entry.actorId}`,
+            'profile_default'
+        );
+    });
 };
 
 const updatePassiveActor = (
@@ -529,6 +830,25 @@ export const createTestNpcRuntime = (
     worldCollisionRuntime: TestNpcWorldCollisionRuntime,
     instances: readonly TestNpcInstanceConfig[]
 ): TestNpcRuntime => {
+    const pendingTriggerEvents: PendingNpcTriggerEvent[] = [];
+    const onNpcActorActionEvent = (payload: unknown): void => {
+        if (typeof payload !== 'object' || payload === null) {
+            return;
+        }
+        const raw = payload as Record<string, unknown>;
+        if (typeof raw.actorId !== 'string' || typeof raw.eventId !== 'string') {
+            return;
+        }
+
+        pendingTriggerEvents.push({
+            actorId: raw.actorId,
+            eventId: raw.eventId,
+            payload: typeof raw.payload === 'object' && raw.payload !== null && !Array.isArray(raw.payload)
+                ? raw.payload as Record<string, unknown>
+                : undefined
+        });
+    };
+    scene.events.on('pf:npc_actor_action_event', onNpcActorActionEvent);
     const actors = instances
         .map((instance) => {
             const resolved = resolveTestNpcConfig(instance);
@@ -624,6 +944,21 @@ export const createTestNpcRuntime = (
                 profileScriptedLoopRef: resolved.profile.scriptedLoopRef ?? null,
                 scriptedLoopInstanceOverride: resolved.instance.scriptedLoopRef,
                 scriptedLoopRef: resolved.scriptedLoopRef,
+                hookRefOverrides: {
+                    onSpawn: resolved.instance.sequenceHookOverrides?.onSpawnSequenceRef,
+                    onPlayerNear: resolved.instance.sequenceHookOverrides?.onPlayerNearSequenceRef,
+                    onPlayerFar: resolved.instance.sequenceHookOverrides?.onPlayerFarSequenceRef
+                },
+                sequenceHooks: resolved.sequenceHooks,
+                activeHook: null,
+                nextHookActivationNonce: 1,
+                spawnHookConsumed: false,
+                playerNearWasInside: null,
+                playerFarWasInside: null,
+                activeInteraction: null,
+                activeCutscene: null,
+                lastCutsceneCompletion: null,
+                nextInteractionActivationNonce: 1,
                 actionRuntime: null as unknown as ActorActionSequenceRuntime
             };
             actor.actionRuntime = createActorActionSequenceRuntime(createTestNpcActorActionAdapter({
@@ -665,18 +1000,198 @@ export const createTestNpcRuntime = (
                 return;
             }
 
+            const triggerEventsForFrame = pendingTriggerEvents.splice(0, pendingTriggerEvents.length);
+
             actors.forEach((actor) => {
                 actor.stateElapsedMs += safeDeltaMs;
-                const desiredSequence = actor.scriptedLoopRef
-                    ? updateScriptedLoopActor(actor)
-                    : (actor.archetype === 'enemy'
-                        ? updateEnemyActor(actor, player)
-                        : updatePassiveActor(actor, safeDeltaMs));
-                actor.actionRuntime.ensureSequence(desiredSequence);
+                clearCompletedInteraction(actor);
+                clearCompletedCutscene(actor);
+                if (!actor.activeInteraction && !actor.activeCutscene) {
+                    clearCompletedHook(actor);
+                    updateSpawnHook(actor);
+                    updatePlayerDistanceHooks(actor, player);
+                    updateTriggerEventHooks(actor, triggerEventsForFrame);
+                }
+
+                if (actor.activeCutscene) {
+                    setActorState(actor, 'cutscene_sequence');
+                } else if (actor.activeInteraction) {
+                    setActorState(actor, 'interaction_sequence');
+                } else if (!actor.activeHook) {
+                    const desiredSequence = actor.scriptedLoopRef
+                        ? updateScriptedLoopActor(actor)
+                        : (actor.archetype === 'enemy'
+                            ? updateEnemyActor(actor, player)
+                            : updatePassiveActor(actor, safeDeltaMs));
+                    actor.actionRuntime.ensureSequence(desiredSequence);
+                } else {
+                    setActorState(actor, 'hook_sequence');
+                }
                 actor.actionRuntime.update(safeDeltaMs);
+                clearCompletedInteraction(actor);
+                clearCompletedCutscene(actor);
+                if (!actor.activeInteraction && !actor.activeCutscene) {
+                    clearCompletedHook(actor);
+                }
 
                 refreshActorVisual(actor);
             });
+        },
+        dispatchInteractionOutcome: (actorId: string, outcome: TestNpcInteractionOutcome): TestNpcInteractionDispatchResult => {
+            const actor = actors.find((entry) => entry.id === actorId) ?? null;
+            if (!actor) {
+                return {
+                    actorId,
+                    outcomeKind: outcome.kind,
+                    result: 'unknown_actor',
+                    detail: 'npc actor was not found in runtime'
+                };
+            }
+
+            if (actor.activeHook || actor.activeInteraction || actor.activeCutscene) {
+                return {
+                    actorId,
+                    outcomeKind: outcome.kind,
+                    result: 'busy',
+                    detail: 'npc is currently running a hook, interaction outcome, or cutscene sequence'
+                };
+            }
+
+            if (outcome.kind === 'run_sequence_ref') {
+                const nextSequence = createInteractionSequence(actor.id, outcome.sequenceRef);
+                if (!nextSequence) {
+                    return {
+                        actorId,
+                        outcomeKind: outcome.kind,
+                        result: 'invalid_outcome',
+                        detail: `missing scripted sequence ref "${outcome.sequenceRef}"`
+                    };
+                }
+
+                actor.activeInteraction = {
+                    outcomeKind: outcome.kind,
+                    outcomeRef: outcome.sequenceRef,
+                    sequenceId: nextSequence.id,
+                    activationNonce: actor.nextInteractionActivationNonce
+                };
+                actor.nextInteractionActivationNonce += 1;
+                actor.waitMsRemaining = 0;
+                setActorState(actor, 'interaction_sequence');
+                actor.actionRuntime.startSequence(nextSequence);
+                return {
+                    actorId,
+                    outcomeKind: outcome.kind,
+                    result: 'dispatched_sequence',
+                    detail: outcome.sequenceRef
+                };
+            }
+
+            if (outcome.kind === 'trigger_event') {
+                actor.lastTriggeredEventId = outcome.eventId;
+                scene.events.emit('pf:npc_actor_action_event', {
+                    actorId: actor.id,
+                    eventId: outcome.eventId
+                });
+                return {
+                    actorId,
+                    outcomeKind: outcome.kind,
+                    result: 'dispatched_event',
+                    detail: outcome.eventId
+                };
+            }
+
+            if (outcome.kind === 'request_cutscene_ref') {
+                scene.events.emit('pf:npc_interaction_cutscene_request', {
+                    actorId: actor.id,
+                    cutsceneRef: outcome.cutsceneRef
+                });
+                return {
+                    actorId,
+                    outcomeKind: outcome.kind,
+                    result: 'requested_cutscene',
+                    detail: outcome.cutsceneRef
+                };
+            }
+
+            return {
+                actorId,
+                outcomeKind: null,
+                result: 'invalid_outcome',
+                detail: 'unsupported interaction outcome'
+            };
+        },
+        dispatchCutsceneSequence: (
+            actorId: string,
+            sequence: ActorActionSequence,
+            cutsceneRef: string,
+            stepRef: string
+        ): TestNpcCutsceneSequenceDispatchResult => {
+            const actor = actors.find((entry) => entry.id === actorId) ?? null;
+            if (!actor) {
+                return {
+                    actorId,
+                    result: 'unknown_actor',
+                    detail: 'npc actor was not found in runtime',
+                    sequenceId: null
+                };
+            }
+
+            if (actor.activeHook || actor.activeInteraction || actor.activeCutscene) {
+                return {
+                    actorId,
+                    result: 'busy',
+                    detail: 'npc is currently running a hook, interaction outcome, or cutscene sequence',
+                    sequenceId: null
+                };
+            }
+
+            actor.activeCutscene = {
+                cutsceneRef,
+                stepRef,
+                sequenceId: sequence.id
+            };
+            actor.lastCutsceneCompletion = null;
+            actor.waitMsRemaining = 0;
+            setActorState(actor, 'cutscene_sequence');
+            actor.actionRuntime.startSequence(sequence);
+            return {
+                actorId,
+                result: 'dispatched',
+                detail: stepRef,
+                sequenceId: sequence.id
+            };
+        },
+        getCutsceneSequenceSnapshot: (actorId: string): TestNpcCutsceneSequenceSnapshot | null => {
+            const actor = actors.find((entry) => entry.id === actorId) ?? null;
+            if (!actor) {
+                return null;
+            }
+
+            if (actor.activeCutscene) {
+                const actionSnapshot = actor.actionRuntime.getSnapshot();
+                if (actionSnapshot.sequenceId === actor.activeCutscene.sequenceId) {
+                    return {
+                        actorId,
+                        cutsceneRef: actor.activeCutscene.cutsceneRef,
+                        stepRef: actor.activeCutscene.stepRef,
+                        sequenceId: actor.activeCutscene.sequenceId,
+                        status: actionSnapshot.sequenceStatus,
+                        failureReason: actionSnapshot.failureReason
+                    };
+                }
+            }
+
+            if (!actor.lastCutsceneCompletion) {
+                return null;
+            }
+            return {
+                actorId,
+                cutsceneRef: actor.lastCutsceneCompletion.cutsceneRef,
+                stepRef: actor.lastCutsceneCompletion.stepRef,
+                sequenceId: actor.lastCutsceneCompletion.sequenceId,
+                status: actor.lastCutsceneCompletion.status,
+                failureReason: actor.lastCutsceneCompletion.failureReason
+            };
         },
         syncTriangleSupportSurfaces: (): void => {
             actors.forEach((actor) => {
@@ -726,6 +1241,12 @@ export const createTestNpcRuntime = (
                     activeScriptedSequenceRef: actionSnapshot.sequenceSource === NPC_SCRIPTED_SEQUENCE_SOURCE
                         ? actor.scriptedLoopRef
                         : null,
+                    activeHookId: actor.activeHook?.hookId ?? null,
+                    activeHookSequenceRef: actor.activeHook?.sequenceRef ?? null,
+                    activeHookReason: actor.activeHook?.reason ?? null,
+                    activeHookActivationNonce: actor.activeHook?.activationNonce ?? null,
+                    activeHookRestartPolicy: actor.activeHook?.restartPolicy ?? null,
+                    activeHookSource: actor.activeHook?.source ?? null,
                     actionSequenceId: actionSnapshot.sequenceId,
                     actionSequenceSource: actionSnapshot.sequenceSource,
                     actionSequenceTargetRef: actionSnapshot.sequenceTargetRef,
@@ -759,6 +1280,7 @@ export const createTestNpcRuntime = (
             return actor?.visual.rootObject ?? null;
         },
         destroy: (): void => {
+            scene.events.off('pf:npc_actor_action_event', onNpcActorActionEvent);
             actors.forEach((actor) => {
                 scene.matter.world.remove(actor.supportMatterBody);
                 destroyActor(actor);

@@ -483,12 +483,25 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         x,
         y,
         facing: 'right',
+        sequenceHookOverrides: undefined,
+        interactionOverride: undefined,
         playerBodyContactMode: undefined,
         behavior: {}
     }),
     duplicate: (config, id) => ({
         ...config,
         id,
+        sequenceHookOverrides: config.sequenceHookOverrides
+            ? { ...config.sequenceHookOverrides }
+            : undefined,
+        interactionOverride: config.interactionOverride
+            ? {
+                ...config.interactionOverride,
+                outcome: config.interactionOverride.outcome
+                    ? { ...config.interactionOverride.outcome }
+                    : config.interactionOverride.outcome
+            }
+            : undefined,
         behavior: config.behavior ? { ...config.behavior } : undefined
     }),
     getId: (config) => config.id,
@@ -527,6 +540,83 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         } else if (typeof patch.scriptedLoopRef === 'string' && isTestNpcScriptedSequenceRef(patch.scriptedLoopRef)) {
             config.scriptedLoopRef = patch.scriptedLoopRef;
         }
+        const hookOverrides = config.sequenceHookOverrides ?? {};
+        const assignHookOverride = (
+            patchKey: 'onSpawnSequenceRef' | 'onPlayerNearSequenceRef' | 'onPlayerFarSequenceRef'
+        ): void => {
+            const value = patch[patchKey];
+            if (value === '' || value === 'profile_default') {
+                hookOverrides[patchKey] = undefined;
+                return;
+            }
+            if (value === 'none') {
+                hookOverrides[patchKey] = null;
+                return;
+            }
+            if (typeof value === 'string' && isTestNpcScriptedSequenceRef(value)) {
+                hookOverrides[patchKey] = value;
+            }
+        };
+        assignHookOverride('onSpawnSequenceRef');
+        assignHookOverride('onPlayerNearSequenceRef');
+        assignHookOverride('onPlayerFarSequenceRef');
+        const interactionOverride = config.interactionOverride ?? {};
+        if (typeof patch.interactionDistancePx === 'number' && Number.isFinite(patch.interactionDistancePx)) {
+            interactionOverride.distancePx = Math.max(0, patch.interactionDistancePx);
+        }
+        if (patch.interactionOutcomeKind === '' || patch.interactionOutcomeKind === 'profile_default') {
+            interactionOverride.outcome = undefined;
+        } else if (patch.interactionOutcomeKind === 'none') {
+            interactionOverride.outcome = null;
+        } else if (patch.interactionOutcomeKind === 'run_sequence_ref') {
+            const sequenceRef = typeof patch.interactionSequenceRef === 'string' && isTestNpcScriptedSequenceRef(patch.interactionSequenceRef)
+                ? patch.interactionSequenceRef
+                : (interactionOverride.outcome?.kind === 'run_sequence_ref' ? interactionOverride.outcome.sequenceRef : null);
+            if (sequenceRef) {
+                interactionOverride.outcome = {
+                    kind: 'run_sequence_ref',
+                    sequenceRef
+                };
+            }
+        } else if (patch.interactionOutcomeKind === 'trigger_event') {
+            const eventId = typeof patch.interactionEventId === 'string' ? patch.interactionEventId.trim() : '';
+            if (eventId.length > 0) {
+                interactionOverride.outcome = {
+                    kind: 'trigger_event',
+                    eventId
+                };
+            }
+        } else if (patch.interactionOutcomeKind === 'request_cutscene_ref') {
+            const cutsceneRef = typeof patch.interactionCutsceneRef === 'string' ? patch.interactionCutsceneRef.trim() : '';
+            if (cutsceneRef.length > 0) {
+                interactionOverride.outcome = {
+                    kind: 'request_cutscene_ref',
+                    cutsceneRef
+                };
+            }
+        } else if (typeof patch.interactionSequenceRef === 'string' && interactionOverride.outcome?.kind === 'run_sequence_ref'
+            && isTestNpcScriptedSequenceRef(patch.interactionSequenceRef)) {
+            interactionOverride.outcome = {
+                kind: 'run_sequence_ref',
+                sequenceRef: patch.interactionSequenceRef
+            };
+        } else if (typeof patch.interactionEventId === 'string' && interactionOverride.outcome?.kind === 'trigger_event') {
+            const eventId = patch.interactionEventId.trim();
+            if (eventId.length > 0) {
+                interactionOverride.outcome = {
+                    kind: 'trigger_event',
+                    eventId
+                };
+            }
+        } else if (typeof patch.interactionCutsceneRef === 'string' && interactionOverride.outcome?.kind === 'request_cutscene_ref') {
+            const cutsceneRef = patch.interactionCutsceneRef.trim();
+            if (cutsceneRef.length > 0) {
+                interactionOverride.outcome = {
+                    kind: 'request_cutscene_ref',
+                    cutsceneRef
+                };
+            }
+        }
         const behavior = config.behavior ?? {};
         if (patch.passiveMode === 'idle' || patch.passiveMode === 'idle_patrol') {
             behavior.passiveMode = patch.passiveMode;
@@ -549,11 +639,28 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         assignBehaviorNumber('returnSpeed');
         assignBehaviorNumber('postTolerance');
         patchVisualOrderFields(config, patch);
+        config.sequenceHookOverrides = Object.values(hookOverrides).some((value) => value !== undefined)
+            ? hookOverrides
+            : undefined;
+        config.interactionOverride = interactionOverride.distancePx !== undefined || interactionOverride.outcome !== undefined
+            ? interactionOverride
+            : undefined;
         config.behavior = behavior;
     },
     patchColors: () => undefined,
     serialize: (config) => ({
         ...config,
+        sequenceHookOverrides: config.sequenceHookOverrides
+            ? { ...config.sequenceHookOverrides }
+            : undefined,
+        interactionOverride: config.interactionOverride
+            ? {
+                ...config.interactionOverride,
+                outcome: config.interactionOverride.outcome
+                    ? { ...config.interactionOverride.outcome }
+                    : config.interactionOverride.outcome
+            }
+            : undefined,
         behavior: config.behavior ? { ...config.behavior } : undefined
     })
 };

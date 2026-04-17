@@ -21,6 +21,12 @@ import {
 } from '../../game/player/tuning/player_tuning_runtime';
 import { loadTestWorldEditorDraft } from '../../game/world/runtime/test_world_editor_storage';
 import {
+    loadTestNpcScriptedSequenceDraft
+} from '../../game/npc/npc_scripted_sequence_storage';
+import {
+    setTestNpcScriptedSequenceDefinitions
+} from '../../game/npc/npc_scripted_sequences';
+import {
     createTestWorldRuntime,
     type TestWorldRuntime
 } from '../../game/world/runtime/test_world_runtime';
@@ -41,6 +47,10 @@ import {
 } from '../../ui/runtime/test_dev_helper_runtime';
 import { getCampaignLevelConfig, getInitialCampaignLevelId } from '../../game/world/runtime/test_campaign_registry';
 import { createTestSceneBackgroundRuntime } from './test_scene_background_runtime';
+import {
+    createTestCutsceneRuntime,
+    type TestCutsceneRuntime
+} from './test_cutscene_runtime';
 
 export interface TestSceneBootstrapRuntime {
     player: PfPlayer;
@@ -49,6 +59,7 @@ export interface TestSceneBootstrapRuntime {
     respawnRuntime: PlayerRespawnRuntime;
     hudRuntime: TestHudRuntime;
     debugRuntime: TestDebugRuntime;
+    cutsceneRuntime: TestCutsceneRuntime;
     editorRuntime: TestWorldEditorRuntime;
     devHelperRuntime: TestDevHelperRuntime;
     tuningRuntime: PlayerTuningRuntime;
@@ -57,6 +68,14 @@ export interface TestSceneBootstrapRuntime {
 
 export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, editorOpen: boolean = false): TestSceneBootstrapRuntime => {
     bootstrapPersistedPlayerTuning();
+
+    const initialSequenceLoad = loadTestNpcScriptedSequenceDraft();
+    setTestNpcScriptedSequenceDefinitions(
+        initialSequenceLoad.definitions,
+        initialSequenceLoad.source === 'draft'
+            ? 'bootstrap_draft'
+            : 'bootstrap_default'
+    );
 
     const resolvedLevelId = levelId ?? getInitialCampaignLevelId();
     const defaultConfig = getCampaignLevelConfig(resolvedLevelId);
@@ -71,6 +90,14 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
             npcs: defaultConfig.npcs.map((entry) => ({
                 ...entry,
                 scriptedLoopRef: entry.scriptedLoopRef,
+                interactionOverride: entry.interactionOverride
+                    ? {
+                        ...entry.interactionOverride,
+                        outcome: entry.interactionOverride.outcome
+                            ? { ...entry.interactionOverride.outcome }
+                            : entry.interactionOverride.outcome
+                    }
+                    : undefined,
                 behavior: entry.behavior ? { ...entry.behavior } : undefined
             }))
         };
@@ -114,6 +141,11 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         player: hudModel
     });
 
+    const cutsceneRuntime = createTestCutsceneRuntime({
+        scene,
+        player: worldActor,
+        worldRuntime
+    });
     const debugRuntime = createTestDebugRuntime({
         scene,
         player: debugModel,
@@ -121,7 +153,9 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
             player.setDebugVisualsVisible(visible);
         },
         getHazards: () => worldRuntime.hazards,
-        getNpcDebugEntries: () => worldRuntime.getNpcDebugEntries()
+        getNpcDebugEntries: () => worldRuntime.getNpcDebugEntries(),
+        getNpcInteractionDebugState: () => worldRuntime.getNpcInteractionDebugState(),
+        getCutsceneDebugState: () => cutsceneRuntime.getDebugState()
     });
     const editorRuntime = createTestWorldEditorRuntime(
         scene,
@@ -130,11 +164,14 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         resolvedLevelId,
         defaultConfig,
         editorOpen,
-        initialWorldLoad.source === 'draft'
-            ? 'loaded saved draft'
-            : initialWorldLoad.error
-                ? 'draft invalid, loaded default'
-                : null,
+        [
+            initialWorldLoad.source === 'draft'
+                ? 'loaded world draft'
+                : (initialWorldLoad.error ? 'world draft invalid, loaded default' : null),
+            initialSequenceLoad.source === 'draft'
+                ? 'loaded sequence draft'
+                : (initialSequenceLoad.error ? 'sequence draft invalid, loaded default' : null)
+        ].filter((entry): entry is string => entry !== null).join(' | ') || null,
         (config) => {
             backgroundRuntime.applyConfig(config);
         },
@@ -161,6 +198,40 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         }
     });
 
+    if (import.meta.env.DEV && typeof window !== 'undefined') {
+        const debugBridge = {
+            getLevelId: (): string => worldRuntime.getLevelId(),
+            getPlayerSnapshot: () => ({
+                x: player.arcadeBodyObject.x,
+                y: player.arcadeBodyObject.y,
+                form: player.currentForm
+            }),
+            teleportPlayer: (x: number, y: number): void => {
+                if (!Number.isFinite(x) || !Number.isFinite(y)) {
+                    return;
+                }
+                respawnRuntime.setRespawnPoint({ x, y });
+                player.respawnAt(x, y);
+            },
+            getNpcDebugEntries: () => worldRuntime.getNpcDebugEntries(),
+            getNpcInteractionDebugState: () => worldRuntime.getNpcInteractionDebugState(),
+            getCutsceneDebugState: () => cutsceneRuntime.getDebugState(),
+            tryTriggerNpcInteraction: (): void => {
+                worldRuntime.updateNpcInteractionTarget();
+                worldRuntime.tryTriggerNpcInteraction();
+            },
+            tryStartCutsceneRef: (cutsceneRef: string): boolean => {
+                const normalizedRef = typeof cutsceneRef === 'string' ? cutsceneRef.trim() : '';
+                return normalizedRef.length > 0
+                    ? cutsceneRuntime.tryStartCutsceneRef(normalizedRef, 'debug_bridge')
+                    : false;
+            }
+        };
+        (window as Window & {
+            __THE_FORM_DEBUG__?: typeof debugBridge;
+        }).__THE_FORM_DEBUG__ = debugBridge;
+    }
+
     return {
         player,
         playerInputKeys,
@@ -168,6 +239,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         respawnRuntime,
         hudRuntime,
         debugRuntime,
+        cutsceneRuntime,
         editorRuntime,
         devHelperRuntime,
         tuningRuntime,

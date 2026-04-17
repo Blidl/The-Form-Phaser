@@ -24,11 +24,36 @@ import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runti
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
 import {
+    resolveTestHudAnchorPosition,
+    TEST_EDITOR_BACKGROUND_BADGE_LAYOUT,
+    TEST_EDITOR_HELP_OVERLAY_LAYOUT
+} from '../../../ui/runtime/test_hud_layout';
+import {
     getTestNpcProfile,
     getTestNpcProfiles,
     resolveTestNpcConfig
 } from '../../npc/npc_profiles';
-import { getTestNpcScriptedSequenceRefs } from '../../npc/npc_scripted_sequences';
+import {
+    TEST_NPC_SCRIPTED_SEQUENCE_ACTION_KINDS,
+    cloneTestNpcScriptedSequenceAction,
+    cloneTestNpcScriptedSequenceDefinition,
+    getDefaultTestNpcScriptedSequenceDefinitions,
+    getTestNpcScriptedSequenceRegistryAuditSnapshot,
+    getTestNpcScriptedSequenceDefinitions,
+    getTestNpcScriptedSequenceRefs,
+    parseTestNpcScriptedSequenceDefinitionsJson,
+    setTestNpcScriptedSequenceDefinitions,
+    type TestNpcScriptedSequenceDefinition,
+    type TestNpcScriptedSequenceActionKind,
+    validateTestNpcScriptedSequenceId
+} from '../../npc/npc_scripted_sequences';
+import {
+    clearTestNpcScriptedSequenceDraft,
+    getTestNpcScriptedSequenceDraftStorageAuditSnapshot,
+    markTestNpcScriptedSequenceDraftRestoredDefault,
+    saveTestNpcScriptedSequenceDraft
+} from '../../npc/npc_scripted_sequence_storage';
+import type { ActorAction } from '../../actor_actions/actor_action_types';
 import {
     TEST_WORLD_VISUAL_LAYER_OPTIONS,
     resolveTestWorldRenderOrder,
@@ -78,6 +103,95 @@ const DRAFT_AUTOSAVE_DELAY_MS = 500;
 const PLACEMENT_PREVIEW_SIZE = 18;
 const MIN_EDITOR_RECT_SIZE = 8;
 const EDITOR_FALLBACK_BACKGROUND_COLOR = 0x263238;
+const RULER_THICKNESS_PX = 20;
+const DEFAULT_SEQUENCE_ID_PREFIX = 'scripted_sequence';
+
+const createDefaultScriptedSequenceAction = (
+    kind: TestNpcScriptedSequenceActionKind
+): ActorAction => {
+    if (kind === 'wait') {
+        return {
+            kind,
+            ref: 'wait_step',
+            durationMs: 500
+        };
+    }
+    if (kind === 'face') {
+        return {
+            kind,
+            ref: 'face_right',
+            facing: 1
+        };
+    }
+    if (kind === 'walk_to_x') {
+        return {
+            kind,
+            ref: 'walk_target',
+            targetX: 0,
+            moveSpeed: 32,
+            tolerancePx: 2
+        };
+    }
+    if (kind === 'play_animation') {
+        return {
+            kind,
+            ref: 'anim_step',
+            animationId: 'wave'
+        };
+    }
+    if (kind === 'set_emotion') {
+        return {
+            kind,
+            ref: 'emotion_step',
+            emotionId: 'calm'
+        };
+    }
+    return {
+        kind,
+        ref: 'event_step',
+        eventId: 'npc_event',
+        payload: undefined
+    };
+};
+
+const cloneScriptedSequenceDefinitions = (
+    definitions: readonly TestNpcScriptedSequenceDefinition[]
+): TestNpcScriptedSequenceDefinition[] => {
+    return definitions.map(cloneTestNpcScriptedSequenceDefinition);
+};
+
+const describeSequenceAction = (action: ActorAction, index: number): string => {
+    if (action.kind === 'wait') {
+        return `${index + 1}. wait ${Math.round(action.durationMs)}ms`;
+    }
+    if (action.kind === 'face') {
+        return `${index + 1}. face ${action.facing < 0 ? 'left' : 'right'}`;
+    }
+    if (action.kind === 'walk_to_x') {
+        return `${index + 1}. walk_to_x x=${action.targetX}`;
+    }
+    if (action.kind === 'play_animation') {
+        return `${index + 1}. play_animation ${action.animationId}`;
+    }
+    if (action.kind === 'set_emotion') {
+        return `${index + 1}. set_emotion ${action.emotionId}`;
+    }
+    return `${index + 1}. trigger_event ${action.eventId}`;
+};
+
+const createNextScriptedSequenceId = (
+    definitions: readonly TestNpcScriptedSequenceDefinition[]
+): string => {
+    const usedIds = new Set(definitions.map((entry) => entry.id));
+    const defaultIds = new Set(getDefaultTestNpcScriptedSequenceDefinitions().map((entry) => entry.id));
+    let nextIndex = 1;
+    let candidate = `${DEFAULT_SEQUENCE_ID_PREFIX}_${nextIndex}`;
+    while (usedIds.has(candidate) || defaultIds.has(candidate)) {
+        nextIndex += 1;
+        candidate = `${DEFAULT_SEQUENCE_ID_PREFIX}_${nextIndex}`;
+    }
+    return candidate;
+};
 
 interface TestWorldEditorEdges {
     left: number;
@@ -433,8 +547,10 @@ export const createTestWorldEditorRuntime = (
     const selectionGraphics = scene.add.graphics().setDepth(4990);
     const placementGraphics = scene.add.graphics().setDepth(4992);
     const gridGraphics = scene.add.graphics().setDepth(4985);
+    const rulerGraphics = scene.add.graphics().setDepth(4988).setScrollFactor(0);
     const boundsGraphics = scene.add.graphics().setDepth(4980);
-    const overlayText = scene.add.text(18, 18, '', {
+    const initialHelpOverlayPosition = resolveTestHudAnchorPosition(scene, TEST_EDITOR_HELP_OVERLAY_LAYOUT);
+    const overlayText = scene.add.text(initialHelpOverlayPosition.x, initialHelpOverlayPosition.y, '', {
         fontFamily: 'monospace',
         fontSize: '13px',
         color: '#ffffff',
@@ -456,11 +572,28 @@ export const createTestWorldEditorRuntime = (
         }
     })
         .setDepth(4994)
+        .setScrollFactor(0)
         .setVisible(false);
 
     const appRoot = document.getElementById('app');
     if (!appRoot) {
         throw new Error('#app was not found.');
+    }
+    const rulerCanvas = document.createElement('canvas');
+    rulerCanvas.width = Math.max(1, scene.scale.width);
+    rulerCanvas.height = Math.max(1, scene.scale.height);
+    rulerCanvas.style.position = 'absolute';
+    rulerCanvas.style.left = '0';
+    rulerCanvas.style.top = '0';
+    rulerCanvas.style.width = '100%';
+    rulerCanvas.style.height = '100%';
+    rulerCanvas.style.pointerEvents = 'none';
+    rulerCanvas.style.zIndex = '24';
+    rulerCanvas.style.display = 'none';
+    appRoot.appendChild(rulerCanvas);
+    const rulerCanvasContext = rulerCanvas.getContext('2d');
+    if (!rulerCanvasContext) {
+        throw new Error('2D canvas context is not available for editor ruler.');
     }
 
     let active = false;
@@ -471,11 +604,14 @@ export const createTestWorldEditorRuntime = (
     let gridSize = 16;
     let status = initialStatus ?? '';
     let autosaveTimer: number | null = null;
+    let suppressSequenceDraftPersistUntilNextTick = false;
     let pointerDragState: PointerDragState | null = null;
     let pendingPlacementType: TestWorldEditorObjectType | null = null;
     let gameplayCameraSnapshot: EditorCameraSnapshot | null = null;
     let activeTab: TestWorldEditorTabId = 'level';
     let selectedBackgroundId: BackgroundSelectionId | null = null;
+    let selectedSequenceId: string | null = getTestNpcScriptedSequenceDefinitions()[0]?.id ?? null;
+    let selectedSequenceActionIndex = 0;
     const undoStack: TestWorldConfig[] = [];
     const redoStack: TestWorldConfig[] = [];
     const inspectorColorKeys = new Set<string>([
@@ -498,6 +634,7 @@ export const createTestWorldEditorRuntime = (
     const getSelectedRootId = (): string | null => getSelectedHandle()?.rootId ?? null;
     const isObjectsTabActive = (): boolean => activeTab === 'objects';
     const isNpcTabActive = (): boolean => activeTab === 'npc';
+    const isSequencesTabActive = (): boolean => activeTab === 'sequences';
     const isInspectorTabActive = (): boolean => activeTab === 'inspector';
     const isObjectInteractionTabActive = (): boolean => isObjectsTabActive() || isNpcTabActive() || isInspectorTabActive();
     const isBackgroundTabActive = (): boolean => activeTab === 'background';
@@ -557,10 +694,118 @@ export const createTestWorldEditorRuntime = (
         return getBackgroundHandles().find((entry) => entry.id === selectedBackgroundId) ?? null;
     };
 
+    const getScriptedSequenceDefinitions = (): readonly TestNpcScriptedSequenceDefinition[] => {
+        return getTestNpcScriptedSequenceDefinitions();
+    };
+
+    const getSelectedScriptedSequence = (): TestNpcScriptedSequenceDefinition | null => {
+        if (!selectedSequenceId) {
+            return null;
+        }
+        return getScriptedSequenceDefinitions().find((entry) => entry.id === selectedSequenceId) ?? null;
+    };
+
+    const normalizeSelectedScriptedSequenceState = (): void => {
+        const definitions = getScriptedSequenceDefinitions();
+        if (definitions.length === 0) {
+            selectedSequenceId = null;
+            selectedSequenceActionIndex = -1;
+            return;
+        }
+
+        if (!selectedSequenceId || !definitions.some((entry) => entry.id === selectedSequenceId)) {
+            selectedSequenceId = definitions[0]?.id ?? null;
+        }
+
+        const selectedSequence = definitions.find((entry) => entry.id === selectedSequenceId) ?? null;
+        if (!selectedSequence || selectedSequence.actions.length === 0) {
+            selectedSequenceActionIndex = -1;
+            return;
+        }
+
+        selectedSequenceActionIndex = Math.max(0, Math.min(selectedSequenceActionIndex, selectedSequence.actions.length - 1));
+    };
+
+    const getProfileSequenceConsumers = (sequenceId: string): string[] => {
+        return getTestNpcProfiles()
+            .filter((profile) => profile.scriptedLoopRef === sequenceId)
+            .map((profile) => profile.id);
+    };
+
+    const getWorldSequenceConsumers = (sequenceId: string): string[] => {
+        return worldRuntime.getConfig().npcs
+            .filter((npc) => npc.scriptedLoopRef === sequenceId)
+            .map((npc) => npc.id);
+    };
+
+    const saveSequenceDraftNow = (): void => {
+        const saved = saveTestNpcScriptedSequenceDraft(getScriptedSequenceDefinitions());
+        if (saved.error) {
+            setStatus(`sequence draft save failed: ${saved.error}`);
+        }
+    };
+
+    const withSequenceDraftPersistSuppressed = (run: () => void): void => {
+        suppressSequenceDraftPersistUntilNextTick = true;
+        try {
+            run();
+        } finally {
+            window.setTimeout(() => {
+                suppressSequenceDraftPersistUntilNextTick = false;
+            }, 0);
+        }
+    };
+
+    const commitScriptedSequenceRegistry = (
+        definitions: readonly TestNpcScriptedSequenceDefinition[],
+        successStatus: string,
+        options?: {
+            persistDraft?: boolean;
+            source?: string;
+        }
+    ): boolean => {
+        const result = setTestNpcScriptedSequenceDefinitions(
+            definitions,
+            options?.source ?? 'editor_commit'
+        );
+        if (result.definitions === null) {
+            const firstIssue = result.issues[0];
+            setStatus(firstIssue ? `sequence invalid: ${firstIssue.message}` : 'sequence invalid');
+            return false;
+        }
+
+        normalizeSelectedScriptedSequenceState();
+        if ((options?.persistDraft ?? true) && !suppressSequenceDraftPersistUntilNextTick) {
+            saveSequenceDraftNow();
+        }
+        setStatus(successStatus);
+        return true;
+    };
+
+    const restoreDefaultScriptedSequenceRegistry = (
+        successStatus: string,
+        options?: {
+            persistDraft?: boolean;
+            source?: string;
+        }
+    ): void => {
+        const defaultDefinitions = getDefaultTestNpcScriptedSequenceDefinitions();
+        if (commitScriptedSequenceRegistry(defaultDefinitions, successStatus, {
+            persistDraft: options?.persistDraft ?? true,
+            source: options?.source ?? 'editor_restore_default'
+        })) {
+            markTestNpcScriptedSequenceDraftRestoredDefault();
+            syncSidebar();
+        }
+    };
+
     const buildSidebarState = (): TestWorldEditorSidebarState => {
         const config = worldRuntime.getConfig();
+        normalizeSelectedScriptedSequenceState();
         const selectedRootId = getSelectedRootId();
         const selectedType = worldRuntime.getEditorObjects().find((entry) => entry.id === selectedRootId)?.type ?? null;
+        const selectedSequence = getSelectedScriptedSequence();
+        const selectedSequenceAction = selectedSequence?.actions[selectedSequenceActionIndex] ?? null;
         const npcItems = worldRuntime.getEditorObjects()
             .filter((entry) => entry.type === 'npc')
             .map((entry) => ({
@@ -600,6 +845,25 @@ export const createTestWorldEditorRuntime = (
             inspectorSections: buildInspectorSections(config, selectedRootId, selectedType),
             npcInspectorId: selectedType === 'npc' ? selectedRootId : null,
             npcInspectorSections: buildNpcInspectorSections(config, selectedType === 'npc' ? selectedRootId : null),
+            sequenceItems: getScriptedSequenceDefinitions().map((entry) => ({
+                id: entry.id,
+                actionCount: entry.actions.length,
+                selected: entry.id === selectedSequenceId
+            })),
+            sequenceInspectorId: selectedSequence?.id ?? null,
+            sequenceSections: [
+                ...buildScriptedSequenceSections(selectedSequence),
+                ...buildScriptedSequenceAuditSections()
+            ],
+            sequenceActionItems: selectedSequence
+                ? selectedSequence.actions.map((action, index) => ({
+                    index,
+                    label: describeSequenceAction(action, index),
+                    selected: index === selectedSequenceActionIndex
+                }))
+                : [],
+            sequenceActionIndex: selectedSequenceAction ? selectedSequenceActionIndex : -1,
+            sequenceActionSections: buildScriptedSequenceActionSections(selectedSequenceAction),
             selectedLocked: getSelectedHandle()?.isLocked() ?? false
         };
     };
@@ -681,6 +945,46 @@ export const createTestWorldEditorRuntime = (
             clearTestWorldEditorDraft(levelId);
             setStatus('saved draft cleared');
         },
+        onSaveSequenceDraft: () => {
+            saveSequenceDraftNow();
+            setStatus('sequence draft saved');
+        },
+        onExportSequencesJson: () => {
+            const blob = new Blob([JSON.stringify(getScriptedSequenceDefinitions(), null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'npc_scripted_sequences.json';
+            link.click();
+            URL.revokeObjectURL(link.href);
+            setStatus('exported sequence json');
+        },
+        onImportSequencesJson: (jsonText) => {
+            const parsed = parseTestNpcScriptedSequenceDefinitionsJson(jsonText);
+            if (parsed.definitions === null) {
+                setStatus(parsed.error ? `sequence import failed: ${parsed.error}` : 'sequence import failed');
+                return;
+            }
+            if (commitScriptedSequenceRegistry(parsed.definitions, 'imported sequence json', {
+                source: 'editor_import_json'
+            })) {
+                syncSidebar();
+            }
+        },
+        onResetSequencesDefault: () => {
+            restoreDefaultScriptedSequenceRegistry('reset sequences to default', {
+                persistDraft: true,
+                source: 'editor_reset_default'
+            });
+        },
+        onClearSavedSequenceDraft: () => {
+            withSequenceDraftPersistSuppressed(() => {
+                clearTestNpcScriptedSequenceDraft();
+                restoreDefaultScriptedSequenceRegistry('saved sequence draft cleared, using default registry', {
+                    persistDraft: false,
+                    source: 'editor_clear_draft_restore_default'
+                });
+            });
+        },
         onCreateObject: (type) => {
             if (type === 'finish' && worldRuntime.getConfig().finish) {
                 selectRoot(worldRuntime.getConfig().finish?.id ?? null);
@@ -731,6 +1035,104 @@ export const createTestWorldEditorRuntime = (
         },
         onDeleteSelected: () => {
             deleteSelected();
+        },
+        onCreateSequence: () => {
+            const definitions = cloneScriptedSequenceDefinitions(getScriptedSequenceDefinitions());
+            const nextId = createNextScriptedSequenceId(definitions);
+            definitions.push({
+                id: nextId,
+                actions: [createDefaultScriptedSequenceAction('wait')]
+            });
+            selectedSequenceId = nextId;
+            selectedSequenceActionIndex = 0;
+            commitScriptedSequenceRegistry(definitions, `created sequence ${nextId}`);
+        },
+        onSelectSequence: (id) => {
+            selectedSequenceId = id;
+            selectedSequenceActionIndex = 0;
+            activeTab = 'sequences';
+            syncSidebar();
+        },
+        onDeleteSelectedSequence: () => {
+            const selectedSequence = getSelectedScriptedSequence();
+            if (!selectedSequence) {
+                return;
+            }
+            const profileConsumers = getProfileSequenceConsumers(selectedSequence.id);
+            const worldConsumers = getWorldSequenceConsumers(selectedSequence.id);
+            if (profileConsumers.length > 0 || worldConsumers.length > 0) {
+                setStatus(
+                    `cannot delete "${selectedSequence.id}": referenced by `
+                    + [...profileConsumers, ...worldConsumers].join(', ')
+                );
+                return;
+            }
+            const definitions = cloneScriptedSequenceDefinitions(getScriptedSequenceDefinitions())
+                .filter((entry) => entry.id !== selectedSequence.id);
+            selectedSequenceId = definitions[0]?.id ?? null;
+            selectedSequenceActionIndex = 0;
+            commitScriptedSequenceRegistry(definitions, `deleted sequence ${selectedSequence.id}`);
+        },
+        onCreateSequenceAction: () => {
+            const selectedSequence = getSelectedScriptedSequence();
+            if (!selectedSequence) {
+                return;
+            }
+            const definitions = cloneScriptedSequenceDefinitions(getScriptedSequenceDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedSequence.id);
+            if (!target) {
+                return;
+            }
+            target.actions = [
+                ...target.actions,
+                createDefaultScriptedSequenceAction('wait')
+            ];
+            selectedSequenceActionIndex = target.actions.length - 1;
+            commitScriptedSequenceRegistry(definitions, `added action to ${selectedSequence.id}`);
+        },
+        onSelectSequenceAction: (index) => {
+            selectedSequenceActionIndex = Number.isFinite(index) ? index : 0;
+            activeTab = 'sequences';
+            syncSidebar();
+        },
+        onDeleteSelectedSequenceAction: () => {
+            const selectedSequence = getSelectedScriptedSequence();
+            if (!selectedSequence || selectedSequenceActionIndex < 0) {
+                return;
+            }
+            if (selectedSequence.actions.length <= 1) {
+                setStatus('sequence must keep at least one action');
+                return;
+            }
+            const definitions = cloneScriptedSequenceDefinitions(getScriptedSequenceDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedSequence.id);
+            if (!target) {
+                return;
+            }
+            target.actions = target.actions.filter((_, index) => index !== selectedSequenceActionIndex);
+            selectedSequenceActionIndex = Math.max(0, Math.min(selectedSequenceActionIndex, target.actions.length - 1));
+            commitScriptedSequenceRegistry(definitions, `removed action from ${selectedSequence.id}`);
+        },
+        onMoveSelectedSequenceAction: (direction) => {
+            const selectedSequence = getSelectedScriptedSequence();
+            if (!selectedSequence || selectedSequenceActionIndex < 0) {
+                return;
+            }
+            const nextIndex = selectedSequenceActionIndex + direction;
+            if (nextIndex < 0 || nextIndex >= selectedSequence.actions.length) {
+                return;
+            }
+            const definitions = cloneScriptedSequenceDefinitions(getScriptedSequenceDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedSequence.id);
+            if (!target) {
+                return;
+            }
+            const actions = target.actions.map(cloneTestNpcScriptedSequenceAction);
+            const [moved] = actions.splice(selectedSequenceActionIndex, 1);
+            actions.splice(nextIndex, 0, moved);
+            target.actions = actions;
+            selectedSequenceActionIndex = nextIndex;
+            commitScriptedSequenceRegistry(definitions, `reordered action in ${selectedSequence.id}`);
         },
         onToggleSelectedLock: () => {
             const rootId = getSelectedRootId();
@@ -821,6 +1223,113 @@ export const createTestWorldEditorRuntime = (
                 worldRuntime.patchObjectFields(rootId, { [key]: value });
             }
             markConfigDirty();
+        },
+        onSequenceFieldChange: (key, value) => {
+            const selectedSequence = getSelectedScriptedSequence();
+            if (!selectedSequence || key !== 'id' || typeof value !== 'string') {
+                return;
+            }
+            const nextId = value.trim();
+            if (nextId === selectedSequence.id) {
+                return;
+            }
+            const idIssue = validateTestNpcScriptedSequenceId(nextId);
+            if (idIssue) {
+                setStatus(idIssue);
+                return;
+            }
+            const profileConsumers = getProfileSequenceConsumers(selectedSequence.id);
+            const worldConsumers = getWorldSequenceConsumers(selectedSequence.id);
+            if (profileConsumers.length > 0 || worldConsumers.length > 0) {
+                setStatus(
+                    `cannot rename "${selectedSequence.id}": referenced by `
+                    + [...profileConsumers, ...worldConsumers].join(', ')
+                );
+                return;
+            }
+            if (getScriptedSequenceDefinitions().some((entry) => entry.id === nextId)) {
+                setStatus(`sequence id "${nextId}" already exists`);
+                return;
+            }
+            const definitions = cloneScriptedSequenceDefinitions(getScriptedSequenceDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedSequence.id);
+            if (!target) {
+                return;
+            }
+            target.id = nextId;
+            selectedSequenceId = nextId;
+            commitScriptedSequenceRegistry(definitions, `renamed sequence to ${nextId}`);
+        },
+        onSequenceActionFieldChange: (key, value) => {
+            const selectedSequence = getSelectedScriptedSequence();
+            if (!selectedSequence || selectedSequenceActionIndex < 0) {
+                return;
+            }
+            const definitions = cloneScriptedSequenceDefinitions(getScriptedSequenceDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedSequence.id);
+            if (!target) {
+                return;
+            }
+            const currentAction = target.actions[selectedSequenceActionIndex];
+            if (!currentAction) {
+                return;
+            }
+
+            let nextAction: ActorAction = cloneTestNpcScriptedSequenceAction(currentAction);
+            if (key === 'kind' && typeof value === 'string') {
+                if (!TEST_NPC_SCRIPTED_SEQUENCE_ACTION_KINDS.includes(value as TestNpcScriptedSequenceActionKind)) {
+                    return;
+                }
+                nextAction = createDefaultScriptedSequenceAction(value as TestNpcScriptedSequenceActionKind);
+            } else if (key === 'ref') {
+                nextAction = {
+                    ...nextAction,
+                    ref: typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+                };
+            } else if (nextAction.kind === 'wait' && key === 'durationMs' && typeof value === 'number' && Number.isFinite(value)) {
+                nextAction = { ...nextAction, durationMs: value };
+            } else if (nextAction.kind === 'face' && key === 'facing') {
+                const facing = Number(value);
+                if (facing === -1 || facing === 1) {
+                    nextAction = { ...nextAction, facing };
+                }
+            } else if (nextAction.kind === 'walk_to_x' && key === 'targetX' && typeof value === 'number' && Number.isFinite(value)) {
+                nextAction = { ...nextAction, targetX: value };
+            } else if (nextAction.kind === 'walk_to_x' && key === 'moveSpeed' && typeof value === 'number' && Number.isFinite(value)) {
+                nextAction = { ...nextAction, moveSpeed: value };
+            } else if (nextAction.kind === 'walk_to_x' && key === 'tolerancePx' && typeof value === 'number' && Number.isFinite(value)) {
+                nextAction = { ...nextAction, tolerancePx: value };
+            } else if (nextAction.kind === 'play_animation' && key === 'animationId' && typeof value === 'string') {
+                nextAction = { ...nextAction, animationId: value };
+            } else if (nextAction.kind === 'set_emotion' && key === 'emotionId' && typeof value === 'string') {
+                nextAction = { ...nextAction, emotionId: value };
+            } else if (nextAction.kind === 'trigger_event' && key === 'eventId' && typeof value === 'string') {
+                nextAction = { ...nextAction, eventId: value };
+            } else if (nextAction.kind === 'trigger_event' && key === 'payloadJson' && typeof value === 'string') {
+                const trimmed = value.trim();
+                if (trimmed.length === 0) {
+                    nextAction = { ...nextAction, payload: undefined };
+                } else {
+                    try {
+                        const parsed = JSON.parse(trimmed) as unknown;
+                        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+                            setStatus('trigger_event payload must be a JSON object');
+                            return;
+                        }
+                        nextAction = { ...nextAction, payload: parsed as Record<string, unknown> };
+                    } catch (error) {
+                        setStatus(error instanceof Error ? `payload json invalid: ${error.message}` : 'payload json invalid');
+                        return;
+                    }
+                }
+            } else {
+                return;
+            }
+
+            target.actions = target.actions.map((action, index) => (
+                index === selectedSequenceActionIndex ? nextAction : cloneTestNpcScriptedSequenceAction(action)
+            ));
+            commitScriptedSequenceRegistry(definitions, `updated action in ${selectedSequence.id}`);
         }
     });
 
@@ -1333,6 +1842,8 @@ export const createTestWorldEditorRuntime = (
         }
         active = !active;
         overlayText.setVisible(active);
+        rulerGraphics.setVisible(active);
+        rulerCanvas.style.display = active ? 'block' : 'none';
         if (active) {
             gameplayCameraSnapshot = captureGameplayCameraSnapshot();
             scene.cameras.main.stopFollow();
@@ -1445,9 +1956,11 @@ export const createTestWorldEditorRuntime = (
         selectionGraphics.destroy();
         placementGraphics.destroy();
         gridGraphics.destroy();
+        rulerGraphics.destroy();
         boundsGraphics.destroy();
         overlayText.destroy();
         backgroundSelectionText.destroy();
+        rulerCanvas.remove();
         sidebar.destroy();
     };
 
@@ -1465,6 +1978,7 @@ export const createTestWorldEditorRuntime = (
                 selectionGraphics.clear();
                 placementGraphics.clear();
                 gridGraphics.clear();
+                rulerGraphics.clear();
                 boundsGraphics.clear();
                 overlayText.setVisible(false);
                 backgroundSelectionText.setVisible(false);
@@ -1472,12 +1986,21 @@ export const createTestWorldEditorRuntime = (
             }
 
             const domTextInputFocused = isDomTextInputFocused();
+            const pointer = scene.input.activePointer;
+            const helpOverlayPosition = resolveTestHudAnchorPosition(scene, TEST_EDITOR_HELP_OVERLAY_LAYOUT);
+            overlayText.setPosition(helpOverlayPosition.x, helpOverlayPosition.y);
+            const selectedHandle = isBackgroundTabActive()
+                ? null
+                : getSelectedHandle();
+            const selectedBounds = selectedHandle?.getBounds() ?? null;
             overlayText.setText([
                 'F2 toggle  Del delete  Ctrl+D duplicate  Ctrl+Z/Y undo redo',
                 pendingPlacementType
                     ? `Placement ${pendingPlacementType}: LMB place  Esc/RMB cancel  wheel zoom`
                     : 'LMB select/move  drag corners resize  wheel zoom  middle or Space+drag pan',
-                `Arrows pan camera  G grid  1/2/3/4 = ${GRID_SIZES.join('/')}  F focus  P spawn`
+                `Arrows pan camera  G grid  1/2/3/4 = ${GRID_SIZES.join('/')}  F focus  P spawn`,
+                `Cursor ${Math.round(pointer.worldX)},${Math.round(pointer.worldY)}`
+                + (selectedBounds ? `  |  Selected ${Math.round(selectedBounds.x)},${Math.round(selectedBounds.y)}` : '')
             ].join('\n'));
 
             if (!domTextInputFocused) {
@@ -1566,6 +2089,13 @@ export const createTestWorldEditorRuntime = (
             const worldBounds = worldRuntime.getWorldBounds();
             drawWorldBoundsOverlay(boundsGraphics, camera, worldBounds);
             drawGrid(gridGraphics, camera, worldBounds, gridEnabled ? gridSize : 0);
+            drawCoordinateRulerCanvas(
+                rulerCanvas,
+                rulerCanvasContext,
+                camera,
+                worldBounds,
+                gridEnabled ? gridSize : 0
+            );
             const selectedBackgroundHandle = getSelectedBackgroundHandle();
             drawSelection(
                 selectionGraphics,
@@ -1580,11 +2110,13 @@ export const createTestWorldEditorRuntime = (
                 isBackgroundTabActive() ? 0x8cffd1 : 0xffeb3b
             );
             if (isBackgroundTabActive() && selectedBackgroundHandle) {
-                const bounds = selectedBackgroundHandle.bounds;
-                backgroundSelectionText.setText(`Background: ${selectedBackgroundHandle.label}`);
+                const backgroundBadgePosition = resolveTestHudAnchorPosition(scene, TEST_EDITOR_BACKGROUND_BADGE_LAYOUT);
+                backgroundSelectionText.setText(
+                    `Background: ${selectedBackgroundHandle.label}  @ ${Math.round(selectedBackgroundHandle.bounds.x)},${Math.round(selectedBackgroundHandle.bounds.y)}`
+                );
                 backgroundSelectionText.setPosition(
-                    bounds.x - (bounds.width * 0.5),
-                    bounds.y - (bounds.height * 0.5) - 24
+                    backgroundBadgePosition.x - backgroundSelectionText.width,
+                    backgroundBadgePosition.y
                 );
                 backgroundSelectionText.setVisible(true);
             } else {
@@ -1708,6 +2240,104 @@ const drawGrid = (
     graphics.strokePath();
 };
 
+const computeRulerStep = (
+    camera: Phaser.Cameras.Scene2D.Camera,
+    gridSize: number
+): number => {
+    const minWorldStep = 72 / Math.max(camera.zoom, 0.0001);
+    const baseStep = gridSize > 1 ? gridSize : 8;
+    let step = baseStep;
+    while (step < minWorldStep) {
+        step *= 2;
+    }
+    return step;
+};
+
+const drawCoordinateRulerCanvas = (
+    canvas: HTMLCanvasElement,
+    context: CanvasRenderingContext2D,
+    camera: Phaser.Cameras.Scene2D.Camera,
+    bounds: { width: number; height: number },
+    gridSize: number
+): void => {
+    const viewportWidth = camera.width;
+    const viewportHeight = camera.height;
+    if (canvas.width !== viewportWidth || canvas.height !== viewportHeight) {
+        canvas.width = Math.max(1, viewportWidth);
+        canvas.height = Math.max(1, viewportHeight);
+    }
+
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = 'rgba(7, 19, 26, 0.88)';
+    context.fillRect(0, 0, viewportWidth, RULER_THICKNESS_PX);
+    context.fillRect(0, 0, RULER_THICKNESS_PX, viewportHeight);
+    context.fillStyle = 'rgba(16, 33, 43, 0.95)';
+    context.fillRect(0, 0, RULER_THICKNESS_PX, RULER_THICKNESS_PX);
+    context.strokeStyle = 'rgba(184, 236, 255, 0.22)';
+    context.lineWidth = 1;
+    context.beginPath();
+    context.moveTo(0, RULER_THICKNESS_PX + 0.5);
+    context.lineTo(viewportWidth, RULER_THICKNESS_PX + 0.5);
+    context.moveTo(RULER_THICKNESS_PX + 0.5, 0);
+    context.lineTo(RULER_THICKNESS_PX + 0.5, viewportHeight);
+    context.stroke();
+
+    const worldLeft = Math.max(0, camera.worldView.left);
+    const worldRight = Math.min(bounds.width, camera.worldView.right);
+    const worldTop = Math.max(0, camera.worldView.top);
+    const worldBottom = Math.min(bounds.height, camera.worldView.bottom);
+    if (worldRight <= worldLeft || worldBottom <= worldTop) {
+        return;
+    }
+
+    const step = computeRulerStep(camera, gridSize);
+    const tickAlpha = 0.55;
+    const majorTickSize = 9;
+    const minorTickSize = 5;
+    context.strokeStyle = `rgba(184, 236, 255, ${tickAlpha})`;
+    context.fillStyle = '#d7f6ff';
+    context.font = '10px monospace';
+    context.textBaseline = 'top';
+
+    const xStart = Math.floor(worldLeft / step) * step;
+    for (let x = xStart; x <= worldRight; x += step) {
+        if (x < 0 || x > bounds.width) {
+            continue;
+        }
+        const screenX = (x - camera.worldView.left) * camera.zoom;
+        if (screenX < RULER_THICKNESS_PX - 2 || screenX > viewportWidth) {
+            continue;
+        }
+        const isMajor = x % (step * 2) === 0;
+        context.beginPath();
+        context.moveTo(screenX + 0.5, RULER_THICKNESS_PX);
+        context.lineTo(screenX + 0.5, RULER_THICKNESS_PX - (isMajor ? majorTickSize : minorTickSize));
+        context.stroke();
+        if (isMajor) {
+            context.fillText(`${Math.round(x)}`, screenX + 3, 3);
+        }
+    }
+
+    const yStart = Math.floor(worldTop / step) * step;
+    for (let y = yStart; y <= worldBottom; y += step) {
+        if (y < 0 || y > bounds.height) {
+            continue;
+        }
+        const screenY = (y - camera.worldView.top) * camera.zoom;
+        if (screenY < RULER_THICKNESS_PX - 2 || screenY > viewportHeight) {
+            continue;
+        }
+        const isMajor = y % (step * 2) === 0;
+        context.beginPath();
+        context.moveTo(RULER_THICKNESS_PX, screenY + 0.5);
+        context.lineTo(RULER_THICKNESS_PX - (isMajor ? majorTickSize : minorTickSize), screenY + 0.5);
+        context.stroke();
+        if (isMajor) {
+            context.fillText(`${Math.round(y)}`, 3, screenY + 1);
+        }
+    }
+};
+
 const drawPlacementPreview = (
     graphics: Phaser.GameObjects.Graphics,
     camera: Phaser.Cameras.Scene2D.Camera,
@@ -1805,6 +2435,14 @@ const buildInspectorSections = (
         const resolved = resolveTestNpcConfig(entry);
         const profileDefaultScriptedLoopRef = profile?.scriptedLoopRef ?? null;
         const effectiveScriptedLoopRef = resolved?.scriptedLoopRef ?? null;
+        const profileInteraction = profile?.interaction ?? null;
+        const effectiveInteraction = resolved?.interaction ?? null;
+        const profileOnSpawnRef = profile?.sequenceHooks?.onSpawn?.sequenceRef ?? null;
+        const profileOnPlayerNearRef = profile?.sequenceHooks?.onPlayerNear?.sequenceRef ?? null;
+        const profileOnPlayerFarRef = profile?.sequenceHooks?.onPlayerFar?.sequenceRef ?? null;
+        const effectiveOnSpawnRef = resolved?.sequenceHooks.onSpawn?.sequenceRef ?? null;
+        const effectiveOnPlayerNearRef = resolved?.sequenceHooks.onPlayerNear?.sequenceRef ?? null;
+        const effectiveOnPlayerFarRef = resolved?.sequenceHooks.onPlayerFar?.sequenceRef ?? null;
         const profileOptions = getTestNpcProfiles().map((candidate) => ({
             value: candidate.id,
             label: `${candidate.id} - ${candidate.displayName}`
@@ -1820,6 +2458,27 @@ const buildInspectorSections = (
                 label: sequenceRef
             }))
         ];
+        const hookSequenceOptions = (profileRef: string | null) => [
+            {
+                value: 'profile_default',
+                label: `Profile Default (${profileRef ?? 'None'})`
+            },
+            { value: 'none', label: 'None' },
+            ...getTestNpcScriptedSequenceRefs().map((sequenceRef) => ({
+                value: sequenceRef,
+                label: sequenceRef
+            }))
+        ];
+        const interactionOutcomeKind = entry.interactionOverride?.outcome === null
+            ? 'none'
+            : (entry.interactionOverride?.outcome?.kind ?? 'profile_default');
+        const interactionOutcomeRefLabel = effectiveInteraction
+            ? (effectiveInteraction.outcome.kind === 'run_sequence_ref'
+                ? effectiveInteraction.outcome.sequenceRef
+                : (effectiveInteraction.outcome.kind === 'trigger_event'
+                    ? effectiveInteraction.outcome.eventId
+                    : effectiveInteraction.outcome.cutsceneRef))
+            : 'None';
         return [
             {
                 title: 'NPC',
@@ -1861,6 +2520,85 @@ const buildInspectorSections = (
                         input: 'select',
                         value: entry.scriptedLoopRef === null ? 'none' : (entry.scriptedLoopRef ?? 'profile_default'),
                         options: scriptedLoopOptions
+                    },
+                    {
+                        key: 'onSpawnSequenceRef',
+                        label: `Hook Spawn (Effective: ${effectiveOnSpawnRef ?? 'None'})`,
+                        input: 'select',
+                        value: entry.sequenceHookOverrides?.onSpawnSequenceRef === null
+                            ? 'none'
+                            : (entry.sequenceHookOverrides?.onSpawnSequenceRef ?? 'profile_default'),
+                        options: hookSequenceOptions(profileOnSpawnRef)
+                    },
+                    {
+                        key: 'onPlayerNearSequenceRef',
+                        label: `Hook Near (Effective: ${effectiveOnPlayerNearRef ?? 'None'})`,
+                        input: 'select',
+                        value: entry.sequenceHookOverrides?.onPlayerNearSequenceRef === null
+                            ? 'none'
+                            : (entry.sequenceHookOverrides?.onPlayerNearSequenceRef ?? 'profile_default'),
+                        options: hookSequenceOptions(profileOnPlayerNearRef)
+                    },
+                    {
+                        key: 'onPlayerFarSequenceRef',
+                        label: `Hook Far (Effective: ${effectiveOnPlayerFarRef ?? 'None'})`,
+                        input: 'select',
+                        value: entry.sequenceHookOverrides?.onPlayerFarSequenceRef === null
+                            ? 'none'
+                            : (entry.sequenceHookOverrides?.onPlayerFarSequenceRef ?? 'profile_default'),
+                        options: hookSequenceOptions(profileOnPlayerFarRef)
+                    },
+                    {
+                        key: 'interactionDistancePx',
+                        label: `Interaction Radius (Effective: ${Math.round(effectiveInteraction?.distancePx ?? 0)})`,
+                        input: 'number',
+                        value: entry.interactionOverride?.distancePx ?? profileInteraction?.distancePx ?? 56,
+                        min: 0,
+                        step: 1
+                    },
+                    {
+                        key: 'interactionOutcomeKind',
+                        label: `Interaction Outcome (Effective: ${effectiveInteraction?.outcome.kind ?? 'None'})`,
+                        input: 'select',
+                        value: interactionOutcomeKind,
+                        options: [
+                            { value: 'profile_default', label: `Profile Default (${profileInteraction?.outcome.kind ?? 'None'})` },
+                            { value: 'none', label: 'None' },
+                            { value: 'run_sequence_ref', label: 'Run Sequence Ref' },
+                            { value: 'trigger_event', label: 'Trigger Event' },
+                            { value: 'request_cutscene_ref', label: 'Request Cutscene Ref' }
+                        ]
+                    },
+                    {
+                        key: 'interactionSequenceRef',
+                        label: `Interaction Sequence (Effective Ref: ${interactionOutcomeRefLabel})`,
+                        input: 'select',
+                        value: entry.interactionOverride?.outcome?.kind === 'run_sequence_ref'
+                            ? entry.interactionOverride.outcome.sequenceRef
+                            : 'profile_default',
+                        options: [
+                            { value: 'profile_default', label: `Profile Default (${profileInteraction?.outcome.kind === 'run_sequence_ref' ? profileInteraction.outcome.sequenceRef : 'None'})` },
+                            ...getTestNpcScriptedSequenceRefs().map((sequenceRef) => ({
+                                value: sequenceRef,
+                                label: sequenceRef
+                            }))
+                        ]
+                    },
+                    {
+                        key: 'interactionEventId',
+                        label: `Interaction Event Id (Effective Ref: ${interactionOutcomeRefLabel})`,
+                        input: 'text',
+                        value: entry.interactionOverride?.outcome?.kind === 'trigger_event'
+                            ? entry.interactionOverride.outcome.eventId
+                            : ''
+                    },
+                    {
+                        key: 'interactionCutsceneRef',
+                        label: `Interaction Cutscene Ref (Effective Ref: ${interactionOutcomeRefLabel})`,
+                        input: 'text',
+                        value: entry.interactionOverride?.outcome?.kind === 'request_cutscene_ref'
+                            ? entry.interactionOverride.outcome.cutsceneRef
+                            : ''
                     }
                 ]
             },
@@ -2110,6 +2848,177 @@ const buildNpcInspectorSections = (
         return [];
     }
     return buildInspectorSections(config, rootId, 'npc');
+};
+
+const buildScriptedSequenceSections = (
+    definition: TestNpcScriptedSequenceDefinition | null
+): TestWorldEditorSidebarSection[] => {
+    if (!definition) {
+        return [];
+    }
+
+    return [{
+        title: 'Sequence',
+        fields: [
+            {
+                key: 'id',
+                label: 'Sequence Id',
+                input: 'text',
+                value: definition.id
+            }
+        ]
+    }];
+};
+
+const buildScriptedSequenceAuditSections = (): TestWorldEditorSidebarSection[] => {
+    const audit = getTestNpcScriptedSequenceRegistryAuditSnapshot();
+    const storageAudit = getTestNpcScriptedSequenceDraftStorageAuditSnapshot();
+    return [{
+        title: 'Registry Audit',
+        fields: [
+            { key: 'registryAuditSource', label: 'Current Source', input: 'text', value: audit.registrySource },
+            { key: 'registryAuditDefaultCount', label: 'Default Count', input: 'number', value: audit.defaultSequenceCount },
+            { key: 'registryAuditLiveCount', label: 'Live Count', input: 'number', value: audit.liveSequenceCount },
+            { key: 'registryAuditStorageKey', label: 'Storage Key', input: 'text', value: storageAudit.storageKey },
+            {
+                key: 'registryAuditStoragePresent',
+                label: 'Storage Draft Present',
+                input: 'text',
+                value: storageAudit.draftPresent ? 'yes' : 'no'
+            },
+            {
+                key: 'registryAuditStorageCount',
+                label: 'Storage Draft Count',
+                input: 'number',
+                value: storageAudit.draftEntryCount
+            },
+            {
+                key: 'registryAuditStorageLastAction',
+                label: 'Last Storage Action',
+                input: 'text',
+                value: storageAudit.lastStorageAction
+            },
+            { key: 'registryAuditDefaultIds', label: 'Default Ids', input: 'textarea', value: audit.defaultSequenceIds.join('\n') },
+            { key: 'registryAuditLiveIds', label: 'Live Ids', input: 'textarea', value: audit.liveSequenceIds.join('\n') },
+            {
+                key: 'registryAuditModuleInitCount',
+                label: 'Module Init Default Count',
+                input: 'number',
+                value: audit.moduleInitDefaultSequenceCount
+            },
+            {
+                key: 'registryAuditModuleInitIds',
+                label: 'Module Init Default Ids',
+                input: 'textarea',
+                value: audit.moduleInitDefaultSequenceIds.join('\n')
+            }
+        ]
+    }];
+};
+
+const buildScriptedSequenceActionSections = (
+    action: ActorAction | null
+): TestWorldEditorSidebarSection[] => {
+    if (!action) {
+        return [];
+    }
+
+    const baseFields: TestWorldEditorSidebarSection['fields'] = [
+        {
+            key: 'kind',
+            label: 'Kind',
+            input: 'select',
+            value: action.kind,
+            options: TEST_NPC_SCRIPTED_SEQUENCE_ACTION_KINDS.map((kind) => ({
+                value: kind,
+                label: kind
+            }))
+        },
+        {
+            key: 'ref',
+            label: 'Ref',
+            input: 'text',
+            value: action.ref ?? ''
+        }
+    ];
+
+    if (action.kind === 'wait') {
+        return [{
+            title: 'Action',
+            fields: [
+                ...baseFields,
+                {
+                    key: 'durationMs',
+                    label: 'Duration Ms',
+                    input: 'number',
+                    value: action.durationMs,
+                    min: 0,
+                    step: 1
+                }
+            ]
+        }];
+    }
+    if (action.kind === 'face') {
+        return [{
+            title: 'Action',
+            fields: [
+                ...baseFields,
+                {
+                    key: 'facing',
+                    label: 'Facing',
+                    input: 'select',
+                    value: String(action.facing),
+                    options: [
+                        { value: '1', label: 'Right' },
+                        { value: '-1', label: 'Left' }
+                    ]
+                }
+            ]
+        }];
+    }
+    if (action.kind === 'walk_to_x') {
+        return [{
+            title: 'Action',
+            fields: [
+                ...baseFields,
+                { key: 'targetX', label: 'Target X', input: 'number', value: action.targetX, step: 1 },
+                { key: 'moveSpeed', label: 'Move Speed', input: 'number', value: action.moveSpeed, min: 0, step: 1 },
+                { key: 'tolerancePx', label: 'Tolerance Px', input: 'number', value: action.tolerancePx, min: 0, step: 1 }
+            ]
+        }];
+    }
+    if (action.kind === 'play_animation') {
+        return [{
+            title: 'Action',
+            fields: [
+                ...baseFields,
+                { key: 'animationId', label: 'Animation Id', input: 'text', value: action.animationId }
+            ]
+        }];
+    }
+    if (action.kind === 'set_emotion') {
+        return [{
+            title: 'Action',
+            fields: [
+                ...baseFields,
+                { key: 'emotionId', label: 'Emotion Id', input: 'text', value: action.emotionId }
+            ]
+        }];
+    }
+
+    return [{
+        title: 'Action',
+        fields: [
+            ...baseFields,
+            { key: 'eventId', label: 'Event Id', input: 'text', value: action.eventId },
+            {
+                key: 'payloadJson',
+                label: 'Payload JSON',
+                input: 'textarea',
+                value: action.payload ? JSON.stringify(action.payload, null, 2) : ''
+            }
+        ]
+    }];
 };
 
 const buildLevelSectionsLegacy = (

@@ -1,10 +1,23 @@
 import type { TestWorldEditorObjectType } from './test_world_editor_adapters';
+import { applyDomAnchorLayout, TEST_EDITOR_SIDEBAR_LAYOUT } from '../../../ui/runtime/test_hud_layout';
 
 export interface TestWorldEditorSidebarObjectItem {
     id: string;
     label: string;
     type: string;
     locked: boolean;
+    selected: boolean;
+}
+
+export interface TestWorldEditorSidebarSequenceItem {
+    id: string;
+    actionCount: number;
+    selected: boolean;
+}
+
+export interface TestWorldEditorSidebarSequenceActionItem {
+    index: number;
+    label: string;
     selected: boolean;
 }
 
@@ -16,7 +29,7 @@ export interface TestWorldEditorSidebarFieldOption {
 export interface TestWorldEditorSidebarField {
     key: string;
     label: string;
-    input: 'number' | 'text' | 'color' | 'select' | 'checkbox';
+    input: 'number' | 'text' | 'textarea' | 'color' | 'select' | 'checkbox';
     value: string | number | boolean;
     min?: number;
     step?: number;
@@ -46,6 +59,12 @@ export interface TestWorldEditorSidebarState {
     inspectorSections: TestWorldEditorSidebarSection[];
     npcInspectorId: string | null;
     npcInspectorSections: TestWorldEditorSidebarSection[];
+    sequenceItems: TestWorldEditorSidebarSequenceItem[];
+    sequenceInspectorId: string | null;
+    sequenceSections: TestWorldEditorSidebarSection[];
+    sequenceActionItems: TestWorldEditorSidebarSequenceActionItem[];
+    sequenceActionIndex: number;
+    sequenceActionSections: TestWorldEditorSidebarSection[];
     selectedLocked: boolean;
 }
 
@@ -57,18 +76,32 @@ export interface TestWorldEditorSidebarCallbacks {
     onImportJson: (jsonText: string) => void;
     onResetDefault: () => void;
     onClearSavedDraft: () => void;
+    onSaveSequenceDraft: () => void;
+    onExportSequencesJson: () => void;
+    onImportSequencesJson: (jsonText: string) => void;
+    onResetSequencesDefault: () => void;
+    onClearSavedSequenceDraft: () => void;
     onCreateObject: (type: TestWorldEditorObjectType) => void;
     onSearchChange: (search: string) => void;
     onSelectObject: (id: string) => void;
     onDuplicateSelected: () => void;
     onDeleteSelected: () => void;
+    onCreateSequence: () => void;
+    onSelectSequence: (id: string) => void;
+    onDeleteSelectedSequence: () => void;
+    onCreateSequenceAction: () => void;
+    onSelectSequenceAction: (index: number) => void;
+    onDeleteSelectedSequenceAction: () => void;
+    onMoveSelectedSequenceAction: (direction: -1 | 1) => void;
     onToggleSelectedLock: () => void;
     onLevelFieldChange: (key: string, value: string | number | boolean) => void;
     onInspectorFieldChange: (key: string, value: string | number | boolean) => void;
+    onSequenceFieldChange: (key: string, value: string | number | boolean) => void;
+    onSequenceActionFieldChange: (key: string, value: string | number | boolean) => void;
     onTabChanged: (tabId: TestWorldEditorTabId) => void;
 }
 
-type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'npc' | 'inspector';
+type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'npc' | 'sequences' | 'inspector';
 export type { TestWorldEditorTabId };
 
 const escapeHtml = (value: string): string => {
@@ -118,6 +151,16 @@ const buildFieldMarkup = (field: TestWorldEditorSidebarField, attributeName: str
         `;
     }
 
+    if (field.input === 'textarea') {
+        const value = escapeHtml(String(field.value));
+        return `
+            <label class="test-world-editor__field">
+                <span>${escapeHtml(field.label)}</span>
+                <textarea ${baseAttributes} rows="4">${value}</textarea>
+            </label>
+        `;
+    }
+
     const type = field.input === 'number' ? 'number' : 'text';
     const min = typeof field.min === 'number' ? `min="${field.min}"` : '';
     const step = typeof field.step === 'number' ? `step="${field.step}"` : '';
@@ -134,7 +177,9 @@ export class TestWorldEditorSidebar {
     private readonly root: HTMLDivElement;
     private readonly fileInput: HTMLInputElement;
     private state: TestWorldEditorSidebarState;
+    private readonly collapsedSectionKeys = new Set<string>();
     private activeTab: TestWorldEditorTabId = 'level';
+    private pendingImportMode: 'world' | 'sequence' = 'world';
     private pendingScrollRestore: { inner: number; list: number } | null = null;
     private pendingFocusRestore: { selector: string; selectionStart: number | null; selectionEnd: number | null } | null = null;
 
@@ -145,6 +190,8 @@ export class TestWorldEditorSidebar {
         this.root = document.createElement('div');
         this.root.id = 'test-world-editor-sidebar';
         this.root.className = 'test-world-editor test-world-editor--hidden';
+        this.root.style.position = 'absolute';
+        applyDomAnchorLayout(this.root, TEST_EDITOR_SIDEBAR_LAYOUT);
         parent.appendChild(this.root);
 
         this.fileInput = document.createElement('input');
@@ -158,8 +205,13 @@ export class TestWorldEditorSidebar {
             }
 
             void file.text().then((jsonText) => {
-                this.callbacks.onImportJson(jsonText);
+                if (this.pendingImportMode === 'sequence') {
+                    this.callbacks.onImportSequencesJson(jsonText);
+                } else {
+                    this.callbacks.onImportJson(jsonText);
+                }
                 this.fileInput.value = '';
+                this.pendingImportMode = 'world';
             });
         });
         this.root.appendChild(this.fileInput);
@@ -182,6 +234,12 @@ export class TestWorldEditorSidebar {
             inspectorSections: [],
             npcInspectorId: null,
             npcInspectorSections: [],
+            sequenceItems: [],
+            sequenceInspectorId: null,
+            sequenceSections: [],
+            sequenceActionItems: [],
+            sequenceActionIndex: -1,
+            sequenceActionSections: [],
             selectedLocked: false
         };
         this.root.addEventListener('click', this.handleClick);
@@ -197,6 +255,7 @@ export class TestWorldEditorSidebar {
         this.captureScrollPosition();
         this.captureFocusedField();
         this.state = nextState;
+        applyDomAnchorLayout(this.root, TEST_EDITOR_SIDEBAR_LAYOUT);
         this.render();
     }
 
@@ -212,6 +271,19 @@ export class TestWorldEditorSidebar {
 
     private readonly handleClick = (event: Event): void => {
         const target = event.target as HTMLElement | null;
+        const toggleSectionKey = target?.closest<HTMLElement>('[data-editor-toggle-section]')?.dataset.editorToggleSection;
+        if (toggleSectionKey) {
+            this.captureScrollPosition();
+            this.captureFocusedField();
+            if (this.collapsedSectionKeys.has(toggleSectionKey)) {
+                this.collapsedSectionKeys.delete(toggleSectionKey);
+            } else {
+                this.collapsedSectionKeys.add(toggleSectionKey);
+            }
+            this.render();
+            return;
+        }
+
         const action = target?.closest<HTMLElement>('[data-editor-action]')?.dataset.editorAction;
         if (action) {
             if (action === 'save-draft') {
@@ -231,7 +303,29 @@ export class TestWorldEditorSidebar {
                 return;
             }
             if (action === 'import-json') {
+                this.pendingImportMode = 'world';
                 this.fileInput.click();
+                return;
+            }
+            if (action === 'save-sequence-draft') {
+                this.callbacks.onSaveSequenceDraft();
+                return;
+            }
+            if (action === 'export-sequences-json') {
+                this.callbacks.onExportSequencesJson();
+                return;
+            }
+            if (action === 'import-sequences-json') {
+                this.pendingImportMode = 'sequence';
+                this.fileInput.click();
+                return;
+            }
+            if (action === 'reset-sequences-default') {
+                this.callbacks.onResetSequencesDefault();
+                return;
+            }
+            if (action === 'clear-sequence-draft') {
+                this.callbacks.onClearSavedSequenceDraft();
                 return;
             }
             if (action === 'reset-default') {
@@ -248,6 +342,30 @@ export class TestWorldEditorSidebar {
             }
             if (action === 'delete-selected') {
                 this.callbacks.onDeleteSelected();
+                return;
+            }
+            if (action === 'create-sequence') {
+                this.callbacks.onCreateSequence();
+                return;
+            }
+            if (action === 'delete-selected-sequence') {
+                this.callbacks.onDeleteSelectedSequence();
+                return;
+            }
+            if (action === 'create-sequence-action') {
+                this.callbacks.onCreateSequenceAction();
+                return;
+            }
+            if (action === 'delete-selected-sequence-action') {
+                this.callbacks.onDeleteSelectedSequenceAction();
+                return;
+            }
+            if (action === 'move-sequence-action-up') {
+                this.callbacks.onMoveSelectedSequenceAction(-1);
+                return;
+            }
+            if (action === 'move-sequence-action-down') {
+                this.callbacks.onMoveSelectedSequenceAction(1);
                 return;
             }
             if (action === 'toggle-selected-lock') {
@@ -267,6 +385,18 @@ export class TestWorldEditorSidebar {
         const objectId = target?.closest<HTMLElement>('[data-editor-object-id]')?.dataset.editorObjectId;
         if (objectId) {
             this.callbacks.onSelectObject(objectId);
+            return;
+        }
+
+        const sequenceId = target?.closest<HTMLElement>('[data-editor-sequence-id]')?.dataset.editorSequenceId;
+        if (sequenceId) {
+            this.callbacks.onSelectSequence(sequenceId);
+            return;
+        }
+
+        const sequenceActionIndexValue = target?.closest<HTMLElement>('[data-editor-sequence-action-index]')?.dataset.editorSequenceActionIndex;
+        if (sequenceActionIndexValue !== undefined) {
+            this.callbacks.onSelectSequenceAction(Number(sequenceActionIndexValue));
             return;
         }
 
@@ -304,7 +434,7 @@ export class TestWorldEditorSidebar {
     };
 
     private handleFieldEvent(event: Event, fromInput: boolean): void {
-        const target = event.target as HTMLInputElement | HTMLSelectElement | null;
+        const target = event.target as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement | null;
         if (!target) {
             return;
         }
@@ -319,8 +449,10 @@ export class TestWorldEditorSidebar {
 
         const fieldKey = target.dataset.editorField;
         const levelFieldKey = target.dataset.editorLevelField;
+        const sequenceFieldKey = target.dataset.editorSequenceField;
+        const sequenceActionFieldKey = target.dataset.editorSequenceActionField;
 
-        if (!fieldKey && !levelFieldKey) {
+        if (!fieldKey && !levelFieldKey && !sequenceFieldKey && !sequenceActionFieldKey) {
             return;
         }
 
@@ -330,9 +462,25 @@ export class TestWorldEditorSidebar {
         if (fromInput && target instanceof HTMLInputElement && target.type === 'checkbox') {
             return;
         }
+        if (
+            fromInput
+            && (sequenceFieldKey || sequenceActionFieldKey)
+            && (
+                target instanceof HTMLTextAreaElement
+                || (target instanceof HTMLInputElement && (target.type === 'text' || target.type === 'number'))
+            )
+        ) {
+            return;
+        }
 
-        const callback = levelFieldKey ? this.callbacks.onLevelFieldChange : this.callbacks.onInspectorFieldChange;
-        const resolvedFieldKey = levelFieldKey ?? fieldKey;
+        const callback = levelFieldKey
+            ? this.callbacks.onLevelFieldChange
+            : (sequenceFieldKey
+                ? this.callbacks.onSequenceFieldChange
+                : (sequenceActionFieldKey
+                    ? this.callbacks.onSequenceActionFieldChange
+                    : this.callbacks.onInspectorFieldChange));
+        const resolvedFieldKey = levelFieldKey ?? sequenceFieldKey ?? sequenceActionFieldKey ?? fieldKey;
 
         if (target instanceof HTMLInputElement && target.type === 'checkbox') {
             callback(resolvedFieldKey, target.checked);
@@ -404,6 +552,34 @@ export class TestWorldEditorSidebar {
             return;
         }
 
+        const sequenceFieldKey = inputElement.dataset.editorSequenceField;
+        if (sequenceFieldKey) {
+            this.pendingFocusRestore = {
+                selector: `[data-editor-sequence-field="${sequenceFieldKey}"]`,
+                selectionStart: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionStart
+                    : null,
+                selectionEnd: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionEnd
+                    : null
+            };
+            return;
+        }
+
+        const sequenceActionFieldKey = inputElement.dataset.editorSequenceActionField;
+        if (sequenceActionFieldKey) {
+            this.pendingFocusRestore = {
+                selector: `[data-editor-sequence-action-field="${sequenceActionFieldKey}"]`,
+                selectionStart: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionStart
+                    : null,
+                selectionEnd: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionEnd
+                    : null
+            };
+            return;
+        }
+
         this.pendingFocusRestore = null;
     }
 
@@ -457,6 +633,32 @@ export class TestWorldEditorSidebar {
             return `<button type="button" class="${className}" data-editor-tab="${tabId}">${escapeHtml(label)}</button>`;
         };
 
+        const renderCollapsibleSections = (
+            sections: TestWorldEditorSidebarSection[],
+            attributeName: string,
+            groupKey: string
+        ): string => {
+            return sections.map((section, sectionIndex) => {
+                const sectionKey = `${this.activeTab}:${groupKey}:${sectionIndex}:${section.title}`;
+                const collapsed = this.collapsedSectionKeys.has(sectionKey);
+                return `
+                    <section class="test-world-editor__section">
+                        <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+                            <h3 style="margin:0;">${escapeHtml(section.title)}</h3>
+                            <button type="button" class="test-world-editor__button" data-editor-toggle-section="${escapeHtml(sectionKey)}">
+                                ${collapsed ? 'Expand' : 'Collapse'}
+                            </button>
+                        </div>
+                        ${collapsed ? '' : `
+                            <div class="test-world-editor__fields">
+                                ${section.fields.map((field) => buildFieldMarkup(field, attributeName)).join('')}
+                            </div>
+                        `}
+                    </section>
+                `;
+            }).join('');
+        };
+
         const paletteMarkup = state.palette.map((entry) => {
             const className = entry.type === state.pendingPlacementType
                 ? 'test-world-editor__button is-active'
@@ -491,52 +693,19 @@ export class TestWorldEditorSidebar {
             `;
         }).join('');
 
-        const inspectorMarkup = state.inspectorSections.map((section) => {
-            return `
-                <section class="test-world-editor__section">
-                    <h3>${escapeHtml(section.title)}</h3>
-                    <div class="test-world-editor__fields">
-                        ${section.fields.map((field) => buildFieldMarkup(field, 'data-editor-field')).join('')}
-                    </div>
-                </section>
-            `;
-        }).join('');
-        const npcInspectorMarkup = state.npcInspectorSections.map((section) => {
-            return `
-                <section class="test-world-editor__section">
-                    <h3>${escapeHtml(section.title)}</h3>
-                    <div class="test-world-editor__fields">
-                        ${section.fields.map((field) => buildFieldMarkup(field, 'data-editor-field')).join('')}
-                    </div>
-                </section>
-            `;
-        }).join('');
-        const levelMarkup = state.levelSections.map((section) => {
-            return `
-                <section class="test-world-editor__section">
-                    <h3>${escapeHtml(section.title)}</h3>
-                    <div class="test-world-editor__fields">
-                        ${section.fields.map((field) => buildFieldMarkup(field, 'data-editor-level-field')).join('')}
-                    </div>
-                </section>
-            `;
-        }).join('');
-        const backgroundMarkup = state.backgroundSections.map((section) => {
-            return `
-                <section class="test-world-editor__section">
-                    <h3>${escapeHtml(section.title)}</h3>
-                    <div class="test-world-editor__fields">
-                        ${section.fields.map((field) => buildFieldMarkup(field, 'data-editor-level-field')).join('')}
-                    </div>
-                </section>
-            `;
-        }).join('');
+        const inspectorMarkup = renderCollapsibleSections(state.inspectorSections, 'data-editor-field', 'inspector');
+        const npcInspectorMarkup = renderCollapsibleSections(state.npcInspectorSections, 'data-editor-field', 'npc-inspector');
+        const sequenceMarkup = renderCollapsibleSections(state.sequenceSections, 'data-editor-sequence-field', 'sequence');
+        const sequenceActionMarkup = renderCollapsibleSections(state.sequenceActionSections, 'data-editor-sequence-action-field', 'sequence-action');
+        const levelMarkup = renderCollapsibleSections(state.levelSections, 'data-editor-level-field', 'level');
+        const backgroundMarkup = renderCollapsibleSections(state.backgroundSections, 'data-editor-level-field', 'background');
         const tabBarMarkup = `
             <div class="test-world-editor__toolbar">
                 ${buildTabButton('level', 'Level')}
                 ${buildTabButton('background', 'Background')}
                 ${buildTabButton('objects', 'Objects')}
                 ${buildTabButton('npc', 'NPC')}
+                ${buildTabButton('sequences', 'Sequences')}
                 ${buildTabButton('inspector', 'Inspector')}
             </div>
         `;
@@ -604,6 +773,66 @@ export class TestWorldEditorSidebar {
                 ${npcInspectorMarkup || '<div class="test-world-editor__empty">Select an NPC</div>'}
             </section>
         `;
+        const sequenceItemsMarkup = state.sequenceItems.map((entry) => {
+            const className = entry.selected
+                ? 'test-world-editor__list-item is-selected'
+                : 'test-world-editor__list-item';
+            return `
+                <button type="button" class="${className}" data-editor-sequence-id="${escapeHtml(entry.id)}">
+                    <span>${escapeHtml(entry.id)}</span>
+                    <small>${entry.actionCount} action${entry.actionCount === 1 ? '' : 's'}</small>
+                </button>
+            `;
+        }).join('');
+        const sequenceActionItemsMarkup = state.sequenceActionItems.map((entry) => {
+            const className = entry.selected
+                ? 'test-world-editor__list-item is-selected'
+                : 'test-world-editor__list-item';
+            return `
+                <button type="button" class="${className}" data-editor-sequence-action-index="${entry.index}">
+                    <span>${escapeHtml(entry.label)}</span>
+                    <small>step ${entry.index + 1}</small>
+                </button>
+            `;
+        }).join('');
+        const sequencesPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Registry</h3>
+                <div class="test-world-editor__toolbar">
+                    <button type="button" class="test-world-editor__button" data-editor-action="save-sequence-draft">Save Draft</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="export-sequences-json">Export JSON</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="import-sequences-json">Import JSON</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="reset-sequences-default">Reset Default</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="clear-sequence-draft">Clear Draft</button>
+                </div>
+            </section>
+            <section class="test-world-editor__section">
+                <h3>Sequences</h3>
+                <div class="test-world-editor__toolbar">
+                    <button type="button" class="test-world-editor__button" data-editor-action="create-sequence">Create</button>
+                    <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-selected-sequence">Delete</button>
+                </div>
+                <div class="test-world-editor__list">${sequenceItemsMarkup || '<div class="test-world-editor__empty">No sequences</div>'}</div>
+                <div class="test-world-editor__meta">
+                    <div><strong>ID</strong> ${escapeHtml(state.sequenceInspectorId ?? 'None')}</div>
+                </div>
+                ${sequenceMarkup || '<div class="test-world-editor__empty">Select a sequence</div>'}
+            </section>
+            <section class="test-world-editor__section">
+                <h3>Actions</h3>
+                <div class="test-world-editor__toolbar">
+                    <button type="button" class="test-world-editor__button" data-editor-action="create-sequence-action">Add Action</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="move-sequence-action-up">Move Up</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="move-sequence-action-down">Move Down</button>
+                    <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-selected-sequence-action">Delete Action</button>
+                </div>
+                <div class="test-world-editor__list">${sequenceActionItemsMarkup || '<div class="test-world-editor__empty">No actions</div>'}</div>
+                <div class="test-world-editor__meta">
+                    <div><strong>Selected Action</strong> ${state.sequenceActionIndex >= 0 ? String(state.sequenceActionIndex + 1) : 'None'}</div>
+                </div>
+                ${sequenceActionMarkup || '<div class="test-world-editor__empty">Select an action</div>'}
+            </section>
+        `;
 
         let activePanelMarkup = levelPanelMarkup;
         if (this.activeTab === 'background') {
@@ -612,6 +841,8 @@ export class TestWorldEditorSidebar {
             activePanelMarkup = objectsPanelMarkup;
         } else if (this.activeTab === 'npc') {
             activePanelMarkup = npcPanelMarkup;
+        } else if (this.activeTab === 'sequences') {
+            activePanelMarkup = sequencesPanelMarkup;
         } else if (this.activeTab === 'inspector') {
             activePanelMarkup = inspectorPanelMarkup;
         }

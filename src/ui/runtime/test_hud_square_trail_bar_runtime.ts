@@ -1,11 +1,10 @@
 import type { Scene } from 'phaser';
 import {
     PLAYER_SQUARE_TRAIL_BAR_HEIGHT,
-    PLAYER_SQUARE_TRAIL_BAR_SCREEN_X,
-    PLAYER_SQUARE_TRAIL_BAR_SCREEN_Y,
     PLAYER_SQUARE_TRAIL_BAR_WIDTH
 } from '../../game/player/player_constants';
 import type { PlayerHudModel } from '../../game/player/player_runtime_contracts';
+import { resolveTestHudAnchorPosition, TEST_HUD_SQUARE_TRAIL_BAR_LAYOUT } from './test_hud_layout';
 
 interface CreateTestHudSquareTrailBarRuntimeParams {
     scene: Scene;
@@ -22,10 +21,11 @@ export const createTestHudSquareTrailBarRuntime = (
     params: CreateTestHudSquareTrailBarRuntimeParams
 ): TestHudSquareTrailBarRuntime => {
     const { scene, player } = params;
+    const initialPosition = resolveTestHudAnchorPosition(scene, TEST_HUD_SQUARE_TRAIL_BAR_LAYOUT);
 
     const squareTrailBarLabel = scene.add.text(
-        PLAYER_SQUARE_TRAIL_BAR_SCREEN_X,
-        PLAYER_SQUARE_TRAIL_BAR_SCREEN_Y - 18,
+        initialPosition.x,
+        initialPosition.y - 18,
         'Square trail',
         {
             color: '#d9f2ff',
@@ -35,8 +35,8 @@ export const createTestHudSquareTrailBarRuntime = (
     ).setDepth(5000).setScrollFactor(0);
 
     const squareTrailBarTrack = scene.add.rectangle(
-        PLAYER_SQUARE_TRAIL_BAR_SCREEN_X,
-        PLAYER_SQUARE_TRAIL_BAR_SCREEN_Y,
+        initialPosition.x,
+        initialPosition.y,
         PLAYER_SQUARE_TRAIL_BAR_WIDTH,
         PLAYER_SQUARE_TRAIL_BAR_HEIGHT,
         0x122026,
@@ -48,8 +48,8 @@ export const createTestHudSquareTrailBarRuntime = (
         .setScrollFactor(0);
 
     const squareTrailBarFill = scene.add.rectangle(
-        PLAYER_SQUARE_TRAIL_BAR_SCREEN_X,
-        PLAYER_SQUARE_TRAIL_BAR_SCREEN_Y,
+        initialPosition.x,
+        initialPosition.y,
         PLAYER_SQUARE_TRAIL_BAR_WIDTH,
         PLAYER_SQUARE_TRAIL_BAR_HEIGHT,
         0x7dd3fc,
@@ -61,6 +61,10 @@ export const createTestHudSquareTrailBarRuntime = (
 
     return {
         update: (): void => {
+            const nextPosition = resolveTestHudAnchorPosition(scene, TEST_HUD_SQUARE_TRAIL_BAR_LAYOUT);
+            squareTrailBarLabel.setPosition(nextPosition.x, nextPosition.y - 18);
+            squareTrailBarTrack.setPosition(nextPosition.x, nextPosition.y);
+            squareTrailBarFill.setPosition(nextPosition.x, nextPosition.y);
             const ratio = player.squareTrailResourceRatio;
             const current = Math.max(0, player.squareTrailResourceCurrent);
             const max = Math.max(0, player.squareTrailResourceMax);

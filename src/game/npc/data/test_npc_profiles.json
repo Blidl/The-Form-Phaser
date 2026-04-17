@@ -3,6 +3,30 @@
     "id": "passive_observer",
     "displayName": "Observer",
     "archetype": "passive",
+    "scriptedLoopRef": "ambient_observer_loop",
+    "sequenceHooks": {
+      "onSpawn": {
+        "sequenceRef": "observer_spawn_salute",
+        "restartPolicy": "restart"
+      },
+      "onPlayerNear": {
+        "sequenceRef": "observer_player_near_signal",
+        "distancePx": 120,
+        "restartPolicy": "keep_running"
+      },
+      "onPlayerFar": {
+        "sequenceRef": "observer_player_far_reset",
+        "distancePx": 160,
+        "restartPolicy": "restart"
+      }
+    },
+    "interaction": {
+      "distancePx": 72,
+      "outcome": {
+        "kind": "run_sequence_ref",
+        "sequenceRef": "observer_interaction_smoke_walk"
+      }
+    },
     "playerBodyContactMode": "block",
     "visual": {
       "label": "P",
@@ -25,6 +49,15 @@
     "id": "enemy_sentry",
     "displayName": "Sentry",
     "archetype": "enemy",
+    "sequenceHooks": {
+      "onTriggerEvent": [
+        {
+          "eventId": "observer_alarm_ping",
+          "sequenceRef": "sentry_alarm_response",
+          "restartPolicy": "restart"
+        }
+      ]
+    },
     "playerBodyContactMode": "block",
     "visual": {
       "label": "E",

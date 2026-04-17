@@ -26,6 +26,7 @@ import {
 } from './test_world_config';
 import type { TestNpcInstanceConfig } from '../../npc/npc_types';
 import { isTestNpcScriptedSequenceRef } from '../../npc/npc_scripted_sequences';
+import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
 
 const MIN_RECT_SIZE = 8;
 const MIN_PICKUP_RADIUS = 4;
@@ -677,6 +678,73 @@ const normalizeNpcInstance = (
             const ref = asOptionalString(raw?.scriptedLoopRef);
             return ref && isTestNpcScriptedSequenceRef(ref) ? ref : undefined;
         })();
+    const hookOverridesSource = asObject(raw?.sequenceHookOverrides);
+    const sequenceHookOverrides = hookOverridesSource
+        ? {
+            onSpawnSequenceRef: hookOverridesSource.onSpawnSequenceRef === null
+                ? null
+                : (() => {
+                    const ref = asOptionalString(hookOverridesSource.onSpawnSequenceRef);
+                    return ref && isTestNpcScriptedSequenceRef(ref) ? ref : undefined;
+                })(),
+            onPlayerNearSequenceRef: hookOverridesSource.onPlayerNearSequenceRef === null
+                ? null
+                : (() => {
+                    const ref = asOptionalString(hookOverridesSource.onPlayerNearSequenceRef);
+                    return ref && isTestNpcScriptedSequenceRef(ref) ? ref : undefined;
+                })(),
+            onPlayerFarSequenceRef: hookOverridesSource.onPlayerFarSequenceRef === null
+                ? null
+                : (() => {
+                    const ref = asOptionalString(hookOverridesSource.onPlayerFarSequenceRef);
+                    return ref && isTestNpcScriptedSequenceRef(ref) ? ref : undefined;
+                })()
+        }
+        : undefined;
+    const interactionOverrideSource = asObject(raw?.interactionOverride);
+    const interactionOverride = interactionOverrideSource
+        ? {
+            distancePx: typeof interactionOverrideSource.distancePx === 'number' && Number.isFinite(interactionOverrideSource.distancePx)
+                ? Math.max(0, interactionOverrideSource.distancePx)
+                : undefined,
+            outcome: interactionOverrideSource.outcome === null
+                ? null
+                : (() => {
+                    const outcomeSource = asObject(interactionOverrideSource.outcome);
+                    if (!outcomeSource) {
+                        return undefined;
+                    }
+                    if (outcomeSource.kind === 'run_sequence_ref') {
+                        const sequenceRef = asOptionalString(outcomeSource.sequenceRef);
+                        return sequenceRef && isTestNpcScriptedSequenceRef(sequenceRef)
+                            ? {
+                                kind: 'run_sequence_ref' as const,
+                                sequenceRef
+                            }
+                            : undefined;
+                    }
+                    if (outcomeSource.kind === 'trigger_event') {
+                        const eventId = asOptionalString(outcomeSource.eventId);
+                        return eventId
+                            ? {
+                                kind: 'trigger_event' as const,
+                                eventId
+                            }
+                            : undefined;
+                    }
+                    if (outcomeSource.kind === 'request_cutscene_ref') {
+                        const cutsceneRef = asOptionalString(outcomeSource.cutsceneRef);
+                        return cutsceneRef && isTestCutsceneRef(cutsceneRef)
+                            ? {
+                                kind: 'request_cutscene_ref' as const,
+                                cutsceneRef
+                            }
+                            : undefined;
+                    }
+                    return undefined;
+                })()
+        }
+        : undefined;
 
     return {
         id: ensureUniqueId(asString(raw?.id, `npc_${index + 1}`), usedIds, `npc_${index + 1}`),
@@ -685,6 +753,8 @@ const normalizeNpcInstance = (
         y: asNumber(raw?.y, 0),
         facing: raw?.facing === 'left' ? 'left' : raw?.facing === 'right' ? 'right' : undefined,
         scriptedLoopRef,
+        sequenceHookOverrides,
+        interactionOverride,
         playerBodyContactMode: raw?.playerBodyContactMode === 'block'
             || raw?.playerBodyContactMode === 'overlap'
             || raw?.playerBodyContactMode === 'ignore'
@@ -711,6 +781,8 @@ const normalizeNpcInstances = (
             y: entry.y,
             facing: entry.facing,
             scriptedLoopRef: entry.scriptedLoopRef,
+            sequenceHookOverrides: entry.sequenceHookOverrides,
+            interactionOverride: entry.interactionOverride,
             playerBodyContactMode: entry.playerBodyContactMode,
             behavior: entry.behavior
         }, usedIds, index)).filter((entry): entry is TestNpcInstanceConfig => entry !== null);

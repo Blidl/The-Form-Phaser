@@ -29,6 +29,7 @@ export const createTestSceneRuntime = (
             return;
         }
         destroyed = true;
+        bootstrapRuntime.cutsceneRuntime.destroy();
         bootstrapRuntime.devHelperRuntime.destroy();
         bootstrapRuntime.tuningPanelRuntime.destroy();
     };

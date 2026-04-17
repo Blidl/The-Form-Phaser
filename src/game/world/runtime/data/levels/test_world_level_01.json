@@ -42,6 +42,59 @@
       }
     },
     {
+      "id": "npc_passive_alarm_console",
+      "profileId": "passive_observer",
+      "x": 1328,
+      "y": 324,
+      "facing": "right",
+      "interactionOverride": {
+        "distancePx": 72,
+        "outcome": {
+          "kind": "trigger_event",
+          "eventId": "observer_alarm_ping"
+        }
+      },
+      "behavior": {
+        "patrolDistance": 42,
+        "moveSpeed": 22,
+        "patrolPauseMs": 500
+      }
+    },
+    {
+      "id": "npc_passive_cutscene_console",
+      "profileId": "passive_observer",
+      "x": 1408,
+      "y": 324,
+      "facing": "left",
+      "interactionOverride": {
+        "distancePx": 72,
+        "outcome": {
+          "kind": "request_cutscene_ref",
+          "cutsceneRef": "observer_manual_cutscene_test"
+        }
+      },
+      "behavior": {
+        "patrolDistance": 24,
+        "moveSpeed": 18,
+        "patrolPauseMs": 650
+      }
+    },
+    {
+      "id": "npc_passive_no_interaction",
+      "profileId": "passive_observer",
+      "x": 1488,
+      "y": 324,
+      "facing": "right",
+      "interactionOverride": {
+        "outcome": null
+      },
+      "behavior": {
+        "patrolDistance": 24,
+        "moveSpeed": 18,
+        "patrolPauseMs": 650
+      }
+    },
+    {
       "id": "npc_enemy_scout",
       "profileId": "enemy_sentry",
       "x": 2112,

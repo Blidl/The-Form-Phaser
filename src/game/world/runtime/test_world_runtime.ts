@@ -51,10 +51,18 @@ import {
 } from './test_world_actor_contact_runtime';
 import {
     createTestNpcRuntime,
+    type TestNpcCutsceneSequenceDispatchResult,
+    type TestNpcCutsceneSequenceSnapshot,
     type TestNpcRuntime,
     type TestNpcWorldCollisionRuntime
 } from '../../npc/npc_runtime';
-import type { TestNpcDebugEntry } from '../../npc/npc_types';
+import { createTestNpcInteractionRuntime, type TestNpcInteractionRuntime } from '../../npc/npc_interaction_runtime';
+import type { TestNpcDebugEntry, TestNpcInteractionDebugState } from '../../npc/npc_types';
+import type { ActorActionSequence } from '../../actor_actions/actor_action_types';
+import {
+    cloneTestNpcScriptedSequenceAction,
+    getTestNpcScriptedSequenceDefinition
+} from '../../npc/npc_scripted_sequences';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -78,6 +86,8 @@ export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
     updateNpcs: (deltaMs: number) => void;
+    updateNpcInteractionTarget: () => void;
+    tryTriggerNpcInteraction: () => void;
     syncNpcTriangleSupportSurfaces: () => void;
     postPlayerTickUpdate: () => void;
     resetRespawnObjects: () => void;
@@ -88,6 +98,20 @@ export interface TestWorldRuntime {
     getLevelId: () => string;
     getNextLevelId: () => string | null;
     getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
+    getNpcInteractionDebugState: () => TestNpcInteractionDebugState;
+    dispatchCutsceneActorSequenceRef: (
+        actorId: string,
+        sequenceRef: string,
+        cutsceneRef: string,
+        stepRef: string
+    ) => {
+        actorId: string;
+        result: 'dispatched' | 'invalid_sequence_ref' | 'unknown_actor' | 'busy';
+        detail: string;
+        sequenceId: string | null;
+    };
+    getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
+    getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     getEditorHandles: () => readonly TestWorldEditorHandle[];
@@ -136,6 +160,8 @@ interface BuiltWorldInstance {
     hazards: HazardObject[];
     updateMovingPlatforms: () => void;
     updateNpcs: (deltaMs: number) => void;
+    updateNpcInteractionTarget: () => void;
+    tryTriggerNpcInteraction: () => void;
     syncNpcTriangleSupportSurfaces: () => void;
     postPlayerTickUpdate: () => void;
     resetRespawnObjects: () => void;
@@ -143,6 +169,20 @@ interface BuiltWorldInstance {
     consumeFinishReached: () => boolean;
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
     getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
+    getNpcInteractionDebugState: () => TestNpcInteractionDebugState;
+    dispatchCutsceneActorSequenceRef: (
+        actorId: string,
+        sequenceRef: string,
+        cutsceneRef: string,
+        stepRef: string
+    ) => {
+        actorId: string;
+        result: 'dispatched' | 'invalid_sequence_ref' | 'unknown_actor' | 'busy';
+        detail: string;
+        sequenceId: string | null;
+    };
+    getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
+    getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
     getEditorHandles: () => readonly TestWorldEditorHandle[];
     getEditorObjects: () => readonly TestWorldEditorObjectSummary[];
     getEditorHandle: (id: string) => TestWorldEditorHandle | null;
@@ -185,6 +225,25 @@ const captureCreatedDisplayObjects = <T>(
 
 const isSurfaceSolid = (config: TestWorldSurfaceConfig): boolean => {
     return (config.collisionMode ?? 'solid') === 'solid';
+};
+
+const createCutsceneActorSequenceFromRef = (
+    actorId: string,
+    sequenceRef: string,
+    cutsceneRef: string,
+    stepRef: string
+): ActorActionSequence | null => {
+    const definition = getTestNpcScriptedSequenceDefinition(sequenceRef);
+    if (!definition) {
+        return null;
+    }
+
+    return {
+        id: `${actorId}:cutscene:${cutsceneRef}:${stepRef}:${definition.id}`,
+        source: 'cutscene_runtime',
+        targetRef: definition.id,
+        actions: definition.actions.map(cloneTestNpcScriptedSequenceAction)
+    };
 };
 
 export const createTestWorldRuntime = (
@@ -281,6 +340,12 @@ export const createTestWorldRuntime = (
         updateNpcs: (deltaMs: number): void => {
             instance.updateNpcs(deltaMs);
         },
+        updateNpcInteractionTarget: (): void => {
+            instance.updateNpcInteractionTarget();
+        },
+        tryTriggerNpcInteraction: (): void => {
+            instance.tryTriggerNpcInteraction();
+        },
         syncNpcTriangleSupportSurfaces: (): void => {
             instance.syncNpcTriangleSupportSurfaces();
         },
@@ -304,6 +369,19 @@ export const createTestWorldRuntime = (
         getLevelId: (): string => currentConfig.meta.id,
         getNextLevelId: (): string | null => currentConfig.nextLevelId,
         getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => instance.getNpcDebugEntries(),
+        getNpcInteractionDebugState: (): TestNpcInteractionDebugState => instance.getNpcInteractionDebugState(),
+        dispatchCutsceneActorSequenceRef: (
+            actorId: string,
+            sequenceRef: string,
+            cutsceneRef: string,
+            stepRef: string
+        ) => instance.dispatchCutsceneActorSequenceRef(actorId, sequenceRef, cutsceneRef, stepRef),
+        getCutsceneActorSequenceSnapshot: (actorId: string): TestNpcCutsceneSequenceSnapshot | null => (
+            instance.getCutsceneActorSequenceSnapshot(actorId)
+        ),
+        getNpcCameraFocusObject: (actorId: string): GameObjects.Container | null => (
+            instance.getNpcCameraFocusObject(actorId)
+        ),
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
             currentConfig = normalizeTestWorldConfig(config, {
@@ -892,6 +970,7 @@ const buildWorldInstance = (
     const rebuildNpcObjects = (): void => {
         npcRuntime.destroy();
         npcRuntime = createTestNpcRuntime(scene, player, npcWorldCollisionRuntime, config.npcs);
+        npcInteractionRuntime = createTestNpcInteractionRuntime(player, npcRuntime, config.npcs);
         refreshVisualDepths();
     };
 
@@ -1313,6 +1392,11 @@ const buildWorldInstance = (
     });
 
     let npcRuntime: TestNpcRuntime = createTestNpcRuntime(scene, player, npcWorldCollisionRuntime, config.npcs);
+    let npcInteractionRuntime: TestNpcInteractionRuntime = createTestNpcInteractionRuntime(
+        player,
+        npcRuntime,
+        config.npcs
+    );
     addCleanup(() => npcRuntime.destroy());
     npcRuntime.syncTriangleSupportSurfaces();
     actorContactRuntime.rebuildColliders();
@@ -1347,6 +1431,12 @@ const buildWorldInstance = (
         },
         updateNpcs: (deltaMs: number): void => {
             npcRuntime.update(deltaMs);
+        },
+        updateNpcInteractionTarget: (): void => {
+            npcInteractionRuntime.update();
+        },
+        tryTriggerNpcInteraction: (): void => {
+            npcInteractionRuntime.tryDispatchCurrentTarget();
         },
         syncNpcTriangleSupportSurfaces: (): void => {
             npcRuntime.syncTriangleSupportSurfaces();
@@ -1400,6 +1490,42 @@ const buildWorldInstance = (
             return horizontalInfluenceX;
         },
         getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => npcRuntime.getDebugEntries(),
+        getNpcInteractionDebugState: (): TestNpcInteractionDebugState => npcInteractionRuntime.getDebugState(),
+        dispatchCutsceneActorSequenceRef: (
+            actorId: string,
+            sequenceRef: string,
+            cutsceneRef: string,
+            stepRef: string
+        ) => {
+            const sequence = createCutsceneActorSequenceFromRef(actorId, sequenceRef, cutsceneRef, stepRef);
+            if (!sequence) {
+                return {
+                    actorId,
+                    result: 'invalid_sequence_ref' as const,
+                    detail: `missing scripted sequence ref "${sequenceRef}"`,
+                    sequenceId: null
+                };
+            }
+
+            const dispatchResult: TestNpcCutsceneSequenceDispatchResult = npcRuntime.dispatchCutsceneSequence(
+                actorId,
+                sequence,
+                cutsceneRef,
+                stepRef
+            );
+            return {
+                actorId: dispatchResult.actorId,
+                result: dispatchResult.result,
+                detail: dispatchResult.detail,
+                sequenceId: dispatchResult.sequenceId
+            };
+        },
+        getCutsceneActorSequenceSnapshot: (actorId: string): TestNpcCutsceneSequenceSnapshot | null => {
+            return npcRuntime.getCutsceneSequenceSnapshot(actorId);
+        },
+        getNpcCameraFocusObject: (actorId: string): GameObjects.Container | null => {
+            return npcRuntime.getVisualObject(actorId);
+        },
         getEditorHandles: (): readonly TestWorldEditorHandle[] => [...handleMap.values()],
         getEditorObjects: (): readonly TestWorldEditorObjectSummary[] => {
             return objectSummaries.map((entry) => ({

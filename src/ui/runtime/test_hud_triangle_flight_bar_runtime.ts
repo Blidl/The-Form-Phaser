@@ -1,11 +1,10 @@
 import type { Scene } from 'phaser';
 import {
     PLAYER_TRIANGLE_FLIGHT_BAR_HEIGHT,
-    PLAYER_TRIANGLE_FLIGHT_BAR_SCREEN_X,
-    PLAYER_TRIANGLE_FLIGHT_BAR_SCREEN_Y,
     PLAYER_TRIANGLE_FLIGHT_BAR_WIDTH
 } from '../../game/player/player_constants';
 import type { PlayerHudModel } from '../../game/player/player_runtime_contracts';
+import { resolveTestHudAnchorPosition, TEST_HUD_TRIANGLE_FLIGHT_BAR_LAYOUT } from './test_hud_layout';
 
 interface CreateTestHudTriangleFlightBarRuntimeParams {
     scene: Scene;
@@ -22,10 +21,11 @@ export const createTestHudTriangleFlightBarRuntime = (
     params: CreateTestHudTriangleFlightBarRuntimeParams
 ): TestHudTriangleFlightBarRuntime => {
     const { scene, player } = params;
+    const initialPosition = resolveTestHudAnchorPosition(scene, TEST_HUD_TRIANGLE_FLIGHT_BAR_LAYOUT);
 
     const label = scene.add.text(
-        PLAYER_TRIANGLE_FLIGHT_BAR_SCREEN_X,
-        PLAYER_TRIANGLE_FLIGHT_BAR_SCREEN_Y - 18,
+        initialPosition.x,
+        initialPosition.y - 18,
         'Triangle flight',
         {
             color: '#ffe7c2',
@@ -35,8 +35,8 @@ export const createTestHudTriangleFlightBarRuntime = (
     ).setDepth(5000).setScrollFactor(0);
 
     const track = scene.add.rectangle(
-        PLAYER_TRIANGLE_FLIGHT_BAR_SCREEN_X,
-        PLAYER_TRIANGLE_FLIGHT_BAR_SCREEN_Y,
+        initialPosition.x,
+        initialPosition.y,
         PLAYER_TRIANGLE_FLIGHT_BAR_WIDTH,
         PLAYER_TRIANGLE_FLIGHT_BAR_HEIGHT,
         0x24170e,
@@ -48,8 +48,8 @@ export const createTestHudTriangleFlightBarRuntime = (
         .setScrollFactor(0);
 
     const fill = scene.add.rectangle(
-        PLAYER_TRIANGLE_FLIGHT_BAR_SCREEN_X,
-        PLAYER_TRIANGLE_FLIGHT_BAR_SCREEN_Y,
+        initialPosition.x,
+        initialPosition.y,
         PLAYER_TRIANGLE_FLIGHT_BAR_WIDTH,
         PLAYER_TRIANGLE_FLIGHT_BAR_HEIGHT,
         0xffb74d,
@@ -61,6 +61,10 @@ export const createTestHudTriangleFlightBarRuntime = (
 
     return {
         update: (): void => {
+            const nextPosition = resolveTestHudAnchorPosition(scene, TEST_HUD_TRIANGLE_FLIGHT_BAR_LAYOUT);
+            label.setPosition(nextPosition.x, nextPosition.y - 18);
+            track.setPosition(nextPosition.x, nextPosition.y);
+            fill.setPosition(nextPosition.x, nextPosition.y);
             const ratio = player.triangleFlightResourceRatio;
             const current = Math.max(0, player.triangleFlightResourceCurrent);
             const max = Math.max(0, player.triangleFlightResourceMax);

@@ -5,6 +5,7 @@ import { getAdjacentCampaignLevelId } from '../../game/world/runtime/test_campai
 import type { TestWorldRuntime } from '../../game/world/runtime/test_world_runtime';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../shared/dom_input_focus';
 import { startLevelScene } from '../../scenes/demo_flow';
+import { applyDomAnchorLayout, TEST_DEV_HELPER_LAYOUT } from './test_hud_layout';
 
 export interface TestDevHelperRuntime {
     update: () => boolean;
@@ -49,8 +50,7 @@ export const createTestDevHelperRuntime = (
     const overlay = document.createElement('div');
     overlay.setAttribute('data-dev-helper-overlay', 'true');
     overlay.style.position = 'absolute';
-    overlay.style.top = '20px';
-    overlay.style.right = '20px';
+    applyDomAnchorLayout(overlay, TEST_DEV_HELPER_LAYOUT);
     overlay.style.zIndex = '30';
     overlay.style.display = 'none';
     overlay.style.minWidth = '240px';
@@ -106,6 +106,7 @@ export const createTestDevHelperRuntime = (
         const currentLevelId = worldRuntime.getLevelId();
         const previousLevelId = getAdjacentCampaignLevelId(currentLevelId, -1);
         const nextLevelId = getAdjacentCampaignLevelId(currentLevelId, 1);
+        applyDomAnchorLayout(overlay, TEST_DEV_HELPER_LAYOUT);
         overlay.style.display = visible ? 'block' : 'none';
         levelMeta.textContent = [
             `Level: ${currentLevelId}`,

@@ -393,3 +393,74 @@
 - Risks / Open Items: Shipped profiles/levels are not forced onto scripted mode in this slice, so authored content still needs an explicit ref to exercise the new path. `play_animation` and `set_emotion` still route through TEMPORARY NPC presentation stubs, and missing/invalid refs currently fail quietly into an idle scripted-loop mode with debug visibility rather than a dedicated validation error surface.
 - Next Recommended Step: Add the first authored NPC content that opts into `scriptedLoopRef`, then run a browser smoke focused on loop start, restart after completion, and cancellation on level reload/editor rebuild.
 
+### Entry
+- Date: 2026-04-17
+- Task: NPC Sequence Hooks / Trigger Routing v1
+- Status: done
+- Summary: Added a narrow NPC-owned hook routing layer above existing scripted sequence refs, without introducing a second sequence runtime or moving ownership out of `npc_runtime`. Profiles can now author `on_spawn`, `on_player_near`, `on_player_far`, and `on_trigger_event` routes; instance overrides stay narrow and only swap or clear spawn/near/far `sequenceRef`s. Hook sequences interrupt the current base planner/scripted sequence while running, then naturally fall back to the normal planner or scripted loop after terminal completion. Debug overlay now exposes active hook id, routed sequence ref, source, and reason, and the editor NPC inspector gained only narrow hook-ref fields.
+- Files:
+  - docs/canon/the_form_orchestrator_log_ru.md
+  - src/game/npc/npc_types.ts
+  - src/game/npc/npc_profiles.ts
+  - src/game/npc/npc_sequence_hooks.ts
+  - src/game/npc/npc_runtime.ts
+  - src/game/world/runtime/test_world_config_validation.ts
+  - src/game/world/runtime/test_world_editor_adapters.ts
+  - src/game/world/runtime/test_world_editor_runtime.ts
+  - src/ui/runtime/test_debug_runtime.ts
+- Manual Check: `npm run build-nolog` passed. Browser/runtime smoke for authored hook cases and repeated retrigger behaviour was not run in this chat.
+- Architecture Decisions: Hook routing remains a separate narrow slice above reusable sequence refs and the existing `ActorActionSequenceRuntime`; no new action verbs, graph editor, or interaction/cutscene owner was added. `on_trigger_event` reuses the existing `trigger_event -> scene event` path and stays profile-authored in first pass, avoiding per-instance event-graph authoring.
+- Risks / Open Items: No shipped profile currently authors hook routes, so first-pass runtime support exists but is not yet exercised by default level content. `on_player_near`/`on_player_far` still use simple radius crossings only, and event hooks are processed on the next frame through the existing scene-event queue rather than same-tick orchestration.
+- Next Recommended Step: Author one real NPC profile with hook routes and run a browser smoke focused on replace/restart policy and return-to-scripted-loop behaviour.
+
+### Entry
+- Date: 2026-04-17
+- Task: NPC Hook E2E Validation + Near/Far Stabilization v1
+- Status: done
+- Summary: Added real authored hook cases to shipped demo NPC content instead of leaving hook routing unexercised. `passive_observer` now combines `scriptedLoopRef` with `on_spawn`, `on_player_near`, and `on_player_far`, while `enemy_sentry` uses `on_trigger_event` driven by observer-authored `trigger_event` actions. Near/far routing stayed on the existing hook path and only received a narrow 8px hysteresis band to suppress threshold chatter; no new sensor framework, interaction runtime, or cutscene layer was introduced.
+- Files:
+  - src/game/npc/data/test_npc_profiles.json
+  - src/game/npc/data/test_npc_scripted_sequences.json
+  - src/game/npc/npc_types.ts
+  - src/game/npc/npc_runtime.ts
+  - src/ui/runtime/test_debug_runtime.ts
+  - src/scenes/runtime/test_scene_bootstrap.ts
+  - docs/canon/the_form_orchestrator_log_ru.md
+- Manual Check: `npm run build-nolog` passed. Browser/runtime smoke on `test-world-01` validated spawn hook start, near `keep_running`, far `restart`, trigger-event restart, return to base behavior, and coexistence with `scriptedLoopRef` via the existing debug overlay plus a dev-only runtime inspection bridge.
+- Architecture Decisions: Near/far stabilization remains local to `npc_runtime` and is implemented as hysteresis over the existing edge-memory booleans. Runtime smoke uses a dev-only inspection bridge over existing scene/runtime objects instead of adding a new automation-specific feature layer.
+- Risks / Open Items: Hook E2E coverage is currently concentrated on the demo observer/sentry pair. If more profiles adopt hooks, smoke should be repeated against authored profile plus instance-override combinations before expanding the authoring surface.
+- Next Recommended Step: Reuse the same authored observer/sentry pair as the baseline smoke fixture for future hook changes, rather than adding a second parallel validation setup.
+
+### Entry
+- Date: 2026-04-17
+- Task: NPC Interaction E2E Validation + Target Arbitration Stabilization v1
+- Status: done
+- Summary: Added real authored interaction cases to `test-world-01` without introducing a second interaction framework. The observer cluster now covers profile-default `run_sequence_ref`, instance-override `trigger_event`, instance-override `request_cutscene_ref`, and explicit interaction clear through `interactionOverride.outcome = null`. `npc_interaction_runtime` received only a narrow arbitration stabilization: keep the current available target while it remains valid, otherwise prefer the nearest available target and fall back to the nearest unavailable target for debug visibility. Debug overlay now exposes arbitration source/detail together with target, availability, outcome, and last dispatch result.
+- Files:
+  - src/game/world/runtime/data/levels/test_world_level_01.json
+  - src/game/npc/npc_interaction_runtime.ts
+  - src/game/npc/npc_types.ts
+  - src/ui/runtime/test_debug_runtime.ts
+  - docs/canon/the_form_orchestrator_log_ru.md
+- Manual Check: `npm run build-nolog` passed. Vite dev server boot was confirmed over HTTP on `127.0.0.1:8080`. Full live browser/canvas smoke for target arbitration, repeated activation, and cutscene-request event observation was not automated in this chat and still requires a manual pass in the running scene.
+- Architecture Decisions: Interaction remains a narrow gating/handoff layer above existing NPC ownership. Arbitration stayed local to `npc_interaction_runtime`; no prompt UI, dialogue layer, cutscene runtime, or new action verbs were introduced. Repeated activation semantics continue to rely on `JustDown(I)` in scene frame runtime and `busy` rejection in `npc_runtime`, instead of adding a second cooldown layer.
+- Risks / Open Items: `request_cutscene_ref` still stops at emitting the existing request event and has no runtime consumer by design. Browser validation is still needed to confirm that the new observer cluster feels stable under real movement when several nearby NPCs compete for selection.
+- Next Recommended Step: Run a short manual browser smoke on `test-world-01` using the existing debug overlay and `window.__THE_FORM_DEBUG__`, then only make further changes if a concrete target-flicker or request-path issue is reproduced live.
+
+### Entry
+- Date: 2026-04-18
+- Task: Interaction Debug Visibility + Observable Test Feedback v1
+- Status: done
+- Summary: Expanded existing interaction observability without changing ownership or adding a new runtime layer. Interaction debug now exposes current target id, distance band, availability, unavailable reason, selected outcome, last input attempt, and last dispatch result in a human-readable form. A small transient on-screen toast now appears for each `I` attempt, making success and rejection states visible even when the full debug overlay is not enough. The profile-default interaction smoke content was also switched to a visibly moving `face/wait/walk_to_x` sequence so manual verification no longer depends on presentation stubs.
+- Files:
+  - src/game/npc/npc_interaction_runtime.ts
+  - src/game/npc/npc_types.ts
+  - src/ui/runtime/test_debug_runtime.ts
+  - src/game/npc/data/test_npc_profiles.json
+  - src/game/npc/data/test_npc_scripted_sequences.json
+  - docs/canon/the_form_orchestrator_log_ru.md
+- Manual Check: `npm run build-nolog` passed. Live browser/canvas smoke was not automated in this chat, so final human verification of the new toast and overlay visibility still needs a manual pass in the running scene.
+- Architecture Decisions: Observability was kept inside the existing interaction debug path and `test_debug_runtime`; no prompt UI, cutscene runtime, extra action verbs, or new gameplay-owner layer was introduced. The new `lastInputAttempt` is a debug-facing snapshot over the existing dispatch path, not a second interaction state machine.
+- Risks / Open Items: The observable smoke walk sequence uses authored world-space `walk_to_x` values for the current demo fixture, so if the observer validation setup moves significantly in a future level, that smoke ref should be revisited rather than generalized into a new system.
+- Next Recommended Step: Run a manual smoke on `test-world-01` and confirm that the toast plus the expanded `NPC interaction` line make `no_target`, `out_of_range`, `busy`, `dispatched_event`, `requested_cutscene`, and `dispatched_sequence` immediately obvious without opening additional tooling.
+

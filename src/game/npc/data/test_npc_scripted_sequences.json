@@ -35,7 +35,181 @@
       {
         "kind": "wait",
         "ref": "hold_left",
-        "durationMs": 900
+        "durationMs": 1900
+      },
+      {
+        "kind": "walk_to_x",
+        "ref": "post_x",
+        "targetX": 0,
+        "moveSpeed": 28,
+        "tolerancePx": 2
+      }
+    ]
+  },
+  {
+    "id": "observer_spawn_salute",
+    "actions": [
+      {
+        "kind": "set_emotion",
+        "ref": "spawn_calm",
+        "emotionId": "calm"
+      },
+      {
+        "kind": "play_animation",
+        "ref": "spawn_wave",
+        "animationId": "wave"
+      },
+      {
+        "kind": "wait",
+        "ref": "spawn_hold",
+        "durationMs": 520
+      }
+    ]
+  },
+  {
+    "id": "observer_player_near_signal",
+    "actions": [
+      {
+        "kind": "set_emotion",
+        "ref": "near_alert",
+        "emotionId": "curious"
+      },
+      {
+        "kind": "play_animation",
+        "ref": "near_wave",
+        "animationId": "wave"
+      },
+      {
+        "kind": "trigger_event",
+        "ref": "ping_1",
+        "eventId": "observer_alarm_ping",
+        "payload": {
+          "source": "observer_player_near_signal",
+          "burst": 1
+        }
+      },
+      {
+        "kind": "wait",
+        "ref": "between_pings",
+        "durationMs": 180
+      },
+      {
+        "kind": "trigger_event",
+        "ref": "ping_2",
+        "eventId": "observer_alarm_ping",
+        "payload": {
+          "source": "observer_player_near_signal",
+          "burst": 2
+        }
+      },
+      {
+        "kind": "wait",
+        "ref": "near_hold",
+        "durationMs": 720
+      }
+    ]
+  },
+  {
+    "id": "observer_player_far_reset",
+    "actions": [
+      {
+        "kind": "set_emotion",
+        "ref": "far_calm",
+        "emotionId": "calm"
+      },
+      {
+        "kind": "face",
+        "ref": "far_face_right",
+        "facing": 1
+      },
+      {
+        "kind": "wait",
+        "ref": "far_hold",
+        "durationMs": 320
+      }
+    ]
+  },
+  {
+    "id": "observer_interaction_greet",
+    "actions": [
+      {
+        "kind": "set_emotion",
+        "ref": "interaction_curious",
+        "emotionId": "curious"
+      },
+      {
+        "kind": "play_animation",
+        "ref": "interaction_wave",
+        "animationId": "wave"
+      },
+      {
+        "kind": "wait",
+        "ref": "interaction_hold",
+        "durationMs": 640
+      }
+    ]
+  },
+  {
+    "id": "observer_interaction_smoke_walk",
+    "actions": [
+      {
+        "kind": "face",
+        "ref": "smoke_face_right",
+        "facing": 1
+      },
+      {
+        "kind": "wait",
+        "ref": "smoke_hold_start",
+        "durationMs": 240
+      },
+      {
+        "kind": "walk_to_x",
+        "ref": "smoke_step_right",
+        "targetX": 1288,
+        "moveSpeed": 54,
+        "tolerancePx": 2
+      },
+      {
+        "kind": "wait",
+        "ref": "smoke_hold_right",
+        "durationMs": 200
+      },
+      {
+        "kind": "face",
+        "ref": "smoke_face_left",
+        "facing": -1
+      },
+      {
+        "kind": "walk_to_x",
+        "ref": "smoke_return_post",
+        "targetX": 1248,
+        "moveSpeed": 54,
+        "tolerancePx": 2
+      },
+      {
+        "kind": "wait",
+        "ref": "smoke_finish_hold",
+        "durationMs": 160
+      }
+    ]
+  },
+  {
+    "id": "sentry_alarm_response",
+    "actions": [
+      {
+        "kind": "set_emotion",
+        "ref": "alarm_emotion",
+        "emotionId": "alert"
+      },
+      {
+        "kind": "play_animation",
+        "ref": "alarm_anim",
+        "animationId": "alert"
+      },
+      {
+        "kind": "wait",
+        "ref": "alarm_hold",
+        "durationMs": 520
       }
     ]
   }

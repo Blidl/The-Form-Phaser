@@ -15,6 +15,7 @@ import type { TestHudRuntime } from '../../ui/runtime/test_hud_runtime';
 import type { PlayerTuningPanelRuntime } from '../../ui/runtime/player_tuning_panel_runtime';
 import { openEndScreen, openPauseMenu, startLevelScene } from '../demo_flow';
 import { relaxKeyboardCapture } from '../../shared/dom_input_focus';
+import type { TestCutsceneRuntime } from './test_cutscene_runtime';
 
 export interface TestSceneFrameRuntime {
     update: (deltaMs: number) => void;
@@ -28,6 +29,7 @@ interface CreateTestSceneFrameRuntimeParams {
     respawnRuntime: PlayerRespawnRuntime;
     hudRuntime: TestHudRuntime;
     debugRuntime: TestDebugRuntime;
+    cutsceneRuntime: TestCutsceneRuntime;
     editorRuntime: TestWorldEditorRuntime;
     devHelperRuntime: TestDevHelperRuntime;
     tuningRuntime: PlayerTuningRuntime;
@@ -37,10 +39,11 @@ interface CreateTestSceneFrameRuntimeParams {
 export const createTestSceneFrameRuntime = (
     params: CreateTestSceneFrameRuntimeParams
 ): TestSceneFrameRuntime => {
-    const { scene, player, playerInputKeys, worldRuntime, respawnRuntime, hudRuntime, debugRuntime, editorRuntime, devHelperRuntime, tuningPanelRuntime } = params;
+    const { scene, player, playerInputKeys, worldRuntime, respawnRuntime, hudRuntime, debugRuntime, cutsceneRuntime, editorRuntime, devHelperRuntime, tuningPanelRuntime } = params;
     const pauseKey = scene.input.keyboard?.addKey(Input.Keyboard.KeyCodes.ESC);
+    const temporaryInteractionKey = scene.input.keyboard?.addKey(Input.Keyboard.KeyCodes.I);
     if (scene.input.keyboard) {
-        relaxKeyboardCapture(scene.input.keyboard, [Input.Keyboard.KeyCodes.ESC]);
+        relaxKeyboardCapture(scene.input.keyboard, [Input.Keyboard.KeyCodes.ESC, Input.Keyboard.KeyCodes.I]);
     }
 
     return {
@@ -48,18 +51,20 @@ export const createTestSceneFrameRuntime = (
             if (devHelperRuntime.update()) {
                 return;
             }
+            cutsceneRuntime.update(deltaMs);
             editorRuntime.update(deltaMs);
             tuningPanelRuntime.update(deltaMs);
             if (editorRuntime.isActive() && tuningPanelRuntime.isActive()) {
                 tuningPanelRuntime.close();
             }
             if (editorRuntime.isActive()) {
+                worldRuntime.updateNpcInteractionTarget();
                 worldRuntime.updateNpcs(deltaMs);
                 debugRuntime.update();
                 hudRuntime.update();
                 return;
             }
-            if (pauseKey && Input.Keyboard.JustDown(pauseKey)) {
+            if (!cutsceneRuntime.isInputLocked() && pauseKey && Input.Keyboard.JustDown(pauseKey)) {
                 openPauseMenu(scene, {
                     levelId: worldRuntime.getLevelId()
                 });
@@ -70,7 +75,7 @@ export const createTestSceneFrameRuntime = (
             worldRuntime.syncNpcTriangleSupportSurfaces();
             worldRuntime.syncPlayerCollisionMode();
 
-            const input = tuningPanelRuntime.shouldMuteGameplayInput()
+            const input = tuningPanelRuntime.shouldMuteGameplayInput() || cutsceneRuntime.isInputLocked()
                 ? EMPTY_PLAYER_INPUT_SNAPSHOT
                 : pollPlayerInputSnapshot(playerInputKeys);
             const windInfluenceX = worldRuntime.resolveWindInfluenceX(player.arcadeBodyObject);
@@ -78,6 +83,10 @@ export const createTestSceneFrameRuntime = (
             player.tick(deltaMs, input, windInfluenceX);
             worldRuntime.postPlayerTickUpdate();
             worldRuntime.syncPlayerCollisionMode();
+            worldRuntime.updateNpcInteractionTarget();
+            if (!cutsceneRuntime.isInputLocked() && temporaryInteractionKey && Input.Keyboard.JustDown(temporaryInteractionKey)) {
+                worldRuntime.tryTriggerNpcInteraction();
+            }
             worldRuntime.updateNpcs(deltaMs);
             worldRuntime.syncNpcTriangleSupportSurfaces();
             if (worldRuntime.consumeFinishReached()) {

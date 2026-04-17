@@ -1,0 +1,54 @@
+[
+  {
+    "id": "observer_manual_cutscene_test",
+    "mode": "in_level",
+    "steps": [
+      {
+        "kind": "lock_input",
+        "ref": "lock_player_input"
+      },
+      {
+        "kind": "subtitle",
+        "ref": "subtitle_01",
+        "text": "Console access granted.",
+        "durationMs": 900
+      },
+      {
+        "kind": "camera_focus_actor",
+        "ref": "focus_console_actor",
+        "actorId": "npc_passive_cutscene_console"
+      },
+      {
+        "kind": "actor_sequence_ref",
+        "ref": "console_actor_sequence",
+        "actorId": "npc_passive_cutscene_console",
+        "sequenceRef": "observer_interaction_greet"
+      },
+      {
+        "kind": "play_sfx",
+        "ref": "console_ping",
+        "sfxId": "observer_console_ping"
+      },
+      {
+        "kind": "spawn_vfx",
+        "ref": "console_flash",
+        "vfxId": "observer_console_flash",
+        "actorId": "npc_passive_cutscene_console"
+      },
+      {
+        "kind": "wait",
+        "ref": "hold_after_flash",
+        "durationMs": 450
+      },
+      {
+        "kind": "camera_focus_actor",
+        "ref": "focus_player",
+        "actorId": "player"
+      },
+      {
+        "kind": "unlock_input",
+        "ref": "unlock_player_input"
+      }
+    ]
+  }
+]
