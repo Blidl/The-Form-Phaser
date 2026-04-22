@@ -17,9 +17,13 @@ import { resetTriangleCollisionState } from './geometry/player_triangle_collisio
 import { applyPlayerVerticalProfile } from './player_vertical_profile_runtime';
 import type { PlayerTickRuntimeContext } from './player_runtime_types';
 
+const APEX_ENTER_SPEED_THRESHOLD = 24;
+const FALL_ENTER_SPEED_THRESHOLD = 36;
+
 export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const { state, timers, physicsBody, input, deltaMs, ballReboundRuntime } = context;
     const deltaSec = deltaMs / 1000;
+    let triangleFlightEndNotified = false;
 
     context.handleFormSwitch();
     context.refreshTrianglePhysicsState();
@@ -31,13 +35,22 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const grounded = isTriangleForm
         ? state.triangleCollision.hasGroundContact && state.triangleCollision.groundSupportEdgeIndex !== null
         : physicsBody.blocked.down || physicsBody.touching.down;
+    if (input.jumpPressed) {
+        context.notifyJumpIntent();
+    }
     physicsBody.setDragX(grounded ? context.groundedDragX : 0);
     const justLanded = grounded && !context.mutable.wasGrounded;
+    const landingImpactSpeed = justLanded
+        ? Math.max(0, context.mutable.lastAirborneDownwardSpeed, physicsBody.velocity.y)
+        : 0;
     if (grounded) {
         refreshCoyoteTime(timers);
     }
 
     updateBallGroundedState(context.mutable, ballReboundRuntime, physicsBody, grounded, justLanded);
+    if (landingImpactSpeed > 0) {
+        context.notifyLandImpact(landingImpactSpeed);
+    }
 
     tickTriangleFlightResourceRuntime({
         state,
@@ -92,6 +105,9 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const isBallReboundPauseHolding = reboundTick.isPauseHolding;
     const didLaunchBallReboundThisFrame = reboundTick.didLaunchThisFrame;
     const preservedReboundVelocityX = reboundTick.preservedVelocityX;
+    if (didLaunchBallReboundThisFrame) {
+        context.notifyBallReboundLaunch();
+    }
 
     let isTriangleFlightActive = isTriangleForm && state.triangleFlight.isActive;
 
@@ -113,7 +129,8 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
             resolveSquareTrailSurfacePoint: context.resolveSquareTrailSurfacePoint,
             querySquareAttachPose: context.querySquareAttachPose,
             isSquareAttachPathClear: context.isSquareAttachPathClear,
-            isSquareRolloverPoseClear: context.isSquareRolloverPoseClear
+            isSquareRolloverPoseClear: context.isSquareRolloverPoseClear,
+            onAttachEntered: () => context.notifySquareAttachEnter()
         });
     }
 
@@ -129,6 +146,7 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     });
     if (flightStartedThisFrame) {
         isTriangleFlightActive = true;
+        context.notifyTriangleFlightStart();
     }
 
     const hasBoostHold = context.mutable.boostActive && input.actionHeld;
@@ -141,7 +159,12 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         isSquareForm
     });
     if (motionFlags.invalidTriangleFlightOutsideTriangle) {
+        const wasActiveBeforeForceStop = state.triangleFlight.isActive;
         stopTriangleFlight(state.triangleFlight);
+        if (wasActiveBeforeForceStop) {
+            context.notifyTriangleFlightEnd();
+            triangleFlightEndNotified = true;
+        }
     }
     const isSquareAttached = motionFlags.isSquareAttached;
     const isSquareTrailRegenerating = motionFlags.isSquareTrailRegenerating;
@@ -203,7 +226,9 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         rawVerticalDir,
         preMoveVelocityX,
         preMoveVelocityY,
-        ballReboundRuntime
+        ballReboundRuntime,
+        onJumpCommitted: () => context.notifyJumpCommit(),
+        onSquareAttachJumpCommitted: () => context.notifySquareAttachJumpCommit()
     });
 
     applyJumpCutRuntime({
@@ -234,6 +259,44 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         input,
         deltaSec
     });
+    const finalTriangleFlightActive = isTriangleForm && state.triangleFlight.isActive;
+    if (!triangleFlightEndNotified && context.mutable.presentationPrevTriangleFlightActive && !finalTriangleFlightActive) {
+        context.notifyTriangleFlightEnd();
+    }
+
+    if (context.mutable.presentationPrevSquareAttached && !state.squareShell.isAttached) {
+        context.notifySquareAttachExit();
+    }
+
+    const isAirborne = !grounded;
+    if (!isAirborne) {
+        context.mutable.presentationApexEmitted = false;
+        context.mutable.presentationFallEmitted = false;
+    } else {
+        if (context.mutable.presentationPrevGrounded) {
+            context.mutable.presentationApexEmitted = false;
+            context.mutable.presentationFallEmitted = false;
+        }
+
+        const currentVerticalSpeed = physicsBody.velocity.y;
+        const previousVerticalSpeed = context.mutable.presentationPrevVerticalSpeed;
+        const enteredApex = !context.mutable.presentationApexEmitted
+            && previousVerticalSpeed < -APEX_ENTER_SPEED_THRESHOLD
+            && Math.abs(currentVerticalSpeed) <= APEX_ENTER_SPEED_THRESHOLD;
+        if (enteredApex) {
+            context.mutable.presentationApexEmitted = true;
+            context.notifyApexEnter();
+        }
+
+        const enteredFall = !context.mutable.presentationFallEmitted
+            && context.mutable.presentationApexEmitted
+            && previousVerticalSpeed <= FALL_ENTER_SPEED_THRESHOLD
+            && currentVerticalSpeed > FALL_ENTER_SPEED_THRESHOLD;
+        if (enteredFall) {
+            context.mutable.presentationFallEmitted = true;
+            context.notifyFallEnter();
+        }
+    }
 
     if (isTriangleForm) {
         const transformLockMs = context.getTransformLockMs();
@@ -249,6 +312,10 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     context.mutable.boostImpulseMs = Math.max(0, context.mutable.boostImpulseMs - deltaMs);
     tickPlayerTimers(timers, deltaMs);
     applySquareDetachedTrailRefund(state, deltaMs);
+    context.mutable.presentationPrevGrounded = grounded;
+    context.mutable.presentationPrevVerticalSpeed = physicsBody.velocity.y;
+    context.mutable.presentationPrevTriangleFlightActive = finalTriangleFlightActive;
+    context.mutable.presentationPrevSquareAttached = state.squareShell.isAttached;
     context.mutable.wasGrounded = isTriangleForm
         ? state.triangleCollision.hasGroundContact
         : grounded;

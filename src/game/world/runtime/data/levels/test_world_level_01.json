@@ -70,7 +70,7 @@
         "distancePx": 72,
         "outcome": {
           "kind": "request_cutscene_ref",
-          "cutsceneRef": "observer_manual_cutscene_test"
+          "cutsceneRef": "observer_smoke_cutscene_v1"
         }
       },
       "behavior": {

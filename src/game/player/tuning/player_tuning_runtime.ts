@@ -28,7 +28,7 @@ export interface PlayerTuningRuntime {
 }
 
 export const applyPlayerTuningSnapshot = (snapshot: PlayerTuningSnapshot): void => {
-    applyPlayerTuningRawSnapshot(snapshot.raw);
+    applyPlayerTuningRawSnapshot(normalizePlayerTuningSnapshot(snapshot).raw);
 };
 
 export const bootstrapPersistedPlayerTuning = (): void => {
@@ -36,14 +36,14 @@ export const bootstrapPersistedPlayerTuning = (): void => {
 };
 
 export const captureLivePlayerTuningSnapshot = (): PlayerTuningSnapshot => {
-    return {
+    return normalizePlayerTuningSnapshot({
         version: 1,
         raw: capturePlayerTuningRawSnapshot()
-    };
+    });
 };
 
 export const createPlayerTuningRuntime = (): PlayerTuningRuntime => {
-    let persistedSnapshot = clonePlayerTuningSnapshot(PLAYER_TUNING_PERSISTED_SNAPSHOT);
+    let persistedSnapshot = normalizePlayerTuningSnapshot(clonePlayerTuningSnapshot(PLAYER_TUNING_PERSISTED_SNAPSHOT));
     let draftSnapshot = clonePlayerTuningSnapshot(persistedSnapshot);
     let saveStatus = 'persisted snapshot loaded';
     let isSaving = false;
@@ -71,7 +71,7 @@ export const createPlayerTuningRuntime = (): PlayerTuningRuntime => {
         updateDraft: (mutator) => {
             const nextDraft = clonePlayerTuningSnapshot(draftSnapshot);
             mutator(nextDraft);
-            draftSnapshot = nextDraft;
+            draftSnapshot = normalizePlayerTuningSnapshot(nextDraft);
             applyPlayerTuningSnapshot(draftSnapshot);
             saveStatus = 'live draft applied';
             emit();
@@ -83,7 +83,7 @@ export const createPlayerTuningRuntime = (): PlayerTuningRuntime => {
             emit();
         },
         resetToDefaults: () => {
-            draftSnapshot = createPlayerTuningDefaultsSnapshot();
+            draftSnapshot = normalizePlayerTuningSnapshot(createPlayerTuningDefaultsSnapshot());
             applyPlayerTuningSnapshot(draftSnapshot);
             saveStatus = 'reset to canonical defaults';
             emit();
@@ -138,7 +138,7 @@ export const setPlayerTuningRawValue = (snapshot: PlayerTuningSnapshot, path: st
         return;
     }
 
-    let cursor: Record<string, unknown> = snapshot.raw as Record<string, unknown>;
+    let cursor: Record<string, unknown> = snapshot.raw as unknown as Record<string, unknown>;
     for (const segment of segments) {
         const next = cursor[segment];
         if (typeof next !== 'object' || next === null) {
@@ -162,8 +162,93 @@ export const clampPlayerTuningNumber = (value: number, min?: number, max?: numbe
 };
 
 export const createPlayerTuningSnapshotFromRaw = (raw: PlayerTuningRawSnapshot): PlayerTuningSnapshot => {
-    return {
+    return normalizePlayerTuningSnapshot({
         version: 1,
         raw
+    });
+};
+
+export const normalizePlayerTuningSnapshot = (snapshot: PlayerTuningSnapshot): PlayerTuningSnapshot => {
+    const defaults = createPlayerTuningDefaultsSnapshot();
+    const source = snapshot.raw as unknown as Partial<PlayerTuningRawSnapshot>;
+
+    return {
+        version: 1,
+        raw: {
+            common: {
+                ...defaults.raw.common,
+                ...(source.common ?? {})
+            },
+            ball: {
+                movement: {
+                    ...defaults.raw.ball.movement,
+                    ...(source.ball?.movement ?? {})
+                },
+                jump: {
+                    ...defaults.raw.ball.jump,
+                    ...(source.ball?.jump ?? {})
+                },
+                animation: {
+                    ...defaults.raw.ball.animation,
+                    ...(source.ball?.animation ?? {})
+                },
+                boost: {
+                    ...defaults.raw.ball.boost,
+                    ...(source.ball?.boost ?? {})
+                },
+                rebound: {
+                    ...defaults.raw.ball.rebound,
+                    ...(source.ball?.rebound ?? {})
+                }
+            },
+            triangle: {
+                movement: {
+                    ...defaults.raw.triangle.movement,
+                    ...(source.triangle?.movement ?? {})
+                },
+                jump: {
+                    ...defaults.raw.triangle.jump,
+                    ...(source.triangle?.jump ?? {})
+                },
+                animation: {
+                    ...defaults.raw.triangle.animation,
+                    ...(source.triangle?.animation ?? {})
+                },
+                flight: {
+                    ...defaults.raw.triangle.flight,
+                    ...(source.triangle?.flight ?? {})
+                }
+            },
+            square: {
+                movement: {
+                    ...defaults.raw.square.movement,
+                    ...(source.square?.movement ?? {})
+                },
+                jump: {
+                    ...defaults.raw.square.jump,
+                    ...(source.square?.jump ?? {})
+                },
+                animation: {
+                    ...defaults.raw.square.animation,
+                    ...(source.square?.animation ?? {})
+                },
+                attach: {
+                    ...defaults.raw.square.attach,
+                    ...(source.square?.attach ?? {})
+                },
+                trail: {
+                    ...defaults.raw.square.trail,
+                    ...(source.square?.trail ?? {})
+                },
+                attachJump: {
+                    ...defaults.raw.square.attachJump,
+                    ...(source.square?.attachJump ?? {})
+                },
+                rollover: {
+                    ...defaults.raw.square.rollover,
+                    ...(source.square?.rollover ?? {})
+                }
+            }
+        }
     };
 };

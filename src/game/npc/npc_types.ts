@@ -245,6 +245,11 @@ export interface TestNpcInteractionTargetDebugEntry {
     maxDistancePx: number;
     outcomeKind: TestNpcInteractionOutcomeKind;
     outcomeRef: string;
+    outcomeSource: TestNpcInteractionOutcomeSource;
+    effectiveCutsceneRef: string | null;
+    cutsceneRefSource: TestNpcInteractionOutcomeSource | null;
+    cutsceneRefStatus: TestNpcInteractionCutsceneRefStatus;
+    cutsceneRefIssue: string | null;
     availability: TestNpcInteractionAvailability;
     unavailableReason: TestNpcInteractionUnavailableReason | null;
 }
@@ -254,6 +259,8 @@ export type TestNpcInteractionArbitrationSource =
     | 'nearest_available'
     | 'nearest_unavailable'
     | 'none';
+export type TestNpcInteractionOutcomeSource = 'profile_default' | 'instance_override';
+export type TestNpcInteractionCutsceneRefStatus = 'n/a' | 'valid' | 'missing_ref' | 'invalid_ref';
 
 export interface TestNpcInteractionDispatchResult {
     actorId: string | null;
@@ -270,6 +277,11 @@ export interface TestNpcInteractionInputAttemptDebugEntry {
     unavailableReason: TestNpcInteractionUnavailableReason | null;
     outcomeKind: TestNpcInteractionOutcomeKind | null;
     outcomeRef: string | null;
+    outcomeSource: TestNpcInteractionOutcomeSource | null;
+    effectiveCutsceneRef: string | null;
+    cutsceneRefSource: TestNpcInteractionOutcomeSource | null;
+    cutsceneRefStatus: TestNpcInteractionCutsceneRefStatus;
+    cutsceneRefIssue: string | null;
     observableResult: TestNpcInteractionObservableResult;
     detail: string;
 }

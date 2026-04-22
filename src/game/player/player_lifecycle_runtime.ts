@@ -44,6 +44,12 @@ export const freezePlayerForRespawn = (context: PlayerLifecycleRuntimeContext): 
     if (freezeDirective.shouldClearAirborneWindDrift) {
         context.mutable.airborneWindDriftX = 0;
     }
+    context.mutable.presentationPrevGrounded = false;
+    context.mutable.presentationPrevVerticalSpeed = 0;
+    context.mutable.presentationApexEmitted = false;
+    context.mutable.presentationFallEmitted = false;
+    context.mutable.presentationPrevTriangleFlightActive = false;
+    context.mutable.presentationPrevSquareAttached = false;
 
     resetBallReboundRuntimeState(context.ballReboundRuntime);
     context.physicsBody.setVelocity(0, 0);
@@ -51,6 +57,7 @@ export const freezePlayerForRespawn = (context: PlayerLifecycleRuntimeContext): 
     context.physicsBody.setAllowGravity(false);
     context.physicsBody.checkCollision.none = false;
     context.applyCurrentFormCollisionBody();
+    context.resetVisualPose();
 };
 
 export const respawnPlayerAt = (
@@ -106,6 +113,12 @@ export const respawnPlayerAt = (
     if (respawnDirective.resetAirborneWindDrift) {
         context.mutable.airborneWindDriftX = 0;
     }
+    context.mutable.presentationPrevGrounded = false;
+    context.mutable.presentationPrevVerticalSpeed = 0;
+    context.mutable.presentationApexEmitted = false;
+    context.mutable.presentationFallEmitted = false;
+    context.mutable.presentationPrevTriangleFlightActive = false;
+    context.mutable.presentationPrevSquareAttached = false;
 
     if (respawnDirective.clearJumpBuffer) {
         clearJumpBuffer(context.timers);
@@ -131,6 +144,7 @@ export const respawnPlayerAt = (
 
     context.mutable.frozenForRespawn = !respawnDirective.unfreezeRespawnState;
     context.applyCurrentFormCollisionBody();
+    context.resetVisualPose();
     context.applyCurrentFormVisual();
     context.syncVisualPosition();
 };
@@ -154,6 +168,7 @@ export const handlePlayerFormSwitch = (
 
     const previousForm = context.state.currentForm;
     context.state.currentForm = switchDecision.targetForm;
+    context.notifyFormSwitchIn(switchDecision.targetForm);
 
     if (switchDecision.shouldApplyTransformLock) {
         context.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;
@@ -178,6 +193,10 @@ export const handlePlayerFormSwitch = (
     }
 
     resetBallReboundRuntimeState(context.ballReboundRuntime);
+    context.mutable.presentationApexEmitted = false;
+    context.mutable.presentationFallEmitted = false;
+    context.mutable.presentationPrevTriangleFlightActive = false;
+    context.mutable.presentationPrevSquareAttached = false;
     context.physicsBody.setAllowGravity(true);
     context.physicsBody.checkCollision.none = false;
     context.applyCurrentFormCollisionBody();

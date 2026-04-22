@@ -1,6 +1,7 @@
 import profilesJson from './data/test_npc_profiles.json';
 import { isTestNpcScriptedSequenceRef } from './npc_scripted_sequences';
 import { resolveTestNpcSequenceHooks } from './npc_sequence_hooks';
+import { isTestCutsceneRef } from '../cutscene/test_cutscene_registry';
 import type {
     TestNpcEnemyProfileBehavior,
     TestNpcInteractionConfig,
@@ -105,7 +106,7 @@ const asInteractionOutcome = (value: unknown): TestNpcInteractionOutcome | undef
 
     if (raw.kind === 'request_cutscene_ref') {
         const cutsceneRef = asTrimmedString(raw.cutsceneRef);
-        if (!cutsceneRef) {
+        if (!cutsceneRef || !isTestCutsceneRef(cutsceneRef)) {
             return undefined;
         }
 

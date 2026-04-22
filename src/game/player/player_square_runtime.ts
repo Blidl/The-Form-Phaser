@@ -68,6 +68,7 @@ interface TickSquareRuntimeParams {
         ignoreBodyA: Physics.Arcade.Body | Physics.Arcade.StaticBody | null,
         ignoreBodyB: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
     ) => boolean;
+    onAttachEntered?: () => void;
 }
 
 interface SquareAttachCandidateSample {
@@ -311,6 +312,7 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
             );
             clearJumpBuffer(timers);
             clearSquareAttachEntryBuffer(timers);
+            params.onAttachEntered?.();
         }
     }
 
@@ -717,9 +719,10 @@ const shouldRunSquareTrailManualRegen = (
         && surfaceNormalY === -1;
     const isStableAtRest = Math.abs(velocityX) <= 8 && Math.abs(velocityY) <= 8;
 
-    return isStandingOnFloor
+    return !squareShell.isAttached
+        && isStandingOnFloor
         && isStableAtRest
-        && input.actionHeld
+        && input.regenPressed
         && horizontalDir === 0
         && verticalDir === 1
         && squareShell.trailResourceCurrent < squareShell.trailResourceMax

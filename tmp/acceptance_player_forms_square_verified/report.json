@@ -1,0 +1,8 @@
+{
+  "form": "square",
+  "attachDetected": true,
+  "attachText": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: square\ncontact: arcade\nbody: 396, 814\nanchor: 396, 814\nhazard shape: box\ntriangle points: 0\nsquare attached: yes\nsquare normal: 0,-1\nsquare zones: BL, BR",
+  "jumpA": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: square\ncontact: arcade\nbody: 394, 764\nanchor: 394, 764\nhazard shape: box\ntriangle points: 0\nsquare attached: no\nsquare normal: 0,-1\nsquare zones: -",
+  "jumpB": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: square\ncontact: arcade\nbody: 396, 814\nanchor: 396, 814\nhazard shape: box\ntriangle points: 0\nsquare attached: yes\nsquare normal: 0,-1\nsquare zones: BL, BR",
+  "attachJumpTransition": true
+}

@@ -50,5 +50,55 @@
         "ref": "unlock_player_input"
       }
     ]
+  },
+  {
+    "id": "observer_smoke_cutscene_v1",
+    "mode": "in_level",
+    "steps": [
+      {
+        "kind": "lock_input",
+        "ref": "smoke_lock_input"
+      },
+      {
+        "kind": "subtitle",
+        "ref": "smoke_subtitle_start",
+        "text": "Smoke cutscene accepted.",
+        "durationMs": 850
+      },
+      {
+        "kind": "camera_pan_to",
+        "ref": "smoke_camera_pan",
+        "x": 1408,
+        "y": 324,
+        "durationMs": 780,
+        "ease": "Sine.easeInOut"
+      },
+      {
+        "kind": "camera_focus_actor",
+        "ref": "smoke_focus_console_actor",
+        "actorId": "npc_passive_cutscene_console"
+      },
+      {
+        "kind": "actor_sequence_ref",
+        "ref": "smoke_console_walk_sequence",
+        "actorId": "npc_passive_cutscene_console",
+        "sequenceRef": "observer_interaction_smoke_walk"
+      },
+      {
+        "kind": "subtitle",
+        "ref": "smoke_subtitle_end",
+        "text": "Smoke cutscene completed.",
+        "durationMs": 760
+      },
+      {
+        "kind": "camera_focus_actor",
+        "ref": "smoke_focus_player",
+        "actorId": "player"
+      },
+      {
+        "kind": "unlock_input",
+        "ref": "smoke_unlock_input"
+      }
+    ]
   }
 ]

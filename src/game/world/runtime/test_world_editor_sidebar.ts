@@ -21,6 +21,19 @@ export interface TestWorldEditorSidebarSequenceActionItem {
     selected: boolean;
 }
 
+export interface TestWorldEditorSidebarCutsceneItem {
+    id: string;
+    mode: 'in_level' | 'overlay';
+    stepCount: number;
+    selected: boolean;
+}
+
+export interface TestWorldEditorSidebarCutsceneStepItem {
+    index: number;
+    label: string;
+    selected: boolean;
+}
+
 export interface TestWorldEditorSidebarFieldOption {
     value: string;
     label: string;
@@ -65,6 +78,12 @@ export interface TestWorldEditorSidebarState {
     sequenceActionItems: TestWorldEditorSidebarSequenceActionItem[];
     sequenceActionIndex: number;
     sequenceActionSections: TestWorldEditorSidebarSection[];
+    cutsceneItems: TestWorldEditorSidebarCutsceneItem[];
+    cutsceneInspectorId: string | null;
+    cutsceneSections: TestWorldEditorSidebarSection[];
+    cutsceneStepItems: TestWorldEditorSidebarCutsceneStepItem[];
+    cutsceneStepIndex: number;
+    cutsceneStepSections: TestWorldEditorSidebarSection[];
     selectedLocked: boolean;
 }
 
@@ -81,6 +100,11 @@ export interface TestWorldEditorSidebarCallbacks {
     onImportSequencesJson: (jsonText: string) => void;
     onResetSequencesDefault: () => void;
     onClearSavedSequenceDraft: () => void;
+    onSaveCutsceneDraft: () => void;
+    onExportCutscenesJson: () => void;
+    onImportCutscenesJson: (jsonText: string) => void;
+    onResetCutscenesDefault: () => void;
+    onClearSavedCutsceneDraft: () => void;
     onCreateObject: (type: TestWorldEditorObjectType) => void;
     onSearchChange: (search: string) => void;
     onSelectObject: (id: string) => void;
@@ -93,15 +117,24 @@ export interface TestWorldEditorSidebarCallbacks {
     onSelectSequenceAction: (index: number) => void;
     onDeleteSelectedSequenceAction: () => void;
     onMoveSelectedSequenceAction: (direction: -1 | 1) => void;
+    onCreateCutscene: () => void;
+    onSelectCutscene: (id: string) => void;
+    onDeleteSelectedCutscene: () => void;
+    onCreateCutsceneStep: () => void;
+    onSelectCutsceneStep: (index: number) => void;
+    onDeleteSelectedCutsceneStep: () => void;
+    onMoveSelectedCutsceneStep: (direction: -1 | 1) => void;
     onToggleSelectedLock: () => void;
     onLevelFieldChange: (key: string, value: string | number | boolean) => void;
     onInspectorFieldChange: (key: string, value: string | number | boolean) => void;
     onSequenceFieldChange: (key: string, value: string | number | boolean) => void;
     onSequenceActionFieldChange: (key: string, value: string | number | boolean) => void;
+    onCutsceneFieldChange: (key: string, value: string | number | boolean) => void;
+    onCutsceneStepFieldChange: (key: string, value: string | number | boolean) => void;
     onTabChanged: (tabId: TestWorldEditorTabId) => void;
 }
 
-type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'npc' | 'sequences' | 'inspector';
+type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'npc' | 'sequences' | 'cutscenes' | 'inspector';
 export type { TestWorldEditorTabId };
 
 const escapeHtml = (value: string): string => {
@@ -179,7 +212,7 @@ export class TestWorldEditorSidebar {
     private state: TestWorldEditorSidebarState;
     private readonly collapsedSectionKeys = new Set<string>();
     private activeTab: TestWorldEditorTabId = 'level';
-    private pendingImportMode: 'world' | 'sequence' = 'world';
+    private pendingImportMode: 'world' | 'sequence' | 'cutscene' = 'world';
     private pendingScrollRestore: { inner: number; list: number } | null = null;
     private pendingFocusRestore: { selector: string; selectionStart: number | null; selectionEnd: number | null } | null = null;
 
@@ -207,6 +240,8 @@ export class TestWorldEditorSidebar {
             void file.text().then((jsonText) => {
                 if (this.pendingImportMode === 'sequence') {
                     this.callbacks.onImportSequencesJson(jsonText);
+                } else if (this.pendingImportMode === 'cutscene') {
+                    this.callbacks.onImportCutscenesJson(jsonText);
                 } else {
                     this.callbacks.onImportJson(jsonText);
                 }
@@ -240,6 +275,12 @@ export class TestWorldEditorSidebar {
             sequenceActionItems: [],
             sequenceActionIndex: -1,
             sequenceActionSections: [],
+            cutsceneItems: [],
+            cutsceneInspectorId: null,
+            cutsceneSections: [],
+            cutsceneStepItems: [],
+            cutsceneStepIndex: -1,
+            cutsceneStepSections: [],
             selectedLocked: false
         };
         this.root.addEventListener('click', this.handleClick);
@@ -328,6 +369,27 @@ export class TestWorldEditorSidebar {
                 this.callbacks.onClearSavedSequenceDraft();
                 return;
             }
+            if (action === 'save-cutscene-draft') {
+                this.callbacks.onSaveCutsceneDraft();
+                return;
+            }
+            if (action === 'export-cutscenes-json') {
+                this.callbacks.onExportCutscenesJson();
+                return;
+            }
+            if (action === 'import-cutscenes-json') {
+                this.pendingImportMode = 'cutscene';
+                this.fileInput.click();
+                return;
+            }
+            if (action === 'reset-cutscenes-default') {
+                this.callbacks.onResetCutscenesDefault();
+                return;
+            }
+            if (action === 'clear-cutscene-draft') {
+                this.callbacks.onClearSavedCutsceneDraft();
+                return;
+            }
             if (action === 'reset-default') {
                 this.callbacks.onResetDefault();
                 return;
@@ -368,6 +430,30 @@ export class TestWorldEditorSidebar {
                 this.callbacks.onMoveSelectedSequenceAction(1);
                 return;
             }
+            if (action === 'create-cutscene') {
+                this.callbacks.onCreateCutscene();
+                return;
+            }
+            if (action === 'delete-selected-cutscene') {
+                this.callbacks.onDeleteSelectedCutscene();
+                return;
+            }
+            if (action === 'create-cutscene-step') {
+                this.callbacks.onCreateCutsceneStep();
+                return;
+            }
+            if (action === 'move-cutscene-step-up') {
+                this.callbacks.onMoveSelectedCutsceneStep(-1);
+                return;
+            }
+            if (action === 'move-cutscene-step-down') {
+                this.callbacks.onMoveSelectedCutsceneStep(1);
+                return;
+            }
+            if (action === 'delete-selected-cutscene-step') {
+                this.callbacks.onDeleteSelectedCutsceneStep();
+                return;
+            }
             if (action === 'toggle-selected-lock') {
                 this.callbacks.onToggleSelectedLock();
                 return;
@@ -397,6 +483,18 @@ export class TestWorldEditorSidebar {
         const sequenceActionIndexValue = target?.closest<HTMLElement>('[data-editor-sequence-action-index]')?.dataset.editorSequenceActionIndex;
         if (sequenceActionIndexValue !== undefined) {
             this.callbacks.onSelectSequenceAction(Number(sequenceActionIndexValue));
+            return;
+        }
+
+        const cutsceneId = target?.closest<HTMLElement>('[data-editor-cutscene-id]')?.dataset.editorCutsceneId;
+        if (cutsceneId) {
+            this.callbacks.onSelectCutscene(cutsceneId);
+            return;
+        }
+
+        const cutsceneStepIndexValue = target?.closest<HTMLElement>('[data-editor-cutscene-step-index]')?.dataset.editorCutsceneStepIndex;
+        if (cutsceneStepIndexValue !== undefined) {
+            this.callbacks.onSelectCutsceneStep(Number(cutsceneStepIndexValue));
             return;
         }
 
@@ -451,8 +549,10 @@ export class TestWorldEditorSidebar {
         const levelFieldKey = target.dataset.editorLevelField;
         const sequenceFieldKey = target.dataset.editorSequenceField;
         const sequenceActionFieldKey = target.dataset.editorSequenceActionField;
+        const cutsceneFieldKey = target.dataset.editorCutsceneField;
+        const cutsceneStepFieldKey = target.dataset.editorCutsceneStepField;
 
-        if (!fieldKey && !levelFieldKey && !sequenceFieldKey && !sequenceActionFieldKey) {
+        if (!fieldKey && !levelFieldKey && !sequenceFieldKey && !sequenceActionFieldKey && !cutsceneFieldKey && !cutsceneStepFieldKey) {
             return;
         }
 
@@ -464,7 +564,7 @@ export class TestWorldEditorSidebar {
         }
         if (
             fromInput
-            && (sequenceFieldKey || sequenceActionFieldKey)
+            && (sequenceFieldKey || sequenceActionFieldKey || cutsceneFieldKey || cutsceneStepFieldKey)
             && (
                 target instanceof HTMLTextAreaElement
                 || (target instanceof HTMLInputElement && (target.type === 'text' || target.type === 'number'))
@@ -479,8 +579,12 @@ export class TestWorldEditorSidebar {
                 ? this.callbacks.onSequenceFieldChange
                 : (sequenceActionFieldKey
                     ? this.callbacks.onSequenceActionFieldChange
-                    : this.callbacks.onInspectorFieldChange));
-        const resolvedFieldKey = levelFieldKey ?? sequenceFieldKey ?? sequenceActionFieldKey ?? fieldKey;
+                    : (cutsceneFieldKey
+                        ? this.callbacks.onCutsceneFieldChange
+                        : (cutsceneStepFieldKey
+                            ? this.callbacks.onCutsceneStepFieldChange
+                            : this.callbacks.onInspectorFieldChange))));
+        const resolvedFieldKey = levelFieldKey ?? sequenceFieldKey ?? sequenceActionFieldKey ?? cutsceneFieldKey ?? cutsceneStepFieldKey ?? fieldKey;
 
         if (target instanceof HTMLInputElement && target.type === 'checkbox') {
             callback(resolvedFieldKey, target.checked);
@@ -570,6 +674,34 @@ export class TestWorldEditorSidebar {
         if (sequenceActionFieldKey) {
             this.pendingFocusRestore = {
                 selector: `[data-editor-sequence-action-field="${sequenceActionFieldKey}"]`,
+                selectionStart: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionStart
+                    : null,
+                selectionEnd: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionEnd
+                    : null
+            };
+            return;
+        }
+
+        const cutsceneFieldKey = inputElement.dataset.editorCutsceneField;
+        if (cutsceneFieldKey) {
+            this.pendingFocusRestore = {
+                selector: `[data-editor-cutscene-field="${cutsceneFieldKey}"]`,
+                selectionStart: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionStart
+                    : null,
+                selectionEnd: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
+                    ? activeElement.selectionEnd
+                    : null
+            };
+            return;
+        }
+
+        const cutsceneStepFieldKey = inputElement.dataset.editorCutsceneStepField;
+        if (cutsceneStepFieldKey) {
+            this.pendingFocusRestore = {
+                selector: `[data-editor-cutscene-step-field="${cutsceneStepFieldKey}"]`,
                 selectionStart: activeElement instanceof HTMLInputElement || activeElement instanceof HTMLTextAreaElement
                     ? activeElement.selectionStart
                     : null,
@@ -697,6 +829,8 @@ export class TestWorldEditorSidebar {
         const npcInspectorMarkup = renderCollapsibleSections(state.npcInspectorSections, 'data-editor-field', 'npc-inspector');
         const sequenceMarkup = renderCollapsibleSections(state.sequenceSections, 'data-editor-sequence-field', 'sequence');
         const sequenceActionMarkup = renderCollapsibleSections(state.sequenceActionSections, 'data-editor-sequence-action-field', 'sequence-action');
+        const cutsceneMarkup = renderCollapsibleSections(state.cutsceneSections, 'data-editor-cutscene-field', 'cutscene');
+        const cutsceneStepMarkup = renderCollapsibleSections(state.cutsceneStepSections, 'data-editor-cutscene-step-field', 'cutscene-step');
         const levelMarkup = renderCollapsibleSections(state.levelSections, 'data-editor-level-field', 'level');
         const backgroundMarkup = renderCollapsibleSections(state.backgroundSections, 'data-editor-level-field', 'background');
         const tabBarMarkup = `
@@ -706,6 +840,7 @@ export class TestWorldEditorSidebar {
                 ${buildTabButton('objects', 'Objects')}
                 ${buildTabButton('npc', 'NPC')}
                 ${buildTabButton('sequences', 'Sequences')}
+                ${buildTabButton('cutscenes', 'Cutscenes')}
                 ${buildTabButton('inspector', 'Inspector')}
             </div>
         `;
@@ -833,6 +968,66 @@ export class TestWorldEditorSidebar {
                 ${sequenceActionMarkup || '<div class="test-world-editor__empty">Select an action</div>'}
             </section>
         `;
+        const cutsceneItemsMarkup = state.cutsceneItems.map((entry) => {
+            const className = entry.selected
+                ? 'test-world-editor__list-item is-selected'
+                : 'test-world-editor__list-item';
+            return `
+                <button type="button" class="${className}" data-editor-cutscene-id="${escapeHtml(entry.id)}">
+                    <span>${escapeHtml(entry.id)}</span>
+                    <small>${escapeHtml(entry.mode)} | ${entry.stepCount} step${entry.stepCount === 1 ? '' : 's'}</small>
+                </button>
+            `;
+        }).join('');
+        const cutsceneStepItemsMarkup = state.cutsceneStepItems.map((entry) => {
+            const className = entry.selected
+                ? 'test-world-editor__list-item is-selected'
+                : 'test-world-editor__list-item';
+            return `
+                <button type="button" class="${className}" data-editor-cutscene-step-index="${entry.index}">
+                    <span>${escapeHtml(entry.label)}</span>
+                    <small>step ${entry.index + 1}</small>
+                </button>
+            `;
+        }).join('');
+        const cutscenesPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Registry</h3>
+                <div class="test-world-editor__toolbar">
+                    <button type="button" class="test-world-editor__button" data-editor-action="save-cutscene-draft">Save Draft</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="export-cutscenes-json">Export JSON</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="import-cutscenes-json">Import JSON</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="reset-cutscenes-default">Reset Default</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="clear-cutscene-draft">Clear Draft</button>
+                </div>
+            </section>
+            <section class="test-world-editor__section">
+                <h3>Cutscenes</h3>
+                <div class="test-world-editor__toolbar">
+                    <button type="button" class="test-world-editor__button" data-editor-action="create-cutscene">Create</button>
+                    <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-selected-cutscene">Delete</button>
+                </div>
+                <div class="test-world-editor__list">${cutsceneItemsMarkup || '<div class="test-world-editor__empty">No cutscenes</div>'}</div>
+                <div class="test-world-editor__meta">
+                    <div><strong>ID</strong> ${escapeHtml(state.cutsceneInspectorId ?? 'None')}</div>
+                </div>
+                ${cutsceneMarkup || '<div class="test-world-editor__empty">Select a cutscene</div>'}
+            </section>
+            <section class="test-world-editor__section">
+                <h3>Steps</h3>
+                <div class="test-world-editor__toolbar">
+                    <button type="button" class="test-world-editor__button" data-editor-action="create-cutscene-step">Add Step</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="move-cutscene-step-up">Move Up</button>
+                    <button type="button" class="test-world-editor__button" data-editor-action="move-cutscene-step-down">Move Down</button>
+                    <button type="button" class="test-world-editor__button test-world-editor__button--danger" data-editor-action="delete-selected-cutscene-step">Delete Step</button>
+                </div>
+                <div class="test-world-editor__list">${cutsceneStepItemsMarkup || '<div class="test-world-editor__empty">No steps</div>'}</div>
+                <div class="test-world-editor__meta">
+                    <div><strong>Selected Step</strong> ${state.cutsceneStepIndex >= 0 ? String(state.cutsceneStepIndex + 1) : 'None'}</div>
+                </div>
+                ${cutsceneStepMarkup || '<div class="test-world-editor__empty">Select a step</div>'}
+            </section>
+        `;
 
         let activePanelMarkup = levelPanelMarkup;
         if (this.activeTab === 'background') {
@@ -843,6 +1038,8 @@ export class TestWorldEditorSidebar {
             activePanelMarkup = npcPanelMarkup;
         } else if (this.activeTab === 'sequences') {
             activePanelMarkup = sequencesPanelMarkup;
+        } else if (this.activeTab === 'cutscenes') {
+            activePanelMarkup = cutscenesPanelMarkup;
         } else if (this.activeTab === 'inspector') {
             activePanelMarkup = inspectorPanelMarkup;
         }

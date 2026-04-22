@@ -1,0 +1,74 @@
+{
+  "startedAt": "2026-04-22T19:10:19.022Z",
+  "checks": {
+    "ball_form_ready": true,
+    "ball_jump_commit_delay_ms": 42,
+    "ball_jump_commit_no_delay": true,
+    "ball_apex_detected": true,
+    "ball_fall_detected": true,
+    "ball_land_detected": true,
+    "triangle_form_ready": true,
+    "triangle_jump_commit_delay_ms": 44,
+    "triangle_jump_commit_no_delay": true,
+    "triangle_apex_detected": true,
+    "triangle_fall_detected": true,
+    "triangle_land_detected": true,
+    "triangle_flight_start_observed": false,
+    "triangle_flight_end_observed": true,
+    "triangle_flight_samples": {
+      "triBeforeFlight": {
+        "x": 520,
+        "y": 771.26108014,
+        "form": "triangle"
+      },
+      "triDuringFlight": {
+        "x": 704.8207112400002,
+        "y": 775.5850522192,
+        "form": "triangle"
+      },
+      "triAfterFlight": {
+        "x": 912.2057014584457,
+        "y": 810.0659542178878,
+        "form": "triangle"
+      }
+    },
+    "square_form_ready": true,
+    "square_jump_commit_delay_ms": 45,
+    "square_jump_commit_no_delay": true,
+    "square_apex_detected": true,
+    "square_fall_detected": true,
+    "square_land_detected": true,
+    "square_attach_enter_detected": true,
+    "square_attach_jump_commit_transition": true,
+    "square_attach_exit_detected": true,
+    "square_attach_text_enter": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: square\ncontact: arcade\nbody: 1352, 326\nanchor: 1352, 326\nhazard shape: box\ntriangle points: 0\nsquare attached: yes\nsquare normal: 0,-1\nsquare zones: BL, BR",
+    "square_attach_text_jump": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: square\ncontact: arcade\nbody: 1370, 278\nanchor: 1370, 278\nhazard shape: box\ntriangle points: 0\nsquare attached: no\nsquare normal: 0,-1\nsquare zones: -",
+    "square_attach_text_exit": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: square\ncontact: arcade\nbody: 1370, 322\nanchor: 1370, 322\nhazard shape: box\ntriangle points: 0\nsquare attached: no\nsquare normal: 0,-1\nsquare zones: -",
+    "form_switch_mid_air_form_changed": true,
+    "form_switch_no_position_teleport": true,
+    "form_switch_continues_motion": true,
+    "form_switch_samples": {
+      "preSwitch": {
+        "x": 520,
+        "y": 812,
+        "form": "ball"
+      },
+      "midAirBeforeSwitch": {
+        "x": 520,
+        "y": 783.2333333333331,
+        "form": "ball"
+      },
+      "postSwitch": {
+        "x": 520,
+        "y": 779.333333333333,
+        "form": "triangle"
+      },
+      "postSwitchRecover": {
+        "x": 502.5307985653157,
+        "y": 808.6155200283364,
+        "form": "triangle"
+      }
+    }
+  },
+  "finishedAt": "2026-04-22T19:10:35.537Z"
+}

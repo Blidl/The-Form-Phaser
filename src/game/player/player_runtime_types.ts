@@ -2,7 +2,7 @@ import type { GameObjects, Physics } from 'phaser';
 import type { PlayerInputSnapshot } from './player_input';
 import type { PlayerView } from './view/player_view';
 import type { BallReboundRuntimeState } from './player_ball_rebound_runtime';
-import type { PlayerShellState } from './player_types';
+import type { PlayerFormId, PlayerShellState } from './player_types';
 import type { PlayerTimers } from './player_timers';
 import type { PlayerSquareAttachPoseQuery, PlayerSquareTrailSurfacePoint } from './geometry/player_geometry_types';
 
@@ -20,6 +20,12 @@ export interface PlayerMutableRuntimeState {
     lastAirborneDownwardSpeed: number;
     frozenForRespawn: boolean;
     airborneWindDriftX: number;
+    presentationPrevGrounded: boolean;
+    presentationPrevVerticalSpeed: number;
+    presentationApexEmitted: boolean;
+    presentationFallEmitted: boolean;
+    presentationPrevTriangleFlightActive: boolean;
+    presentationPrevSquareAttached: boolean;
 }
 
 export interface PlayerLifecycleRuntimeContext {
@@ -32,6 +38,8 @@ export interface PlayerLifecycleRuntimeContext {
     applyCurrentFormCollisionBody: () => void;
     applyCurrentFormVisual: () => void;
     syncVisualPosition: () => void;
+    notifyFormSwitchIn: (nextForm: PlayerFormId) => void;
+    resetVisualPose: () => void;
 }
 
 export interface PlayerTickRuntimeContext {
@@ -71,4 +79,15 @@ export interface PlayerTickRuntimeContext {
         ignoreBodyB: Physics.Arcade.Body | Physics.Arcade.StaticBody | null
     ) => boolean;
     isCurrentlyGrounded: () => boolean;
+    notifyJumpIntent: () => void;
+    notifyJumpCommit: () => void;
+    notifyApexEnter: () => void;
+    notifyFallEnter: () => void;
+    notifyLandImpact: (impactSpeed: number) => void;
+    notifyBallReboundLaunch: () => void;
+    notifyTriangleFlightStart: () => void;
+    notifyTriangleFlightEnd: () => void;
+    notifySquareAttachEnter: () => void;
+    notifySquareAttachExit: () => void;
+    notifySquareAttachJumpCommit: () => void;
 }

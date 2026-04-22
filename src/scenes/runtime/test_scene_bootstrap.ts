@@ -27,6 +27,12 @@ import {
     setTestNpcScriptedSequenceDefinitions
 } from '../../game/npc/npc_scripted_sequences';
 import {
+    loadTestCutsceneDraft
+} from '../../game/cutscene/cutscene_storage';
+import {
+    setTestCutsceneDefinitions
+} from '../../game/cutscene/test_cutscene_registry';
+import {
     createTestWorldRuntime,
     type TestWorldRuntime
 } from '../../game/world/runtime/test_world_runtime';
@@ -45,7 +51,12 @@ import {
     createTestDevHelperRuntime,
     type TestDevHelperRuntime
 } from '../../ui/runtime/test_dev_helper_runtime';
-import { getCampaignLevelConfig, getInitialCampaignLevelId } from '../../game/world/runtime/test_campaign_registry';
+import {
+    getBundledCampaignLevelConfig,
+    getCampaignLevelConfig,
+    getCampaignLevelConfigSource,
+    getInitialCampaignLevelId
+} from '../../game/world/runtime/test_campaign_registry';
 import { createTestSceneBackgroundRuntime } from './test_scene_background_runtime';
 import {
     createTestCutsceneRuntime,
@@ -76,18 +87,28 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
             ? 'bootstrap_draft'
             : 'bootstrap_default'
     );
+    const initialCutsceneLoad = loadTestCutsceneDraft();
+    setTestCutsceneDefinitions(
+        initialCutsceneLoad.definitions,
+        initialCutsceneLoad.source === 'draft'
+            ? 'bootstrap_draft'
+            : 'bootstrap_default'
+    );
 
     const resolvedLevelId = levelId ?? getInitialCampaignLevelId();
     const defaultConfig = getCampaignLevelConfig(resolvedLevelId);
+    const bundledConfig = getBundledCampaignLevelConfig(resolvedLevelId);
+    const campaignConfigSource = getCampaignLevelConfigSource(resolvedLevelId);
+    const defaultReferenceConfig = bundledConfig ?? defaultConfig;
     const initialWorldLoad = loadTestWorldEditorDraft(resolvedLevelId, defaultConfig);
     if (
         initialWorldLoad.source === 'draft'
         && initialWorldLoad.config.npcs.length === 0
-        && defaultConfig.npcs.length > 0
+        && defaultReferenceConfig.npcs.length > 0
     ) {
         initialWorldLoad.config = {
             ...initialWorldLoad.config,
-            npcs: defaultConfig.npcs.map((entry) => ({
+            npcs: defaultReferenceConfig.npcs.map((entry) => ({
                 ...entry,
                 scriptedLoopRef: entry.scriptedLoopRef,
                 interactionOverride: entry.interactionOverride
@@ -168,16 +189,29 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
             initialWorldLoad.source === 'draft'
                 ? 'loaded world draft'
                 : (initialWorldLoad.error ? 'world draft invalid, loaded default' : null),
+            `campaign source: ${campaignConfigSource}`,
             initialSequenceLoad.source === 'draft'
                 ? 'loaded sequence draft'
-                : (initialSequenceLoad.error ? 'sequence draft invalid, loaded default' : null)
+                : (initialSequenceLoad.error ? 'sequence draft invalid, loaded default' : null),
+            initialCutsceneLoad.source === 'draft'
+                ? 'loaded cutscene draft'
+                : (initialCutsceneLoad.error ? 'cutscene draft invalid, loaded default' : null)
         ].filter((entry): entry is string => entry !== null).join(' | ') || null,
+        {
+            bundledDefaultConfig: defaultReferenceConfig,
+            campaignDefaultConfig: defaultConfig,
+            campaignConfigSource,
+            initialWorldLoadSource: initialWorldLoad.source,
+            initialDraftPresent: initialWorldLoad.draftPresent,
+            initialWorldLoadError: initialWorldLoad.error
+        },
         (config) => {
             backgroundRuntime.applyConfig(config);
         },
         (basis) => {
             backgroundRuntime.setEditorPreviewCameraBasis(basis);
-        }
+        },
+        (source) => cutsceneRuntime.requestNormalCameraOwnership(source)
     );
     const devHelperRuntime = createTestDevHelperRuntime({
         scene,

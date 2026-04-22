@@ -158,11 +158,62 @@ export let PLAYER_BALL_JUMP_CUT_MULTIPLIER = 0.45;
 export let PLAYER_BALL_JUMP_RISE_GRAVITY_SCALE = 0.72;
 export let PLAYER_BALL_JUMP_APEX_GRAVITY_SCALE = 0.5;
 export let PLAYER_BALL_JUMP_APEX_VELOCITY_THRESHOLD = 90;
+export let PLAYER_BALL_ANIM_JUMP_SQUASH_SCALE_X = 1.12;
+export let PLAYER_BALL_ANIM_JUMP_SQUASH_SCALE_Y = 0.88;
+export let PLAYER_BALL_ANIM_JUMP_SQUASH_DURATION_MS = 70;
+export let PLAYER_BALL_ANIM_JUMP_STRETCH_SCALE_X = 0.9;
+export let PLAYER_BALL_ANIM_JUMP_STRETCH_SCALE_Y = 1.12;
+export let PLAYER_BALL_ANIM_JUMP_STRETCH_DURATION_MS = 90;
+export let PLAYER_BALL_ANIM_JUMP_RECOVER_DURATION_MS = 130;
+export let PLAYER_BALL_ANIM_LAND_IMPACT_SPEED_FOR_MAX = 900;
+export let PLAYER_BALL_ANIM_LAND_SQUASH_SCALE_X = 1.18;
+export let PLAYER_BALL_ANIM_LAND_SQUASH_SCALE_Y = 0.82;
+export let PLAYER_BALL_ANIM_LAND_SQUASH_DURATION_MS = 70;
+export let PLAYER_BALL_ANIM_LAND_RECOVER_DURATION_MS = 140;
+export let PLAYER_BALL_ANIM_AIR_SCALE_X = 0.94;
+export let PLAYER_BALL_ANIM_AIR_SCALE_Y = 1.06;
+export let PLAYER_BALL_ANIM_AIR_SPEED_FOR_MAX = 700;
+export let PLAYER_BALL_ANIM_AIR_SMOOTHING_TIME_SEC = 0.08;
+export let PLAYER_BALL_ANIM_SWITCH_RECOVER_DURATION_MS = 150;
 export let PLAYER_SQUARE_JUMP_LAUNCH_VELOCITY = -620;
 export let PLAYER_SQUARE_JUMP_CUT_MULTIPLIER = 0.45;
 export let PLAYER_SQUARE_JUMP_RISE_GRAVITY_SCALE = 0.72;
 export let PLAYER_SQUARE_JUMP_APEX_GRAVITY_SCALE = 0.5;
 export let PLAYER_SQUARE_JUMP_APEX_VELOCITY_THRESHOLD = 90;
+export let PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_SCALE_X = 1.0576;
+export let PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_SCALE_Y = 0.928;
+export let PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_DURATION_MS = 65;
+export let PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_SCALE_X = 0.9136;
+export let PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_SCALE_Y = 1.1008;
+export let PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_DURATION_MS = 85;
+export let PLAYER_TRIANGLE_ANIM_JUMP_RECOVER_DURATION_MS = 120;
+export let PLAYER_TRIANGLE_ANIM_LAND_IMPACT_SPEED_FOR_MAX = 980;
+export let PLAYER_TRIANGLE_ANIM_LAND_SQUASH_SCALE_X = 1.0936;
+export let PLAYER_TRIANGLE_ANIM_LAND_SQUASH_SCALE_Y = 0.9064;
+export let PLAYER_TRIANGLE_ANIM_LAND_SQUASH_DURATION_MS = 65;
+export let PLAYER_TRIANGLE_ANIM_LAND_RECOVER_DURATION_MS = 130;
+export let PLAYER_TRIANGLE_ANIM_AIR_SCALE_X = 0.932;
+export let PLAYER_TRIANGLE_ANIM_AIR_SCALE_Y = 1.068;
+export let PLAYER_TRIANGLE_ANIM_AIR_SPEED_FOR_MAX = 820;
+export let PLAYER_TRIANGLE_ANIM_AIR_SMOOTHING_TIME_SEC = 0.07;
+export let PLAYER_TRIANGLE_ANIM_SWITCH_RECOVER_DURATION_MS = 128;
+export let PLAYER_SQUARE_ANIM_JUMP_SQUASH_SCALE_X = 1.0434;
+export let PLAYER_SQUARE_ANIM_JUMP_SQUASH_SCALE_Y = 0.9442;
+export let PLAYER_SQUARE_ANIM_JUMP_SQUASH_DURATION_MS = 70;
+export let PLAYER_SQUARE_ANIM_JUMP_STRETCH_SCALE_X = 0.9566;
+export let PLAYER_SQUARE_ANIM_JUMP_STRETCH_SCALE_Y = 1.0496;
+export let PLAYER_SQUARE_ANIM_JUMP_STRETCH_DURATION_MS = 90;
+export let PLAYER_SQUARE_ANIM_JUMP_RECOVER_DURATION_MS = 130;
+export let PLAYER_SQUARE_ANIM_LAND_IMPACT_SPEED_FOR_MAX = 860;
+export let PLAYER_SQUARE_ANIM_LAND_SQUASH_SCALE_X = 1.062;
+export let PLAYER_SQUARE_ANIM_LAND_SQUASH_SCALE_Y = 0.938;
+export let PLAYER_SQUARE_ANIM_LAND_SQUASH_DURATION_MS = 75;
+export let PLAYER_SQUARE_ANIM_LAND_RECOVER_DURATION_MS = 150;
+export let PLAYER_SQUARE_ANIM_AIR_SCALE_X = 0.9768;
+export let PLAYER_SQUARE_ANIM_AIR_SCALE_Y = 1.0232;
+export let PLAYER_SQUARE_ANIM_AIR_SPEED_FOR_MAX = 650;
+export let PLAYER_SQUARE_ANIM_AIR_SMOOTHING_TIME_SEC = 0.09;
+export let PLAYER_SQUARE_ANIM_SWITCH_RECOVER_DURATION_MS = 173;
 
 export let PLAYER_JUMP_VELOCITY = PLAYER_BALL_JUMP_LAUNCH_VELOCITY;
 export let PLAYER_JUMP_CUT_MULTIPLIER = PLAYER_BALL_JUMP_CUT_MULTIPLIER;
@@ -248,6 +299,23 @@ export const applyPlayerTuningRawSnapshot = (raw: PlayerTuningRawSnapshot): void
     PLAYER_BALL_JUMP_RISE_GRAVITY_SCALE = raw.ball.jump.riseGravityScale;
     PLAYER_BALL_JUMP_APEX_GRAVITY_SCALE = raw.ball.jump.apexGravityScale;
     PLAYER_BALL_JUMP_APEX_VELOCITY_THRESHOLD = raw.ball.jump.apexVelocityThreshold;
+    PLAYER_BALL_ANIM_JUMP_SQUASH_SCALE_X = raw.ball.animation.jumpSquashScaleX;
+    PLAYER_BALL_ANIM_JUMP_SQUASH_SCALE_Y = raw.ball.animation.jumpSquashScaleY;
+    PLAYER_BALL_ANIM_JUMP_SQUASH_DURATION_MS = raw.ball.animation.jumpSquashDurationMs;
+    PLAYER_BALL_ANIM_JUMP_STRETCH_SCALE_X = raw.ball.animation.jumpStretchScaleX;
+    PLAYER_BALL_ANIM_JUMP_STRETCH_SCALE_Y = raw.ball.animation.jumpStretchScaleY;
+    PLAYER_BALL_ANIM_JUMP_STRETCH_DURATION_MS = raw.ball.animation.jumpStretchDurationMs;
+    PLAYER_BALL_ANIM_JUMP_RECOVER_DURATION_MS = raw.ball.animation.jumpRecoverDurationMs;
+    PLAYER_BALL_ANIM_LAND_IMPACT_SPEED_FOR_MAX = raw.ball.animation.landImpactSpeedForMax;
+    PLAYER_BALL_ANIM_LAND_SQUASH_SCALE_X = raw.ball.animation.landSquashScaleX;
+    PLAYER_BALL_ANIM_LAND_SQUASH_SCALE_Y = raw.ball.animation.landSquashScaleY;
+    PLAYER_BALL_ANIM_LAND_SQUASH_DURATION_MS = raw.ball.animation.landSquashDurationMs;
+    PLAYER_BALL_ANIM_LAND_RECOVER_DURATION_MS = raw.ball.animation.landRecoverDurationMs;
+    PLAYER_BALL_ANIM_AIR_SCALE_X = raw.ball.animation.airScaleX;
+    PLAYER_BALL_ANIM_AIR_SCALE_Y = raw.ball.animation.airScaleY;
+    PLAYER_BALL_ANIM_AIR_SPEED_FOR_MAX = raw.ball.animation.airSpeedForMax;
+    PLAYER_BALL_ANIM_AIR_SMOOTHING_TIME_SEC = raw.ball.animation.airSmoothingTimeSec;
+    PLAYER_BALL_ANIM_SWITCH_RECOVER_DURATION_MS = raw.ball.animation.switchRecoverDurationMs;
     PLAYER_BALL_BOOST_START_IMPULSE_SPEED = raw.ball.boost.startImpulseSpeed;
     PLAYER_BALL_BOOST_START_IMPULSE_DECAY_MS = raw.ball.boost.startImpulseDecayMs;
     PLAYER_BALL_BOOST_HOLD_MOVE_SPEED = raw.ball.boost.holdGroundMoveSpeed;
@@ -280,6 +348,23 @@ export const applyPlayerTuningRawSnapshot = (raw: PlayerTuningRawSnapshot): void
     PLAYER_TRIANGLE_JUMP_RISE_GRAVITY_SCALE = raw.triangle.jump.riseGravityScale;
     PLAYER_TRIANGLE_JUMP_APEX_GRAVITY_SCALE = raw.triangle.jump.apexGravityScale;
     PLAYER_TRIANGLE_JUMP_APEX_VELOCITY_THRESHOLD = raw.triangle.jump.apexVelocityThreshold;
+    PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_SCALE_X = raw.triangle.animation.jumpSquashScaleX;
+    PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_SCALE_Y = raw.triangle.animation.jumpSquashScaleY;
+    PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_DURATION_MS = raw.triangle.animation.jumpSquashDurationMs;
+    PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_SCALE_X = raw.triangle.animation.jumpStretchScaleX;
+    PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_SCALE_Y = raw.triangle.animation.jumpStretchScaleY;
+    PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_DURATION_MS = raw.triangle.animation.jumpStretchDurationMs;
+    PLAYER_TRIANGLE_ANIM_JUMP_RECOVER_DURATION_MS = raw.triangle.animation.jumpRecoverDurationMs;
+    PLAYER_TRIANGLE_ANIM_LAND_IMPACT_SPEED_FOR_MAX = raw.triangle.animation.landImpactSpeedForMax;
+    PLAYER_TRIANGLE_ANIM_LAND_SQUASH_SCALE_X = raw.triangle.animation.landSquashScaleX;
+    PLAYER_TRIANGLE_ANIM_LAND_SQUASH_SCALE_Y = raw.triangle.animation.landSquashScaleY;
+    PLAYER_TRIANGLE_ANIM_LAND_SQUASH_DURATION_MS = raw.triangle.animation.landSquashDurationMs;
+    PLAYER_TRIANGLE_ANIM_LAND_RECOVER_DURATION_MS = raw.triangle.animation.landRecoverDurationMs;
+    PLAYER_TRIANGLE_ANIM_AIR_SCALE_X = raw.triangle.animation.airScaleX;
+    PLAYER_TRIANGLE_ANIM_AIR_SCALE_Y = raw.triangle.animation.airScaleY;
+    PLAYER_TRIANGLE_ANIM_AIR_SPEED_FOR_MAX = raw.triangle.animation.airSpeedForMax;
+    PLAYER_TRIANGLE_ANIM_AIR_SMOOTHING_TIME_SEC = raw.triangle.animation.airSmoothingTimeSec;
+    PLAYER_TRIANGLE_ANIM_SWITCH_RECOVER_DURATION_MS = raw.triangle.animation.switchRecoverDurationMs;
     PLAYER_TRIANGLE_FLIGHT_SPEED = raw.triangle.flight.flightSpeed;
     PLAYER_TRIANGLE_FLIGHT_SECTION_DISTANCE_PX = raw.triangle.flight.flightDistancePx;
     PLAYER_TRIANGLE_FLIGHT_RESTORE_SPEED_PX_PER_SEC = raw.triangle.flight.flightRestoreSpeed;
@@ -296,6 +381,23 @@ export const applyPlayerTuningRawSnapshot = (raw: PlayerTuningRawSnapshot): void
     PLAYER_SQUARE_JUMP_RISE_GRAVITY_SCALE = raw.square.jump.riseGravityScale;
     PLAYER_SQUARE_JUMP_APEX_GRAVITY_SCALE = raw.square.jump.apexGravityScale;
     PLAYER_SQUARE_JUMP_APEX_VELOCITY_THRESHOLD = raw.square.jump.apexVelocityThreshold;
+    PLAYER_SQUARE_ANIM_JUMP_SQUASH_SCALE_X = raw.square.animation.jumpSquashScaleX;
+    PLAYER_SQUARE_ANIM_JUMP_SQUASH_SCALE_Y = raw.square.animation.jumpSquashScaleY;
+    PLAYER_SQUARE_ANIM_JUMP_SQUASH_DURATION_MS = raw.square.animation.jumpSquashDurationMs;
+    PLAYER_SQUARE_ANIM_JUMP_STRETCH_SCALE_X = raw.square.animation.jumpStretchScaleX;
+    PLAYER_SQUARE_ANIM_JUMP_STRETCH_SCALE_Y = raw.square.animation.jumpStretchScaleY;
+    PLAYER_SQUARE_ANIM_JUMP_STRETCH_DURATION_MS = raw.square.animation.jumpStretchDurationMs;
+    PLAYER_SQUARE_ANIM_JUMP_RECOVER_DURATION_MS = raw.square.animation.jumpRecoverDurationMs;
+    PLAYER_SQUARE_ANIM_LAND_IMPACT_SPEED_FOR_MAX = raw.square.animation.landImpactSpeedForMax;
+    PLAYER_SQUARE_ANIM_LAND_SQUASH_SCALE_X = raw.square.animation.landSquashScaleX;
+    PLAYER_SQUARE_ANIM_LAND_SQUASH_SCALE_Y = raw.square.animation.landSquashScaleY;
+    PLAYER_SQUARE_ANIM_LAND_SQUASH_DURATION_MS = raw.square.animation.landSquashDurationMs;
+    PLAYER_SQUARE_ANIM_LAND_RECOVER_DURATION_MS = raw.square.animation.landRecoverDurationMs;
+    PLAYER_SQUARE_ANIM_AIR_SCALE_X = raw.square.animation.airScaleX;
+    PLAYER_SQUARE_ANIM_AIR_SCALE_Y = raw.square.animation.airScaleY;
+    PLAYER_SQUARE_ANIM_AIR_SPEED_FOR_MAX = raw.square.animation.airSpeedForMax;
+    PLAYER_SQUARE_ANIM_AIR_SMOOTHING_TIME_SEC = raw.square.animation.airSmoothingTimeSec;
+    PLAYER_SQUARE_ANIM_SWITCH_RECOVER_DURATION_MS = raw.square.animation.switchRecoverDurationMs;
     PLAYER_SQUARE_ATTACH_ACQUIRE_RANGE_PX = raw.square.attach.acquireRangePx;
     PLAYER_SQUARE_ATTACH_ENTRY_BUFFER_MS = raw.square.attach.attachBufferMs;
     PLAYER_SQUARE_ATTACH_CONTACT_GRACE_MS = raw.square.attach.contactGraceMs;
@@ -348,6 +450,25 @@ export const capturePlayerTuningRawSnapshot = (): PlayerTuningRawSnapshot => ({
             apexGravityScale: PLAYER_BALL_JUMP_APEX_GRAVITY_SCALE,
             apexVelocityThreshold: PLAYER_BALL_JUMP_APEX_VELOCITY_THRESHOLD
         },
+        animation: {
+            jumpSquashScaleX: PLAYER_BALL_ANIM_JUMP_SQUASH_SCALE_X,
+            jumpSquashScaleY: PLAYER_BALL_ANIM_JUMP_SQUASH_SCALE_Y,
+            jumpSquashDurationMs: PLAYER_BALL_ANIM_JUMP_SQUASH_DURATION_MS,
+            jumpStretchScaleX: PLAYER_BALL_ANIM_JUMP_STRETCH_SCALE_X,
+            jumpStretchScaleY: PLAYER_BALL_ANIM_JUMP_STRETCH_SCALE_Y,
+            jumpStretchDurationMs: PLAYER_BALL_ANIM_JUMP_STRETCH_DURATION_MS,
+            jumpRecoverDurationMs: PLAYER_BALL_ANIM_JUMP_RECOVER_DURATION_MS,
+            landImpactSpeedForMax: PLAYER_BALL_ANIM_LAND_IMPACT_SPEED_FOR_MAX,
+            landSquashScaleX: PLAYER_BALL_ANIM_LAND_SQUASH_SCALE_X,
+            landSquashScaleY: PLAYER_BALL_ANIM_LAND_SQUASH_SCALE_Y,
+            landSquashDurationMs: PLAYER_BALL_ANIM_LAND_SQUASH_DURATION_MS,
+            landRecoverDurationMs: PLAYER_BALL_ANIM_LAND_RECOVER_DURATION_MS,
+            airScaleX: PLAYER_BALL_ANIM_AIR_SCALE_X,
+            airScaleY: PLAYER_BALL_ANIM_AIR_SCALE_Y,
+            airSpeedForMax: PLAYER_BALL_ANIM_AIR_SPEED_FOR_MAX,
+            airSmoothingTimeSec: PLAYER_BALL_ANIM_AIR_SMOOTHING_TIME_SEC,
+            switchRecoverDurationMs: PLAYER_BALL_ANIM_SWITCH_RECOVER_DURATION_MS
+        },
         boost: {
             startImpulseSpeed: PLAYER_BALL_BOOST_START_IMPULSE_SPEED,
             startImpulseDecayMs: PLAYER_BALL_BOOST_START_IMPULSE_DECAY_MS,
@@ -389,6 +510,25 @@ export const capturePlayerTuningRawSnapshot = (): PlayerTuningRawSnapshot => ({
             apexGravityScale: PLAYER_TRIANGLE_JUMP_APEX_GRAVITY_SCALE,
             apexVelocityThreshold: PLAYER_TRIANGLE_JUMP_APEX_VELOCITY_THRESHOLD
         },
+        animation: {
+            jumpSquashScaleX: PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_SCALE_X,
+            jumpSquashScaleY: PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_SCALE_Y,
+            jumpSquashDurationMs: PLAYER_TRIANGLE_ANIM_JUMP_SQUASH_DURATION_MS,
+            jumpStretchScaleX: PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_SCALE_X,
+            jumpStretchScaleY: PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_SCALE_Y,
+            jumpStretchDurationMs: PLAYER_TRIANGLE_ANIM_JUMP_STRETCH_DURATION_MS,
+            jumpRecoverDurationMs: PLAYER_TRIANGLE_ANIM_JUMP_RECOVER_DURATION_MS,
+            landImpactSpeedForMax: PLAYER_TRIANGLE_ANIM_LAND_IMPACT_SPEED_FOR_MAX,
+            landSquashScaleX: PLAYER_TRIANGLE_ANIM_LAND_SQUASH_SCALE_X,
+            landSquashScaleY: PLAYER_TRIANGLE_ANIM_LAND_SQUASH_SCALE_Y,
+            landSquashDurationMs: PLAYER_TRIANGLE_ANIM_LAND_SQUASH_DURATION_MS,
+            landRecoverDurationMs: PLAYER_TRIANGLE_ANIM_LAND_RECOVER_DURATION_MS,
+            airScaleX: PLAYER_TRIANGLE_ANIM_AIR_SCALE_X,
+            airScaleY: PLAYER_TRIANGLE_ANIM_AIR_SCALE_Y,
+            airSpeedForMax: PLAYER_TRIANGLE_ANIM_AIR_SPEED_FOR_MAX,
+            airSmoothingTimeSec: PLAYER_TRIANGLE_ANIM_AIR_SMOOTHING_TIME_SEC,
+            switchRecoverDurationMs: PLAYER_TRIANGLE_ANIM_SWITCH_RECOVER_DURATION_MS
+        },
         flight: {
             flightSpeed: PLAYER_TRIANGLE_FLIGHT_SPEED,
             flightDistancePx: PLAYER_TRIANGLE_FLIGHT_SECTION_DISTANCE_PX,
@@ -411,6 +551,25 @@ export const capturePlayerTuningRawSnapshot = (): PlayerTuningRawSnapshot => ({
             riseGravityScale: PLAYER_SQUARE_JUMP_RISE_GRAVITY_SCALE,
             apexGravityScale: PLAYER_SQUARE_JUMP_APEX_GRAVITY_SCALE,
             apexVelocityThreshold: PLAYER_SQUARE_JUMP_APEX_VELOCITY_THRESHOLD
+        },
+        animation: {
+            jumpSquashScaleX: PLAYER_SQUARE_ANIM_JUMP_SQUASH_SCALE_X,
+            jumpSquashScaleY: PLAYER_SQUARE_ANIM_JUMP_SQUASH_SCALE_Y,
+            jumpSquashDurationMs: PLAYER_SQUARE_ANIM_JUMP_SQUASH_DURATION_MS,
+            jumpStretchScaleX: PLAYER_SQUARE_ANIM_JUMP_STRETCH_SCALE_X,
+            jumpStretchScaleY: PLAYER_SQUARE_ANIM_JUMP_STRETCH_SCALE_Y,
+            jumpStretchDurationMs: PLAYER_SQUARE_ANIM_JUMP_STRETCH_DURATION_MS,
+            jumpRecoverDurationMs: PLAYER_SQUARE_ANIM_JUMP_RECOVER_DURATION_MS,
+            landImpactSpeedForMax: PLAYER_SQUARE_ANIM_LAND_IMPACT_SPEED_FOR_MAX,
+            landSquashScaleX: PLAYER_SQUARE_ANIM_LAND_SQUASH_SCALE_X,
+            landSquashScaleY: PLAYER_SQUARE_ANIM_LAND_SQUASH_SCALE_Y,
+            landSquashDurationMs: PLAYER_SQUARE_ANIM_LAND_SQUASH_DURATION_MS,
+            landRecoverDurationMs: PLAYER_SQUARE_ANIM_LAND_RECOVER_DURATION_MS,
+            airScaleX: PLAYER_SQUARE_ANIM_AIR_SCALE_X,
+            airScaleY: PLAYER_SQUARE_ANIM_AIR_SCALE_Y,
+            airSpeedForMax: PLAYER_SQUARE_ANIM_AIR_SPEED_FOR_MAX,
+            airSmoothingTimeSec: PLAYER_SQUARE_ANIM_AIR_SMOOTHING_TIME_SEC,
+            switchRecoverDurationMs: PLAYER_SQUARE_ANIM_SWITCH_RECOVER_DURATION_MS
         },
         attach: {
             acquireRangePx: PLAYER_SQUARE_ATTACH_ACQUIRE_RANGE_PX,

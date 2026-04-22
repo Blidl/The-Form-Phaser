@@ -1,31 +1,31 @@
-﻿# The Form вЂ” Orchestrator Log
+﻿# The Form — Orchestrator Log
 
-## РќР°Р·РЅР°С‡РµРЅРёРµ
-Р­С‚Рѕ Р¶СѓСЂРЅР°Р» СЂРµР·СѓР»СЊС‚Р°С‚РѕРІ РІРЅРµС€РЅРёС… С‡Р°С‚РѕРІ Рё РєР»СЋС‡РµРІС‹С… СЂРµС€РµРЅРёР№ РїРѕ С…РѕРґСѓ СЂРµР°Р»РёР·Р°С†РёРё.
+## Назначение
+Это журнал результатов внешних чатов и ключевых решений по ходу реализации.
 
-РЎСЋРґР° РїРёСЃР°С‚СЊ С‚РѕР»СЊРєРѕ:
-- С‡С‚Рѕ СЂРµР°Р»СЊРЅРѕ Р±С‹Р»Рѕ СЃРґРµР»Р°РЅРѕ;
-- РєР°РєРёРµ С„Р°Р№Р»С‹ РёР·РјРµРЅРёР»РёСЃСЊ;
-- С‡С‚Рѕ РїСЂРѕРІРµСЂРµРЅРѕ РІСЂСѓС‡РЅСѓСЋ;
-- РєР°РєРёРµ РЅРѕРІС‹Рµ СЂРёСЃРєРё РёР»Рё РІСЂРµРјРµРЅРЅС‹Рµ РґРѕРїСѓС‰РµРЅРёСЏ РїРѕСЏРІРёР»РёСЃСЊ;
-- РєР°РєРѕР№ СЃР»РµРґСѓСЋС‰РёР№ С€Р°Рі.
+Сюда писать только:
+- что реально было сделано;
+- какие файлы изменились;
+- что проверено вручную;
+- какие новые риски или временные допущения появились;
+- какой следующий шаг.
 
-РќРµ РїРёСЃР°С‚СЊ СЃСЋРґР° Р±РѕР»СЊС€РёРµ СЂР°СЃСЃСѓР¶РґРµРЅРёСЏ. Р›РѕРі РґРѕР»Р¶РµРЅ С‡РёС‚Р°С‚СЊСЃСЏ Р±С‹СЃС‚СЂРѕ.
+Не писать сюда большие рассуждения. Лог должен читаться быстро.
 
 ---
 
-## Р¤РѕСЂРјР°С‚ Р·Р°РїРёСЃРё
+## Формат записи
 
 ### Entry
 - `Date:` YYYY-MM-DD
-- `Task:` РЅР°Р·РІР°РЅРёРµ Р·Р°РґР°С‡Рё РёР· work queue
+- `Task:` название задачи из work queue
 - `Status:` done / in_progress / blocked
-- `Summary:` 2вЂ“5 РєРѕСЂРѕС‚РєРёС… РїСЂРµРґР»РѕР¶РµРЅРёР№
-- `Files:` СЃРїРёСЃРѕРє РёР·РјРµРЅС‘РЅРЅС‹С… С„Р°Р№Р»РѕРІ
-- `Manual Check:` С‡С‚Рѕ СЂРµР°Р»СЊРЅРѕ РїСЂРѕРІРµСЂРµРЅРѕ РІСЂСѓС‡РЅСѓСЋ
-- `Architecture Decisions:` С‚РѕР»СЊРєРѕ РЅРѕРІС‹Рµ РёР»Рё РёР·РјРµРЅС‘РЅРЅС‹Рµ СЂРµС€РµРЅРёСЏ
-- `Risks / Open Items:` С‡С‚Рѕ РѕСЃС‚Р°Р»РѕСЃСЊ СЃРїРѕСЂРЅС‹Рј
-- `Next Recommended Step:` РєР°РєР°СЏ Р·Р°РґР°С‡Р° РёРґС‘С‚ СЃР»РµРґСѓСЋС‰РµР№
+- `Summary:` 2–5 коротких предложений
+- `Files:` список изменённых файлов
+- `Manual Check:` что реально проверено вручную
+- `Architecture Decisions:` только новые или изменённые решения
+- `Risks / Open Items:` что осталось спорным
+- `Next Recommended Step:` какая задача идёт следующей
 
 ---
 
@@ -35,148 +35,148 @@
 - `Date:` 2026-04-08
 - `Task:` Orchestrator Setup
 - `Status:` done
-- `Summary:` РЎРѕР·РґР°РЅ РѕСЂРєРµСЃС‚СЂР°С‚РѕСЂСЃРєРёР№ РєРѕРЅС‚СѓСЂ РґРѕРєСѓРјРµРЅС‚Р°С†РёРё: РѕР±С‰РµРµ СЃРѕСЃС‚РѕСЏРЅРёРµ, СЂР°Р±РѕС‡Р°СЏ РѕС‡РµСЂРµРґСЊ, Р¶СѓСЂРЅР°Р» Рё С€Р°Р±Р»РѕРЅ intake. Р­С‚Рѕ РґРѕР»Р¶РЅРѕ СѓРґРµСЂР¶РёРІР°С‚СЊ РїСЂРѕРµРєС‚РЅС‹Р№ РєРѕРЅС‚РµРєСЃС‚ РјРµР¶РґСѓ РјРЅРѕРіРёРјРё РІРЅРµС€РЅРёРјРё С‡Р°С‚Р°РјРё Рё РЅРµ РґР°РІР°С‚СЊ РїРѕС‚РµСЂСЏС‚СЊ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅС‹Рµ СЂРµС€РµРЅРёСЏ.
+- `Summary:` Создан оркестраторский контур документации: общее состояние, рабочая очередь, журнал и шаблон intake. Это должно удерживать проектный контекст между многими внешними чатами и не давать потерять архитектурные решения.
 - `Files:`
   - `docs/canon/the_form_orchestrator_state_ru.md`
   - `docs/canon/the_form_orchestrator_work_queue_ru.md`
   - `docs/canon/the_form_orchestrator_log_ru.md`
   - `docs/canon/the_form_external_chat_intake_template_ru.md`
   - `docs/canon/the_form_docs_index_ru.md`
-- `Manual Check:` Р”РѕРєСѓРјРµРЅС‚С‹ РґРѕР±Р°РІР»РµРЅС‹ РІ `docs/canon`, РёРЅРґРµРєСЃ РѕР±РЅРѕРІР»С‘РЅ.
-- `Architecture Decisions:` Canon РґР»СЏ РѕСЂРєРµСЃС‚СЂР°С†РёРё РІС‹РЅРµСЃРµРЅ РІ РѕС‚РґРµР»СЊРЅС‹Р№ СЃР»РѕР№ РґРѕРєСѓРјРµРЅС‚РѕРІ, РЅРµ СЃРјРµС€Р°РЅРЅС‹Р№ СЃ feature specs.
-- `Risks / Open Items:` Р›РѕРі РїРѕРєР° СЃРѕРґРµСЂР¶РёС‚ С‚РѕР»СЊРєРѕ СЃС‚Р°СЂС‚РѕРІСѓСЋ Р·Р°РїРёСЃСЊ; РґР°Р»СЊС€Рµ РµРіРѕ РЅСѓР¶РЅРѕ РїРѕРґРґРµСЂР¶РёРІР°С‚СЊ РїРѕСЃР»Рµ РєР°Р¶РґРѕРіРѕ РІРЅРµС€РЅРµРіРѕ С‡Р°С‚Р°.
-- `Next Recommended Step:` Р—Р°РїСѓСЃРєР°С‚СЊ `Never Embed Contract` РєР°Рє РїРµСЂРІС‹Р№ РІРЅРµС€РЅРёР№ С‡Р°С‚ Рё РїРѕС‚РѕРј Р·Р°РЅРµСЃС‚Рё СЂРµР·СѓР»СЊС‚Р°С‚ СЃСЋРґР°.
+- `Manual Check:` Документы добавлены в `docs/canon`, индекс обновлён.
+- `Architecture Decisions:` Canon для оркестрации вынесен в отдельный слой документов, не смешанный с feature specs.
+- `Risks / Open Items:` Лог пока содержит только стартовую запись; дальше его нужно поддерживать после каждого внешнего чата.
+- `Next Recommended Step:` Запускать `Never Embed Contract` как первый внешний чат и потом занести результат сюда.
 
 ### Entry
 - `Date:` 2026-04-08
 - `Task:` Never Embed Contract
 - `Status:` in_progress
-- `Summary:` Р’Рѕ РІРЅРµС€РЅРµРј С‡Р°С‚Рµ РґРѕР±Р°РІР»РµРЅ post-tick safeguard РІ `player_runtime.ts`, РєРѕС‚РѕСЂС‹Р№ РїРѕСЃР»Рµ `tickPlayerRuntime(...)` РїСЂРѕРІРµСЂСЏРµС‚ overlap Arcade-body РёРіСЂРѕРєР° СЃ `platform surface` Рё РІС‹С‚Р°Р»РєРёРІР°РµС‚ РµРіРѕ РёР· С„РёРЅР°Р»СЊРЅРѕРіРѕ embed-СЃРѕСЃС‚РѕСЏРЅРёСЏ. Р РµС€РµРЅРёРµ СЃРѕР·РЅР°С‚РµР»СЊРЅРѕ Р»РѕРєР°Р»СЊРЅРѕРµ: Р±РµР· РїРµСЂРµРїРёСЃС‹РІР°РЅРёСЏ attach/carry state machine, editor РёР»Рё world update order. Build РїСЂРѕС…РѕРґРёС‚, РЅРѕ Р¶РёРІРѕР№ acceptance playtest РїРѕ `square attach/carry/pit` РµС‰С‘ РЅРµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ.
+- `Summary:` Во внешнем чате добавлен post-tick safeguard в `player_runtime.ts`, который после `tickPlayerRuntime(...)` проверяет overlap Arcade-body игрока с `platform surface` и выталкивает его из финального embed-состояния. Решение сознательно локальное: без переписывания attach/carry state machine, editor или world update order. Build проходит, но живой acceptance playtest по `square attach/carry/pit` ещё не подтверждён.
 - `Files:`
   - `src/game/player/player_runtime.ts`
-- `Manual Check:` `npm run build-nolog` РїСЂРѕС€С‘Р». Р СѓС‡РЅРѕР№ runtime playtest СЃ reproduce-РєРµР№СЃРѕРј `square attach/carry/pit` РµС‰С‘ РЅРµ РІС‹РїРѕР»РЅРµРЅ.
-- `Architecture Decisions:` Never-embed СЃРµР№С‡Р°СЃ СЂРµР°Р»РёР·СѓРµС‚СЃСЏ РєР°Рє post-tick safeguard РІ player runtime. РџСЂРёРѕСЂРёС‚РµС‚ РѕС‚РґР°РЅ РіР°СЂР°РЅС‚РёРё `РЅРµ Р·Р°РІРµСЂС€Р°С‚СЊ РєР°РґСЂ РІРЅСѓС‚СЂРё solid`, Р° РЅРµ Р»РѕРєР°Р»СЊРЅРѕР№ вЂњРєСЂР°СЃРёРІРѕР№вЂќ РєРѕСЂСЂРµРєС†РёРё attach resolve.
-- `Risks / Open Items:` Safeguard РЅРµ РїРѕРєСЂС‹РІР°РµС‚ Matter-based triangle pipeline. Р’РѕР·РјРѕР¶РЅС‹ edge cases, РіРґРµ square Р±СѓРґРµС‚ СЃР»РµРіРєР° РІС‹С‚РѕР»РєРЅСѓС‚ РЅР°СЂСѓР¶Сѓ. РћСЃРЅРѕРІРЅРѕР№ root cause Р±Р°РіР° РІСЃС‘ РµС‰С‘ СЃС‡РёС‚Р°РµС‚СЃСЏ РІРµСЂРѕСЏС‚РЅРѕСЃС‚РЅРѕР№ РєРѕРјР±РёРЅР°С†РёРµР№ `moving support + attach/rollover/attach jump + reset after collision step`.
-- `Next Recommended Step:` Р’С‹РїРѕР»РЅРёС‚СЊ СЂСѓС‡РЅРѕР№ acceptance playtest РёРјРµРЅРЅРѕ РЅР° РєРµР№СЃРµ `square attach/carry/pit`. Р•СЃР»Рё РёРЅРІР°СЂРёР°РЅС‚ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ, РїРµСЂРµС…РѕРґРёС‚СЊ Рє `Square Rollover by Input`. Р•СЃР»Рё РѕСЃС‚Р°РЅСѓС‚СЃСЏ Р°СЂС‚РµС„Р°РєС‚С‹ вЂ” Р°РґСЂРµСЃРЅРѕ С‡РёРЅРёС‚СЊ attach/carry transition РґРѕ СЃР»РµРґСѓСЋС‰РµР№ Р·Р°РґР°С‡Рё.
+- `Manual Check:` `npm run build-nolog` прошёл. Ручной runtime playtest с reproduce-кейсом `square attach/carry/pit` ещё не выполнен.
+- `Architecture Decisions:` Never-embed сейчас реализуется как post-tick safeguard в player runtime. Приоритет отдан гарантии `не завершать кадр внутри solid`, а не локальной “красивой” коррекции attach resolve.
+- `Risks / Open Items:` Safeguard не покрывает Matter-based triangle pipeline. Возможны edge cases, где square будет слегка вытолкнут наружу. Основной root cause бага всё ещё считается вероятностной комбинацией `moving support + attach/rollover/attach jump + reset after collision step`.
+- `Next Recommended Step:` Выполнить ручной acceptance playtest именно на кейсе `square attach/carry/pit`. Если инвариант подтверждён, переходить к `Square Rollover by Input`. Если останутся артефакты — адресно чинить attach/carry transition до следующей задачи.
 
 ### Entry
 - `Date:` 2026-04-08
-- `Task:` Never Embed Contract вЂ” Manual Acceptance
+- `Task:` Never Embed Contract — Manual Acceptance
 - `Status:` blocked
-- `Summary:` Р СѓС‡РЅР°СЏ РїСЂРѕРІРµСЂРєР° Рё РІРёРґРµРѕ РёР· РёРЅС‚РµСЂРІР°Р»Р° `2вЂ“4s` РїРѕРєР°Р·Р°Р»Рё, С‡С‚Рѕ С‚РµРєСѓС‰РёР№ `post-tick safeguard` РЅРµ СЂРµС€Р°РµС‚ С„Р°РєС‚РёС‡РµСЃРєРёР№ Р±Р°Рі `square attach/carry/pit`. РљРІР°РґСЂР°С‚ РїСЂРѕРґРѕР»Р¶Р°РµС‚ СѓСЃС‚РѕР№С‡РёРІРѕ РїСЂРѕС‚Р°Р»РєРёРІР°С‚СЊСЃСЏ РІ РЅРµРІР°Р»РёРґРЅСѓСЋ world-РїРѕР·Сѓ Сѓ СЃС‚С‹РєР° РіРµРѕРјРµС‚СЂРёРё. Р­С‚Рѕ РїРѕРґС‚РІРµСЂР¶РґР°РµС‚, С‡С‚Рѕ РїСЂРѕР±Р»РµРјР° Р»РµР¶РёС‚ РІС‹С€Рµ СѓСЂРѕРІРЅСЏ РїСЂРѕСЃС‚РѕРіРѕ post-tick depenetration Рё С‚СЂРµР±СѓРµС‚ РѕС‚РґРµР»СЊРЅРѕРіРѕ СЂР°Р·СЂРµС€РµРЅРёСЏ РєРѕРЅС„Р»РёРєС‚Р° `attach/carry/world collision`.
+- `Summary:` Ручная проверка и видео из интервала `2–4s` показали, что текущий `post-tick safeguard` не решает фактический баг `square attach/carry/pit`. Квадрат продолжает устойчиво проталкиваться в невалидную world-позу у стыка геометрии. Это подтверждает, что проблема лежит выше уровня простого post-tick depenetration и требует отдельного разрешения конфликта `attach/carry/world collision`.
 - `Files:`
   - `src/game/player/player_runtime.ts`
   - `tmp/video_review/contact_sheet_2_4s.png`
   - `tmp/video_review/frame_06_3.25s.png`
   - `tmp/video_review/frame_07_3.50s.png`
   - `tmp/video_review/frame_08_3.75s.png`
-- `Manual Check:` Р’РёРґРµРѕ СЂР°Р·РѕР±СЂР°РЅРѕ РїРѕРєР°РґСЂРѕРІРѕ РІ РѕРєРЅРµ `2вЂ“4s`. РќР° `3.50s` Рё `3.75s` РєРІР°РґСЂР°С‚ СѓР¶Рµ СѓСЃС‚РѕР№С‡РёРІРѕ РІРґР°РІР»РµРЅ РІ СЃС‚С‹Рє РіРµРѕРјРµС‚СЂРёРё.
-- `Architecture Decisions:` Never-embed safeguard РѕСЃС‚Р°С‘С‚СЃСЏ РєР°Рє СЃС‚СЂР°С…РѕРІРєР°, РЅРѕ Р±РѕР»СЊС€Рµ РЅРµ СЃС‡РёС‚Р°РµС‚СЃСЏ РґРѕСЃС‚Р°С‚РѕС‡РЅС‹Рј СЂРµС€РµРЅРёРµРј РєРµР№СЃР° `square attach/carry/pit`. РќСѓР¶РµРЅ РѕС‚РґРµР»СЊРЅС‹Р№ attach/carry conflict resolver, РіРґРµ world collision РёРјРµРµС‚ РїСЂРёРѕСЂРёС‚РµС‚.
-- `Risks / Open Items:` Р•СЃР»Рё СЃСЂР°Р·Сѓ РёРґС‚Рё РґР°Р»СЊС€Рµ РїРѕ СЃРїРёСЃРєСѓ core stability, РјС‹ Р·Р°РєСЂРµРїРёРј РЅРµРІРµСЂРЅСѓСЋ РѕСЃРЅРѕРІСѓ РґР»СЏ square mechanics. РЎР»РµРґСѓСЋС‰РёР№ fix РґРѕР»Р¶РµРЅ СЏРІРЅРѕ СЂРµС€Р°С‚СЊ: СЂРІС‘С‚СЃСЏ Р»Рё attach, СЃС‚РѕРїРѕСЂРёС‚СЃСЏ Р»Рё carried object РёР»Рё РєРІР°РґСЂР°С‚ РїРµСЂРµРІРѕРґРёС‚СЃСЏ РІ Р±РµР·РѕРїР°СЃРЅСѓСЋ РїРѕР·Сѓ.
-- `Next Recommended Step:` Р—Р°РїСѓСЃС‚РёС‚СЊ РЅРѕРІС‹Р№ РІРЅРµС€РЅРёР№ С‡Р°С‚ РїРѕ Р·Р°РґР°С‡Рµ `Square Attach/Carry Invalid World Pose Resolution`, Р·Р°С‚РµРј РїРѕРІС‚РѕСЂРёС‚СЊ СЂСѓС‡РЅРѕР№ acceptance РёРјРµРЅРЅРѕ РЅР° СЌС‚РѕРј reproduce-РєРµР№СЃРµ.
+- `Manual Check:` Видео разобрано покадрово в окне `2–4s`. На `3.50s` и `3.75s` квадрат уже устойчиво вдавлен в стык геометрии.
+- `Architecture Decisions:` Never-embed safeguard остаётся как страховка, но больше не считается достаточным решением кейса `square attach/carry/pit`. Нужен отдельный attach/carry conflict resolver, где world collision имеет приоритет.
+- `Risks / Open Items:` Если сразу идти дальше по списку core stability, мы закрепим неверную основу для square mechanics. Следующий fix должен явно решать: рвётся ли attach, стопорится ли carried object или квадрат переводится в безопасную позу.
+- `Next Recommended Step:` Запустить новый внешний чат по задаче `Square Attach/Carry Invalid World Pose Resolution`, затем повторить ручной acceptance именно на этом reproduce-кейсе.
 
 ### Entry
 - `Date:` 2026-04-08
 - `Task:` Square Attach/Carry Invalid World Pose Resolution
 - `Status:` in_progress
-- `Summary:` Р’Рѕ РІРЅРµС€РЅРµРј С‡Р°С‚Рµ Р±Р°Рі РїРµСЂРµРѕРїСЂРµРґРµР»С‘РЅ С‚РѕС‡РЅРµРµ: РїСЂРѕР±Р»РµРјР° Р±С‹Р»Р° РЅРµ С‚РѕР»СЊРєРѕ РІ С„РёРЅР°Р»СЊРЅРѕРј embed, Р° РІ С‚РѕРј, С‡С‚Рѕ square attach-РїРѕР·Р° РїСЂРѕРґРѕР»Р¶Р°Р»Р° СЃС‡РёС‚Р°С‚СЊСЃСЏ РІР°Р»РёРґРЅРѕР№ РёР·-Р·Р° inset-РїСЂРѕРІРµСЂРєРё РІРјРµСЃС‚Рѕ РїСЂРѕРІРµСЂРєРё РїРѕР»РЅРѕР№ snapped rect-РїРѕР·С‹. Р’ РѕС‚РІРµС‚ РЅР° СЌС‚Рѕ РґРѕР±Р°РІР»РµРЅР° РїРѕР»РЅР°СЏ overlap-РІР°Р»РёРґР°С†РёСЏ attached pose Рё immediate break attach, РµСЃР»Рё С‚РµРєСѓС‰Р°СЏ attached-РїРѕР·Р° СѓР¶Рµ world-invalid. Р­С‚Рѕ СѓР¶Рµ Р±Р»РёР¶Рµ Рє СЂРµР°Р»СЊРЅРѕРјСѓ conflict resolution РјРµР¶РґСѓ attach/carry Рё world collision, РЅРѕ СЂСѓС‡РЅРѕР№ playtest РµС‰С‘ РЅРµ РїРѕРґС‚РІРµСЂР¶РґС‘РЅ.
+- `Summary:` Во внешнем чате баг переопределён точнее: проблема была не только в финальном embed, а в том, что square attach-поза продолжала считаться валидной из-за inset-проверки вместо проверки полной snapped rect-позы. В ответ на это добавлена полная overlap-валидация attached pose и immediate break attach, если текущая attached-поза уже world-invalid. Это уже ближе к реальному conflict resolution между attach/carry и world collision, но ручной playtest ещё не подтверждён.
 - `Files:`
   - `src/game/player/geometry/player_geometry_queries.ts`
   - `src/game/player/player_runtime.ts`
   - `src/game/player/player_square_runtime.ts`
-- `Manual Check:` `npm run build-nolog` РїСЂРѕС€С‘Р». Р СѓС‡РЅРѕР№ runtime playtest РїРѕ reproduce-РєРµР№СЃСѓ РёР· РІРёРґРµРѕ РµС‰С‘ РЅРµ РІС‹РїРѕР»РЅРµРЅ.
-- `Architecture Decisions:` Р”Р»СЏ square attach safety С‚РµРїРµСЂСЊ РґРµР№СЃС‚РІСѓРµС‚ Р±РѕР»РµРµ Р¶С‘СЃС‚РєРѕРµ РїСЂР°РІРёР»Рѕ: invalid world pose РЅРµ РјРѕР¶РµС‚ Р±С‹С‚СЊ РІС‹Р±СЂР°РЅР° РєР°Рє attach candidate, Р° СѓР¶Рµ СѓРґРµСЂР¶РёРІР°РµРјС‹Р№ attach РґРѕР»Р¶РµРЅ СЂРІР°С‚СЊСЃСЏ СЃСЂР°Р·Сѓ РїСЂРё world-invalid attached pose. Post-tick never-embed safeguard РѕСЃС‚Р°С‘С‚СЃСЏ РєР°Рє defensive layer, Р° РЅРµ РєР°Рє РѕСЃРЅРѕРІРЅРѕРµ СЂРµС€РµРЅРёРµ.
-- `Risks / Open Items:` РџРѕРєР° РЅРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ, РЅРµ СЃР»РѕРјР°РµС‚ Р»Рё СЌС‚Рѕ РѕР±С‹С‡РЅС‹Р№ wall/floor attach, attach hold Рё attach jump. РќРµ СЏСЃРЅРѕ, РґРѕСЃС‚Р°С‚РѕС‡РЅРѕ Р»Рё РѕРґРЅРѕРіРѕ break attach, РёР»Рё РІ С‡Р°СЃС‚Рё РєРµР№СЃРѕРІ РЅСѓР¶РЅРѕ РµС‰С‘ СЃС‚РѕРїРѕСЂРёС‚СЊ carried object.
-- `Next Recommended Step:` РџРѕРІС‚РѕСЂРёС‚СЊ СЂРѕРІРЅРѕ С‚РѕС‚ Р¶Рµ reproduce-РєРµР№СЃ РёР· РІРёРґРµРѕ. Р•СЃР»Рё Р±Р°Рі СѓС€С‘Р» Р±РµР· Р·Р°РјРµС‚РЅРѕР№ СЂРµРіСЂРµСЃСЃРёРё РѕР±С‹С‡РЅРѕРіРѕ attach-flow, РјРѕР¶РЅРѕ РїРµСЂРµРІРµСЃС‚Рё `Square Attach/Carry Invalid World Pose Resolution` РІ `done` Рё РІРµСЂРЅСѓС‚СЊ `Never Embed Contract` Рє `in_progress`/`done` РїРѕ С„Р°РєС‚РёС‡РµСЃРєРѕРјСѓ СЂРµР·СѓР»СЊС‚Р°С‚Сѓ.
+- `Manual Check:` `npm run build-nolog` прошёл. Ручной runtime playtest по reproduce-кейсу из видео ещё не выполнен.
+- `Architecture Decisions:` Для square attach safety теперь действует более жёсткое правило: invalid world pose не может быть выбрана как attach candidate, а уже удерживаемый attach должен рваться сразу при world-invalid attached pose. Post-tick never-embed safeguard остаётся как defensive layer, а не как основное решение.
+- `Risks / Open Items:` Пока не подтверждено, не сломает ли это обычный wall/floor attach, attach hold и attach jump. Не ясно, достаточно ли одного break attach, или в части кейсов нужно ещё стопорить carried object.
+- `Next Recommended Step:` Повторить ровно тот же reproduce-кейс из видео. Если баг ушёл без заметной регрессии обычного attach-flow, можно перевести `Square Attach/Carry Invalid World Pose Resolution` в `done` и вернуть `Never Embed Contract` к `in_progress`/`done` по фактическому результату.
 
 ### Entry
 - `Date:` 2026-04-08
-- `Task:` Square Attach/Carry Invalid World Pose Resolution вЂ” Second Manual Acceptance
+- `Task:` Square Attach/Carry Invalid World Pose Resolution — Second Manual Acceptance
 - `Status:` blocked
-- `Summary:` Р’С‚РѕСЂРѕРµ РІРёРґРµРѕ РїРѕРєР°Р·Р°Р»Рѕ, С‡С‚Рѕ РїСЂРѕР±Р»РµРјР° РІСЃС‘ РµС‰С‘ РЅРµ Р·Р°РєСЂС‹С‚Р°. РўРµРїРµСЂСЊ РІРёРґРЅРѕ Р±РѕР»РµРµ С‚РѕС‡РЅРѕ: РґР°Р¶Рµ РїРѕСЃР»Рµ СЂР°Р·РІРёС‚РёСЏ РєРѕРЅС„Р»РёРєС‚Р° Рё С„Р°РєС‚РёС‡РµСЃРєРѕРіРѕ СЂР°Р·СЂС‹РІР° СЃРІСЏР·РєРё СЃ РєРѕСЂРѕР±РєРѕР№ РєРІР°РґСЂР°С‚ РјРѕР¶РµС‚ РѕСЃС‚Р°С‚СЊСЃСЏ РІ РїР»РѕС…РѕР№ С„РёРЅР°Р»СЊРЅРѕР№ world-РїРѕР·Рµ Сѓ РїРѕР»Р°/СЃС‚С‹РєР°. Р­С‚Рѕ СѓРєР°Р·С‹РІР°РµС‚, С‡С‚Рѕ РѕРґРЅРѕРіРѕ attach invalidation РЅРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ: РЅСѓР¶РµРЅ РѕС‚РґРµР»СЊРЅС‹Р№ СЂР°Р·Р±РѕСЂ РїРѕСЂСЏРґРєР° detach/depenetration Рё РїРѕРІРµРґРµРЅРёСЏ РІ multi-solid corner.
+- `Summary:` Второе видео показало, что проблема всё ещё не закрыта. Теперь видно более точно: даже после развития конфликта и фактического разрыва связки с коробкой квадрат может остаться в плохой финальной world-позе у пола/стыка. Это указывает, что одного attach invalidation недостаточно: нужен отдельный разбор порядка detach/depenetration и поведения в multi-solid corner.
 - `Files:`
   - `tmp/video_review/video2/contact_sheet_2_4_5s.png`
   - `tmp/video_review/video2/frame_09_4.00s.png`
   - `tmp/video_review/video2/frame_10_4.25s.png`
   - `tmp/video_review/video2/frame_11_4.50s.png`
-- `Manual Check:` РќРѕРІРѕРµ РІРёРґРµРѕ СЂР°Р·РѕР±СЂР°РЅРѕ РїРѕРєР°РґСЂРѕРІРѕ. РќР° `4.25s` РІРёРґРЅРѕ, С‡С‚Рѕ carried object СѓР¶Рµ СѓС€С‘Р» РІРІРµСЂС…, Р° square РІСЃС‘ РµС‰С‘ РѕСЃС‚Р°С‘С‚СЃСЏ РІ РЅРµРІРµСЂРЅРѕР№ С„РёРЅР°Р»СЊРЅРѕР№ РїРѕР·Рµ.
-- `Architecture Decisions:` Р‘Р°Рі С‚РµРїРµСЂСЊ РЅСѓР¶РЅРѕ СЃС‡РёС‚Р°С‚СЊ РґРІСѓС…СЃР»РѕР№РЅС‹Рј: 1) attach/carry conflict resolution; 2) РєРѕСЂСЂРµРєС‚РЅР°СЏ depenetration/escape РёР· multi-solid corner РїРѕСЃР»Рµ РєРѕРЅС„Р»РёРєС‚Р°. Р­С‚Рё СЃР»РѕРё РЅР°РґРѕ С‡РёРЅРёС‚СЊ СЂР°Р·РґРµР»СЊРЅРѕ.
-- `Risks / Open Items:` Р•СЃР»Рё СЃР»РµРґСѓСЋС‰РёР№ fix СЃРЅРѕРІР° РїРѕРїС‹С‚Р°РµС‚СЃСЏ Р»РµС‡РёС‚СЊ РІСЃС‘ РѕРґРЅРѕР№ РѕР±С‰РµР№ СЃС‚СЂР°С…РѕРІРєРѕР№, РјС‹ РїРѕС‚РµСЂСЏРµРј РІСЂРµРјСЏ. РќСѓР¶РµРЅ СѓР·РєРёР№ task РЅР° deterministic escape vector Рё РїРѕСЂСЏРґРѕРє detach/depenetration.
-- `Next Recommended Step:` РџРѕРґРіРѕС‚РѕРІРёС‚СЊ РЅРѕРІС‹Р№ РІРЅРµС€РЅРёР№ С‡Р°С‚ РЅР° Р·Р°РґР°С‡Сѓ `Square Multi-Solid Depenetration and Detach Ordering`, РѕРїРёСЂР°СЏСЃСЊ РЅР° РѕР±Р° РІРёРґРµРѕ Рё СѓР¶Рµ РІРЅРµСЃС‘РЅРЅС‹Рµ partial fixes.
+- `Manual Check:` Новое видео разобрано покадрово. На `4.25s` видно, что carried object уже ушёл вверх, а square всё ещё остаётся в неверной финальной позе.
+- `Architecture Decisions:` Баг теперь нужно считать двухслойным: 1) attach/carry conflict resolution; 2) корректная depenetration/escape из multi-solid corner после конфликта. Эти слои надо чинить раздельно.
+- `Risks / Open Items:` Если следующий fix снова попытается лечить всё одной общей страховкой, мы потеряем время. Нужен узкий task на deterministic escape vector и порядок detach/depenetration.
+- `Next Recommended Step:` Подготовить новый внешний чат на задачу `Square Multi-Solid Depenetration and Detach Ordering`, опираясь на оба видео и уже внесённые partial fixes.
 
 ### Entry
 - `Date:` 2026-04-08
 - `Task:` Square Multi-Solid Depenetration and Detach Ordering
 - `Status:` in_progress
-- `Summary:` Р’Рѕ РІРЅРµС€РЅРµРј С‡Р°С‚Рµ РґРѕР±Р°РІР»РµРЅ РµС‰С‘ РѕРґРёРЅ СЃР»РѕР№ square-fix РІ `player_runtime.ts`: snapshot РґРѕ С‚РёРєР°, РїР°РјСЏС‚СЊ Рѕ `lastValidSquarePose`, directed escape РёР· multi-solid corner Рё Р¶С‘СЃС‚РєРёР№ РїРѕСЂСЏРґРѕРє `detach -> body reset/depenetration -> velocity cleanup`. Р­С‚Рѕ СѓР¶Рµ Р°РґСЂРµСЃСѓРµС‚ РёРјРµРЅРЅРѕ РѕСЃС‚Р°С‚РѕС‡РЅС‹Р№ РєРµР№СЃ РёР· РІС‚РѕСЂРѕРіРѕ РІРёРґРµРѕ, РіРґРµ carry-РєРѕРЅС„Р»РёРєС‚ С„Р°РєС‚РёС‡РµСЃРєРё СЂР°СЃРїР°Р»СЃСЏ, РЅРѕ square РѕСЃС‚Р°РІР°Р»СЃСЏ РІ РїР»РѕС…РѕР№ С„РёРЅР°Р»СЊРЅРѕР№ РїРѕР·Рµ. Р СѓС‡РЅРѕР№ reproduce РїРѕСЃР»Рµ СЌС‚РѕРіРѕ РёР·РјРµРЅРµРЅРёСЏ РµС‰С‘ РЅРµ РІС‹РїРѕР»РЅРµРЅ.
+- `Summary:` Во внешнем чате добавлен ещё один слой square-fix в `player_runtime.ts`: snapshot до тика, память о `lastValidSquarePose`, directed escape из multi-solid corner и жёсткий порядок `detach -> body reset/depenetration -> velocity cleanup`. Это уже адресует именно остаточный кейс из второго видео, где carry-конфликт фактически распался, но square оставался в плохой финальной позе. Ручной reproduce после этого изменения ещё не выполнен.
 - `Files:`
   - `src/game/player/player_runtime.ts`
-- `Manual Check:` `npm run build-nolog` РїСЂРѕС€С‘Р». Р СѓС‡РЅРѕР№ playtest РїРѕ РІС‚РѕСЂРѕРјСѓ РІРёРґРµРѕ-РєРµР№СЃСѓ РµС‰С‘ РЅРµ РІС‹РїРѕР»РЅРµРЅ.
-- `Architecture Decisions:` Р”Р»СЏ square conflict resolution С‚РµРїРµСЂСЊ РґРѕРїСѓСЃС‚РёРј deterministic preferred escape direction РІРјРµСЃС‚Рѕ С‡РёСЃС‚Рѕ РјРёРЅРёРјР°Р»СЊРЅРѕР№ РѕСЃРµРІРѕР№ РєРѕСЂСЂРµРєС†РёРё. РСЃС‚РѕС‡РЅРёРєРё РїСЂРёРѕСЂРёС‚РµС‚Р°: attach normal РёР· pre-tick snapshot, `lastValidSquarePose`, support/contact normals, Р·Р°С‚РµРј С„РёРєСЃРёСЂРѕРІР°РЅРЅС‹Р№ fallback order.
-- `Risks / Open Items:` РџРѕРєР° РЅРµ РїРѕРґС‚РІРµСЂР¶РґРµРЅРѕ, С‡С‚Рѕ directed escape РЅРµ СЃРѕР·РґР°СЃС‚ СЂРµРіСЂРµСЃСЃРёРё РЅР° РѕР±С‹С‡РЅРѕРј attach-flow Рё РІР°Р»РёРґРЅС‹С… СѓРіР»РѕРІС‹С… СЃС†РµРЅР°СЂРёСЏС…. Р•СЃР»Рё reproduce РІСЃС‘ РµС‰С‘ РѕСЃС‚Р°РЅРµС‚СЃСЏ, СЃР»РµРґСѓСЋС‰РёРј СЃР»РѕРµРј РїСЂРёРґС‘С‚СЃСЏ СЃРјРѕС‚СЂРµС‚СЊ РЅРµ С‚РѕР»СЊРєРѕ depenetration, РЅРѕ Рё СЃР°Рј РїРѕСЂСЏРґРѕРє world/player update РІРѕРєСЂСѓРі drag box Рё moving support.
-- `Next Recommended Step:` РџРѕРІС‚РѕСЂРёС‚СЊ РёРјРµРЅРЅРѕ РІС‚РѕСЂРѕР№ РІРёРґРµРѕ-РєРµР№СЃ. Р•СЃР»Рё Р±Р°Рі СѓС€С‘Р», Р·Р°РєСЂС‹С‚СЊ `Square Multi-Solid Depenetration and Detach Ordering` Рё Р·Р°С‚РµРј РїСЂРѕРІРµСЂРёС‚СЊ, РјРѕР¶РЅРѕ Р»Рё СЃС‡РёС‚Р°С‚СЊ `Never Embed Contract` Р·Р°РєСЂС‹С‚С‹Рј С…РѕС‚СЏ Р±С‹ РґР»СЏ square Arcade-path. Р•СЃР»Рё Р±Р°Рі Р¶РёРІ вЂ” РґРµР»Р°С‚СЊ С‡РµС‚РІС‘СЂС‚С‹Р№ СЂР°Р·Р±РѕСЂ СѓР¶Рµ РїРѕ update ordering / support ownership.
+- `Manual Check:` `npm run build-nolog` прошёл. Ручной playtest по второму видео-кейсу ещё не выполнен.
+- `Architecture Decisions:` Для square conflict resolution теперь допустим deterministic preferred escape direction вместо чисто минимальной осевой коррекции. Источники приоритета: attach normal из pre-tick snapshot, `lastValidSquarePose`, support/contact normals, затем фиксированный fallback order.
+- `Risks / Open Items:` Пока не подтверждено, что directed escape не создаст регрессии на обычном attach-flow и валидных угловых сценариях. Если reproduce всё ещё останется, следующим слоем придётся смотреть не только depenetration, но и сам порядок world/player update вокруг drag box и moving support.
+- `Next Recommended Step:` Повторить именно второй видео-кейс. Если баг ушёл, закрыть `Square Multi-Solid Depenetration and Detach Ordering` и затем проверить, можно ли считать `Never Embed Contract` закрытым хотя бы для square Arcade-path. Если баг жив — делать четвёртый разбор уже по update ordering / support ownership.
 
 ### Entry
 - `Date:` 2026-04-08
 - `Task:` Square Attach Face Snap Regression on Moving Supports
 - `Status:` todo
-- `Summary:` РџРѕСЃР»Рµ РїРѕСЃР»РµРґРЅРёС… square fix-РѕРІ РїРѕСЏРІРёР»Р°СЃСЊ РЅРѕРІР°СЏ СЂРµРіСЂРµСЃСЃРёСЏ: РїСЂРё attach Рє РґРІРёР¶СѓС‰РµРјСѓСЃСЏ РѕР±СЉРµРєС‚Сѓ РєРІР°РґСЂР°С‚ СЃРјРµС‰Р°РµС‚СЃСЏ Рє СѓРіР»Сѓ support body РІРјРµСЃС‚Рѕ РѕР¶РёРґР°РµРјРѕРіРѕ face-snap. РџРѕ РєРѕРґСѓ СЌС‚Рѕ Р±РѕР»СЊС€Рµ РїРѕС…РѕР¶Рµ РЅР° РїРѕР±РѕС‡РЅС‹Р№ СЌС„С„РµРєС‚ СѓР¶РµСЃС‚РѕС‡С‘РЅРЅРѕР№ pose validation, С‡РµРј РЅР° РёСЃС…РѕРґРЅС‹Р№ `pit/carry` Р±Р°Рі.
+- `Summary:` После последних square fix-ов появилась новая регрессия: при attach к движущемуся объекту квадрат смещается к углу support body вместо ожидаемого face-snap. По коду это больше похоже на побочный эффект ужесточённой pose validation, чем на исходный `pit/carry` баг.
 - `Files:`
   - `src/game/player/geometry/player_geometry_queries.ts`
   - `src/game/player/player_runtime.ts`
   - `src/game/player/player_square_runtime.ts`
-- `Manual Check:` РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІСЂСѓС‡РЅСѓСЋ РїРѕРґС‚РІРµСЂРґРёР» РІРёР·СѓР°Р»СЊРЅС‹Р№ СЃРёРјРїС‚РѕРј РЅР° moving object side contact.
-- `Architecture Decisions:` Р­С‚Сѓ СЂРµРіСЂРµСЃСЃРёСЋ РЅСѓР¶РЅРѕ С‡РёРЅРёС‚СЊ РѕС‚РґРµР»СЊРЅРѕ РѕС‚ `Square Multi-Solid Depenetration and Detach Ordering`, РёРЅР°С‡Рµ РјС‹ Р±СѓРґРµРј СЃРјРµС€РёРІР°С‚СЊ РґРІР° СЂР°Р·РЅС‹С… РєР»Р°СЃСЃР° square bugs.
-- `Risks / Open Items:` Р“Р»Р°РІРЅС‹Р№ СЂРёСЃРє вЂ” РїРѕРїС‹С‚Р°С‚СЊСЃСЏ РѕСЃР»Р°Р±РёС‚СЊ РЅРѕРІС‹Рµ safety fixes СЃР»РёС€РєРѕРј С€РёСЂРѕРєРѕ Рё РІРµСЂРЅСѓС‚СЊ РёСЃС…РѕРґРЅС‹Р№ corner/pit bug. РЎР»РµРґСѓСЋС‰РёР№ fix РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ СѓР·РєРёРј Рё РІРѕР·РІСЂР°С‰Р°С‚СЊ normal face-snap Р±РµР· РѕС‚РєР°С‚Р° collision safety.
-- `Next Recommended Step:` Р—Р°РїСѓСЃС‚РёС‚СЊ РЅРѕРІС‹Р№ РІРЅРµС€РЅРёР№ С‡Р°С‚ РїРѕ Р·Р°РґР°С‡Рµ `Square Attach Face Snap Regression on Moving Supports`.
+- `Manual Check:` Пользователь вручную подтвердил визуальный симптом на moving object side contact.
+- `Architecture Decisions:` Эту регрессию нужно чинить отдельно от `Square Multi-Solid Depenetration and Detach Ordering`, иначе мы будем смешивать два разных класса square bugs.
+- `Risks / Open Items:` Главный риск — попытаться ослабить новые safety fixes слишком широко и вернуть исходный corner/pit bug. Следующий fix должен быть узким и возвращать normal face-snap без отката collision safety.
+- `Next Recommended Step:` Запустить новый внешний чат по задаче `Square Attach Face Snap Regression on Moving Supports`.
 
 ### Entry
 - `Date:` 2026-04-08
 - `Task:` Square Architecture Reframe
 - `Status:` in_progress
-- `Summary:` РџРѕСЃР»Рµ РїРѕРІС‚РѕСЂСЏСЋС‰РёС…СЃСЏ square regressions РїСЂРёРЅСЏС‚Рѕ Р±РѕР»РµРµ С‡РёСЃС‚РѕРµ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅРѕРµ СЂРµС€РµРЅРёРµ: РЅРµ Р»РµС‡РёС‚СЊ attach/carry Р±Р°РіРё post-tick depenetration Рё directed escape-Р»РѕРіРёРєРѕР№, Р° РІРµСЂРЅСѓС‚СЊ authority РјРёСЂСѓ Рё attach-pose validation. РР· `player_runtime.ts` СѓРґР°Р»С‘РЅ СЃР»РѕР№ `enforceNeverEmbedContract`, РїР°РјСЏС‚СЊ `lastValidSquarePose` Рё РІСЃСЏ Р»РѕРіРёРєР° forced escape РїРѕСЃР»Рµ С‚РёРєР°. Р’ `resolveSquarePoseClear(...)` СЃРѕС…СЂР°РЅРµРЅР° РїРѕР»РЅР°СЏ РїСЂРѕРІРµСЂРєР° snapped rect РїСЂРѕС‚РёРІ foreign solids, РЅРѕ support body Р±РѕР»СЊС€Рµ РЅРµ СЃС‡РёС‚Р°РµС‚СЃСЏ РєРѕРЅС„Р»РёРєС‚РѕРј, Р° corner-allowance hack СѓР±СЂР°РЅ.
+- `Summary:` После повторяющихся square regressions принято более чистое архитектурное решение: не лечить attach/carry баги post-tick depenetration и directed escape-логикой, а вернуть authority миру и attach-pose validation. Из `player_runtime.ts` удалён слой `enforceNeverEmbedContract`, память `lastValidSquarePose` и вся логика forced escape после тика. В `resolveSquarePoseClear(...)` сохранена полная проверка snapped rect против foreign solids, но support body больше не считается конфликтом, а corner-allowance hack убран.
 - `Files:`
   - `src/game/player/player_runtime.ts`
   - `src/game/player/geometry/player_geometry_queries.ts`
-- `Manual Check:` `npm run build-nolog` РїСЂРѕС€С‘Р». Р СѓС‡РЅРѕР№ runtime playtest РїРѕСЃР»Рµ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅРѕРіРѕ СѓРїСЂРѕС‰РµРЅРёСЏ РµС‰С‘ РЅРµ РІС‹РїРѕР»РЅРµРЅ.
-- `Architecture Decisions:` РќРѕРІС‹Р№ Р±Р°Р·РѕРІС‹Р№ РєРѕРЅС‚СЂР°РєС‚: square РЅРµ РґРѕР»Р¶РµРЅ РЅР°СЃРёР»СЊСЃС‚РІРµРЅРЅРѕ "РёСЃРїСЂР°РІР»СЏС‚СЊСЃСЏ" РїРѕСЃР»Рµ С‚РёРєР° С‡РµСЂРµР· РєРѕРѕСЂРґРёРЅР°С‚РЅС‹Рµ РєРѕСЂСЂРµРєС†РёРё. Attach РјРѕР¶РµС‚ РєРѕРјРјРёС‚РёС‚СЊСЃСЏ С‚РѕР»СЊРєРѕ РІ РІР°Р»РёРґРЅСѓСЋ pose; РµСЃР»Рё pose РЅРµРІР°Р»РёРґРЅР°, attach РґРѕР»Р¶РµРЅ СЂРІР°С‚СЊСЃСЏ РёР»Рё РЅРµ РЅР°С‡РёРЅР°С‚СЊСЃСЏ, Р° authoritative collision РѕСЃС‚Р°С‘С‚СЃСЏ Сѓ РјРёСЂР°/physics.
-- `Risks / Open Items:` Р’РѕР·РјРѕР¶РЅРѕ, СЌС‚Рѕ СЃРЅРѕРІР° РѕС‚РєСЂРѕРµС‚ С‡Р°СЃС‚СЊ РёСЃС…РѕРґРЅРѕРіРѕ `pit/carry` РєРµР№СЃР°, РЅРѕ Р·Р°С‚Рѕ СѓР±РµСЂС‘С‚ РЅР°РєРѕРїРёРІС€РёРµСЃСЏ СЂРµРіСЂРµСЃСЃРёРё РѕС‚ symptom-driven fixes. РЎР»РµРґСѓСЋС‰РёР№ С€Р°Рі вЂ” РїСЂРѕРІРµСЂРёС‚СЊ РѕР±Р° РєР»Р°СЃСЃР° square РєРµР№СЃРѕРІ: attach face-snap Рё original attach/carry/pit.
-- `Next Recommended Step:` Р СѓС‡РЅРѕР№ playtest РїРѕ РґРІСѓРј СЃС†РµРЅР°СЂРёСЏРј: 1) moving support face attach; 2) РёСЃС…РѕРґРЅС‹Р№ attach/carry/pit reproduce. РџРѕ СЂРµР·СѓР»СЊС‚Р°С‚Сѓ СЂРµС€Р°С‚СЊ, РЅСѓР¶РЅР° Р»Рё РµС‰С‘ РѕРґРЅР° С‚РѕС‡РµС‡РЅР°СЏ square fix-РёС‚РµСЂР°С†РёСЏ.
+- `Manual Check:` `npm run build-nolog` прошёл. Ручной runtime playtest после архитектурного упрощения ещё не выполнен.
+- `Architecture Decisions:` Новый базовый контракт: square не должен насильственно "исправляться" после тика через координатные коррекции. Attach может коммититься только в валидную pose; если pose невалидна, attach должен рваться или не начинаться, а authoritative collision остаётся у мира/physics.
+- `Risks / Open Items:` Возможно, это снова откроет часть исходного `pit/carry` кейса, но зато уберёт накопившиеся регрессии от symptom-driven fixes. Следующий шаг — проверить оба класса square кейсов: attach face-snap и original attach/carry/pit.
+- `Next Recommended Step:` Ручной playtest по двум сценариям: 1) moving support face attach; 2) исходный attach/carry/pit reproduce. По результату решать, нужна ли ещё одна точечная square fix-итерация.
 
 ### Entry
 - `Date:` 2026-04-08
-- `Task:` Square Architecture Reframe вЂ” Clean Collision Follow-up
+- `Task:` Square Architecture Reframe — Clean Collision Follow-up
 - `Status:` in_progress
-- `Summary:` РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ СЏРІРЅРѕ РѕС‚РІРµСЂРі РІРµС‚РєСѓ СЃ post-tick forced reposition/depenetration РєР°Рє РЅРµРїСЂР°РІРёР»СЊРЅРѕРµ Р°СЂС…РёС‚РµРєС‚СѓСЂРЅРѕРµ СЂРµС€РµРЅРёРµ. РђРєС‚СѓР°Р»СЊРЅР°СЏ square-СЃС‚СЂР°С‚РµРіРёСЏ С‚РµРїРµСЂСЊ С„РѕСЂРјСѓР»РёСЂСѓРµС‚СЃСЏ Р¶С‘СЃС‚РєРѕ: РјРёСЂ РѕСЃС‚Р°С‘С‚СЃСЏ authoritative, square РЅРµ РґРѕР»Р¶РµРЅ "Р»РµС‡РёС‚СЊСЃСЏ" РїРµСЂРµСЃС‡С‘С‚РѕРј РєРѕРѕСЂРґРёРЅР°С‚ РїРѕСЃР»Рµ С„Р°РєС‚Р°, attach РґРѕР»Р¶РµРЅ Р»РёР±Рѕ РєРѕРјРјРёС‚РёС‚СЊСЃСЏ С‚РѕР»СЊРєРѕ РІ РІР°Р»РёРґРЅСѓСЋ pose, Р»РёР±Рѕ РЅРµРјРµРґР»РµРЅРЅРѕ СЂРІР°С‚СЊСЃСЏ. Р”РѕРїРѕР»РЅРёС‚РµР»СЊРЅС‹Р№ regression fix РЅР° `corner-strip foreign overlap allowance` С‚РѕР¶Рµ СѓР±СЂР°РЅ, РїРѕС‚РѕРјСѓ С‡С‚Рѕ РѕРЅ РїСЂРёРІРѕРґРёР» Рє РЅРµРѕРґРЅРѕР·РЅР°С‡РЅРѕРјСѓ face/corner РїРѕРІРµРґРµРЅРёСЋ.
+- `Summary:` Пользователь явно отверг ветку с post-tick forced reposition/depenetration как неправильное архитектурное решение. Актуальная square-стратегия теперь формулируется жёстко: мир остаётся authoritative, square не должен "лечиться" пересчётом координат после факта, attach должен либо коммититься только в валидную pose, либо немедленно рваться. Дополнительный regression fix на `corner-strip foreign overlap allowance` тоже убран, потому что он приводил к неоднозначному face/corner поведению.
 - `Files:`
   - `src/game/player/player_runtime.ts`
   - `src/game/player/geometry/player_geometry_queries.ts`
   - `src/game/player/player_square_runtime.ts`
-- `Manual Check:` `npm run build-nolog` РїСЂРѕС€С‘Р» РїРѕСЃР»Рµ СѓРїСЂРѕС‰РµРЅРёСЏ. РќРѕРІС‹Р№ СЂСѓС‡РЅРѕР№ playtest РµС‰С‘ РЅРµ Р·Р°РЅРµСЃС‘РЅ.
-- `Architecture Decisions:` Directed escape, `lastValidSquarePose`, post-tick never-embed correction Рё corner-allowance hacks СЃС‡РёС‚Р°СЋС‚СЃСЏ РѕС‚РІРµСЂРіРЅСѓС‚РѕР№ symptom-driven РІРµС‚РєРѕР№. РљР°РЅРѕРЅРёС‡РµСЃРєРёР№ РїСѓС‚СЊ: `valid attach pose or detach`, Р±РµР· forced body reset РєР°Рє Р±Р°Р·РѕРІРѕР№ square-РјРµС…Р°РЅРёРєРё.
-- `Risks / Open Items:` Р’РѕР·РјРѕР¶РЅРѕ, attach/carry/pit Р±Р°Рі С‡Р°СЃС‚РёС‡РЅРѕ РІРµСЂРЅС‘С‚СЃСЏ СѓР¶Рµ Р±РµР· СЃРёРјРїС‚РѕРјР°С‚РёС‡РµСЃРєРёС… РїРѕРґРїРѕСЂРѕРє; РµСЃР»Рё СЌС‚Рѕ СЃР»СѓС‡РёС‚СЃСЏ, СЃР»РµРґСѓСЋС‰РёР№ fix РґРѕР»Р¶РµРЅ РёРґС‚Рё РІ attach/runtime ordering, Р° РЅРµ РІ РЅРѕРІС‹Р№ СЃР»РѕР№ РєРѕРѕСЂРґРёРЅР°С‚РЅС‹С… РєРѕСЂСЂРµРєС†РёР№.
-- `Next Recommended Step:` РџСЂРѕРІРµСЂРёС‚СЊ РґРІР° СЃС†РµРЅР°СЂРёСЏ РїРѕСЃР»Рµ reframe: 1) face-snap РЅР° moving platform/drag box; 2) РёСЃС…РѕРґРЅС‹Р№ attach/carry/pit reproduce. РўРѕР»СЊРєРѕ РїРѕСЃР»Рµ СЌС‚РѕРіРѕ СЂРµС€Р°С‚СЊ, РЅСѓР¶РЅР° Р»Рё РµС‰С‘ РѕРґРЅР° РІРЅРµС€РЅСЏСЏ square-Р·Р°РґР°С‡Р°.
+- `Manual Check:` `npm run build-nolog` прошёл после упрощения. Новый ручной playtest ещё не занесён.
+- `Architecture Decisions:` Directed escape, `lastValidSquarePose`, post-tick never-embed correction и corner-allowance hacks считаются отвергнутой symptom-driven веткой. Канонический путь: `valid attach pose or detach`, без forced body reset как базовой square-механики.
+- `Risks / Open Items:` Возможно, attach/carry/pit баг частично вернётся уже без симптоматических подпорок; если это случится, следующий fix должен идти в attach/runtime ordering, а не в новый слой координатных коррекций.
+- `Next Recommended Step:` Проверить два сценария после reframe: 1) face-snap на moving platform/drag box; 2) исходный attach/carry/pit reproduce. Только после этого решать, нужна ли ещё одна внешняя square-задача.
 
 ### Entry
 - `Date:` 2026-04-08
 - `Task:` Square Attach Commit Path Collision Hypothesis
 - `Status:` in_progress
-- `Summary:` РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІС‹РґРІРёРЅСѓР» Р±РѕР»РµРµ СЃРёР»СЊРЅСѓСЋ РіРёРїРѕС‚РµР·Сѓ: square РјРѕР¶РµС‚ РїСЂРѕС…РѕРґРёС‚СЊ РІ РЅРµРІР°Р»РёРґРЅСѓСЋ world-РїРѕР·Сѓ РЅРµ РїРѕС‚РѕРјСѓ, С‡С‚Рѕ РЅРµРІРµСЂРЅРѕ РІР°Р»РёРґРёСЂСѓРµС‚СЃСЏ РєРѕРЅРµС‡РЅР°СЏ attach-pose, Р° РїРѕС‚РѕРјСѓ, С‡С‚Рѕ РІРѕ РІСЂРµРјСЏ attach commit РёР»Рё РІРѕР·РІСЂР°С‚Р° attach-jump РІСЂРµРјРµРЅРЅРѕ РёРіРЅРѕСЂРёСЂСѓРµС‚СЃСЏ collision Рё РЅРµ РїСЂРѕРІРµСЂСЏРµС‚СЃСЏ СЃР°Рј РїСѓС‚СЊ РґРѕ snapped pose. Р­С‚Рѕ СЃРјРµС‰Р°РµС‚ С„РѕРєСѓСЃ СЃ `pose clear` РЅР° `commit path collision gating`.
+- `Summary:` Пользователь выдвинул более сильную гипотезу: square может проходить в невалидную world-позу не потому, что неверно валидируется конечная attach-pose, а потому, что во время attach commit или возврата attach-jump временно игнорируется collision и не проверяется сам путь до snapped pose. Это смещает фокус с `pose clear` на `commit path collision gating`.
 - `Files:`
   - `src/game/player/player_square_attach.ts`
   - `src/game/player/player_square_attach_jump.ts`
   - `src/game/player/player_square_runtime.ts`
   - `src/game/player/player_runtime.ts`
-- `Manual Check:` Р“РёРїРѕС‚РµР·Р° РІС‹РґРІРёРЅСѓС‚Р° РїРѕСЃР»Рµ СЂСѓС‡РЅРѕРіРѕ РЅР°Р±Р»СЋРґРµРЅРёСЏ С‚РµРєСѓС‰РµРіРѕ РїРѕРІРµРґРµРЅРёСЏ; РѕС‚РґРµР»СЊРЅС‹Р№ РєРѕРґРѕРІС‹Р№ СЂР°Р·Р±РѕСЂ path collision РµС‰С‘ РЅРµ РїСЂРѕРІРµРґС‘РЅ РІ РЅРѕРІРѕРј РІРЅРµС€РЅРµРј С‡Р°С‚Рµ.
-- `Architecture Decisions:` Р•СЃР»Рё РіРёРїРѕС‚РµР·Р° РїРѕРґС‚РІРµСЂРґРёС‚СЃСЏ, РїСЂР°РІРёР»СЊРЅС‹Р№ fix РґРѕР»Р¶РµРЅ Р±С‹С‚СЊ РЅРµ РІ РѕС‡РµСЂРµРґРЅРѕРј post-factum reposition, Р° РІ С‚РѕРј, С‡С‚РѕР±С‹ attach/snap РЅРµ РєРѕРјРјРёС‚РёР»СЃСЏ С‡РµСЂРµР· wall/floor/ceiling РІРѕРѕР±С‰Рµ. РњРёСЂ РѕСЃС‚Р°С‘С‚СЃСЏ authoritative РЅРµ С‚РѕР»СЊРєРѕ РІ С„РёРЅР°Р»СЊРЅРѕР№ РїРѕР·Рµ, РЅРѕ Рё РЅР° С‚СЂР°РµРєС‚РѕСЂРёРё attach commit.
-- `Risks / Open Items:` Р’РѕР·РјРѕР¶РµРЅ СЃС†РµРЅР°СЂРёР№, РіРґРµ path collision Рё pose validation РѕР±Р° РІРЅРѕСЃСЏС‚ РІРєР»Р°Рґ. РќРµР»СЊР·СЏ СЃРЅРѕРІР° СЃРјРµС€Р°С‚СЊ РёС… РІ РѕРґРёРЅ Р±РѕР»СЊС€РѕР№ fix Р±РµР· РґРѕРєР°Р·Р°С‚РµР»СЊСЃС‚РІ. РЎР»РµРґСѓСЋС‰РёР№ РІРЅРµС€РЅРёР№ С‡Р°С‚ РґРѕР»Р¶РµРЅ С†РµР»РµРЅР°РїСЂР°РІР»РµРЅРЅРѕ РїСЂРѕРІРµСЂРёС‚СЊ `checkCollision.none`, `reset(...)`, snap ordering Рё sweep/path semantics.
-- `Next Recommended Step:` Р—Р°РїСѓСЃС‚РёС‚СЊ РѕС‚РґРµР»СЊРЅС‹Р№ РІРЅРµС€РЅРёР№ С‡Р°С‚ РїРѕ Р·Р°РґР°С‡Рµ `Square Attach Commit Path Collision`, Р° Р·Р°С‚РµРј СЃРІРµСЂРёС‚СЊ СЂРµР·СѓР»СЊС‚Р°С‚ СЃ РґРІСѓРјСЏ СЂСѓС‡РЅС‹РјРё СЃС†РµРЅР°СЂРёСЏРјРё: normal face-snap Рё attach/carry/pit reproduce.
+- `Manual Check:` Гипотеза выдвинута после ручного наблюдения текущего поведения; отдельный кодовый разбор path collision ещё не проведён в новом внешнем чате.
+- `Architecture Decisions:` Если гипотеза подтвердится, правильный fix должен быть не в очередном post-factum reposition, а в том, чтобы attach/snap не коммитился через wall/floor/ceiling вообще. Мир остаётся authoritative не только в финальной позе, но и на траектории attach commit.
+- `Risks / Open Items:` Возможен сценарий, где path collision и pose validation оба вносят вклад. Нельзя снова смешать их в один большой fix без доказательств. Следующий внешний чат должен целенаправленно проверить `checkCollision.none`, `reset(...)`, snap ordering и sweep/path semantics.
+- `Next Recommended Step:` Запустить отдельный внешний чат по задаче `Square Attach Commit Path Collision`, а затем сверить результат с двумя ручными сценариями: normal face-snap и attach/carry/pit reproduce.
 
 ### Entry
 - `Date:` 2026-04-08
 - `Task:` Square Corner Passive Drift Clamp
 - `Status:` done
-- `Summary:` Р’ С…РѕРґРµ РЅРµСЃРєРѕР»СЊРєРёС… РёС‚РµСЂР°С†РёР№ РІС‹СЏСЃРЅРёР»РѕСЃСЊ, С‡С‚Рѕ external-corner bug РѕР±СЉСЏСЃРЅСЏР»СЃСЏ РЅРµ С‚РѕР»СЊРєРѕ active slide input Рё РЅРµ С‚РѕР»СЊРєРѕ path collision, Р° РµС‰С‘ Рё РїР°СЃСЃРёРІРЅС‹Рј attached drift: РєРІР°РґСЂР°С‚ РјРѕРі РґРѕРµР·Р¶Р°С‚СЊ РґРѕ СЃР°РјРѕРіРѕ СЃС‚С‹РєР° РґР°Р¶Рµ Р±РµР· РєРѕСЂСЂРµРєС‚РЅРѕРіРѕ rollover intent. РџРѕРїС‹С‚РєРё Р»РµС‡РёС‚СЊ СЌС‚Рѕ С‡РµСЂРµР· velocity clamp, projected query Рё corner-stop guard Р±С‹Р»Рё РЅРµСЃС‚Р°Р±РёР»СЊРЅС‹, РїРѕС‚РѕРјСѓ С‡С‚Рѕ РѕРЅРё СЂР°Р±РѕС‚Р°Р»Рё РїРѕРІРµСЂС… СѓР¶Рµ РїР»Р°РІР°СЋС‰РµР№ attach pose. Р Р°Р±РѕС‡РёРј СЂРµС€РµРЅРёРµРј СЃС‚Р°Р» Р±РѕР»РµРµ Р¶С‘СЃС‚РєРёР№ attach-runtime РєРѕРЅС‚СЂР°РєС‚: Р»СЋР±Р°СЏ attached pose РґРѕР»Р¶РЅР° СЃРѕС…СЂР°РЅСЏС‚СЊ РјРёРЅРёРјСѓРј `1/4` РєРѕРЅС‚Р°РєС‚Р° СЃ С‚РµРєСѓС‰РµР№ attach surface, РёРЅР°С‡Рµ pose РЅРµРјРµРґР»РµРЅРЅРѕ clamp'РёС‚СЃСЏ РЅР°Р·Р°Рґ РІРґРѕР»СЊ С‚РѕР№ Р¶Рµ РїРѕРІРµСЂС…РЅРѕСЃС‚Рё.
+- `Summary:` В ходе нескольких итераций выяснилось, что external-corner bug объяснялся не только active slide input и не только path collision, а ещё и пассивным attached drift: квадрат мог доезжать до самого стыка даже без корректного rollover intent. Попытки лечить это через velocity clamp, projected query и corner-stop guard были нестабильны, потому что они работали поверх уже плавающей attach pose. Рабочим решением стал более жёсткий attach-runtime контракт: любая attached pose должна сохранять минимум `1/4` контакта с текущей attach surface, иначе pose немедленно clamp'ится назад вдоль той же поверхности.
 - `Files:`
   - `src/game/player/player_square_runtime.ts`
   - `src/game/player/player_runtime.ts`
@@ -185,15 +185,15 @@
   - `docs/canon/the_form_feature_square_ru.md`
   - `docs/canon/the_form_orchestrator_state_ru.md`
   - `docs/canon/the_form_orchestrator_log_ru.md`
-- `Manual Check:` РџРѕР»СЊР·РѕРІР°С‚РµР»СЊ РІСЂСѓС‡РЅСѓСЋ РїРѕРґС‚РІРµСЂРґРёР», С‡С‚Рѕ РїРѕСЃР»Рµ РІРІРѕРґР° Р±РµР·СѓСЃР»РѕРІРЅРѕРіРѕ `1/4 contact clamp` РєРІР°РґСЂР°С‚ РїРµСЂРµСЃС‚Р°Р» РїР°СЃСЃРёРІРЅРѕ РґРѕРµР·Р¶Р°С‚СЊ РґРѕ СѓРіР»Р° РІ РїСЂРѕР±Р»РµРјРЅРѕРј СЃС†РµРЅР°СЂРёРё.
-- `Architecture Decisions:` Р”Р»СЏ РїРѕРґРѕР±РЅС‹С… square corner-bugs СЃРЅР°С‡Р°Р»Р° РЅСѓР¶РЅРѕ РѕС‚РґРµР»СЏС‚СЊ active slide intent РѕС‚ passive attached drift. Р•СЃР»Рё СЃРёРјРїС‚РѕРј РІРѕСЃРїСЂРѕРёР·РІРѕРґРёС‚СЃСЏ Р±РµР· РѕСЃРјС‹СЃР»РµРЅРЅРѕРіРѕ slide input, Р»РµС‡РёС‚СЊ velocity РЅРµРґРѕСЃС‚Р°С‚РѕС‡РЅРѕ: invariant РґРѕР»Р¶РµРЅ Р¶РёС‚СЊ РЅР° СѓСЂРѕРІРЅРµ active attached pose. Minimum-contact clamp СЃС‡РёС‚Р°РµС‚СЃСЏ РїРѕ current attached surface identity Рё РЅРµ РґРѕР»Р¶РµРЅ РїРµСЂРµРєРёРґС‹РІР°С‚СЊ square РЅР° СЃРѕСЃРµРґРЅСЋСЋ surface РІ СЃС‚С‹РєРµ.
-- `Risks / Open Items:` РќСѓР¶РЅРѕ СЃР»РµРґРёС‚СЊ, РЅРµ СЃРѕР·РґР°С‘С‚ Р»Рё СЌС‚РѕС‚ clamp РЅРѕРІС‹Рµ edge cases РЅР° moving supports РёР»Рё РІ РЅРµС‚РёРїРёС‡РЅС‹С… corner transitions. Р•СЃР»Рё РїРѕСЏРІРёС‚СЃСЏ РїРѕС…РѕР¶РёР№ Р±Р°Рі, СЃРЅР°С‡Р°Р»Р° РЅР°РґРѕ РїСЂРѕРІРµСЂСЏС‚СЊ, РЅР°СЂСѓС€РµРЅ Р»Рё minimum-contact invariant, Р° РЅРµ РІРѕР·РІСЂР°С‰Р°С‚СЊСЃСЏ Рє post-tick correction РёР»Рё СЃР»СѓС‡Р°Р№РЅС‹Рј overlap-based retarget.
-- `Next Recommended Step:` РџСЂРё СЃР»РµРґСѓСЋС‰РёС… square corner regressions СЃРЅР°С‡Р°Р»Р° РїСЂРѕРІРµСЂСЏС‚СЊ С‚СЂРё РІРµС‰Рё: 1) current attached surface identity; 2) minimum-contact invariant; 3) passive drift vs active slide path. РўРѕР»СЊРєРѕ РїРѕСЃР»Рµ СЌС‚РѕРіРѕ С‚СЂРѕРіР°С‚СЊ rollover branch logic.
+- `Manual Check:` Пользователь вручную подтвердил, что после ввода безусловного `1/4 contact clamp` квадрат перестал пассивно доезжать до угла в проблемном сценарии.
+- `Architecture Decisions:` Для подобных square corner-bugs сначала нужно отделять active slide intent от passive attached drift. Если симптом воспроизводится без осмысленного slide input, лечить velocity недостаточно: invariant должен жить на уровне active attached pose. Minimum-contact clamp считается по current attached surface identity и не должен перекидывать square на соседнюю surface в стыке.
+- `Risks / Open Items:` Нужно следить, не создаёт ли этот clamp новые edge cases на moving supports или в нетипичных corner transitions. Если появится похожий баг, сначала надо проверять, нарушен ли minimum-contact invariant, а не возвращаться к post-tick correction или случайным overlap-based retarget.
+- `Next Recommended Step:` При следующих square corner regressions сначала проверять три вещи: 1) current attached surface identity; 2) minimum-contact invariant; 3) passive drift vs active slide path. Только после этого трогать rollover branch logic.
 ### Entry
 - `Date:` 2026-04-08
 - `Task:` Campaign + Level Metadata
 - `Status:` done
-- `Summary:` Demo-level data РІС‹РЅРµСЃРµРЅС‹ РІ `campaign.json` Рё РѕС‚РґРµР»СЊРЅС‹Р№ level json, Р° `TestScene` С‚РµРїРµСЂСЊ СЃС‚Р°СЂС‚СѓРµС‚ РїРѕ `levelId` С‡РµСЂРµР· runtime registry. Р¤РѕСЂРјР°С‚ СѓСЂРѕРІРЅСЏ СЂР°СЃС€РёСЂРµРЅ `meta`, `worldBounds`, singleton `finish` Рё `nextLevelId`, РїСЂРё СЌС‚РѕРј СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРµ gameplay-РјР°СЃСЃРёРІС‹ СЃРѕС…СЂР°РЅРµРЅС‹ Р±РµР· РїРµСЂРµСЃС‚СЂРѕР№РєРё editor/runtime pipeline. Runtime/editor/camera Р±РѕР»СЊС€Рµ РЅРµ РѕРїРёСЂР°СЋС‚СЃСЏ РЅР° С„РёРєСЃРёСЂРѕРІР°РЅРЅС‹Рµ `TEST_WORLD_WIDTH/TEST_WORLD_HEIGHT`: bounds Р±РµСЂСѓС‚СЃСЏ РёР· level config, finish Р¶РёРІС‘С‚ РѕС‚РґРµР»СЊРЅС‹Рј world-slice, draft autosave РїСЂРёРІСЏР·Р°РЅ Рє `levelId`.
+- `Summary:` Demo-level data вынесены в `campaign.json` и отдельный level json, а `TestScene` теперь стартует по `levelId` через runtime registry. Формат уровня расширен `meta`, `worldBounds`, singleton `finish` и `nextLevelId`, при этом существующие gameplay-массивы сохранены без перестройки editor/runtime pipeline. Runtime/editor/camera больше не опираются на фиксированные `TEST_WORLD_WIDTH/TEST_WORLD_HEIGHT`: bounds берутся из level config, finish живёт отдельным world-slice, draft autosave привязан к `levelId`.
 - `Files:`
   - `src/game/world/runtime/data/campaign.json`
   - `src/game/world/runtime/data/levels/test_world_level_01.json`
@@ -210,16 +210,16 @@
   - `src/scenes/runtime/test_scene_runtime.ts`
   - `src/scenes/runtime/test_scene_frame_runtime.ts`
   - `tsconfig.json`
-- `Manual Check:` `npm run build-nolog` РїСЂРѕС€С‘Р». РћС‚РґРµР»СЊРЅС‹Р№ multi-level runtime smoke/playtest РµС‰С‘ РЅРµ РІС‹РїРѕР»РЅРµРЅ.
-- `Architecture Decisions:` Campaign backbone СЂРµР°Р»РёР·РѕРІР°РЅ РєР°Рє СѓР·РєРёР№ registry РїРѕРІРµСЂС… scene-first РїРѕС‚РѕРєР° `BootScene -> TestScene`, Р±РµР· main-menu flow Рё Р±РµР· giant controller. Finish РЅРµ СЃРјРµС€РёРІР°Р»СЃСЏ СЃ checkpoint/hazard logic: СЌС‚Рѕ РѕС‚РґРµР»СЊРЅС‹Р№ singleton trigger-РѕР±СЉРµРєС‚ Рё РѕС‚РґРµР»СЊРЅС‹Р№ overlap-slice РІ world runtime.
-- `Risks / Open Items:` Р’ campaign РїРѕРєР° С‚РѕР»СЊРєРѕ РѕРґРёРЅ СѓСЂРѕРІРµРЅСЊ, РїРѕСЌС‚РѕРјСѓ Р¶РёРІРѕР№ РїРµСЂРµС…РѕРґ `finish -> nextLevelId` РєРѕРґРѕРј РїРѕРґРіРѕС‚РѕРІР»РµРЅ, РЅРѕ РµС‰С‘ РЅРµ РїСЂРѕРІРµСЂРµРЅ РЅР° СЂРµР°Р»СЊРЅРѕР№ multi-level СЃРІСЏР·РєРµ. General-purpose world-origin system СЃРѕР·РЅР°С‚РµР»СЊРЅРѕ РЅРµ СЃС‚СЂРѕРёР»СЃСЏ: origin РїРѕ-РїСЂРµР¶РЅРµРјСѓ С„РёРєСЃРёСЂРѕРІР°РЅ РІ `(0,0)`, РјРµРЅСЏСЋС‚СЃСЏ С‚РѕР»СЊРєРѕ `width/height`.
-- `Next Recommended Step:` Р›РёР±Рѕ РЅР°РїРѕР»РЅРёС‚СЊ campaign РІС‚РѕСЂС‹Рј СѓСЂРѕРІРЅРµРј РґР»СЏ РїСЂСЏРјРѕР№ РїСЂРѕРІРµСЂРєРё РїРµСЂРµС…РѕРґР°, Р»РёР±Рѕ РїРµСЂРµС…РѕРґРёС‚СЊ Рє `Main Menu + Pause + End Screen`.
+- `Manual Check:` `npm run build-nolog` прошёл. Отдельный multi-level runtime smoke/playtest ещё не выполнен.
+- `Architecture Decisions:` Campaign backbone реализован как узкий registry поверх scene-first потока `BootScene -> TestScene`, без main-menu flow и без giant controller. Finish не смешивался с checkpoint/hazard logic: это отдельный singleton trigger-объект и отдельный overlap-slice в world runtime.
+- `Risks / Open Items:` В campaign пока только один уровень, поэтому живой переход `finish -> nextLevelId` кодом подготовлен, но ещё не проверен на реальной multi-level связке. General-purpose world-origin system сознательно не строился: origin по-прежнему фиксирован в `(0,0)`, меняются только `width/height`.
+- `Next Recommended Step:` Либо наполнить campaign вторым уровнем для прямой проверки перехода, либо переходить к `Main Menu + Pause + End Screen`.
 
 ### Entry
 - `Date:` 2026-04-09
 - `Task:` Runtime Editor Level Authoring
 - `Status:` done
-- `Summary:` Runtime editor получил level controls в sidebar: текущий `levelId`, редактирование `displayName`, `worldBounds`, `nextLevelId` и scene-first переключение между уровнями через restart `TestScene`. Для `finish` добавлен authoring path с create/select/move/resize/delete semantics, при этом второй singleton `finish` не создаётся silently. Import/export JSON и per-level draft storage продолжают работать по `levelId`, а смена `worldBounds` сразу перестраивает camera и physics bounds.
+- `Summary:` Runtime editor ������� level controls � sidebar: ������� `levelId`, �������������� `displayName`, `worldBounds`, `nextLevelId` � scene-first ������������ ����� �������� ����� restart `TestScene`. ��� `finish` �������� authoring path � create/select/move/resize/delete semantics, ��� ���� ������ singleton `finish` �� �������� silently. Import/export JSON � per-level draft storage ���������� �������� �� `levelId`, � ����� `worldBounds` ����� ������������� camera � physics bounds.
 - `Files:`
   - `src/game/world/runtime/data/campaign.json`
   - `src/game/world/runtime/data/levels/test_world_level_02.json`
@@ -235,16 +235,16 @@
   - `src/scenes/runtime/test_scene_runtime.ts`
   - `docs/canon/the_form_orchestrator_work_queue_ru.md`
   - `docs/canon/the_form_orchestrator_log_ru.md`
-- `Manual Check:` `npm run build-nolog` прошёл. Живой browser smoke для level switch, bounds resize и delete/create `finish` в этом чате не выполнялся.
-- `Architecture Decisions:` Level switching оставлен scene-first: editor не хранит отдельный campaign controller, а делает restart `TestScene` с новым `levelId` и флагом повторного открытия editor. Nullable `finish` добавлен узко для editor authoring и import/export; campaign registry по-прежнему валидирует shipped levels как уровни с обязательным `finish`.
-- `Risks / Open Items:` Второй level добавлен как минимальный demo-safe smoke target, а не как полноценный production content. Нужна ручная проверка крайних случаев resize bounds и round-trip сценария с `finish: null`.
-- `Next Recommended Step:` Выполнить ручной editor smoke по multi-level authoring и затем переходить к следующей demo-flow задаче без оживления старых template scenes.
+- `Manual Check:` `npm run build-nolog` ������. ����� browser smoke ��� level switch, bounds resize � delete/create `finish` � ���� ���� �� ����������.
+- `Architecture Decisions:` Level switching �������� scene-first: editor �� ������ ��������� campaign controller, � ������ restart `TestScene` � ����� `levelId` � ������ ���������� �������� editor. Nullable `finish` �������� ���� ��� editor authoring � import/export; campaign registry ��-�������� ���������� shipped levels ��� ������ � ������������ `finish`.
+- `Risks / Open Items:` ������ level �������� ��� ����������� demo-safe smoke target, � �� ��� ����������� production content. ����� ������ �������� ������� ������� resize bounds � round-trip �������� � `finish: null`.
+- `Next Recommended Step:` ��������� ������ editor smoke �� multi-level authoring � ����� ���������� � ��������� demo-flow ������ ��� ��������� ������ template scenes.
 
 ### Entry
 - `Date:` 2026-04-09
 - `Task:` Runtime Editor Usability Contract
 - `Status:` done
-- `Summary:` Закрыт input-focus contract для runtime editor и tuning/gameplay hotkeys: добавлен общий helper `isDomTextInputFocused()`, конфликтующие клавиши выведены из Phaser keyboard capture, а editor hotkeys больше не срабатывают во время набора в DOM-полях. Palette переведена в scene placement mode без HTML drag-and-drop: выбор типа включает pending placement, клик по сцене создаёт объект, `Esc` и RMB отменяют режим, `finish` остаётся singleton. Для readability в editor render path добавлены явная рамка world bounds, затемнение за пределами уровня и grid, ограниченный реальными bounds.
+- `Summary:` ������ input-focus contract ��� runtime editor � tuning/gameplay hotkeys: �������� ����� helper `isDomTextInputFocused()`, ������������� ������� �������� �� Phaser keyboard capture, � editor hotkeys ������ �� ����������� �� ����� ������ � DOM-�����. Palette ���������� � scene placement mode ��� HTML drag-and-drop: ����� ���� �������� pending placement, ���� �� ����� ������ ������, `Esc` � RMB �������� �����, `finish` ������� singleton. ��� readability � editor render path ��������� ����� ����� world bounds, ���������� �� ��������� ������ � grid, ������������ ��������� bounds.
 - `Files:`
   - `src/shared/dom_input_focus.ts`
   - `src/game/player/player_input.ts`
@@ -254,16 +254,16 @@
   - `src/game/world/runtime/test_world_editor_sidebar.ts`
   - `docs/canon/the_form_orchestrator_work_queue_ru.md`
   - `docs/canon/the_form_orchestrator_log_ru.md`
-- `Manual Check:` `npm run build-nolog` прошёл. Browser-level smoke на реальном вводе в sidebar/tuning и на placement flow в этом чате не выполнялся.
-- `Architecture Decisions:` Исправление сделано узко поверх существующего scene-first editor runtime, без giant editor controller и без нового UI toolkit. DOM input focus вынесен в общий helper, а placement mode встроен в existing pointer/update path редактора вместо HTML DnD.
-- `Risks / Open Items:` Sidebar всё ещё рендерится целиком на state sync, но теперь сохраняет focus/selection для активных DOM-полей; если дальше появятся более тяжёлые inspector-секции, может понадобиться точечная DOM-синхронизация отдельных блоков. Placement preview пока intentionally лёгкий: status + scene cursor ghost, без full object-shape ghost для всех типов.
-- `Next Recommended Step:` Выполнить ручной smoke именно на editor usability contract и только потом возвращаться к следующим demo задачам.
+- `Manual Check:` `npm run build-nolog` ������. Browser-level smoke �� �������� ����� � sidebar/tuning � �� placement flow � ���� ���� �� ����������.
+- `Architecture Decisions:` ����������� ������� ���� ������ ������������� scene-first editor runtime, ��� giant editor controller � ��� ������ UI toolkit. DOM input focus ������� � ����� helper, � placement mode ������� � existing pointer/update path ��������� ������ HTML DnD.
+- `Risks / Open Items:` Sidebar �� ��� ���������� ������� �� state sync, �� ������ ��������� focus/selection ��� �������� DOM-�����; ���� ������ �������� ����� ������ inspector-������, ����� ������������ �������� DOM-������������� ��������� ������. Placement preview ���� intentionally �����: status + scene cursor ghost, ��� full object-shape ghost ��� ���� �����.
+- `Next Recommended Step:` ��������� ������ smoke ������ �� editor usability contract � ������ ����� ������������ � ��������� demo �������.
 
 ### Entry
 - `Date:` 2026-04-09
 - `Task:` Runtime Editor Authoring Contract Finalization
 - `Status:` done
-- `Summary:` Р”РѕРІРµРґС‘РЅ РЅРµР·Р°РІРµСЂС€С‘РЅРЅС‹Р№ Epic 2 editor authoring contract Р±РµР· РЅРѕРІРѕРіРѕ flow manager: placement mode РѕСЃС‚Р°РІР»РµРЅ scene-first Рё С‚РµРїРµСЂСЊ С‡С‘С‚РєРѕ СЂР°Р·РґРµР»С‘РЅ СЃ existing object selection. `Objects palette` РёСЃРїРѕР»СЊР·СѓРµС‚СЃСЏ С‚РѕР»СЊРєРѕ РґР»СЏ СЃРѕР·РґР°РЅРёСЏ РЅРѕРІС‹С… РѕР±СЉРµРєС‚РѕРІ С‡РµСЂРµР· pending placement, Р° `Objects` list РІС‹Р±РёСЂР°РµС‚ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёР№ РѕР±СЉРµРєС‚ Рё СЃСЂР°Р·Сѓ С„РѕРєСѓСЃРёСЂСѓРµС‚ РєР°РјРµСЂСѓ РЅР° РЅС‘Рј. Р”РѕР±Р°РІР»РµРЅ СѓР·РєРёР№ `Create Level` flow, Р° editor runtime С‚РµРїРµСЂСЊ РєРѕСЂСЂРµРєС‚РЅРѕ СѓРЅРёС‡С‚РѕР¶Р°РµС‚ DOM/input listeners РЅР° scene shutdown/destroy, С‡С‚РѕР±С‹ level switch РЅРµ РЅР°СЃР»Р°РёРІР°Р» РІС‚РѕСЂРѕР№ editor instance.
+- `Summary:` Доведён незавершённый Epic 2 editor authoring contract без нового flow manager: placement mode оставлен scene-first и теперь чётко разделён с existing object selection. `Objects palette` используется только для создания новых объектов через pending placement, а `Objects` list выбирает существующий объект и сразу фокусирует камеру на нём. Добавлен узкий `Create Level` flow, а editor runtime теперь корректно уничтожает DOM/input listeners на scene shutdown/destroy, чтобы level switch не наслаивал второй editor instance.
 - `Files:`
   - `src/game/world/runtime/test_campaign_registry.ts`
   - `src/game/world/runtime/test_world_config_validation.ts`
@@ -273,16 +273,16 @@
   - `src/game/player/player_runtime.ts`
   - `docs/canon/the_form_orchestrator_work_queue_ru.md`
   - `docs/canon/the_form_orchestrator_log_ru.md`
-- `Manual Check:` `npm run build-nolog` РїСЂРѕС€С‘Р». Browser smoke РїРѕ create-level, level-switch cleanup Рё multi-form geometry refresh РІ СЌС‚РѕРј С‡Р°С‚Рµ РЅРµ РІС‹РїРѕР»РЅСЏР»СЃСЏ.
-- `Architecture Decisions:` `finish + nextLevelId` РѕСЃС‚Р°С‘С‚СЃСЏ РµРґРёРЅСЃС‚РІРµРЅРЅС‹Рј РєР°РЅРѕРЅРёС‡РµСЃРєРёРј level transition path; РѕС‚РґРµР»СЊРЅС‹Р№ transition object РЅРµ РІРІРѕРґРёР»СЃСЏ. Shared geometry refresh Р·Р°РєСЂС‹С‚ РЅРµ triangle-specific fix'РѕРј, Р° РѕР±С‰РёРј player-side reset world-geometry references РїРѕСЃР»Рµ editor mutations, С‡С‚РѕР±С‹ square/triangle/other forms РЅРµ СЂР°СЃС…РѕРґРёР»РёСЃСЊ РїРѕ stale support/collision state.
-- `Risks / Open Items:` `Create Level` СЃРѕС…СЂР°РЅСЏРµС‚ campaign additions РІ editor-side registry/storage Рё СЃСЂР°Р·Сѓ СЃРѕР·РґР°С‘С‚ level draft, РЅРѕ СЌС‚Рѕ РІСЃС‘ РµС‰С‘ demo-safe authoring flow, Р° РЅРµ production content pipeline. РќСѓР¶РµРЅ СЂСѓС‡РЅРѕР№ smoke РёРјРµРЅРЅРѕ РЅР° РёР·РјРµРЅРµРЅРёРё solid layout РїСЂРё СЂР°Р·РЅС‹С… С„РѕСЂРјР°С…, С‡С‚РѕР±С‹ РїРѕРґС‚РІРµСЂРґРёС‚СЊ РѕС‚СЃСѓС‚СЃС‚РІРёРµ СЃРєСЂС‹С‚РѕРіРѕ stale-runtime state РїРѕСЃР»Рµ РёРЅС‚РµРЅСЃРёРІРЅРѕРіРѕ СЂРµРґР°РєС‚РёСЂРѕРІР°РЅРёСЏ.
-- `Next Recommended Step:` РџСЂРѕР№С‚Рё СЂСѓС‡РЅРѕР№ smoke РїРѕ placement/create-level/open-level/shared-geometry cases Рё С‚РѕР»СЊРєРѕ РїРѕСЃР»Рµ СЌС‚РѕРіРѕ РІРѕР·РІСЂР°С‰Р°С‚СЊСЃСЏ Рє СЃР»РµРґСѓСЋС‰РёРј demo Р·Р°РґР°С‡Р°Рј.
+- `Manual Check:` `npm run build-nolog` прошёл. Browser smoke по create-level, level-switch cleanup и multi-form geometry refresh в этом чате не выполнялся.
+- `Architecture Decisions:` `finish + nextLevelId` остаётся единственным каноническим level transition path; отдельный transition object не вводился. Shared geometry refresh закрыт не triangle-specific fix'ом, а общим player-side reset world-geometry references после editor mutations, чтобы square/triangle/other forms не расходились по stale support/collision state.
+- `Risks / Open Items:` `Create Level` сохраняет campaign additions в editor-side registry/storage и сразу создаёт level draft, но это всё ещё demo-safe authoring flow, а не production content pipeline. Нужен ручной smoke именно на изменении solid layout при разных формах, чтобы подтвердить отсутствие скрытого stale-runtime state после интенсивного редактирования.
+- `Next Recommended Step:` Пройти ручной smoke по placement/create-level/open-level/shared-geometry cases и только после этого возвращаться к следующим demo задачам.
 
 ### Entry
 - `Date:` 2026-04-12
 - `Task:` Main Menu + Pause + End Screen
 - `Status:` done
-- `Summary:` Demo flow собран как узкий scene-first слой поверх существующего `TestScene`, без giant flow controller и без пересборки gameplay runtime. `BootScene` теперь по умолчанию открывает `MainMenu`, `Start Demo` стартует `campaign.initialLevelId`, а `finish` в `TestScene` ведёт либо в следующий `levelId`, либо на отдельный `EndScreen`. Pause реализован как overlay-scene по `Esc`: gameplay scene именно pause/resume/stop'ится, поэтому новый runtime не дублируется, а editor draft storage и per-level restart path остаются нетронутыми. Для dev сохранён прямой путь старта конкретного уровня через `BootScene` data и query `?levelId=...&editorOpen=1`.
+- `Summary:` Demo flow ������ ��� ����� scene-first ���� ������ ������������� `TestScene`, ��� giant flow controller � ��� ���������� gameplay runtime. `BootScene` ������ �� ��������� ��������� `MainMenu`, `Start Demo` �������� `campaign.initialLevelId`, � `finish` � `TestScene` ���� ���� � ��������� `levelId`, ���� �� ��������� `EndScreen`. Pause ���������� ��� overlay-scene �� `Esc`: gameplay scene ������ pause/resume/stop'����, ������� ����� runtime �� �����������, � editor draft storage � per-level restart path �������� �����������. ��� dev ������� ������ ���� ������ ����������� ������ ����� `BootScene` data � query `?levelId=...&editorOpen=1`.
 - `Files:`
   - `src/boot/game_config.ts`
   - `src/scenes/BootScene.ts`
@@ -293,10 +293,10 @@
   - `src/scenes/runtime/test_scene_frame_runtime.ts`
   - `docs/canon/the_form_orchestrator_work_queue_ru.md`
   - `docs/canon/the_form_orchestrator_log_ru.md`
-- `Manual Check:` `npm run build-nolog` прошёл. Browser smoke по `main menu -> first level`, `finish -> next level/end screen`, `Esc -> pause`, `restart level`, `main menu` и editor/dev path в этом чате не выполнялся.
-- `Architecture Decisions:` Player-facing flow остался scene-first и использует существующий `levelId` contract: меню только запускают/останавливают сцены, а уровни по-прежнему открываются через `TestScene` start data. Pause сделан отдельной overlay-scene, которая управляет жизненным циклом уже существующего `TestScene`, а не новым gameplay-controller; editor активность имеет приоритет над `Esc`, поэтому editor placement/menu contract не перехватывается.
-- `Risks / Open Items:` Нужен живой browser smoke именно на сочетании pause/menu с runtime editor и на dev boot override через query string. Manual acceptance также должен подтвердить, что при `Main Menu`/`Restart Level` paused `TestScene` всегда корректно уничтожается и не оставляет второй overlay instance.
-- `Next Recommended Step:` Пройти ручной smoke по семи demo-flow сценариям и только после этого двигаться к NPC/cutscene/presentation задачам.
+- `Manual Check:` `npm run build-nolog` ������. Browser smoke �� `main menu -> first level`, `finish -> next level/end screen`, `Esc -> pause`, `restart level`, `main menu` � editor/dev path � ���� ���� �� ����������.
+- `Architecture Decisions:` Player-facing flow ������� scene-first � ���������� ������������ `levelId` contract: ���� ������ ���������/������������� �����, � ������ ��-�������� ����������� ����� `TestScene` start data. Pause ������ ��������� overlay-scene, ������� ��������� ��������� ������ ��� ������������� `TestScene`, � �� ����� gameplay-controller; editor ���������� ����� ��������� ��� `Esc`, ������� editor placement/menu contract �� ���������������.
+- `Risks / Open Items:` ����� ����� browser smoke ������ �� ��������� pause/menu � runtime editor � �� dev boot override ����� query string. Manual acceptance ����� ������ �����������, ��� ��� `Main Menu`/`Restart Level` paused `TestScene` ������ ��������� ������������ � �� ��������� ������ overlay instance.
+- `Next Recommended Step:` ������ ������ smoke �� ���� demo-flow ��������� � ������ ����� ����� ��������� � NPC/cutscene/presentation �������.
 ### Entry
 - Date: 2026-04-12
 - Task: Dev Helper Overlay + Level Jump + Click-Spawn
@@ -319,7 +319,7 @@
 - Date: 2026-04-14
 - Task: Player Contact Shape Adapter v1 - Triangle vs NPC Stability
 - Status: done
-- Summary: Fixed the long-running `Triangle ↔ NPC` contact instability after several failed symptom-driven iterations. The rejected approaches were scene-event depenetration in actor-contact runtime, remembered safe pose rollback, residual bounce resolve, and other post-factum coordinate correction layers. The accepted solution moved responsibility back to the movement owner: `actor contact runtime` stays detector-only, while `npc runtime` performs predictive horizontal guard / push-before-commit against the player triangle polygon.
+- Summary: Fixed the long-running `Triangle - NPC` contact instability after several failed symptom-driven iterations. The rejected approaches were scene-event depenetration in actor-contact runtime, remembered safe pose rollback, residual bounce resolve, and other post-factum coordinate correction layers. The accepted solution moved responsibility back to the movement owner: `actor contact runtime` stays detector-only, while `npc runtime` performs predictive horizontal guard / push-before-commit against the player triangle polygon.
 - Files:
   - docs/canon/the_form_orchestrator_state_ru.md
   - docs/canon/the_form_mini_spec_npc_archetypes_ru.md
@@ -334,15 +334,15 @@
   - src/game/npc/npc_types.ts
   - src/ui/runtime/test_debug_runtime.ts
 - Manual Check: User confirmed in-thread that the final predictive-guard version fixed the visible gameplay issue after multiple reproductions against left-wall and right-wall triangle pressure cases.
-- Architecture Decisions: Canon rule for future chats: do not solve `Triangle ↔ NPC/actor bounds` by adding another post-tick/post-event correction layer on top of actor contact detection. If an actor owns movement, that actor runtime must clamp or validate its intended movement against triangle polygon before commit, and triangle push must happen before fallback stop. `actor contact runtime` is allowed to expose shape snapshots and contact state, but not to become a hidden pair-physics resolver.
-- Risks / Open Items: The current fix is still a narrow first-pass for `Triangle ↔ Arcade actor bounds`; it is not a general-purpose actor physics engine. If similar bugs appear for other moving actors, reuse the same architectural pattern rather than copying old depenetration hacks.
+- Architecture Decisions: Canon rule for future chats: do not solve `Triangle - NPC/actor bounds` by adding another post-tick/post-event correction layer on top of actor contact detection. If an actor owns movement, that actor runtime must clamp or validate its intended movement against triangle polygon before commit, and triangle push must happen before fallback stop. `actor contact runtime` is allowed to expose shape snapshots and contact state, but not to become a hidden pair-physics resolver.
+- Risks / Open Items: The current fix is still a narrow first-pass for `Triangle - Arcade actor bounds`; it is not a general-purpose actor physics engine. If similar bugs appear for other moving actors, reuse the same architectural pattern rather than copying old depenetration hacks.
 - Next Recommended Step: If a future actor also needs triangle-aware motion, extract the predictive guard into a dedicated shared runtime helper instead of rebuilding scene-event overlap correction.
 
 ### Entry
 - Date: 2026-04-14
 - Task: Triangle Support on NPC Surfaces
 - Status: done
-- Summary: Fixed the remaining invalid `Triangle ↔ NPC` interaction where Triangle could touch NPCs laterally but could not stand on them as a stable support surface. Root cause was architectural: triangle world-geometry runtime only trusts Matter platform surfaces for grounded/support logic, while NPCs existed only as Arcade actors. The accepted solution gives each NPC a synced Matter support-body, marked as a platform surface, and updates it in frame order before player tick and again after NPC movement.
+- Summary: Fixed the remaining invalid `Triangle - NPC` interaction where Triangle could touch NPCs laterally but could not stand on them as a stable support surface. Root cause was architectural: triangle world-geometry runtime only trusts Matter platform surfaces for grounded/support logic, while NPCs existed only as Arcade actors. The accepted solution gives each NPC a synced Matter support-body, marked as a platform surface, and updates it in frame order before player tick and again after NPC movement.
 - Files:
   - docs/canon/the_form_orchestrator_state_ru.md
   - docs/canon/the_form_mini_spec_npc_archetypes_ru.md
@@ -351,7 +351,7 @@
   - src/game/world/runtime/test_world_runtime.ts
   - src/scenes/runtime/test_scene_frame_runtime.ts
 - Manual Check: User confirmed in-thread that after the sync support-body integration Triangle now interacts correctly with NPCs as support, instead of bouncing/rotating off them when trying to stand on top.
-- Architecture Decisions: “Normal interaction with Triangle” for NPCs now has an explicit canon meaning: NPCs must support both actor-contact semantics and triangle world-support semantics. If Triangle should be able to stand on an actor, that actor must expose a triangle-consumable support surface adapter; actor-contact flags alone are not sufficient.
+- Architecture Decisions: �Normal interaction with Triangle� for NPCs now has an explicit canon meaning: NPCs must support both actor-contact semantics and triangle world-support semantics. If Triangle should be able to stand on an actor, that actor must expose a triangle-consumable support surface adapter; actor-contact flags alone are not sufficient.
 - Risks / Open Items: This remains a narrow adapter pattern for NPCs and other future moving actors; it is not a justification to migrate all actors onto triangle-style kinematic runtime.
 - Next Recommended Step: If another actor class should become a valid Triangle support surface, reuse the same synced Matter support-body pattern instead of inventing a new grounded workaround.
 
@@ -464,3 +464,78 @@
 - Risks / Open Items: The observable smoke walk sequence uses authored world-space `walk_to_x` values for the current demo fixture, so if the observer validation setup moves significantly in a future level, that smoke ref should be revisited rather than generalized into a new system.
 - Next Recommended Step: Run a manual smoke on `test-world-01` and confirm that the toast plus the expanded `NPC interaction` line make `no_target`, `out_of_range`, `busy`, `dispatched_event`, `requested_cutscene`, and `dispatched_sequence` immediately obvious without opening additional tooling.
 
+### Entry
+- Date: 2026-04-21
+- Task: Animation Profiles - Player Forms First-Pass Hooks (canon patch)
+- Status: done
+- Summary: Resolved a canon/work-queue conflict: `Animation Profiles` was marked as strictly "start from NPC", while the current product need is a demo-feel first pass for player forms. Kept NPC-first backbone as the long-term presentation direction, and explicitly allowed only a narrow player-form slice with fixed hook vocabulary. The patch does not introduce a universal animation framework, does not add a new editor, and does not move animation ownership into a giant player controller.
+- Files:
+  - docs/canon/the_form_orchestrator_state_ru.md
+  - docs/canon/the_form_orchestrator_work_queue_ru.md
+  - docs/canon/the_form_orchestrator_log_ru.md
+- Manual Check: Canon/docs patch only. No runtime code changes were made in this chat.
+- Architecture Decisions: First-pass player-form presentation hooks are constrained to `jump_start`, `land_impact`, `airborne`, `form_switch`, with optional form-specific `ball_rebound_launch`, `triangle_flight_start`, `square_attach_start`, `square_attach_jump_start`. This is a temporary demo-enabling slice under Epic 6, while NPC-first presentation backbone remains the target for the full rollout.
+- Risks / Open Items: Hook emission/consumption wiring in player runtime/view and live-tuning integration are not implemented yet in this patch.
+- Next Recommended Step: Implement narrow hook emission/consumption in existing `player_tick_runtime` + `player_view` slices and validate demo feel via runtime tuning, without expanding scope into a generic animation system.
+
+### Entry
+- Date: 2026-04-22
+- Task: Player Forms Animation Hooks - Verification Pass (build/typecheck + code-level smoke review)
+- Status: done
+- Summary: Ran available project checks and completed a manual code-level smoke review for player-form scenarios requested for this pass. `npm run build-nolog` and `npm run build` passed. `npx tsc --noEmit` failed on many pre-existing strict-TS errors across `cutscene/npc/world runtime/editor` and not only in player animation scope. Verified hook wiring for `ball jump/land`, `triangle jump/airborne/flight start`, `square jump/attach/trail regen/attach jump`, form switching, respawn/reset, live tuning apply path, and save-to-project path.
+- Files:
+  - docs/canon/the_form_orchestrator_log_ru.md
+- Manual Check: Code-level trace review completed for `src/game/player/player_tick_runtime.ts`, `src/game/player/player_jump_runtime.ts`, `src/game/player/player_square_runtime.ts`, `src/game/player/player_lifecycle_runtime.ts`, `src/game/player/player_runtime.ts`, `src/game/player/view/player_view.ts`, `src/game/player/view/player_form_animation_runtime.ts`, `src/game/player/tuning/player_tuning_runtime.ts`, `src/game/player/tuning/player_tuning_schema.ts`, `src/ui/runtime/player_tuning_panel_runtime.ts`, `src/scenes/runtime/test_scene_bootstrap.ts`. Confirmed visual scaling is applied only on render objects (`PlayerView`) while physics shape updates stay in `applyCurrentFormCollisionBody` (`setCircle/setSize/setOffset`) and are not animation-driven.
+- Architecture Decisions: Kept presentation hooks as one-frame runtime signals collected in `PfPlayerRuntime` and consumed by `PlayerView` animation runtime; no physics coupling added. Kept player tuning integration through existing constants snapshot flow (`applyPlayerTuningRawSnapshot`) with normalization fallback for partial snapshots.
+- Risks / Open Items: Working tree currently contains large unrelated edits in world editor/cutscene/NPC areas; runtime editor files are already modified in this branch, so this pass only verified that player animation hook wiring does not directly depend on editor internals. Typecheck baseline is red due to pre-existing repo-wide strict-TS issues, so full static-safety signal is limited until those are cleaned.
+- Next Recommended Step: Run in-engine manual runtime smoke in browser for the listed scenarios (especially square attach/regen/jump transitions and tuning sidebar interactions) after stabilizing or isolating unrelated editor/cutscene changes.
+
+### Entry
+- Date: 2026-04-22
+- Task: Player Forms Animation Hooks - Cleanup + Acceptance Hardening (implementation pass)
+- Status: done
+- Summary: Completed cleanup/hardening on the implemented player-form animation slice without expanding architecture ownership. Removed hidden runtime intensity scaling from form animation profiles and made `ball/triangle/square.animation` values apply 1:1. Removed dead first-pass rotation offset contract (`rotationOffsetMaxRad` in profile/runtime path and `rotationOffsetRad` pose wiring) instead of keeping unused fields. Removed duplicate airborne wiring by keeping a single canonical source (`grounded` passed into animation runtime) and deleting runtime callback plumbing that pushed separate airborne presentation flags.
+- Files:
+  - src/game/player/view/player_form_animation_profiles.ts
+  - src/game/player/view/player_form_animation_runtime.ts
+  - src/game/player/view/player_presentation_hooks.ts
+  - src/game/player/view/player_view.ts
+  - src/game/player/player_runtime_types.ts
+  - src/game/player/player_tick_runtime.ts
+  - src/game/player/player_runtime.ts
+  - src/game/player/player_constants.ts
+  - src/game/player/tuning/player_tuning_defaults.ts
+  - src/game/player/tuning/player_tuning_persisted.generated.ts
+  - docs/canon/the_form_orchestrator_log_ru.md
+- Player Animation Files Changed/Created:
+  - changed: src/game/player/view/player_form_animation_profiles.ts
+  - changed: src/game/player/view/player_form_animation_runtime.ts
+  - created+tracked: src/game/player/view/player_presentation_hooks.ts
+- Manual Check: `npm run build-nolog` passed; `npm run build` passed. `npx tsc --noEmit` still fails on existing repository baseline errors outside this cleanup scope (cutscene/npc/world/editor), with additional existing strictness errors in square runtime files already present in the branch before this cleanup pass. No physics-body logic was modified for visuals.
+- Architecture Decisions: Kept first-pass animation runtime narrow and explicit: no hidden per-form scaling multipliers, no dead future-facing fields, no additional controller layer. Maintained one-frame presentation hook model while removing redundant airborne source.
+- Risks / Open Items: Rotation animation offset remains intentionally out-of-scope for first pass after dead-contract removal. Full in-engine feel validation (especially triangle/square default feel after moving softness to default numbers) still requires runtime smoke in browser.
+- Next Recommended Step: Run focused in-engine smoke for ball/triangle/square jump-land-air transitions and form-switch transitions, then lock any remaining feel tweaks directly in tuning defaults (not runtime scaling).
+
+
+
+### Entry
+- Date: 2026-04-22
+- Task: Animation Profiles - Player Forms Phase-Linked Hooks Pass
+- Status: done
+- Summary: Расширен player presentation contract с edge-фазами `jump_intent`, `jump_commit`, `apex_enter`, `fall_enter`, `land_impact`, `form_switch_in` и form-specific hooks для `ball/triangle/square`. Runtime detection добавлена в существующие player runtime slices без изменения physics contract и без задержки обычного jump commit; `jump_intent` работает только как visual anticipation. В `PlayerView` и `player_form_animation_runtime` добавлен phase-pulse consumption c first-pass hardcoded defaults, включая отдельные pulses для `triangle_flight_end` и `square_attach_exit`. Tuning schema сознательно не расширялась: phase defaults оставлены локально в animation runtime/profile слое, чтобы не раздувать scope и не трогать runtime editor на этом шаге.
+- Files:
+  - docs/canon/the_form_orchestrator_log_ru.md
+  - src/game/player/player_runtime.ts
+  - src/game/player/player_runtime_types.ts
+  - src/game/player/player_tick_runtime.ts
+  - src/game/player/player_jump_runtime.ts
+  - src/game/player/player_square_runtime.ts
+  - src/game/player/player_lifecycle_runtime.ts
+  - src/game/player/view/player_presentation_hooks.ts
+  - src/game/player/view/player_form_animation_profiles.ts
+  - src/game/player/view/player_form_animation_phase_pulse.ts
+  - src/game/player/view/player_form_animation_runtime.ts
+- Manual Check: `npm run build-nolog` passed; `npm run build` passed. `npx tsc --noEmit` failed on existing repository-wide strict-TS baseline (cutscene/npc/world/editor + existing square strictness), без новых падений в обновлённом player presentation runtime.
+- Architecture Decisions: Gameplay phase detection оставлена в existing player runtime slices (`tick/jump/lifecycle/square`), visual apply остаётся в `PlayerView`, phase consumption в existing player presentation runtime/hooks. Новый global animation framework и расширение runtime editor не добавлялись.
+- Risks / Open Items: Это first-pass phase presentation; возможны вторичные feel-тюнинги по порогам `apex/fall` и приоритетам одновременных pulses после in-engine ручного smoke.
+- Next Recommended Step: Выполнить ручной in-engine smoke на `ball/triangle/square` сценариях (`jump intent->commit`, apex/fall readability, triangle flight end, square attach enter/exit/attach-jump commit) и только затем решать вопрос о second-pass tuning exposure.

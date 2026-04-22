@@ -2,6 +2,7 @@ import type {
     TestNpcInstanceConfig
 } from '../../npc/npc_types';
 import { isTestNpcScriptedSequenceRef } from '../../npc/npc_scripted_sequences';
+import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
 import type {
     TestWorldFinishConfig,
     TestWorldCheckpointConfig,
@@ -588,7 +589,7 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
             }
         } else if (patch.interactionOutcomeKind === 'request_cutscene_ref') {
             const cutsceneRef = typeof patch.interactionCutsceneRef === 'string' ? patch.interactionCutsceneRef.trim() : '';
-            if (cutsceneRef.length > 0) {
+            if (cutsceneRef.length > 0 && isTestCutsceneRef(cutsceneRef)) {
                 interactionOverride.outcome = {
                     kind: 'request_cutscene_ref',
                     cutsceneRef
@@ -610,7 +611,15 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
             }
         } else if (typeof patch.interactionCutsceneRef === 'string' && interactionOverride.outcome?.kind === 'request_cutscene_ref') {
             const cutsceneRef = patch.interactionCutsceneRef.trim();
-            if (cutsceneRef.length > 0) {
+            if (cutsceneRef.length > 0 && isTestCutsceneRef(cutsceneRef)) {
+                interactionOverride.outcome = {
+                    kind: 'request_cutscene_ref',
+                    cutsceneRef
+                };
+            }
+        } else if (typeof patch.interactionCutsceneRef === 'string') {
+            const cutsceneRef = patch.interactionCutsceneRef.trim();
+            if (cutsceneRef.length > 0 && isTestCutsceneRef(cutsceneRef)) {
                 interactionOverride.outcome = {
                     kind: 'request_cutscene_ref',
                     cutsceneRef

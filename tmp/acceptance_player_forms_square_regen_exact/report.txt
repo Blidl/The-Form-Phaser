@@ -1,0 +1,53 @@
+SPEND
+Debug Dock
+1 Interaction
+2 NPC
+3 Player
+4 Log
+No interaction attempts yet.
+Player
+form: square
+contact: arcade
+body: 394, 814
+anchor: 394, 814
+hazard shape: box
+triangle points: 0
+square attached: yes
+square normal: 1,0
+square zones: TL, BL
+
+AFTER_O
+Debug Dock
+1 Interaction
+2 NPC
+3 Player
+4 Log
+No interaction attempts yet.
+Player
+form: square
+contact: arcade
+body: 394, 814
+anchor: 394, 814
+hazard shape: box
+triangle points: 0
+square attached: yes
+square normal: 1,0
+square zones: TL, BL
+
+AFTER_KS
+Debug Dock
+1 Interaction
+2 NPC
+3 Player
+4 Log
+No interaction attempts yet.
+Player
+form: square
+contact: arcade
+body: 394, 814
+anchor: 394, 814
+hazard shape: box
+triangle points: 0
+square attached: yes
+square normal: 1,0
+square zones: TL, BL

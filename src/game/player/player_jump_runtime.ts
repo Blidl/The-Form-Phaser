@@ -34,6 +34,8 @@ interface HandleJumpFlowParams {
     preMoveVelocityX: number;
     preMoveVelocityY: number;
     ballReboundRuntime: BallReboundRuntimeState;
+    onJumpCommitted?: () => void;
+    onSquareAttachJumpCommitted?: () => void;
 }
 
 export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
@@ -67,6 +69,8 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
         mutable.jumpCutConsumed = false;
         clearJumpBuffer(timers);
         clearCoyoteTime(timers);
+        params.onSquareAttachJumpCommitted?.();
+        params.onJumpCommitted?.();
         return;
     }
 
@@ -104,6 +108,7 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
         clearJumpBuffer(timers);
         clearCoyoteTime(timers);
         mutable.lastAirborneDownwardSpeed = 0;
+        params.onJumpCommitted?.();
         return;
     }
 
@@ -117,6 +122,7 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
             grounded,
             hasBoostHold
         });
+        params.onJumpCommitted?.();
         return;
     }
 
@@ -126,6 +132,7 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
     clearJumpBuffer(timers);
     clearCoyoteTime(timers);
     mutable.lastAirborneDownwardSpeed = 0;
+    params.onJumpCommitted?.();
 };
 
 interface ApplyJumpCutParams {

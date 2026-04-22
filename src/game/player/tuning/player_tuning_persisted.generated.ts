@@ -33,6 +33,25 @@ export const PLAYER_TUNING_PERSISTED_SNAPSHOT: PlayerTuningSnapshot = {
                 "apexGravityScale": 0.5,
                 "apexVelocityThreshold": 90
             },
+            "animation": {
+                "jumpSquashScaleX": 1.2,
+                "jumpSquashScaleY": 0.8,
+                "jumpSquashDurationMs": 950,
+                "jumpStretchScaleX": 0.82,
+                "jumpStretchScaleY": 1.22,
+                "jumpStretchDurationMs": 110,
+                "jumpRecoverDurationMs": 130,
+                "landImpactSpeedForMax": 900,
+                "landSquashScaleX": 1.18,
+                "landSquashScaleY": 0.82,
+                "landSquashDurationMs": 70,
+                "landRecoverDurationMs": 140,
+                "airScaleX": 0.94,
+                "airScaleY": 1.06,
+                "airSpeedForMax": 700,
+                "airSmoothingTimeSec": 0.08,
+                "switchRecoverDurationMs": 150
+            },
             "boost": {
                 "startImpulseSpeed": 860,
                 "startImpulseDecayMs": 420,
@@ -74,6 +93,25 @@ export const PLAYER_TUNING_PERSISTED_SNAPSHOT: PlayerTuningSnapshot = {
                 "apexGravityScale": 0.5,
                 "apexVelocityThreshold": 90
             },
+            "animation": {
+                "jumpSquashScaleX": 1.0576,
+                "jumpSquashScaleY": 0.928,
+                "jumpSquashDurationMs": 65,
+                "jumpStretchScaleX": 0.9136,
+                "jumpStretchScaleY": 1.1008,
+                "jumpStretchDurationMs": 85,
+                "jumpRecoverDurationMs": 120,
+                "landImpactSpeedForMax": 980,
+                "landSquashScaleX": 1.0936,
+                "landSquashScaleY": 0.9064,
+                "landSquashDurationMs": 65,
+                "landRecoverDurationMs": 130,
+                "airScaleX": 0.932,
+                "airScaleY": 1.068,
+                "airSpeedForMax": 820,
+                "airSmoothingTimeSec": 0.07,
+                "switchRecoverDurationMs": 128
+            },
             "flight": {
                 "flightSpeed": 620,
                 "flightDistancePx": 320,
@@ -96,6 +134,25 @@ export const PLAYER_TUNING_PERSISTED_SNAPSHOT: PlayerTuningSnapshot = {
                 "riseGravityScale": 0.72,
                 "apexGravityScale": 0.5,
                 "apexVelocityThreshold": 90
+            },
+            "animation": {
+                "jumpSquashScaleX": 1.0434,
+                "jumpSquashScaleY": 0.9442,
+                "jumpSquashDurationMs": 70,
+                "jumpStretchScaleX": 0.9566,
+                "jumpStretchScaleY": 1.0496,
+                "jumpStretchDurationMs": 90,
+                "jumpRecoverDurationMs": 130,
+                "landImpactSpeedForMax": 860,
+                "landSquashScaleX": 1.062,
+                "landSquashScaleY": 0.938,
+                "landSquashDurationMs": 75,
+                "landRecoverDurationMs": 150,
+                "airScaleX": 0.9768,
+                "airScaleY": 1.0232,
+                "airSpeedForMax": 650,
+                "airSmoothingTimeSec": 0.09,
+                "switchRecoverDurationMs": 173
             },
             "attach": {
                 "acquireRangePx": 10,

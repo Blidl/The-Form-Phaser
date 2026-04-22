@@ -21,6 +21,11 @@ export interface TestCampaignLevelSummary {
     displayName: string;
 }
 
+export type CampaignLevelConfigSource =
+    | 'bundled'
+    | 'campaign_registry_override'
+    | 'campaign_registry_custom';
+
 interface TestCampaignConfig {
     initialLevelId: string;
     levels: TestCampaignLevelReference[];
@@ -93,7 +98,8 @@ const buildLevelRegistry = (rawLevels: readonly unknown[]): Map<string, TestWorl
 };
 
 const campaignConfig = parseCampaignConfig(campaignJson);
-const levelRegistry = buildLevelRegistry(rawLevelConfigs);
+const bundledLevelRegistry = buildLevelRegistry(rawLevelConfigs);
+const levelRegistry = new Map<string, TestWorldConfig>(bundledLevelRegistry);
 const campaignLevelOrder = [...campaignConfig.levels.map((entry) => entry.id)];
 
 const canUseStorage = (): boolean => {
@@ -188,6 +194,29 @@ export const getCampaignLevelConfig = (levelId: string): TestWorldConfig => {
     }
 
     return cloneTestWorldConfig(config);
+};
+
+export const getBundledCampaignLevelConfig = (levelId: string): TestWorldConfig | null => {
+    const bundledConfig = bundledLevelRegistry.get(levelId);
+    return bundledConfig ? cloneTestWorldConfig(bundledConfig) : null;
+};
+
+export const getCampaignLevelConfigSource = (levelId: string): CampaignLevelConfigSource => {
+    const liveConfig = levelRegistry.get(levelId);
+    if (!liveConfig) {
+        throw new Error(`Unknown campaign level '${levelId}'.`);
+    }
+
+    const bundledConfig = bundledLevelRegistry.get(levelId);
+    if (!bundledConfig) {
+        return 'campaign_registry_custom';
+    }
+
+    const liveSignature = JSON.stringify(liveConfig);
+    const bundledSignature = JSON.stringify(bundledConfig);
+    return liveSignature === bundledSignature
+        ? 'bundled'
+        : 'campaign_registry_override';
 };
 
 export const getCampaignLevelIds = (): string[] => {

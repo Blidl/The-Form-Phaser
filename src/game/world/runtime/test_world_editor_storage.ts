@@ -15,6 +15,7 @@ const canUseStorage = (): boolean => {
 export interface LoadTestWorldDraftResult {
     config: TestWorldConfig;
     source: 'draft' | 'default';
+    draftPresent: boolean;
     error: string | null;
 }
 
@@ -30,6 +31,7 @@ export const loadTestWorldEditorDraft = (
         return {
             config: createDefaultTestWorldConfig(fallbackConfig),
             source: 'default',
+            draftPresent: false,
             error: null
         };
     }
@@ -39,6 +41,7 @@ export const loadTestWorldEditorDraft = (
         return {
             config: createDefaultTestWorldConfig(fallbackConfig),
             source: 'default',
+            draftPresent: false,
             error: null
         };
     }
@@ -48,6 +51,7 @@ export const loadTestWorldEditorDraft = (
         return {
             config: createDefaultTestWorldConfig(fallbackConfig),
             source: 'default',
+            draftPresent: true,
             error: parsed.error
         };
     }
@@ -55,6 +59,7 @@ export const loadTestWorldEditorDraft = (
     return {
         config: parsed.config,
         source: 'draft',
+        draftPresent: true,
         error: null
     };
 };
@@ -95,4 +100,68 @@ export const readSavedTestWorldEditorDraft = (
 
     const parsed = parseTestWorldConfigJson(raw, { fallbackConfig });
     return parsed.config;
+};
+
+export interface TestWorldEditorDraftStorageAuditSnapshot {
+    storageKey: string;
+    draftPresent: boolean;
+    draftValid: boolean;
+    draftNpcCount: number;
+    draftNpcIds: string[];
+    parseError: string | null;
+    draftConfigSignature: string | null;
+}
+
+export const getTestWorldEditorDraftStorageAuditSnapshot = (
+    levelId: string,
+    fallbackConfig: TestWorldConfig
+): TestWorldEditorDraftStorageAuditSnapshot => {
+    const storageKey = getLevelDraftStorageKey(levelId);
+    if (!canUseStorage()) {
+        return {
+            storageKey,
+            draftPresent: false,
+            draftValid: false,
+            draftNpcCount: 0,
+            draftNpcIds: [],
+            parseError: null,
+            draftConfigSignature: null
+        };
+    }
+
+    const raw = window.localStorage.getItem(storageKey);
+    if (raw === null) {
+        return {
+            storageKey,
+            draftPresent: false,
+            draftValid: false,
+            draftNpcCount: 0,
+            draftNpcIds: [],
+            parseError: null,
+            draftConfigSignature: null
+        };
+    }
+
+    const parsed = parseTestWorldConfigJson(raw, { fallbackConfig });
+    if (parsed.config === null) {
+        return {
+            storageKey,
+            draftPresent: true,
+            draftValid: false,
+            draftNpcCount: 0,
+            draftNpcIds: [],
+            parseError: parsed.error ?? 'invalid json',
+            draftConfigSignature: null
+        };
+    }
+
+    return {
+        storageKey,
+        draftPresent: true,
+        draftValid: true,
+        draftNpcCount: parsed.config.npcs.length,
+        draftNpcIds: parsed.config.npcs.map((npc) => npc.id),
+        parseError: null,
+        draftConfigSignature: JSON.stringify(parsed.config)
+    };
 };

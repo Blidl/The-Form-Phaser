@@ -207,6 +207,46 @@ const buildJumpRawFields = (rootPath: string, prefix: string): PlayerTuningField
     rawField(`${prefix}-apex-threshold`, 'Apex Velocity Threshold', 'px/sec', `${rootPath}.apexVelocityThreshold`, { min: 0, step: 1 })
 ];
 
+const buildAnimationFields = (rootPath: string, prefix: string): PlayerTuningFieldSchema[] => [
+    rawField(`${prefix}-jump-squash-scale-x`, 'Jump Squash Scale X', 'ratio', `${rootPath}.jumpSquashScaleX`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-jump-squash-scale-y`, 'Jump Squash Scale Y', 'ratio', `${rootPath}.jumpSquashScaleY`, { min: 0.1, step: 0.01 }),
+    secondsField(`${prefix}-jump-squash-duration`, 'Jump Squash Duration', `${rootPath}.jumpSquashDurationMs`, { min: 0, step: 0.01 }),
+    rawField(`${prefix}-jump-stretch-scale-x`, 'Jump Stretch Scale X', 'ratio', `${rootPath}.jumpStretchScaleX`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-jump-stretch-scale-y`, 'Jump Stretch Scale Y', 'ratio', `${rootPath}.jumpStretchScaleY`, { min: 0.1, step: 0.01 }),
+    secondsField(`${prefix}-jump-stretch-duration`, 'Jump Stretch Duration', `${rootPath}.jumpStretchDurationMs`, { min: 0, step: 0.01 }),
+    secondsField(`${prefix}-jump-recover-duration`, 'Jump Recover Duration', `${rootPath}.jumpRecoverDurationMs`, { min: 0, step: 0.01 }),
+    rawField(`${prefix}-land-impact-speed-max`, 'Land Impact Speed For Max', 'px/sec', `${rootPath}.landImpactSpeedForMax`, { min: 1, step: 1 }),
+    rawField(`${prefix}-land-squash-scale-x`, 'Land Squash Scale X', 'ratio', `${rootPath}.landSquashScaleX`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-land-squash-scale-y`, 'Land Squash Scale Y', 'ratio', `${rootPath}.landSquashScaleY`, { min: 0.1, step: 0.01 }),
+    secondsField(`${prefix}-land-squash-duration`, 'Land Squash Duration', `${rootPath}.landSquashDurationMs`, { min: 0, step: 0.01 }),
+    secondsField(`${prefix}-land-recover-duration`, 'Land Recover Duration', `${rootPath}.landRecoverDurationMs`, { min: 0, step: 0.01 }),
+    rawField(`${prefix}-air-scale-x`, 'Air Scale X', 'ratio', `${rootPath}.airScaleX`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-air-scale-y`, 'Air Scale Y', 'ratio', `${rootPath}.airScaleY`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-air-speed-max`, 'Air Speed For Max', 'px/sec', `${rootPath}.airSpeedForMax`, { min: 1, step: 1 }),
+    rawField(`${prefix}-air-smoothing-time`, 'Air Smoothing Time', 'sec', `${rootPath}.airSmoothingTimeSec`, { min: 0, step: 0.01 }),
+    secondsField(`${prefix}-switch-recover-duration`, 'Switch Recover Duration', `${rootPath}.switchRecoverDurationMs`, { min: 0, step: 0.01 })
+];
+
+const buildAnimationRawFields = (rootPath: string, prefix: string): PlayerTuningFieldSchema[] => [
+    rawField(`${prefix}-jump-squash-scale-x-raw`, 'Jump Squash Scale X', 'ratio', `${rootPath}.jumpSquashScaleX`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-jump-squash-scale-y-raw`, 'Jump Squash Scale Y', 'ratio', `${rootPath}.jumpSquashScaleY`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-jump-squash-duration-raw`, 'Jump Squash Duration', 'ms', `${rootPath}.jumpSquashDurationMs`, { min: 0, step: 1 }),
+    rawField(`${prefix}-jump-stretch-scale-x-raw`, 'Jump Stretch Scale X', 'ratio', `${rootPath}.jumpStretchScaleX`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-jump-stretch-scale-y-raw`, 'Jump Stretch Scale Y', 'ratio', `${rootPath}.jumpStretchScaleY`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-jump-stretch-duration-raw`, 'Jump Stretch Duration', 'ms', `${rootPath}.jumpStretchDurationMs`, { min: 0, step: 1 }),
+    rawField(`${prefix}-jump-recover-duration-raw`, 'Jump Recover Duration', 'ms', `${rootPath}.jumpRecoverDurationMs`, { min: 0, step: 1 }),
+    rawField(`${prefix}-land-impact-speed-max-raw`, 'Land Impact Speed For Max', 'px/sec', `${rootPath}.landImpactSpeedForMax`, { min: 1, step: 1 }),
+    rawField(`${prefix}-land-squash-scale-x-raw`, 'Land Squash Scale X', 'ratio', `${rootPath}.landSquashScaleX`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-land-squash-scale-y-raw`, 'Land Squash Scale Y', 'ratio', `${rootPath}.landSquashScaleY`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-land-squash-duration-raw`, 'Land Squash Duration', 'ms', `${rootPath}.landSquashDurationMs`, { min: 0, step: 1 }),
+    rawField(`${prefix}-land-recover-duration-raw`, 'Land Recover Duration', 'ms', `${rootPath}.landRecoverDurationMs`, { min: 0, step: 1 }),
+    rawField(`${prefix}-air-scale-x-raw`, 'Air Scale X', 'ratio', `${rootPath}.airScaleX`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-air-scale-y-raw`, 'Air Scale Y', 'ratio', `${rootPath}.airScaleY`, { min: 0.1, step: 0.01 }),
+    rawField(`${prefix}-air-speed-max-raw`, 'Air Speed For Max', 'px/sec', `${rootPath}.airSpeedForMax`, { min: 1, step: 1 }),
+    rawField(`${prefix}-air-smoothing-time-raw`, 'Air Smoothing Time', 'sec', `${rootPath}.airSmoothingTimeSec`, { min: 0, step: 0.01 }),
+    rawField(`${prefix}-switch-recover-duration-raw`, 'Switch Recover Duration', 'ms', `${rootPath}.switchRecoverDurationMs`, { min: 0, step: 1 })
+];
+
 const buildMovementFields = (rootPath: string, prefix: string): PlayerTuningFieldSchema[] => [
     rawField(`${prefix}-ground-max-speed`, 'Ground Max Speed', 'px/sec', `${rootPath}.groundMaxSpeed`, { min: 1, step: 1 }),
     timeToRateField(`${prefix}-ground-accel-time`, 'Ground Accel 0→Max', `${rootPath}.groundMaxSpeed`, `${rootPath}.groundAccel`),
@@ -345,6 +385,7 @@ export const PLAYER_TUNING_TABS: PlayerTuningTabSchema[] = [
         sections: [
             { id: 'ball-movement', title: 'Movement', fields: buildMovementFields('ball.movement', 'ball-move'), rawFields: buildMovementRawFields('ball.movement', 'ball-move') },
             { id: 'ball-jump', title: 'Jump', fields: buildJumpFields('ball.jump', 'ball-jump'), rawFields: buildJumpRawFields('ball.jump', 'ball-jump') },
+            { id: 'ball-animation', title: 'Animation', fields: buildAnimationFields('ball.animation', 'ball-anim'), rawFields: buildAnimationRawFields('ball.animation', 'ball-anim') },
             {
                 id: 'ball-boost',
                 title: 'Boost',
@@ -409,6 +450,7 @@ export const PLAYER_TUNING_TABS: PlayerTuningTabSchema[] = [
         sections: [
             { id: 'triangle-movement', title: 'Movement', fields: buildMovementFields('triangle.movement', 'triangle-move'), rawFields: buildMovementRawFields('triangle.movement', 'triangle-move') },
             { id: 'triangle-jump', title: 'Jump', fields: buildJumpFields('triangle.jump', 'triangle-jump'), rawFields: buildJumpRawFields('triangle.jump', 'triangle-jump') },
+            { id: 'triangle-animation', title: 'Animation', fields: buildAnimationFields('triangle.animation', 'triangle-anim'), rawFields: buildAnimationRawFields('triangle.animation', 'triangle-anim') },
             {
                 id: 'triangle-flight',
                 title: 'Flight',
@@ -433,6 +475,7 @@ export const PLAYER_TUNING_TABS: PlayerTuningTabSchema[] = [
         sections: [
             { id: 'square-movement', title: 'Movement', fields: buildMovementFields('square.movement', 'square-move'), rawFields: buildMovementRawFields('square.movement', 'square-move') },
             { id: 'square-jump', title: 'Jump', fields: buildJumpFields('square.jump', 'square-jump'), rawFields: buildJumpRawFields('square.jump', 'square-jump') },
+            { id: 'square-animation', title: 'Animation', fields: buildAnimationFields('square.animation', 'square-anim'), rawFields: buildAnimationRawFields('square.animation', 'square-anim') },
             {
                 id: 'square-attach',
                 title: 'Attach',

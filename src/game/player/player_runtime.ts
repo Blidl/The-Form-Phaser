@@ -88,6 +88,7 @@ import {
 import { tickPlayerRuntime } from './player_tick_runtime';
 import type { PlayerLifecycleRuntimeContext, PlayerMutableRuntimeState, PlayerTickRuntimeContext } from './player_runtime_types';
 import { clearSquareAttach } from './player_square_attach';
+import { createEmptyPlayerPresentationFrameHooks, type PlayerPresentationFrameHooks } from './view/player_presentation_hooks';
 
 export class PfPlayerRuntime {
     private readonly scene: Scene;
@@ -111,6 +112,14 @@ export class PfPlayerRuntime {
     private readonly ballReboundRuntime: BallReboundRuntimeState;
     private frozenForRespawn: boolean;
     private airborneWindDriftX: number;
+    private presentationPrevGrounded: boolean;
+    private presentationPrevVerticalSpeed: number;
+    private presentationApexEmitted: boolean;
+    private presentationFallEmitted: boolean;
+    private presentationPrevTriangleFlightActive: boolean;
+    private presentationPrevSquareAttached: boolean;
+    private lastVisualDeltaMs: number;
+    private pendingPresentationHooks: PlayerPresentationFrameHooks;
     private readonly groundedDragX: number;
     private readonly lifecycleContext: PlayerLifecycleRuntimeContext;
 
@@ -139,6 +148,14 @@ export class PfPlayerRuntime {
         this.ballReboundRuntime = createBallReboundRuntimeState();
         this.frozenForRespawn = false;
         this.airborneWindDriftX = 0;
+        this.presentationPrevGrounded = false;
+        this.presentationPrevVerticalSpeed = 0;
+        this.presentationApexEmitted = false;
+        this.presentationFallEmitted = false;
+        this.presentationPrevTriangleFlightActive = false;
+        this.presentationPrevSquareAttached = false;
+        this.lastVisualDeltaMs = 16;
+        this.pendingPresentationHooks = createEmptyPlayerPresentationFrameHooks();
 
         this.physicsSprite = scene.add.circle(x, y, PLAYER_PLACEHOLDER_RADIUS, 0xffffff, 0.01);
         this.physicsSprite.setDepth(4498);
@@ -167,9 +184,12 @@ export class PfPlayerRuntime {
             mutable: this.mutableState,
             applyCurrentFormCollisionBody: () => this.applyCurrentFormCollisionBody(),
             applyCurrentFormVisual: () => this.applyCurrentFormVisual(),
-            syncVisualPosition: () => this.syncVisualPosition()
+            syncVisualPosition: () => this.syncVisualPosition(),
+            notifyFormSwitchIn: (nextForm) => this.queuePresentationFormSwitchIn(nextForm),
+            resetVisualPose: () => this.view.resetFormAnimationPose(this.state.currentForm)
         };
         this.applyCurrentFormCollisionBody();
+        this.view.resetFormAnimationPose(this.state.currentForm);
         this.applyCurrentFormVisual();
     }
 
@@ -187,7 +207,13 @@ export class PfPlayerRuntime {
             reboundJumpVelocity: this.reboundJumpVelocity,
             lastAirborneDownwardSpeed: this.lastAirborneDownwardSpeed,
             frozenForRespawn: this.frozenForRespawn,
-            airborneWindDriftX: this.airborneWindDriftX
+            airborneWindDriftX: this.airborneWindDriftX,
+            presentationPrevGrounded: this.presentationPrevGrounded,
+            presentationPrevVerticalSpeed: this.presentationPrevVerticalSpeed,
+            presentationApexEmitted: this.presentationApexEmitted,
+            presentationFallEmitted: this.presentationFallEmitted,
+            presentationPrevTriangleFlightActive: this.presentationPrevTriangleFlightActive,
+            presentationPrevSquareAttached: this.presentationPrevSquareAttached
         };
     }
 
@@ -205,6 +231,12 @@ export class PfPlayerRuntime {
         this.lastAirborneDownwardSpeed = value.lastAirborneDownwardSpeed;
         this.frozenForRespawn = value.frozenForRespawn;
         this.airborneWindDriftX = value.airborneWindDriftX;
+        this.presentationPrevGrounded = value.presentationPrevGrounded;
+        this.presentationPrevVerticalSpeed = value.presentationPrevVerticalSpeed;
+        this.presentationApexEmitted = value.presentationApexEmitted;
+        this.presentationFallEmitted = value.presentationFallEmitted;
+        this.presentationPrevTriangleFlightActive = value.presentationPrevTriangleFlightActive;
+        this.presentationPrevSquareAttached = value.presentationPrevSquareAttached;
     }
 
     public get currentForm(): PlayerFormId {
@@ -457,6 +489,7 @@ export class PfPlayerRuntime {
         this.physicsBody.checkCollision.none = false;
         this.applyCurrentFormCollisionBody();
         this.refreshTrianglePhysicsState();
+        this.view.resetFormAnimationPose(this.state.currentForm);
         this.syncVisualPosition();
     }
 
@@ -465,6 +498,7 @@ export class PfPlayerRuntime {
             return;
         }
 
+        this.pendingPresentationHooks = createEmptyPlayerPresentationFrameHooks();
         this.syncLiveTuningRuntimeState();
         const tickContext: PlayerTickRuntimeContext = {
             state: this.state,
@@ -489,11 +523,23 @@ export class PfPlayerRuntime {
             querySquareAttachPose: (centerX, centerY, normalX, normalY) => this.querySquareAttachPose(centerX, centerY, normalX, normalY),
             isSquareAttachPathClear: (fromCenterX, fromCenterY, toCenterX, toCenterY, supportBody) => this.isSquareAttachPathClear(fromCenterX, fromCenterY, toCenterX, toCenterY, supportBody),
             isSquareRolloverPoseClear: (centerX, centerY, orientationRad, ignoreBodyA, ignoreBodyB) => this.isSquareRolloverPoseClear(centerX, centerY, orientationRad, ignoreBodyA, ignoreBodyB),
-            isCurrentlyGrounded: () => this.computeIsCurrentlyGrounded()
+            isCurrentlyGrounded: () => this.computeIsCurrentlyGrounded(),
+            notifyJumpIntent: () => this.queuePresentationJumpIntent(),
+            notifyJumpCommit: () => this.queuePresentationJumpCommit(),
+            notifyApexEnter: () => this.queuePresentationApexEnter(),
+            notifyFallEnter: () => this.queuePresentationFallEnter(),
+            notifyLandImpact: (impactSpeed) => this.queuePresentationLandImpact(impactSpeed),
+            notifyBallReboundLaunch: () => this.queuePresentationBallReboundLaunch(),
+            notifyTriangleFlightStart: () => this.queuePresentationTriangleFlightStart(),
+            notifyTriangleFlightEnd: () => this.queuePresentationTriangleFlightEnd(),
+            notifySquareAttachEnter: () => this.queuePresentationSquareAttachEnter(),
+            notifySquareAttachExit: () => this.queuePresentationSquareAttachExit(),
+            notifySquareAttachJumpCommit: () => this.queuePresentationSquareAttachJumpCommit()
         };
 
         tickPlayerRuntime(tickContext);
         this.mutableState = tickContext.mutable;
+        this.lastVisualDeltaMs = deltaMs;
         this.syncVisualPosition();
     }
 
@@ -510,6 +556,8 @@ export class PfPlayerRuntime {
         const y = this.physicsSprite.y;
         this.applyCurrentFormCollisionBody();
         const formAnchor = this.formAnchor;
+        const grounded = this.computeIsCurrentlyGrounded();
+        const presentationHooks = this.consumePresentationHooks();
         this.view.syncVisualPosition(
             x,
             y,
@@ -519,8 +567,75 @@ export class PfPlayerRuntime {
             this.state.triangleShell,
             this.state.squareShell,
             this.state.triangleFlight,
-            this.state.currentForm === 'ball' && this.boostModeActive
+            this.state.currentForm === 'ball' && this.boostModeActive,
+            presentationHooks,
+            grounded,
+            this.physicsBody.velocity.y,
+            this.lastVisualDeltaMs
         );
+    }
+
+    private consumePresentationHooks(): PlayerPresentationFrameHooks {
+        const snapshot: PlayerPresentationFrameHooks = { ...this.pendingPresentationHooks };
+        this.pendingPresentationHooks = createEmptyPlayerPresentationFrameHooks();
+        return snapshot;
+    }
+
+    private queuePresentationJumpIntent(): void {
+        this.pendingPresentationHooks.jumpIntent = true;
+    }
+
+    private queuePresentationJumpCommit(): void {
+        this.pendingPresentationHooks.jumpCommit = true;
+    }
+
+    private queuePresentationApexEnter(): void {
+        this.pendingPresentationHooks.apexEnter = true;
+    }
+
+    private queuePresentationFallEnter(): void {
+        this.pendingPresentationHooks.fallEnter = true;
+    }
+
+    private queuePresentationLandImpact(impactSpeed: number): void {
+        const nextImpactSpeed = Math.max(0, impactSpeed);
+        if (this.pendingPresentationHooks.landImpactSpeed === null) {
+            this.pendingPresentationHooks.landImpactSpeed = nextImpactSpeed;
+            return;
+        }
+
+        this.pendingPresentationHooks.landImpactSpeed = Math.max(
+            this.pendingPresentationHooks.landImpactSpeed,
+            nextImpactSpeed
+        );
+    }
+
+    private queuePresentationFormSwitchIn(nextForm: PlayerFormId): void {
+        this.pendingPresentationHooks.formSwitchIn = nextForm;
+    }
+
+    private queuePresentationBallReboundLaunch(): void {
+        this.pendingPresentationHooks.ballReboundLaunch = true;
+    }
+
+    private queuePresentationTriangleFlightStart(): void {
+        this.pendingPresentationHooks.triangleFlightStart = true;
+    }
+
+    private queuePresentationTriangleFlightEnd(): void {
+        this.pendingPresentationHooks.triangleFlightEnd = true;
+    }
+
+    private queuePresentationSquareAttachEnter(): void {
+        this.pendingPresentationHooks.squareAttachEnter = true;
+    }
+
+    private queuePresentationSquareAttachExit(): void {
+        this.pendingPresentationHooks.squareAttachExit = true;
+    }
+
+    private queuePresentationSquareAttachJumpCommit(): void {
+        this.pendingPresentationHooks.squareAttachJumpCommit = true;
     }
 
     private applyCurrentFormCollisionBody(): void {

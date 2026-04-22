@@ -6,6 +6,7 @@ import { createTestDebugDrawRuntime } from './test_debug_draw_runtime';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../shared/dom_input_focus';
 import type { TestNpcDebugEntry, TestNpcInteractionDebugState } from '../../game/npc/npc_types';
 import type { TestCutsceneDebugState } from '../../game/cutscene/cutscene_types';
+import type { TestCutsceneRequestResult } from '../../game/cutscene/cutscene_types';
 
 type DebugDockTabId = 'interaction' | 'npc' | 'player' | 'log';
 
@@ -32,6 +33,14 @@ const DEBUG_DOCK_MAX_WIDTH = 420;
 const DEBUG_DOCK_VIEWPORT_MARGIN = 12;
 const DEBUG_DOCK_TOP_OFFSET = 110;
 const DEBUG_DOCK_BOTTOM_MARGIN = 18;
+const CUTSCENE_TOAST_DURATION_MS = 1800;
+
+interface CutsceneDebugFeedbackPayload {
+    result?: unknown;
+    cutsceneRef?: unknown;
+    sourceDetail?: unknown;
+    failureReason?: unknown;
+}
 
 export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): TestDebugRuntime => {
     const { scene, player, setPlayerDebugVisualsVisible, getHazards, getNpcDebugEntries, getNpcInteractionDebugState, getCutsceneDebugState } = params;
@@ -114,11 +123,33 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
     root.appendChild(body);
     document.body.appendChild(root);
 
+    const cutsceneToast = document.createElement('div');
+    cutsceneToast.id = 'test-cutscene-toast';
+    cutsceneToast.style.position = 'fixed';
+    cutsceneToast.style.right = '20px';
+    cutsceneToast.style.bottom = '24px';
+    cutsceneToast.style.zIndex = '6004';
+    cutsceneToast.style.minWidth = '220px';
+    cutsceneToast.style.maxWidth = '460px';
+    cutsceneToast.style.padding = '10px 12px';
+    cutsceneToast.style.borderRadius = '8px';
+    cutsceneToast.style.border = '1px solid rgba(90, 140, 150, 0.95)';
+    cutsceneToast.style.background = 'rgba(5, 19, 24, 0.94)';
+    cutsceneToast.style.boxShadow = '0 10px 24px rgba(0, 0, 0, 0.34)';
+    cutsceneToast.style.color = '#ecfff8';
+    cutsceneToast.style.fontFamily = 'monospace';
+    cutsceneToast.style.fontSize = '12px';
+    cutsceneToast.style.lineHeight = '1.45';
+    cutsceneToast.style.pointerEvents = 'none';
+    cutsceneToast.style.display = 'none';
+    document.body.appendChild(cutsceneToast);
+
     let visible = false;
     let activeTab: DebugDockTabId = 'interaction';
     let lastSeenInteractionAttemptNonce = 0;
     let statusLines: string[] = ['No interaction attempts yet.'];
     let logEntries: string[] = [];
+    let cutsceneToastTimeoutId: number | null = null;
 
     const restoreGameFocus = (): void => {
         const activeElement = document.activeElement;
@@ -169,6 +200,78 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
     const pushLogEntry = (line: string): void => {
         logEntries = [line, ...logEntries].slice(0, DEBUG_LOG_MAX_ENTRIES);
     };
+
+    const showCutsceneToast = (line: string, level: 'neutral' | 'success' | 'error'): void => {
+        if (!import.meta.env.DEV) {
+            return;
+        }
+        cutsceneToast.textContent = line;
+        cutsceneToast.style.display = 'block';
+        cutsceneToast.style.borderColor = level === 'error'
+            ? 'rgba(196, 98, 98, 0.95)'
+            : (level === 'success'
+                ? 'rgba(95, 165, 102, 0.95)'
+                : 'rgba(90, 140, 150, 0.95)');
+        cutsceneToast.style.background = level === 'error'
+            ? 'rgba(44, 12, 14, 0.94)'
+            : (level === 'success'
+                ? 'rgba(10, 31, 16, 0.94)'
+                : 'rgba(5, 19, 24, 0.94)');
+        if (cutsceneToastTimeoutId !== null) {
+            window.clearTimeout(cutsceneToastTimeoutId);
+        }
+        cutsceneToastTimeoutId = window.setTimeout(() => {
+            cutsceneToast.style.display = 'none';
+            cutsceneToastTimeoutId = null;
+        }, CUTSCENE_TOAST_DURATION_MS);
+    };
+
+    const toCutsceneResult = (value: unknown): TestCutsceneRequestResult | null => {
+        if (typeof value !== 'string') {
+            return null;
+        }
+        if (
+            value === 'accepted'
+            || value === 'rejected'
+            || value === 'missing_ref'
+            || value === 'already_running'
+            || value === 'completed'
+            || value === 'failed'
+        ) {
+            return value;
+        }
+        return null;
+    };
+
+    const onCutsceneDebugFeedback = (payload: unknown): void => {
+        if (typeof payload !== 'object' || payload === null) {
+            return;
+        }
+        const raw = payload as CutsceneDebugFeedbackPayload;
+        const result = toCutsceneResult(raw.result);
+        if (!result) {
+            return;
+        }
+        const cutsceneRef = typeof raw.cutsceneRef === 'string' && raw.cutsceneRef.trim().length > 0
+            ? raw.cutsceneRef.trim()
+            : '-';
+        const sourceDetail = typeof raw.sourceDetail === 'string' && raw.sourceDetail.trim().length > 0
+            ? raw.sourceDetail.trim()
+            : '-';
+        const failureReason = typeof raw.failureReason === 'string' && raw.failureReason.trim().length > 0
+            ? raw.failureReason.trim()
+            : null;
+        const line = `CUTSCENE ${result} | ref:${cutsceneRef} | src:${sourceDetail}${failureReason ? ` | ${failureReason}` : ''}`;
+        pushLogEntry(line);
+        const level: 'neutral' | 'success' | 'error' = result === 'accepted' || result === 'completed'
+            ? 'success'
+            : ((result === 'failed' || result === 'missing_ref' || result === 'rejected')
+                ? 'error'
+                : 'neutral');
+        showCutsceneToast(line, level);
+    };
+
+    scene.events.on('pf:cutscene_debug_feedback', onCutsceneDebugFeedback);
 
     const formatScriptedOverride = (value: string | null | undefined): string => {
         if (value === undefined) {
@@ -225,6 +328,11 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
             `available: ${target ? (target.availability === 'available' ? 'yes' : 'no') : 'no_target'}`,
             `reason: ${target?.unavailableReason ?? 'ready'}`,
             `outcome: ${target ? `${target.outcomeKind}:${target.outcomeRef}` : '-'}`,
+            `outcome source: ${target?.outcomeSource ?? '-'}`,
+            `effective cutscene ref: ${target?.effectiveCutsceneRef ?? '-'}`,
+            `cutscene ref source: ${target?.cutsceneRefSource ?? '-'}`,
+            `cutscene ref status: ${target?.cutsceneRefStatus ?? '-'}`,
+            `cutscene ref issue: ${target?.cutsceneRefIssue ?? '-'}`,
             `arbitration: ${interactionState.arbitrationSource}${interactionState.arbitrationDetail ? ` (${interactionState.arbitrationDetail})` : ''}`,
             `attempt: ${attempt ? `#${attempt.attemptNonce} ${attempt.observableResult}` : '-'}`,
             `attempt detail: ${attempt?.detail ?? '-'}`,
@@ -232,11 +340,41 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
             `key: ${interactionState.temporaryManualTriggerKey}`,
             '',
             'Cutscene',
+            `last request ref: ${cutsceneState.lastCutsceneRequestRef ?? '-'}`,
+            `last request result: ${cutsceneState.lastCutsceneRequestResult ?? '-'}`,
             `ref: ${cutsceneState.activeCutsceneRef ?? '-'}`,
             `step index: ${cutsceneState.activeStepIndex >= 0 ? cutsceneState.activeStepIndex : '-'}`,
             `step kind: ${cutsceneState.activeStepKind ?? '-'}`,
             `status: ${cutsceneState.status ?? '-'}`,
-            `detail: ${cutsceneState.detail ?? '-'}`
+            `block reason: ${cutsceneState.blockReason ?? '-'}`,
+            `failure: ${cutsceneState.failureReason ?? '-'}`,
+            `detail: ${cutsceneState.detail ?? '-'}`,
+            `camera owner: ${cutsceneState.cameraOwner}`,
+            `camera focus actor: ${cutsceneState.cameraFocusActorId ?? '-'}`,
+            `camera transition: ${cutsceneState.cameraTransitionMode}`,
+            `camera target: ${
+                cutsceneState.cameraTargetX !== null && cutsceneState.cameraTargetY !== null
+                    ? `${cutsceneState.cameraTargetX.toFixed(2)}, ${cutsceneState.cameraTargetY.toFixed(2)}`
+                    : '-'
+            }`,
+            `camera delta: ${
+                cutsceneState.cameraRemainingDeltaX !== null && cutsceneState.cameraRemainingDeltaY !== null
+                    ? `${cutsceneState.cameraRemainingDeltaX.toFixed(2)}, ${cutsceneState.cameraRemainingDeltaY.toFixed(2)}`
+                    : '-'
+            }`,
+            `camera remaining: ${
+                cutsceneState.cameraRemainingDistancePx !== null
+                    ? `${cutsceneState.cameraRemainingDistancePx.toFixed(2)}px`
+                    : '-'
+            }`,
+            `actor seq actor: ${cutsceneState.activeActorSequenceActorId ?? '-'}`,
+            `actor seq ref: ${cutsceneState.activeActorSequenceRef ?? '-'}`,
+            `actor seq id: ${cutsceneState.activeActorSequenceId ?? '-'}`,
+            `actor seq status: ${cutsceneState.activeActorSequenceStatus ?? '-'}`,
+            `cutscene active: ${cutsceneState.cutsceneActive ? 'yes' : 'no'}`,
+            `normal camera path: ${cutsceneState.normalCameraPathStatus}`,
+            `normal camera source: ${cutsceneState.normalCameraPathSource ?? '-'}`,
+            `normal camera reason: ${cutsceneState.normalCameraPathReason ?? '-'}`
         ];
     };
 
@@ -357,7 +495,8 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
                 lastSeenInteractionAttemptNonce = latestAttempt.attemptNonce;
                 statusLines = [
                     `I -> ${latestAttempt.observableResult}`,
-                    `actor:${latestAttempt.actorId ?? '-'} | outcome:${latestAttempt.outcomeKind ?? '-'}:${latestAttempt.outcomeRef ?? '-'}`,
+                    `actor:${latestAttempt.actorId ?? '-'} | outcome:${latestAttempt.outcomeKind ?? '-'}:${latestAttempt.outcomeRef ?? '-'} | src:${latestAttempt.outcomeSource ?? '-'}`,
+                    `cutscene:${latestAttempt.effectiveCutsceneRef ?? '-'} | ${latestAttempt.cutsceneRefStatus}${latestAttempt.cutsceneRefIssue ? ` | ${latestAttempt.cutsceneRefIssue}` : ''}`,
                     latestAttempt.detail
                 ];
                 const isSuccess = latestAttempt.observableResult === 'dispatched_sequence'
@@ -404,9 +543,15 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
         destroy: (): void => {
             applyVisibility(false);
             debugDrawRuntime.destroy();
+            scene.events.off('pf:cutscene_debug_feedback', onCutsceneDebugFeedback);
             root.removeEventListener('keydown', stopDomKeyPropagation, true);
             root.removeEventListener('keyup', stopDomKeyPropagation, true);
             root.removeEventListener('keypress', stopDomKeyPropagation, true);
+            if (cutsceneToastTimeoutId !== null) {
+                window.clearTimeout(cutsceneToastTimeoutId);
+                cutsceneToastTimeoutId = null;
+            }
+            cutsceneToast.remove();
             root.remove();
         }
     };

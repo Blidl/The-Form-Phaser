@@ -4,9 +4,11 @@ import type { PlayerWorldActor } from '../../game/player/player_runtime_contract
 import { getTestCutsceneDefinition } from '../../game/cutscene/test_cutscene_registry';
 import type {
     TestCutsceneActorSequenceRefStep,
+    TestCutsceneCameraFocusActorStep,
     TestCutsceneCameraPanToStep,
     TestCutsceneDebugState,
     TestCutsceneDefinition,
+    TestCutsceneRequestResult,
     TestCutsceneRunStatus,
     TestCutsceneStep,
     TestCutsceneSubtitleStep
@@ -19,14 +21,31 @@ interface ActiveCutsceneRun {
     waitRemainingMs: number | null;
     waitingActorSequence: {
         actorId: string;
+        sequenceRef: string;
         sequenceId: string;
+        stepRef: string;
+        status: 'running' | 'succeeded' | 'failed' | 'cancelled' | null;
     } | null;
-    waitingCameraPan: boolean;
+    waitingCameraPan: {
+        stepIndex: number;
+        targetX: number;
+        targetY: number;
+        tolerancePx: number;
+    } | null;
+    waitingCameraFocus: {
+        stepIndex: number;
+        actorId: string;
+        targetX: number;
+        targetY: number;
+        tolerancePx: number;
+    } | null;
+    activeCameraFocusActorId: string | null;
 }
 
 export interface TestCutsceneRuntime {
     update: (deltaMs: number) => void;
     tryStartCutsceneRef: (cutsceneRef: string, sourceDetail: string) => boolean;
+    requestNormalCameraOwnership: (source: string) => boolean;
     isRunning: () => boolean;
     isInputLocked: () => boolean;
     getDebugState: () => TestCutsceneDebugState;
@@ -49,10 +68,66 @@ const clampDeltaMs = (deltaMs: number): number => {
     return Math.min(deltaMs, 64);
 };
 
+const CUTSCENE_CAMERA_PAN_COMPLETE_EPSILON_PX = 1.25;
+const CUTSCENE_CAMERA_FOCUS_COMPLETE_EPSILON_PX = 1.25;
+const CUTSCENE_CAMERA_FOCUS_TRANSITION_DURATION_MS = 280;
+const CUTSCENE_CAMERA_FOLLOW_OFFSET_X = 0;
+const CUTSCENE_CAMERA_FOLLOW_OFFSET_Y = 96;
+
+type CameraPanSnapshot = {
+    targetX: number;
+    targetY: number;
+    deltaX: number;
+    deltaY: number;
+    remainingDistancePx: number;
+    tolerancePx: number;
+};
+
+const getCameraCenter = (camera: Phaser.Cameras.Scene2D.Camera): { x: number; y: number } => ({
+    x: camera.scrollX + (camera.width * 0.5),
+    y: camera.scrollY + (camera.height * 0.5)
+});
+
+const getCameraPanSnapshot = (
+    camera: Phaser.Cameras.Scene2D.Camera,
+    targetX: number,
+    targetY: number,
+    tolerancePx: number
+): CameraPanSnapshot => {
+    const center = getCameraCenter(camera);
+    const deltaX = targetX - center.x;
+    const deltaY = targetY - center.y;
+    return {
+        targetX,
+        targetY,
+        deltaX,
+        deltaY,
+        remainingDistancePx: Math.hypot(deltaX, deltaY),
+        tolerancePx
+    };
+};
+
+const getFocusObjectPosition = (
+    focusObject: Phaser.GameObjects.GameObject
+): { x: number; y: number } | null => {
+    const candidate = focusObject as Partial<{ x: unknown; y: unknown }>;
+    if (typeof candidate.x === 'number' && Number.isFinite(candidate.x)
+        && typeof candidate.y === 'number' && Number.isFinite(candidate.y)) {
+        return { x: candidate.x, y: candidate.y };
+    }
+    return null;
+};
+
 const getStepRef = (step: TestCutsceneStep, stepIndex: number): string => {
     return step.ref && step.ref.trim().length > 0
         ? step.ref.trim()
         : `step_${stepIndex + 1}`;
+};
+
+const isActorSequenceTerminalStatus = (
+    status: 'running' | 'succeeded' | 'failed' | 'cancelled' | null
+): status is 'succeeded' | 'failed' | 'cancelled' => {
+    return status === 'succeeded' || status === 'failed' || status === 'cancelled';
 };
 
 export const createTestCutsceneRuntime = (
@@ -63,19 +138,77 @@ export const createTestCutsceneRuntime = (
     let inputLocked = false;
     let status: TestCutsceneRunStatus | null = null;
     let detail: string | null = null;
+    let failureReason: string | null = null;
+    let lastCutsceneRequestRef: string | null = null;
+    let lastCutsceneRequestResult: TestCutsceneRequestResult | null = null;
+    let blockReason: string | null = null;
+    let cameraOwner: 'cutscene_runtime' | 'player_follow_runtime' = 'player_follow_runtime';
+    let normalCameraPathStatus: 'none' | 'applied' | 'skipped' = 'none';
+    let normalCameraPathSource: string | null = null;
+    let normalCameraPathReason: string | null = null;
+
+    const clearBlockReason = (): void => {
+        blockReason = null;
+    };
+
+    const setBlockReason = (nextBlockReason: string): void => {
+        blockReason = nextBlockReason;
+    };
+
+    const acquireCutsceneCameraOwnership = (): void => {
+        cameraOwner = 'cutscene_runtime';
+    };
+
+    const recordNormalCameraPathStatus = (
+        nextStatus: 'none' | 'applied' | 'skipped',
+        source: string | null,
+        reason: string | null
+    ): void => {
+        normalCameraPathStatus = nextStatus;
+        normalCameraPathSource = source;
+        normalCameraPathReason = reason;
+    };
+
+    const emitCutsceneDebugFeedback = (
+        result: TestCutsceneRequestResult,
+        cutsceneRef: string | null,
+        sourceDetail: string | null,
+        nextFailureReason: string | null
+    ): void => {
+        scene.events.emit('pf:cutscene_debug_feedback', {
+            result,
+            cutsceneRef,
+            sourceDetail,
+            failureReason: nextFailureReason
+        });
+    };
 
     const restorePlayerCameraFollow = (): void => {
         const camera = scene.cameras.main;
+        camera.panEffect.reset();
         camera.stopFollow();
         camera.startFollow(player.arcadeBodyObject, true);
-        camera.setFollowOffset(0, 96);
+        camera.setFollowOffset(CUTSCENE_CAMERA_FOLLOW_OFFSET_X, CUTSCENE_CAMERA_FOLLOW_OFFSET_Y);
         refreshBaselineFollowCameraLerp(camera);
+        cameraOwner = 'player_follow_runtime';
     };
 
     const finishRun = (nextStatus: TestCutsceneRunStatus, nextDetail: string | null): void => {
+        const completedCutsceneRef = activeRun?.definition.id ?? null;
         activeRun = null;
         status = nextStatus;
         detail = nextDetail;
+        failureReason = nextStatus === 'failed'
+            ? (nextDetail ?? 'cutscene failed without explicit reason')
+            : null;
+        if (nextStatus === 'completed') {
+            lastCutsceneRequestResult = 'completed';
+            emitCutsceneDebugFeedback('completed', completedCutsceneRef, nextDetail, null);
+        } else if (nextStatus === 'failed') {
+            lastCutsceneRequestResult = 'failed';
+            emitCutsceneDebugFeedback('failed', completedCutsceneRef, nextDetail, failureReason);
+        }
+        clearBlockReason();
         inputLocked = false;
         restorePlayerCameraFollow();
     };
@@ -87,25 +220,160 @@ export const createTestCutsceneRuntime = (
         return worldRuntime.getNpcCameraFocusObject(actorId);
     };
 
-    const executeCameraPanStep = (step: TestCutsceneCameraPanToStep): void => {
+    const executeCameraPanStep = (
+        step: TestCutsceneCameraPanToStep,
+        stepIndex: number
+    ): 'advanced' | 'blocked' => {
+        if (!activeRun) {
+            return 'blocked';
+        }
         const camera = scene.cameras.main;
+        acquireCutsceneCameraOwnership();
         camera.stopFollow();
         const durationMs = Math.max(0, Math.round(step.durationMs));
+        const tolerancePx = CUTSCENE_CAMERA_PAN_COMPLETE_EPSILON_PX;
+        const targetX = step.x;
+        const targetY = step.y;
         if (durationMs <= 0) {
-            camera.centerOn(step.x, step.y);
-            if (activeRun) {
-                activeRun.waitingCameraPan = false;
-            }
-            return;
+            camera.centerOn(targetX, targetY);
+            clearBlockReason();
+            return 'advanced';
         }
-        if (activeRun) {
-            activeRun.waitingCameraPan = true;
+        activeRun.waitingCameraPan = {
+            stepIndex,
+            targetX,
+            targetY,
+            tolerancePx
+        };
+        camera.pan(targetX, targetY, durationMs, step.ease ?? 'Sine.easeInOut', true);
+        const panSnapshot = getCameraPanSnapshot(camera, targetX, targetY, tolerancePx);
+        setBlockReason(
+            `camera_pan_to waiting: remain=${panSnapshot.remainingDistancePx.toFixed(2)}px `
+            + `(dx=${panSnapshot.deltaX.toFixed(2)}, dy=${panSnapshot.deltaY.toFixed(2)})`
+        );
+        return 'blocked';
+    };
+
+    const executeCameraFocusActorStep = (
+        step: TestCutsceneCameraFocusActorStep,
+        stepIndex: number
+    ): 'advanced' | 'blocked' => {
+        if (!activeRun) {
+            return 'blocked';
         }
-        camera.pan(step.x, step.y, durationMs, step.ease ?? 'Sine.easeInOut', true, () => {
-            if (activeRun) {
-                activeRun.waitingCameraPan = false;
+        const focusObject = resolveFocusObject(step.actorId);
+        if (!focusObject) {
+            finishRun('failed', `camera_focus_actor failed: missing actor "${step.actorId}"`);
+            return 'blocked';
+        }
+        const focusPosition = getFocusObjectPosition(focusObject);
+        if (!focusPosition) {
+            finishRun('failed', `camera_focus_actor failed: actor "${step.actorId}" has no x/y focus position`);
+            return 'blocked';
+        }
+        const camera = scene.cameras.main;
+        const targetX = focusPosition.x + CUTSCENE_CAMERA_FOLLOW_OFFSET_X;
+        const targetY = focusPosition.y + CUTSCENE_CAMERA_FOLLOW_OFFSET_Y;
+        const durationMs = Math.max(
+            0,
+            Math.round(step.durationMs ?? CUTSCENE_CAMERA_FOCUS_TRANSITION_DURATION_MS)
+        );
+        const tolerancePx = step.tolerancePx ?? CUTSCENE_CAMERA_FOCUS_COMPLETE_EPSILON_PX;
+        acquireCutsceneCameraOwnership();
+        camera.stopFollow();
+        camera.panEffect.reset();
+        if (durationMs <= 0) {
+            camera.centerOn(targetX, targetY);
+            camera.startFollow(focusObject, true);
+            camera.setFollowOffset(CUTSCENE_CAMERA_FOLLOW_OFFSET_X, CUTSCENE_CAMERA_FOLLOW_OFFSET_Y);
+            refreshBaselineFollowCameraLerp(camera);
+            activeRun.activeCameraFocusActorId = step.actorId;
+            clearBlockReason();
+            return 'advanced';
+        }
+        activeRun.waitingCameraFocus = {
+            stepIndex,
+            actorId: step.actorId,
+            targetX,
+            targetY,
+            tolerancePx
+        };
+        camera.pan(targetX, targetY, durationMs, step.ease ?? 'Sine.easeInOut', true);
+        const panSnapshot = getCameraPanSnapshot(camera, targetX, targetY, tolerancePx);
+        setBlockReason(
+            `camera_focus_actor handoff: remain=${panSnapshot.remainingDistancePx.toFixed(2)}px `
+            + `(dx=${panSnapshot.deltaX.toFixed(2)}, dy=${panSnapshot.deltaY.toFixed(2)})`
+        );
+        return 'blocked';
+    };
+
+    const updateCameraPanWait = (): boolean => {
+        if (!activeRun?.waitingCameraPan) {
+            return false;
+        }
+        const camera = scene.cameras.main;
+        const waitingPan = activeRun.waitingCameraPan;
+        const panSnapshot = getCameraPanSnapshot(
+            camera,
+            waitingPan.targetX,
+            waitingPan.targetY,
+            waitingPan.tolerancePx
+        );
+        const reachedTolerance = panSnapshot.remainingDistancePx <= waitingPan.tolerancePx;
+        const panFinished = reachedTolerance || !camera.panEffect.isRunning;
+        if (panFinished) {
+            camera.centerOn(waitingPan.targetX, waitingPan.targetY);
+            activeRun.waitingCameraPan = null;
+            if (activeRun.stepIndex === waitingPan.stepIndex) {
+                activeRun.stepIndex += 1;
             }
-        });
+            clearBlockReason();
+            return false;
+        }
+        setBlockReason(
+            `camera_pan_to waiting: remain=${panSnapshot.remainingDistancePx.toFixed(2)}px `
+            + `(dx=${panSnapshot.deltaX.toFixed(2)}, dy=${panSnapshot.deltaY.toFixed(2)})`
+        );
+        return true;
+    };
+
+    const updateCameraFocusWait = (): boolean => {
+        if (!activeRun?.waitingCameraFocus) {
+            return false;
+        }
+        const camera = scene.cameras.main;
+        const waitingFocus = activeRun.waitingCameraFocus;
+        const panSnapshot = getCameraPanSnapshot(
+            camera,
+            waitingFocus.targetX,
+            waitingFocus.targetY,
+            waitingFocus.tolerancePx
+        );
+        const reachedTolerance = panSnapshot.remainingDistancePx <= waitingFocus.tolerancePx;
+        const transitionFinished = reachedTolerance || !camera.panEffect.isRunning;
+        if (transitionFinished) {
+            const focusObject = resolveFocusObject(waitingFocus.actorId);
+            if (!focusObject) {
+                finishRun('failed', `camera_focus_actor failed: missing actor "${waitingFocus.actorId}"`);
+                return false;
+            }
+            camera.centerOn(waitingFocus.targetX, waitingFocus.targetY);
+            camera.startFollow(focusObject, true);
+            camera.setFollowOffset(CUTSCENE_CAMERA_FOLLOW_OFFSET_X, CUTSCENE_CAMERA_FOLLOW_OFFSET_Y);
+            refreshBaselineFollowCameraLerp(camera);
+            activeRun.activeCameraFocusActorId = waitingFocus.actorId;
+            activeRun.waitingCameraFocus = null;
+            if (activeRun.stepIndex === waitingFocus.stepIndex) {
+                activeRun.stepIndex += 1;
+            }
+            clearBlockReason();
+            return false;
+        }
+        setBlockReason(
+            `camera_focus_actor handoff: remain=${panSnapshot.remainingDistancePx.toFixed(2)}px `
+            + `(dx=${panSnapshot.deltaX.toFixed(2)}, dy=${panSnapshot.deltaY.toFixed(2)})`
+        );
+        return true;
     };
 
     const emitSubtitleStub = (
@@ -141,7 +409,10 @@ export const createTestCutsceneRuntime = (
         if (activeRun) {
             activeRun.waitingActorSequence = {
                 actorId: step.actorId,
-                sequenceId: dispatchResult.sequenceId
+                sequenceRef: step.sequenceRef,
+                sequenceId: dispatchResult.sequenceId,
+                stepRef,
+                status: 'running'
             };
         }
         return true;
@@ -163,23 +434,20 @@ export const createTestCutsceneRuntime = (
             return 'advanced';
         }
         if (step.kind === 'camera_focus_actor') {
-            const focusObject = resolveFocusObject(step.actorId);
-            if (!focusObject) {
-                finishRun('failed', `camera_focus_actor failed: missing actor "${step.actorId}"`);
-                return 'blocked';
-            }
-            const camera = scene.cameras.main;
-            camera.startFollow(focusObject, true);
-            camera.setFollowOffset(0, 96);
-            refreshBaselineFollowCameraLerp(camera);
-            return 'advanced';
+            return executeCameraFocusActorStep(step, stepIndex);
         }
         if (step.kind === 'camera_pan_to') {
-            executeCameraPanStep(step);
-            return 'blocked';
+            activeRun.activeCameraFocusActorId = null;
+            activeRun.waitingCameraFocus = null;
+            return executeCameraPanStep(step, stepIndex);
         }
         if (step.kind === 'wait') {
             activeRun.waitRemainingMs = Math.max(0, step.durationMs);
+            if (activeRun.waitRemainingMs > 0) {
+                setBlockReason(`wait: ${Math.round(activeRun.waitRemainingMs)}ms remaining`);
+            } else {
+                clearBlockReason();
+            }
             return activeRun.waitRemainingMs <= 0 ? 'advanced' : 'blocked';
         }
         if (step.kind === 'play_sfx') {
@@ -208,7 +476,13 @@ export const createTestCutsceneRuntime = (
             return 'advanced';
         }
         if (step.kind === 'actor_sequence_ref') {
-            runActorSequenceStep(cutsceneRef, stepRef, step);
+            const dispatched = runActorSequenceStep(cutsceneRef, stepRef, step);
+            if (dispatched) {
+                setBlockReason(
+                    `actor_sequence_ref: waiting actor "${step.actorId}" `
+                    + `ref "${step.sequenceRef}" id "${activeRun.waitingActorSequence?.sequenceId ?? '-'}"`
+                );
+            }
             return 'blocked';
         }
         finishRun('failed', `unsupported cutscene step kind "${step.kind}"`);
@@ -220,7 +494,10 @@ export const createTestCutsceneRuntime = (
             return;
         }
 
-        if (activeRun.waitingCameraPan) {
+        if (updateCameraPanWait()) {
+            return;
+        }
+        if (updateCameraFocusWait()) {
             return;
         }
         if (activeRun.waitingActorSequence) {
@@ -229,7 +506,14 @@ export const createTestCutsceneRuntime = (
                 finishRun('failed', 'actor_sequence_ref lost sequence snapshot');
                 return;
             }
-            if (snapshot.status === 'running') {
+            activeRun.waitingActorSequence.status = snapshot.status;
+            if (!isActorSequenceTerminalStatus(snapshot.status)) {
+                setBlockReason(
+                    `actor_sequence_ref: waiting actor "${activeRun.waitingActorSequence.actorId}" `
+                    + `ref "${activeRun.waitingActorSequence.sequenceRef}" `
+                    + `id "${activeRun.waitingActorSequence.sequenceId}" `
+                    + `status "${snapshot.status ?? 'null'}"`
+                );
                 return;
             }
             if (snapshot.status !== 'succeeded') {
@@ -238,6 +522,7 @@ export const createTestCutsceneRuntime = (
             }
             activeRun.waitingActorSequence = null;
             activeRun.stepIndex += 1;
+            clearBlockReason();
         }
         if (!activeRun) {
             return;
@@ -245,10 +530,12 @@ export const createTestCutsceneRuntime = (
         if (activeRun.waitRemainingMs !== null) {
             activeRun.waitRemainingMs = Math.max(0, activeRun.waitRemainingMs - deltaMs);
             if (activeRun.waitRemainingMs > 0) {
+                setBlockReason(`wait: ${Math.round(activeRun.waitRemainingMs)}ms remaining`);
                 return;
             }
             activeRun.waitRemainingMs = null;
             activeRun.stepIndex += 1;
+            clearBlockReason();
         }
 
         while (activeRun) {
@@ -265,29 +552,44 @@ export const createTestCutsceneRuntime = (
                 return;
             }
             activeRun.stepIndex += 1;
+            clearBlockReason();
         }
     };
 
     const tryStartCutsceneRef = (cutsceneRef: string, sourceDetail: string): boolean => {
+        lastCutsceneRequestRef = cutsceneRef;
+        failureReason = null;
         const definition = getTestCutsceneDefinition(cutsceneRef);
         if (!definition) {
             status = 'failed';
             detail = `missing cutscene ref "${cutsceneRef}"`;
+            failureReason = detail;
+            lastCutsceneRequestResult = 'missing_ref';
+            emitCutsceneDebugFeedback('missing_ref', cutsceneRef, sourceDetail, detail);
             return false;
         }
 
         if (activeRun) {
+            lastCutsceneRequestResult = 'already_running';
+            emitCutsceneDebugFeedback('already_running', cutsceneRef, sourceDetail, null);
             finishRun('cancelled', `cancelled by ${sourceDetail}`);
         }
+        acquireCutsceneCameraOwnership();
         activeRun = {
             definition,
             stepIndex: 0,
             waitRemainingMs: null,
             waitingActorSequence: null,
-            waitingCameraPan: false
+            waitingCameraPan: null,
+            waitingCameraFocus: null,
+            activeCameraFocusActorId: null
         };
         status = 'running';
         detail = sourceDetail;
+        failureReason = null;
+        clearBlockReason();
+        lastCutsceneRequestResult = 'accepted';
+        emitCutsceneDebugFeedback('accepted', cutsceneRef, sourceDetail, null);
         return true;
     };
 
@@ -299,6 +601,13 @@ export const createTestCutsceneRuntime = (
         const cutsceneRef = typeof raw.cutsceneRef === 'string' ? raw.cutsceneRef.trim() : '';
         const actorId = typeof raw.actorId === 'string' ? raw.actorId.trim() : '';
         if (!cutsceneRef) {
+            lastCutsceneRequestRef = null;
+            lastCutsceneRequestResult = 'rejected';
+            status = 'failed';
+            detail = actorId ? `npc_interaction:${actorId}` : 'npc_interaction';
+            failureReason = 'request rejected: empty cutscene ref';
+            clearBlockReason();
+            emitCutsceneDebugFeedback('rejected', null, detail, failureReason);
             return;
         }
         const sourceDetail = actorId ? `npc_interaction:${actorId}` : 'npc_interaction';
@@ -319,19 +628,62 @@ export const createTestCutsceneRuntime = (
             updateActiveRun(safeDeltaMs);
         },
         tryStartCutsceneRef,
+        requestNormalCameraOwnership: (source: string): boolean => {
+            const normalizedSource = source.trim().length > 0 ? source.trim() : 'unknown';
+            if (activeRun && status === 'running') {
+                recordNormalCameraPathStatus('skipped', normalizedSource, 'cutscene_running');
+                return false;
+            }
+            recordNormalCameraPathStatus('applied', normalizedSource, 'cutscene_inactive');
+            cameraOwner = 'player_follow_runtime';
+            return true;
+        },
         isRunning: (): boolean => activeRun !== null,
         isInputLocked: (): boolean => inputLocked,
         getDebugState: (): TestCutsceneDebugState => {
             const step = activeRun?.definition.steps[activeRun.stepIndex] ?? null;
+            const waitingPan = activeRun?.waitingCameraPan ?? null;
+            const waitingFocus = activeRun?.waitingCameraFocus ?? null;
+            const camera = scene.cameras.main;
+            const cameraPanSnapshot = waitingPan
+                ? getCameraPanSnapshot(camera, waitingPan.targetX, waitingPan.targetY, waitingPan.tolerancePx)
+                : (waitingFocus
+                    ? getCameraPanSnapshot(camera, waitingFocus.targetX, waitingFocus.targetY, waitingFocus.tolerancePx)
+                    : null);
             return {
+                lastCutsceneRequestRef,
+                lastCutsceneRequestResult,
                 activeCutsceneRef: activeRun?.definition.id ?? null,
                 activeStepIndex: activeRun ? activeRun.stepIndex : -1,
                 activeStepKind: step?.kind ?? null,
                 status,
-                detail
+                failureReason,
+                detail,
+                blockReason,
+                cameraOwner,
+                cameraFocusActorId: activeRun?.activeCameraFocusActorId ?? null,
+                cameraTransitionMode: waitingPan
+                    ? 'pan_to_point'
+                    : (waitingFocus ? 'focus_actor_handoff' : 'none'),
+                cameraTargetX: cameraPanSnapshot?.targetX ?? null,
+                cameraTargetY: cameraPanSnapshot?.targetY ?? null,
+                cameraRemainingDeltaX: cameraPanSnapshot?.deltaX ?? null,
+                cameraRemainingDeltaY: cameraPanSnapshot?.deltaY ?? null,
+                cameraRemainingDistancePx: cameraPanSnapshot?.remainingDistancePx ?? null,
+                activeActorSequenceActorId: activeRun?.waitingActorSequence?.actorId ?? null,
+                activeActorSequenceRef: activeRun?.waitingActorSequence?.sequenceRef ?? null,
+                activeActorSequenceId: activeRun?.waitingActorSequence?.sequenceId ?? null,
+                activeActorSequenceStatus: activeRun?.waitingActorSequence?.status ?? null,
+                cutsceneActive: activeRun !== null && status === 'running',
+                normalCameraPathStatus,
+                normalCameraPathSource,
+                normalCameraPathReason
             };
         },
         destroy: (): void => {
+            if (activeRun || inputLocked || cameraOwner !== 'player_follow_runtime') {
+                finishRun('cancelled', 'cutscene runtime destroyed');
+            }
             scene.events.off('pf:npc_interaction_cutscene_request', onNpcCutsceneRequest);
         }
     };

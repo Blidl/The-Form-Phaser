@@ -67,7 +67,7 @@
 
 | Task | Status | Notes |
 | --- | --- | --- |
-| Animation Profiles | todo | РќР°С‡Р°С‚СЊ СЃ NPC |
+| Animation Profiles | in_progress | NPC-first backbone сохраняется; TEMPORARY узкий demo-feel first-pass для player forms (`ball/triangle/square`) разрешён через hooks `jump_start`, `land_impact`, `airborne`, `form_switch` + optional `ball_rebound_launch`, `triangle_flight_start`, `square_attach_start`, `square_attach_jump_start`; это не universal animation framework и не новый editor |
 | Lighting Profiles + Debug Tuning | todo | Atmosphere-first |
 | Parallax Profiles | todo | Background profiles |
 | VFX Profiles | todo | Square attach + triangle break |
@@ -122,9 +122,9 @@
 3. РµСЃР»Рё РёР·РјРµРЅРёР»СЃСЏ РєР°РЅРѕРЅ вЂ” РѕР±РЅРѕРІРёС‚СЊ `the_form_orchestrator_state_ru.md`.
 
 ## Latest Queue Update
-- Date: 2026-04-12
-- Task: Dev Helper Overlay + Level Jump + Click-Spawn
-- Status: done
-- Notes: Dev-only Numpad + overlay ? TestScene, prev/next level jump ?? campaign order ????? existing levelId scene-flow, click-spawn ????????? respawn point ? ?? ??????????? ? runtime editor.
-- Next: ????? ??????? smoke ?? helper ???????????? ? NPC/cutscene/presentation ???????.
+- Date: 2026-04-21
+- Task: Animation Profiles - Player Forms First-Pass Hooks (canon patch)
+- Status: in_progress
+- Notes: Зафиксирован TEMPORARY узкий demo-feel slice для player forms без отмены NPC-first presentation backbone. Vocabulary first-pass hooks: `jump_start`, `land_impact`, `airborne`, `form_switch`; optional form-specific: `ball_rebound_launch`, `triangle_flight_start`, `square_attach_start`, `square_attach_jump_start`.
+- Next: Реализовать player-form hook emission/consumption в существующих player/view runtime slices и подключить live tuning без добавления нового editor/framework.
 

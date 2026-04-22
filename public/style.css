@@ -121,6 +121,12 @@ body {
     padding: 8px 10px;
 }
 
+.test-world-editor__field select option,
+.test-world-editor__field select optgroup {
+    color: #0f1b24;
+    background: #eef4f9;
+}
+
 .test-world-editor__field--checkbox {
     display: flex;
     justify-content: space-between;

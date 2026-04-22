@@ -101,6 +101,7 @@ export const pollPlayerInputSnapshot = (keys: PlayerInputKeys): PlayerInputSnaps
         prevFormPressed: Input.Keyboard.JustDown(keys.prevForm),
         actionPressed: Input.Keyboard.JustDown(keys.action),
         actionHeld: keys.action.isDown,
-        regenPressed: Input.Keyboard.JustDown(keys.regen)
+        // Keep this as a held-state signal for regen channels.
+        regenPressed: keys.regen.isDown
     };
 };

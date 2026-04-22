@@ -68,8 +68,19 @@ export class PlayerTuningSidebar {
     }
 
     public setState(nextState: PlayerTuningSidebarState): void {
+        const shouldPreserveScroll = this.state.visible
+            && nextState.visible
+            && this.state.activeTabId === nextState.activeTabId;
+        const previousInner = this.root.querySelector<HTMLElement>('.player-tuning__inner');
+        const previousScrollTop = previousInner?.scrollTop ?? 0;
         this.state = nextState;
         this.render();
+        if (shouldPreserveScroll) {
+            const nextInner = this.root.querySelector<HTMLElement>('.player-tuning__inner');
+            if (nextInner) {
+                nextInner.scrollTop = previousScrollTop;
+            }
+        }
     }
 
     public getRootElement(): HTMLElement {

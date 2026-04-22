@@ -1,0 +1,33 @@
+{
+  "timestamps": {
+    "startedAt": "2026-04-22T15:55:43.706Z",
+    "finishedAt": "2026-04-22T15:56:09.656Z"
+  },
+  "scenarios": {
+    "ball": {
+      "formReady": true,
+      "weakLanded": true,
+      "strongLanded": true
+    },
+    "triangle": {
+      "formReady": true
+    },
+    "square": {
+      "attachDetected": false,
+      "attachJumpTransitionObserved": true,
+      "attachText": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: ball\ncontact: arcade\nbody: 1206, 324\nanchor: 1206, 324\nhazard shape: circle\ntriangle points: 0\nsquare attached: no\nsquare normal: -\nsquare zones: -",
+      "attachJumpTextA": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: ball\ncontact: arcade\nbody: 1206, 284\nanchor: 1206, 284\nhazard shape: circle\ntriangle points: 0\nsquare attached: no\nsquare normal: -\nsquare zones: -",
+      "attachJumpTextB": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: ball\ncontact: arcade\nbody: 1206, 324\nanchor: 1206, 324\nhazard shape: circle\ntriangle points: 0\nsquare attached: no\nsquare normal: -\nsquare zones: -"
+    }
+  },
+  "tuning": {
+    "valueBefore": 1.12,
+    "valueAfter": 1.29,
+    "valueAfterReload": 1.29,
+    "liveApplyStatusSeen": false,
+    "saveFileContainsValue": true,
+    "reloadPersistenceOk": true,
+    "restoredOriginalPersistedFile": true
+  },
+  "artifactsDir": "F:\\Projects\\TheFormPhaser\\tmp\\acceptance_player_forms"
+}

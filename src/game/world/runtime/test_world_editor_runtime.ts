@@ -18,8 +18,18 @@ import {
     type TestWorldEditorSelectionPart
 } from './test_world_editor_adapters';
 import { TestWorldEditorSidebar, type TestWorldEditorSidebarSection, type TestWorldEditorSidebarState, type TestWorldEditorTabId } from './test_world_editor_sidebar';
-import { clearTestWorldEditorDraft, saveTestWorldEditorDraft } from './test_world_editor_storage';
-import { createCampaignLevel, deleteCampaignLevel, getCampaignLevelSummaries, syncCampaignLevelHeader } from './test_campaign_registry';
+import {
+    clearTestWorldEditorDraft,
+    getTestWorldEditorDraftStorageAuditSnapshot,
+    saveTestWorldEditorDraft
+} from './test_world_editor_storage';
+import {
+    createCampaignLevel,
+    deleteCampaignLevel,
+    getCampaignLevelSummaries,
+    syncCampaignLevelHeader,
+    type CampaignLevelConfigSource
+} from './test_campaign_registry';
 import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runtime';
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
@@ -48,12 +58,39 @@ import {
     validateTestNpcScriptedSequenceId
 } from '../../npc/npc_scripted_sequences';
 import {
+    TEST_CUTSCENE_STEP_KINDS,
+    getDefaultTestCutsceneDefinitions,
+    getTestCutsceneDefinitions,
+    getTestCutsceneRefs,
+    getTestCutsceneRegistryAuditSnapshot,
+    parseTestCutsceneDefinitionsJson,
+    setTestCutsceneDefinitions,
+    type TestCutsceneDefinition,
+    validateTestCutsceneId
+} from '../../cutscene/test_cutscene_registry';
+import {
     clearTestNpcScriptedSequenceDraft,
     getTestNpcScriptedSequenceDraftStorageAuditSnapshot,
     markTestNpcScriptedSequenceDraftRestoredDefault,
     saveTestNpcScriptedSequenceDraft
 } from '../../npc/npc_scripted_sequence_storage';
+import {
+    clearTestCutsceneDraft,
+    getTestCutsceneDraftStorageAuditSnapshot,
+    markTestCutsceneDraftRestoredDefault,
+    saveTestCutsceneDraft
+} from '../../cutscene/cutscene_storage';
 import type { ActorAction } from '../../actor_actions/actor_action_types';
+import type {
+    TestCutsceneActorSequenceRefStep,
+    TestCutsceneCameraFocusActorStep,
+    TestCutsceneCameraPanToStep,
+    TestCutscenePlaySfxStep,
+    TestCutsceneSpawnVfxStep,
+    TestCutsceneStep,
+    TestCutsceneSubtitleStep,
+    TestCutsceneWaitStep
+} from '../../cutscene/cutscene_types';
 import {
     TEST_WORLD_VISUAL_LAYER_OPTIONS,
     resolveTestWorldRenderOrder,
@@ -66,6 +103,15 @@ export interface TestWorldEditorRuntime {
     open: () => void;
     close: () => void;
     destroy: () => void;
+}
+
+export interface TestWorldLevelSourceContext {
+    bundledDefaultConfig: TestWorldConfig;
+    campaignDefaultConfig: TestWorldConfig;
+    campaignConfigSource: CampaignLevelConfigSource;
+    initialWorldLoadSource: 'draft' | 'default';
+    initialDraftPresent: boolean;
+    initialWorldLoadError: string | null;
 }
 
 type DragMode = 'move' | 'resize' | 'pan';
@@ -105,6 +151,7 @@ const MIN_EDITOR_RECT_SIZE = 8;
 const EDITOR_FALLBACK_BACKGROUND_COLOR = 0x263238;
 const RULER_THICKNESS_PX = 20;
 const DEFAULT_SEQUENCE_ID_PREFIX = 'scripted_sequence';
+const DEFAULT_CUTSCENE_ID_PREFIX = 'cutscene';
 
 const createDefaultScriptedSequenceAction = (
     kind: TestNpcScriptedSequenceActionKind
@@ -189,6 +236,120 @@ const createNextScriptedSequenceId = (
     while (usedIds.has(candidate) || defaultIds.has(candidate)) {
         nextIndex += 1;
         candidate = `${DEFAULT_SEQUENCE_ID_PREFIX}_${nextIndex}`;
+    }
+    return candidate;
+};
+
+const createDefaultCutsceneStep = (
+    kind: typeof TEST_CUTSCENE_STEP_KINDS[number]
+): TestCutsceneStep => {
+    if (kind === 'lock_input' || kind === 'unlock_input') {
+        return { kind, ref: `${kind}_step` };
+    }
+    if (kind === 'camera_focus_actor') {
+        return {
+            kind,
+            ref: 'focus_actor_step',
+            actorId: 'player',
+            durationMs: 280
+        };
+    }
+    if (kind === 'camera_pan_to') {
+        return {
+            kind,
+            ref: 'camera_pan_step',
+            x: 0,
+            y: 0,
+            durationMs: 500,
+            ease: 'Sine.easeInOut'
+        };
+    }
+    if (kind === 'wait') {
+        return {
+            kind,
+            ref: 'wait_step',
+            durationMs: 500
+        };
+    }
+    if (kind === 'play_sfx') {
+        return {
+            kind,
+            ref: 'play_sfx_step',
+            sfxId: 'sfx_id'
+        };
+    }
+    if (kind === 'spawn_vfx') {
+        return {
+            kind,
+            ref: 'spawn_vfx_step',
+            vfxId: 'vfx_id'
+        };
+    }
+    if (kind === 'subtitle') {
+        return {
+            kind,
+            ref: 'subtitle_step',
+            text: 'Subtitle',
+            durationMs: 900
+        };
+    }
+    return {
+        kind,
+        ref: 'actor_sequence_step',
+        actorId: 'npc_actor',
+        sequenceRef: 'sequence_ref'
+    };
+};
+
+const cloneCutsceneStep = (step: TestCutsceneStep): TestCutsceneStep => ({ ...step });
+
+const cloneCutsceneDefinition = (definition: TestCutsceneDefinition): TestCutsceneDefinition => ({
+    id: definition.id,
+    mode: definition.mode,
+    steps: definition.steps.map(cloneCutsceneStep)
+});
+
+const cloneCutsceneDefinitions = (
+    definitions: readonly TestCutsceneDefinition[]
+): TestCutsceneDefinition[] => {
+    return definitions.map(cloneCutsceneDefinition);
+};
+
+const describeCutsceneStep = (step: TestCutsceneStep, index: number): string => {
+    if (step.kind === 'lock_input' || step.kind === 'unlock_input') {
+        return `${index + 1}. ${step.kind}`;
+    }
+    if (step.kind === 'camera_focus_actor') {
+        return `${index + 1}. camera_focus_actor actor=${step.actorId}`;
+    }
+    if (step.kind === 'camera_pan_to') {
+        return `${index + 1}. camera_pan_to x=${Math.round(step.x)} y=${Math.round(step.y)}`;
+    }
+    if (step.kind === 'wait') {
+        return `${index + 1}. wait ${Math.round(step.durationMs)}ms`;
+    }
+    if (step.kind === 'play_sfx') {
+        return `${index + 1}. play_sfx ${step.sfxId}`;
+    }
+    if (step.kind === 'spawn_vfx') {
+        return `${index + 1}. spawn_vfx ${step.vfxId}`;
+    }
+    if (step.kind === 'subtitle') {
+        return `${index + 1}. subtitle "${step.text}"`;
+    }
+    return `${index + 1}. actor_sequence_ref ${step.actorId}:${step.sequenceRef}`;
+};
+
+const createNextCutsceneId = (
+    definitions: readonly TestCutsceneDefinition[]
+): string => {
+    const usedIds = new Set(definitions.map((entry) => entry.id));
+    const defaultIds = new Set(getDefaultTestCutsceneDefinitions().map((entry) => entry.id));
+    let nextIndex = 1;
+    let candidate = `${DEFAULT_CUTSCENE_ID_PREFIX}_${nextIndex}`;
+    while (usedIds.has(candidate) || defaultIds.has(candidate)) {
+        nextIndex += 1;
+        candidate = `${DEFAULT_CUTSCENE_ID_PREFIX}_${nextIndex}`;
     }
     return candidate;
 };
@@ -491,8 +652,10 @@ export const createTestWorldEditorRuntime = (
     defaultConfig: TestWorldConfig,
     initialOpen: boolean = false,
     initialStatus: string | null = null,
+    sourceContext?: TestWorldLevelSourceContext,
     onLevelConfigChanged?: (config: TestWorldConfig) => void,
-    onEditorPreviewCameraBasisChanged?: (basis: { scrollX: number; scrollY: number; zoom: number } | null) => void
+    onEditorPreviewCameraBasisChanged?: (basis: { scrollX: number; scrollY: number; zoom: number } | null) => void,
+    requestNormalCameraOwnership?: (source: string) => boolean
 ): TestWorldEditorRuntime => {
     const keyboard = scene.input.keyboard;
     if (!keyboard) {
@@ -612,6 +775,11 @@ export const createTestWorldEditorRuntime = (
     let selectedBackgroundId: BackgroundSelectionId | null = null;
     let selectedSequenceId: string | null = getTestNpcScriptedSequenceDefinitions()[0]?.id ?? null;
     let selectedSequenceActionIndex = 0;
+    let suppressCutsceneDraftPersistUntilNextTick = false;
+    let selectedCutsceneId: string | null = getTestCutsceneDefinitions()[0]?.id ?? null;
+    let selectedCutsceneStepIndex = 0;
+    const bundledDefaultConfig = createDefaultTestWorldConfig(sourceContext?.bundledDefaultConfig ?? defaultConfig);
+    const campaignDefaultConfig = createDefaultTestWorldConfig(sourceContext?.campaignDefaultConfig ?? defaultConfig);
     const undoStack: TestWorldConfig[] = [];
     const redoStack: TestWorldConfig[] = [];
     const inspectorColorKeys = new Set<string>([
@@ -635,6 +803,7 @@ export const createTestWorldEditorRuntime = (
     const isObjectsTabActive = (): boolean => activeTab === 'objects';
     const isNpcTabActive = (): boolean => activeTab === 'npc';
     const isSequencesTabActive = (): boolean => activeTab === 'sequences';
+    const isCutscenesTabActive = (): boolean => activeTab === 'cutscenes';
     const isInspectorTabActive = (): boolean => activeTab === 'inspector';
     const isObjectInteractionTabActive = (): boolean => isObjectsTabActive() || isNpcTabActive() || isInspectorTabActive();
     const isBackgroundTabActive = (): boolean => activeTab === 'background';
@@ -738,6 +907,52 @@ export const createTestWorldEditorRuntime = (
             .map((npc) => npc.id);
     };
 
+    const getCutsceneDefinitions = (): readonly TestCutsceneDefinition[] => {
+        return getTestCutsceneDefinitions();
+    };
+
+    const getSelectedCutscene = (): TestCutsceneDefinition | null => {
+        if (!selectedCutsceneId) {
+            return null;
+        }
+        return getCutsceneDefinitions().find((entry) => entry.id === selectedCutsceneId) ?? null;
+    };
+
+    const normalizeSelectedCutsceneState = (): void => {
+        const definitions = getCutsceneDefinitions();
+        if (definitions.length === 0) {
+            selectedCutsceneId = null;
+            selectedCutsceneStepIndex = -1;
+            return;
+        }
+
+        if (!selectedCutsceneId || !definitions.some((entry) => entry.id === selectedCutsceneId)) {
+            selectedCutsceneId = definitions[0]?.id ?? null;
+        }
+
+        const selectedCutscene = definitions.find((entry) => entry.id === selectedCutsceneId) ?? null;
+        if (!selectedCutscene || selectedCutscene.steps.length === 0) {
+            selectedCutsceneStepIndex = -1;
+            return;
+        }
+
+        selectedCutsceneStepIndex = Math.max(0, Math.min(selectedCutsceneStepIndex, selectedCutscene.steps.length - 1));
+    };
+
+    const getCutsceneConsumers = (cutsceneId: string): string[] => {
+        return worldRuntime.getConfig().npcs
+            .filter((npc) => npc.interactionOverride?.outcome?.kind === 'request_cutscene_ref'
+                && npc.interactionOverride.outcome.cutsceneRef === cutsceneId)
+            .map((npc) => npc.id);
+    };
+
+    const getProfileCutsceneConsumers = (cutsceneId: string): string[] => {
+        return getTestNpcProfiles()
+            .filter((profile) => profile.interaction?.outcome.kind === 'request_cutscene_ref'
+                && profile.interaction.outcome.cutsceneRef === cutsceneId)
+            .map((profile) => profile.id);
+    };
+
     const saveSequenceDraftNow = (): void => {
         const saved = saveTestNpcScriptedSequenceDraft(getScriptedSequenceDefinitions());
         if (saved.error) {
@@ -752,6 +967,24 @@ export const createTestWorldEditorRuntime = (
         } finally {
             window.setTimeout(() => {
                 suppressSequenceDraftPersistUntilNextTick = false;
+            }, 0);
+        }
+    };
+
+    const saveCutsceneDraftNow = (): void => {
+        const saved = saveTestCutsceneDraft(getCutsceneDefinitions());
+        if (saved.error) {
+            setStatus(`cutscene draft save failed: ${saved.error}`);
+        }
+    };
+
+    const withCutsceneDraftPersistSuppressed = (run: () => void): void => {
+        suppressCutsceneDraftPersistUntilNextTick = true;
+        try {
+            run();
+        } finally {
+            window.setTimeout(() => {
+                suppressCutsceneDraftPersistUntilNextTick = false;
             }, 0);
         }
     };
@@ -799,13 +1032,112 @@ export const createTestWorldEditorRuntime = (
         }
     };
 
+    const commitCutsceneRegistry = (
+        definitions: readonly TestCutsceneDefinition[],
+        successStatus: string,
+        options?: {
+            persistDraft?: boolean;
+            source?: string;
+        }
+    ): boolean => {
+        const result = setTestCutsceneDefinitions(
+            definitions,
+            options?.source ?? 'editor_commit'
+        );
+        if (result.definitions === null) {
+            const firstIssue = result.issues[0];
+            setStatus(firstIssue ? `cutscene invalid: ${firstIssue.message}` : 'cutscene invalid');
+            return false;
+        }
+
+        normalizeSelectedCutsceneState();
+        if ((options?.persistDraft ?? true) && !suppressCutsceneDraftPersistUntilNextTick) {
+            saveCutsceneDraftNow();
+        }
+        setStatus(successStatus);
+        return true;
+    };
+
+    const restoreDefaultCutsceneRegistry = (
+        successStatus: string,
+        options?: {
+            persistDraft?: boolean;
+            source?: string;
+        }
+    ): void => {
+        const defaultDefinitions = getDefaultTestCutsceneDefinitions();
+        if (commitCutsceneRegistry(defaultDefinitions, successStatus, {
+            persistDraft: options?.persistDraft ?? true,
+            source: options?.source ?? 'editor_restore_default'
+        })) {
+            markTestCutsceneDraftRestoredDefault();
+            syncSidebar();
+        }
+    };
+
+    const mapCampaignSourceToLabel = (source: CampaignLevelConfigSource): string => {
+        if (source === 'campaign_registry_override') {
+            return 'campaign_registry_override';
+        }
+        if (source === 'campaign_registry_custom') {
+            return 'campaign_registry_custom';
+        }
+        return 'bundled_file_json';
+    };
+
+    const mapBootstrapWorldSourceToLabel = (source: 'draft' | 'default'): string => {
+        return source === 'draft' ? 'local_storage_draft' : 'campaign_default';
+    };
+
+    const getSourceAuditView = (config: TestWorldConfig): TestWorldLevelSourceAuditView => {
+        const configSignature = JSON.stringify(config);
+        const draftAudit = getTestWorldEditorDraftStorageAuditSnapshot(levelId, campaignDefaultConfig);
+        const bundledSignature = JSON.stringify(bundledDefaultConfig);
+        const campaignSignature = JSON.stringify(campaignDefaultConfig);
+        const currentSourceLabel = (
+            draftAudit.draftValid
+            && draftAudit.draftConfigSignature === configSignature
+        )
+            ? 'local_storage_draft'
+            : (
+                configSignature === bundledSignature
+                    ? 'bundled_file_json'
+                    : (configSignature === campaignSignature
+                        ? mapCampaignSourceToLabel(sourceContext?.campaignConfigSource ?? 'bundled')
+                        : 'live_runtime_unsaved')
+            );
+
+        return {
+            currentSourceLabel,
+            campaignSourceLabel: mapCampaignSourceToLabel(sourceContext?.campaignConfigSource ?? 'bundled'),
+            bootstrapWorldSourceLabel: mapBootstrapWorldSourceToLabel(sourceContext?.initialWorldLoadSource ?? 'default'),
+            bootstrapWorldError: sourceContext?.initialWorldLoadError ?? null,
+            initialDraftPresent: sourceContext?.initialDraftPresent ?? false,
+            draftPresent: draftAudit.draftPresent,
+            draftValid: draftAudit.draftValid,
+            draftStorageKey: draftAudit.storageKey,
+            draftNpcCount: draftAudit.draftNpcCount,
+            draftNpcIds: draftAudit.draftNpcIds,
+            draftParseError: draftAudit.parseError,
+            fileNpcCount: bundledDefaultConfig.npcs.length,
+            fileNpcIds: bundledDefaultConfig.npcs.map((npc) => npc.id),
+            campaignNpcCount: campaignDefaultConfig.npcs.length,
+            campaignNpcIds: campaignDefaultConfig.npcs.map((npc) => npc.id),
+            loadedNpcCount: config.npcs.length,
+            loadedNpcIds: config.npcs.map((npc) => npc.id)
+        };
+    };
+
     const buildSidebarState = (): TestWorldEditorSidebarState => {
         const config = worldRuntime.getConfig();
+        const sourceAudit = getSourceAuditView(config);
         normalizeSelectedScriptedSequenceState();
         const selectedRootId = getSelectedRootId();
         const selectedType = worldRuntime.getEditorObjects().find((entry) => entry.id === selectedRootId)?.type ?? null;
         const selectedSequence = getSelectedScriptedSequence();
         const selectedSequenceAction = selectedSequence?.actions[selectedSequenceActionIndex] ?? null;
+        const selectedCutscene = getSelectedCutscene();
+        const selectedCutsceneStep = selectedCutscene?.steps[selectedCutsceneStepIndex] ?? null;
         const npcItems = worldRuntime.getEditorObjects()
             .filter((entry) => entry.type === 'npc')
             .map((entry) => ({
@@ -823,7 +1155,7 @@ export const createTestWorldEditorRuntime = (
             canRedo: redoStack.length > 0,
             levelId,
             pendingPlacementType,
-            levelSections: buildLevelSections(config, getCampaignLevelSummaries()),
+            levelSections: buildLevelSections(config, getCampaignLevelSummaries(), sourceAudit),
             backgroundSections: buildBackgroundSections(config),
             palette: TEST_WORLD_EDITOR_PALETTE,
             objectItems: worldRuntime.getEditorObjects()
@@ -864,6 +1196,26 @@ export const createTestWorldEditorRuntime = (
                 : [],
             sequenceActionIndex: selectedSequenceAction ? selectedSequenceActionIndex : -1,
             sequenceActionSections: buildScriptedSequenceActionSections(selectedSequenceAction),
+            cutsceneItems: getCutsceneDefinitions().map((entry) => ({
+                id: entry.id,
+                mode: entry.mode,
+                stepCount: entry.steps.length,
+                selected: entry.id === selectedCutsceneId
+            })),
+            cutsceneInspectorId: selectedCutscene?.id ?? null,
+            cutsceneSections: [
+                ...buildCutsceneSections(selectedCutscene),
+                ...buildCutsceneAuditSections()
+            ],
+            cutsceneStepItems: selectedCutscene
+                ? selectedCutscene.steps.map((step, index) => ({
+                    index,
+                    label: describeCutsceneStep(step, index),
+                    selected: index === selectedCutsceneStepIndex
+                }))
+                : [],
+            cutsceneStepIndex: selectedCutsceneStep ? selectedCutsceneStepIndex : -1,
+            cutsceneStepSections: buildCutsceneStepSections(selectedCutsceneStep),
             selectedLocked: getSelectedHandle()?.isLocked() ?? false
         };
     };
@@ -930,7 +1282,7 @@ export const createTestWorldEditorRuntime = (
             setStatus('imported json');
         },
         onResetDefault: () => {
-            const resetConfig = createDefaultTestWorldConfig(defaultConfig);
+            const resetConfig = createDefaultTestWorldConfig(bundledDefaultConfig);
             pushUndoSnapshot();
             worldRuntime.setConfig(resetConfig);
             syncCampaignLevelHeader(resetConfig);
@@ -939,11 +1291,20 @@ export const createTestWorldEditorRuntime = (
             selectRoot('player_spawn');
             onLevelConfigChanged?.(worldRuntime.getConfig());
             markConfigDirty();
-            setStatus('reset to default');
+            setStatus('reset to bundled file default');
         },
         onClearSavedDraft: () => {
             clearTestWorldEditorDraft(levelId);
-            setStatus('saved draft cleared');
+            const resetConfig = createDefaultTestWorldConfig(bundledDefaultConfig);
+            pushUndoSnapshot();
+            worldRuntime.setConfig(resetConfig);
+            syncCampaignLevelHeader(resetConfig);
+            syncCameraBoundsToWorld();
+            redoStack.length = 0;
+            selectRoot('player_spawn');
+            onLevelConfigChanged?.(worldRuntime.getConfig());
+            syncSidebar();
+            setStatus('saved draft cleared, live world reset to bundled file default');
         },
         onSaveSequenceDraft: () => {
             saveSequenceDraftNow();
@@ -980,6 +1341,46 @@ export const createTestWorldEditorRuntime = (
             withSequenceDraftPersistSuppressed(() => {
                 clearTestNpcScriptedSequenceDraft();
                 restoreDefaultScriptedSequenceRegistry('saved sequence draft cleared, using default registry', {
+                    persistDraft: false,
+                    source: 'editor_clear_draft_restore_default'
+                });
+            });
+        },
+        onSaveCutsceneDraft: () => {
+            saveCutsceneDraftNow();
+            setStatus('cutscene draft saved');
+        },
+        onExportCutscenesJson: () => {
+            const blob = new Blob([JSON.stringify(getCutsceneDefinitions(), null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'test_cutscenes.json';
+            link.click();
+            URL.revokeObjectURL(link.href);
+            setStatus('exported cutscene json');
+        },
+        onImportCutscenesJson: (jsonText) => {
+            const parsed = parseTestCutsceneDefinitionsJson(jsonText);
+            if (parsed.definitions === null) {
+                setStatus(parsed.error ? `cutscene import failed: ${parsed.error}` : 'cutscene import failed');
+                return;
+            }
+            if (commitCutsceneRegistry(parsed.definitions, 'imported cutscene json', {
+                source: 'editor_import_json'
+            })) {
+                syncSidebar();
+            }
+        },
+        onResetCutscenesDefault: () => {
+            restoreDefaultCutsceneRegistry('reset cutscenes to default', {
+                persistDraft: true,
+                source: 'editor_reset_default'
+            });
+        },
+        onClearSavedCutsceneDraft: () => {
+            withCutsceneDraftPersistSuppressed(() => {
+                clearTestCutsceneDraft();
+                restoreDefaultCutsceneRegistry('saved cutscene draft cleared, using default registry', {
                     persistDraft: false,
                     source: 'editor_clear_draft_restore_default'
                 });
@@ -1134,6 +1535,105 @@ export const createTestWorldEditorRuntime = (
             selectedSequenceActionIndex = nextIndex;
             commitScriptedSequenceRegistry(definitions, `reordered action in ${selectedSequence.id}`);
         },
+        onCreateCutscene: () => {
+            const definitions = cloneCutsceneDefinitions(getCutsceneDefinitions());
+            const nextId = createNextCutsceneId(definitions);
+            definitions.push({
+                id: nextId,
+                mode: 'in_level',
+                steps: [createDefaultCutsceneStep('lock_input')]
+            });
+            selectedCutsceneId = nextId;
+            selectedCutsceneStepIndex = 0;
+            commitCutsceneRegistry(definitions, `created cutscene ${nextId}`);
+        },
+        onSelectCutscene: (id) => {
+            selectedCutsceneId = id;
+            selectedCutsceneStepIndex = 0;
+            activeTab = 'cutscenes';
+            syncSidebar();
+        },
+        onDeleteSelectedCutscene: () => {
+            const selectedCutscene = getSelectedCutscene();
+            if (!selectedCutscene) {
+                return;
+            }
+            const profileConsumers = getProfileCutsceneConsumers(selectedCutscene.id);
+            const worldConsumers = getCutsceneConsumers(selectedCutscene.id);
+            if (profileConsumers.length > 0 || worldConsumers.length > 0) {
+                setStatus(
+                    `cannot delete "${selectedCutscene.id}": referenced by `
+                    + [...profileConsumers, ...worldConsumers].join(', ')
+                );
+                return;
+            }
+            const definitions = cloneCutsceneDefinitions(getCutsceneDefinitions())
+                .filter((entry) => entry.id !== selectedCutscene.id);
+            selectedCutsceneId = definitions[0]?.id ?? null;
+            selectedCutsceneStepIndex = 0;
+            commitCutsceneRegistry(definitions, `deleted cutscene ${selectedCutscene.id}`);
+        },
+        onCreateCutsceneStep: () => {
+            const selectedCutscene = getSelectedCutscene();
+            if (!selectedCutscene) {
+                return;
+            }
+            const definitions = cloneCutsceneDefinitions(getCutsceneDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedCutscene.id);
+            if (!target) {
+                return;
+            }
+            target.steps = [
+                ...target.steps,
+                createDefaultCutsceneStep('wait')
+            ];
+            selectedCutsceneStepIndex = target.steps.length - 1;
+            commitCutsceneRegistry(definitions, `added step to ${selectedCutscene.id}`);
+        },
+        onSelectCutsceneStep: (index) => {
+            selectedCutsceneStepIndex = Number.isFinite(index) ? index : 0;
+            activeTab = 'cutscenes';
+            syncSidebar();
+        },
+        onDeleteSelectedCutsceneStep: () => {
+            const selectedCutscene = getSelectedCutscene();
+            if (!selectedCutscene || selectedCutsceneStepIndex < 0) {
+                return;
+            }
+            if (selectedCutscene.steps.length <= 1) {
+                setStatus('cutscene must keep at least one step');
+                return;
+            }
+            const definitions = cloneCutsceneDefinitions(getCutsceneDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedCutscene.id);
+            if (!target) {
+                return;
+            }
+            target.steps = target.steps.filter((_, index) => index !== selectedCutsceneStepIndex);
+            selectedCutsceneStepIndex = Math.max(0, Math.min(selectedCutsceneStepIndex, target.steps.length - 1));
+            commitCutsceneRegistry(definitions, `removed step from ${selectedCutscene.id}`);
+        },
+        onMoveSelectedCutsceneStep: (direction) => {
+            const selectedCutscene = getSelectedCutscene();
+            if (!selectedCutscene || selectedCutsceneStepIndex < 0) {
+                return;
+            }
+            const nextIndex = selectedCutsceneStepIndex + direction;
+            if (nextIndex < 0 || nextIndex >= selectedCutscene.steps.length) {
+                return;
+            }
+            const definitions = cloneCutsceneDefinitions(getCutsceneDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedCutscene.id);
+            if (!target) {
+                return;
+            }
+            const steps = target.steps.map(cloneCutsceneStep);
+            const [moved] = steps.splice(selectedCutsceneStepIndex, 1);
+            steps.splice(nextIndex, 0, moved);
+            target.steps = steps;
+            selectedCutsceneStepIndex = nextIndex;
+            commitCutsceneRegistry(definitions, `reordered step in ${selectedCutscene.id}`);
+        },
         onToggleSelectedLock: () => {
             const rootId = getSelectedRootId();
             if (!rootId) {
@@ -1145,6 +1645,9 @@ export const createTestWorldEditorRuntime = (
             setStatus(nextLocked ? 'locked' : 'unlocked');
         },
         onLevelFieldChange: (key, value) => {
+            if (key.startsWith('audit')) {
+                return;
+            }
             if (key === 'switchLevelId') {
                 const nextLevelId = String(value).trim();
                 if (!nextLevelId || nextLevelId === levelId) {
@@ -1330,6 +1833,169 @@ export const createTestWorldEditorRuntime = (
                 index === selectedSequenceActionIndex ? nextAction : cloneTestNpcScriptedSequenceAction(action)
             ));
             commitScriptedSequenceRegistry(definitions, `updated action in ${selectedSequence.id}`);
+        },
+        onCutsceneFieldChange: (key, value) => {
+            const selectedCutscene = getSelectedCutscene();
+            if (!selectedCutscene) {
+                return;
+            }
+            if (key === 'id' && typeof value === 'string') {
+                const nextId = value.trim();
+                if (nextId === selectedCutscene.id) {
+                    return;
+                }
+                const idIssue = validateTestCutsceneId(nextId);
+                if (idIssue) {
+                    setStatus(idIssue);
+                    return;
+                }
+                const profileConsumers = getProfileCutsceneConsumers(selectedCutscene.id);
+                const worldConsumers = getCutsceneConsumers(selectedCutscene.id);
+                if (profileConsumers.length > 0 || worldConsumers.length > 0) {
+                    setStatus(
+                        `cannot rename "${selectedCutscene.id}": referenced by `
+                        + [...profileConsumers, ...worldConsumers].join(', ')
+                    );
+                    return;
+                }
+                if (getCutsceneDefinitions().some((entry) => entry.id === nextId)) {
+                    setStatus(`cutscene id "${nextId}" already exists`);
+                    return;
+                }
+                const definitions = cloneCutsceneDefinitions(getCutsceneDefinitions());
+                const target = definitions.find((entry) => entry.id === selectedCutscene.id);
+                if (!target) {
+                    return;
+                }
+                target.id = nextId;
+                selectedCutsceneId = nextId;
+                commitCutsceneRegistry(definitions, `renamed cutscene to ${nextId}`);
+                return;
+            }
+            if (key === 'mode' && (value === 'in_level' || value === 'overlay')) {
+                const definitions = cloneCutsceneDefinitions(getCutsceneDefinitions());
+                const target = definitions.find((entry) => entry.id === selectedCutscene.id);
+                if (!target) {
+                    return;
+                }
+                target.mode = value;
+                commitCutsceneRegistry(definitions, `updated mode for ${selectedCutscene.id}`);
+            }
+        },
+        onCutsceneStepFieldChange: (key, value) => {
+            const selectedCutscene = getSelectedCutscene();
+            if (!selectedCutscene || selectedCutsceneStepIndex < 0) {
+                return;
+            }
+            const definitions = cloneCutsceneDefinitions(getCutsceneDefinitions());
+            const target = definitions.find((entry) => entry.id === selectedCutscene.id);
+            if (!target) {
+                return;
+            }
+            const currentStep = target.steps[selectedCutsceneStepIndex];
+            if (!currentStep) {
+                return;
+            }
+
+            let nextStep: TestCutsceneStep = cloneCutsceneStep(currentStep);
+            if (key === 'kind' && typeof value === 'string') {
+                if (!TEST_CUTSCENE_STEP_KINDS.includes(value as typeof TEST_CUTSCENE_STEP_KINDS[number])) {
+                    return;
+                }
+                nextStep = createDefaultCutsceneStep(value as typeof TEST_CUTSCENE_STEP_KINDS[number]);
+            } else if (key === 'ref') {
+                nextStep = {
+                    ...nextStep,
+                    ref: typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
+                };
+            } else if (nextStep.kind === 'camera_focus_actor' && key === 'actorId' && typeof value === 'string') {
+                nextStep = { ...nextStep, actorId: value.trim() };
+            } else if (nextStep.kind === 'camera_focus_actor' && key === 'durationMs') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric) || numeric < 0) {
+                    setStatus('camera_focus_actor.durationMs must be >= 0');
+                    return;
+                }
+                nextStep = { ...nextStep, durationMs: numeric };
+            } else if (nextStep.kind === 'camera_focus_actor' && key === 'ease' && typeof value === 'string') {
+                const trimmed = value.trim();
+                nextStep = { ...nextStep, ease: trimmed.length > 0 ? trimmed : undefined };
+            } else if (nextStep.kind === 'camera_focus_actor' && key === 'tolerancePx') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric) || numeric <= 0) {
+                    setStatus('camera_focus_actor.tolerancePx must be > 0');
+                    return;
+                }
+                nextStep = { ...nextStep, tolerancePx: numeric };
+            } else if (nextStep.kind === 'camera_pan_to' && key === 'x') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric)) {
+                    return;
+                }
+                nextStep = { ...nextStep, x: numeric };
+            } else if (nextStep.kind === 'camera_pan_to' && key === 'y') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric)) {
+                    return;
+                }
+                nextStep = { ...nextStep, y: numeric };
+            } else if (nextStep.kind === 'camera_pan_to' && key === 'durationMs') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric) || numeric < 0) {
+                    setStatus('camera_pan_to.durationMs must be >= 0');
+                    return;
+                }
+                nextStep = { ...nextStep, durationMs: numeric };
+            } else if (nextStep.kind === 'camera_pan_to' && key === 'ease' && typeof value === 'string') {
+                const trimmed = value.trim();
+                nextStep = { ...nextStep, ease: trimmed.length > 0 ? trimmed : undefined };
+            } else if (nextStep.kind === 'wait' && key === 'durationMs') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric) || numeric < 0) {
+                    setStatus('wait.durationMs must be >= 0');
+                    return;
+                }
+                nextStep = { ...nextStep, durationMs: numeric };
+            } else if (nextStep.kind === 'play_sfx' && key === 'sfxId' && typeof value === 'string') {
+                nextStep = { ...nextStep, sfxId: value.trim() };
+            } else if (nextStep.kind === 'spawn_vfx' && key === 'vfxId' && typeof value === 'string') {
+                nextStep = { ...nextStep, vfxId: value.trim() };
+            } else if (nextStep.kind === 'spawn_vfx' && key === 'actorId' && typeof value === 'string') {
+                const trimmed = value.trim();
+                nextStep = { ...nextStep, actorId: trimmed.length > 0 ? trimmed : undefined };
+            } else if (nextStep.kind === 'spawn_vfx' && key === 'x') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric)) {
+                    return;
+                }
+                nextStep = { ...nextStep, x: numeric };
+            } else if (nextStep.kind === 'spawn_vfx' && key === 'y') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric)) {
+                    return;
+                }
+                nextStep = { ...nextStep, y: numeric };
+            } else if (nextStep.kind === 'subtitle' && key === 'text' && typeof value === 'string') {
+                nextStep = { ...nextStep, text: value };
+            } else if (nextStep.kind === 'subtitle' && key === 'durationMs') {
+                const numeric = Number(value);
+                if (!Number.isFinite(numeric) || numeric < 0) {
+                    setStatus('subtitle.durationMs must be >= 0');
+                    return;
+                }
+                nextStep = { ...nextStep, durationMs: numeric };
+            } else if (nextStep.kind === 'actor_sequence_ref' && key === 'actorId' && typeof value === 'string') {
+                nextStep = { ...nextStep, actorId: value.trim() };
+            } else if (nextStep.kind === 'actor_sequence_ref' && key === 'sequenceRef' && typeof value === 'string') {
+                nextStep = { ...nextStep, sequenceRef: value.trim() };
+            } else {
+                return;
+            }
+
+            target.steps = target.steps.map((step, index) => (
+                index === selectedCutsceneStepIndex ? nextStep : cloneCutsceneStep(step)
+            ));
+            commitCutsceneRegistry(definitions, `updated step in ${selectedCutscene.id}`);
         }
     });
 
@@ -1857,13 +2523,21 @@ export const createTestWorldEditorRuntime = (
             if (gameplayCameraSnapshot) {
                 camera.setZoom(gameplayCameraSnapshot.zoom);
             }
-            setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
-                width: worldBounds.width,
-                height: worldBounds.height
-            });
+            const restoreCameraSource = 'editor_runtime:toggle_off';
+            const canRestoreNormalCamera = requestNormalCameraOwnership
+                ? requestNormalCameraOwnership(restoreCameraSource)
+                : true;
+            if (canRestoreNormalCamera) {
+                setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
+                    width: worldBounds.width,
+                    height: worldBounds.height
+                });
+                setStatus('editor mode off');
+            } else {
+                setStatus('editor mode off | camera restore skipped (cutscene running)');
+            }
             gameplayCameraSnapshot = null;
             syncEditorPreviewCameraBasis();
-            setStatus('editor mode off');
         }
         syncSidebar();
     };
@@ -2479,6 +3153,16 @@ const buildInspectorSections = (
                     ? effectiveInteraction.outcome.eventId
                     : effectiveInteraction.outcome.cutsceneRef))
             : 'None';
+        const cutsceneRegistryRefs = getTestCutsceneRefs();
+        const cutsceneRefOptions = cutsceneRegistryRefs.map((cutsceneRef) => ({
+            value: cutsceneRef,
+            label: cutsceneRef
+        }));
+        const interactionCutsceneRefValue = entry.interactionOverride?.outcome?.kind === 'request_cutscene_ref'
+            ? entry.interactionOverride.outcome.cutsceneRef
+            : (effectiveInteraction?.outcome.kind === 'request_cutscene_ref'
+                ? effectiveInteraction.outcome.cutsceneRef
+                : (cutsceneRegistryRefs[0] ?? ''));
         return [
             {
                 title: 'NPC',
@@ -2595,10 +3279,9 @@ const buildInspectorSections = (
                     {
                         key: 'interactionCutsceneRef',
                         label: `Interaction Cutscene Ref (Effective Ref: ${interactionOutcomeRefLabel})`,
-                        input: 'text',
-                        value: entry.interactionOverride?.outcome?.kind === 'request_cutscene_ref'
-                            ? entry.interactionOverride.outcome.cutsceneRef
-                            : ''
+                        input: 'select',
+                        value: interactionCutsceneRefValue,
+                        options: cutsceneRefOptions
                     }
                 ]
             },
@@ -3021,6 +3704,202 @@ const buildScriptedSequenceActionSections = (
     }];
 };
 
+const buildCutsceneSections = (
+    definition: TestCutsceneDefinition | null
+): TestWorldEditorSidebarSection[] => {
+    if (!definition) {
+        return [];
+    }
+
+    return [{
+        title: 'Cutscene',
+        fields: [
+            {
+                key: 'id',
+                label: 'Cutscene Id',
+                input: 'text',
+                value: definition.id
+            },
+            {
+                key: 'mode',
+                label: 'Mode',
+                input: 'select',
+                value: definition.mode,
+                options: [
+                    { value: 'in_level', label: 'in_level' },
+                    { value: 'overlay', label: 'overlay' }
+                ]
+            }
+        ]
+    }];
+};
+
+const buildCutsceneAuditSections = (): TestWorldEditorSidebarSection[] => {
+    const audit = getTestCutsceneRegistryAuditSnapshot();
+    const storageAudit = getTestCutsceneDraftStorageAuditSnapshot();
+    return [{
+        title: 'Registry Audit',
+        fields: [
+            { key: 'registryAuditSource', label: 'Current Source', input: 'text', value: audit.registrySource },
+            { key: 'registryAuditDefaultCount', label: 'Default Count', input: 'number', value: audit.defaultCutsceneCount },
+            { key: 'registryAuditLiveCount', label: 'Live Count', input: 'number', value: audit.liveCutsceneCount },
+            { key: 'registryAuditStorageKey', label: 'Storage Key', input: 'text', value: storageAudit.storageKey },
+            {
+                key: 'registryAuditStoragePresent',
+                label: 'Storage Draft Present',
+                input: 'text',
+                value: storageAudit.draftPresent ? 'yes' : 'no'
+            },
+            {
+                key: 'registryAuditStorageCount',
+                label: 'Storage Draft Count',
+                input: 'number',
+                value: storageAudit.draftEntryCount
+            },
+            {
+                key: 'registryAuditStorageLastAction',
+                label: 'Last Storage Action',
+                input: 'text',
+                value: storageAudit.lastStorageAction
+            },
+            { key: 'registryAuditDefaultIds', label: 'Default Ids', input: 'textarea', value: audit.defaultCutsceneIds.join('\n') },
+            { key: 'registryAuditLiveIds', label: 'Live Ids', input: 'textarea', value: audit.liveCutsceneIds.join('\n') },
+            {
+                key: 'registryAuditModuleInitCount',
+                label: 'Module Init Default Count',
+                input: 'number',
+                value: audit.moduleInitDefaultCutsceneCount
+            },
+            {
+                key: 'registryAuditModuleInitIds',
+                label: 'Module Init Default Ids',
+                input: 'textarea',
+                value: audit.moduleInitDefaultCutsceneIds.join('\n')
+            }
+        ]
+    }];
+};
+
+const buildCutsceneStepSections = (
+    step: TestCutsceneStep | null
+): TestWorldEditorSidebarSection[] => {
+    if (!step) {
+        return [];
+    }
+
+    const baseFields: TestWorldEditorSidebarSection['fields'] = [
+        {
+            key: 'kind',
+            label: 'Kind',
+            input: 'select',
+            value: step.kind,
+            options: TEST_CUTSCENE_STEP_KINDS.map((kind) => ({
+                value: kind,
+                label: kind
+            }))
+        },
+        {
+            key: 'ref',
+            label: 'Ref',
+            input: 'text',
+            value: step.ref ?? ''
+        }
+    ];
+
+    if (step.kind === 'lock_input' || step.kind === 'unlock_input') {
+        return [{ title: 'Step', fields: baseFields }];
+    }
+    if (step.kind === 'camera_focus_actor') {
+        const cameraStep = step as TestCutsceneCameraFocusActorStep;
+        return [{
+            title: 'Step',
+            fields: [
+                ...baseFields,
+                { key: 'actorId', label: 'Actor Id', input: 'text', value: cameraStep.actorId },
+                { key: 'durationMs', label: 'Duration Ms', input: 'number', value: cameraStep.durationMs ?? 280, min: 0, step: 1 },
+                { key: 'ease', label: 'Ease', input: 'text', value: cameraStep.ease ?? '' },
+                { key: 'tolerancePx', label: 'Tolerance Px', input: 'number', value: cameraStep.tolerancePx ?? 1.25, min: 0.1, step: 0.1 }
+            ]
+        }];
+    }
+    if (step.kind === 'camera_pan_to') {
+        const panStep = step as TestCutsceneCameraPanToStep;
+        return [{
+            title: 'Step',
+            fields: [
+                ...baseFields,
+                { key: 'x', label: 'X', input: 'number', value: panStep.x, step: 1 },
+                { key: 'y', label: 'Y', input: 'number', value: panStep.y, step: 1 },
+                { key: 'durationMs', label: 'Duration Ms', input: 'number', value: panStep.durationMs, min: 0, step: 1 },
+                { key: 'ease', label: 'Ease', input: 'text', value: panStep.ease ?? '' }
+            ]
+        }];
+    }
+    if (step.kind === 'wait') {
+        const waitStep = step as TestCutsceneWaitStep;
+        return [{
+            title: 'Step',
+            fields: [
+                ...baseFields,
+                { key: 'durationMs', label: 'Duration Ms', input: 'number', value: waitStep.durationMs, min: 0, step: 1 }
+            ]
+        }];
+    }
+    if (step.kind === 'play_sfx') {
+        const sfxStep = step as TestCutscenePlaySfxStep;
+        return [{
+            title: 'Step',
+            fields: [
+                ...baseFields,
+                { key: 'sfxId', label: 'Sfx Id', input: 'text', value: sfxStep.sfxId }
+            ]
+        }];
+    }
+    if (step.kind === 'spawn_vfx') {
+        const vfxStep = step as TestCutsceneSpawnVfxStep;
+        return [{
+            title: 'Step',
+            fields: [
+                ...baseFields,
+                { key: 'vfxId', label: 'Vfx Id', input: 'text', value: vfxStep.vfxId },
+                { key: 'actorId', label: 'Actor Id (Optional)', input: 'text', value: vfxStep.actorId ?? '' },
+                { key: 'x', label: 'X', input: 'number', value: vfxStep.x ?? 0, step: 1 },
+                { key: 'y', label: 'Y', input: 'number', value: vfxStep.y ?? 0, step: 1 }
+            ]
+        }];
+    }
+    if (step.kind === 'subtitle') {
+        const subtitleStep = step as TestCutsceneSubtitleStep;
+        return [{
+            title: 'Step',
+            fields: [
+                ...baseFields,
+                { key: 'text', label: 'Text', input: 'textarea', value: subtitleStep.text },
+                { key: 'durationMs', label: 'Duration Ms', input: 'number', value: subtitleStep.durationMs ?? 900, min: 0, step: 1 }
+            ]
+        }];
+    }
+
+    const actorSequenceStep = step as TestCutsceneActorSequenceRefStep;
+    return [{
+        title: 'Step',
+        fields: [
+            ...baseFields,
+            { key: 'actorId', label: 'Actor Id', input: 'text', value: actorSequenceStep.actorId },
+            {
+                key: 'sequenceRef',
+                label: 'Sequence Ref',
+                input: 'select',
+                value: actorSequenceStep.sequenceRef,
+                options: getTestNpcScriptedSequenceRefs().map((sequenceRef) => ({
+                    value: sequenceRef,
+                    label: sequenceRef
+                }))
+            }
+        ]
+    }];
+};
+
 const buildLevelSectionsLegacy = (
     config: TestWorldConfig,
     campaignLevels: ReadonlyArray<{ id: string; displayName: string }>
@@ -3058,9 +3937,30 @@ const buildLevelSectionsLegacy = (
     ];
 };
 
+interface TestWorldLevelSourceAuditView {
+    currentSourceLabel: string;
+    campaignSourceLabel: string;
+    bootstrapWorldSourceLabel: string;
+    bootstrapWorldError: string | null;
+    initialDraftPresent: boolean;
+    draftPresent: boolean;
+    draftValid: boolean;
+    draftStorageKey: string;
+    draftNpcCount: number;
+    draftNpcIds: string[];
+    draftParseError: string | null;
+    fileNpcCount: number;
+    fileNpcIds: string[];
+    campaignNpcCount: number;
+    campaignNpcIds: string[];
+    loadedNpcCount: number;
+    loadedNpcIds: string[];
+}
+
 const buildLevelSections = (
     config: TestWorldConfig,
-    campaignLevels: ReadonlyArray<{ id: string; displayName: string }>
+    campaignLevels: ReadonlyArray<{ id: string; displayName: string }>,
+    sourceAudit: TestWorldLevelSourceAuditView
 ): TestWorldEditorSidebarSection[] => {
     const nextLevelOptions = [
         { value: '', label: 'None' },
@@ -3090,6 +3990,28 @@ const buildLevelSections = (
             fields: [
                 { key: 'worldWidth', label: 'Width', input: 'number', value: config.worldBounds.width, min: 64, step: 1 },
                 { key: 'worldHeight', label: 'Height', input: 'number', value: config.worldBounds.height, min: 64, step: 1 }
+            ]
+        },
+        {
+            title: 'Level Source Audit',
+            fields: [
+                { key: 'auditCurrentWorldSource', label: 'Current World Source', input: 'text', value: sourceAudit.currentSourceLabel },
+                { key: 'auditCampaignSource', label: 'Campaign Config Source', input: 'text', value: sourceAudit.campaignSourceLabel },
+                { key: 'auditBootstrapSource', label: 'Bootstrap World Source', input: 'text', value: sourceAudit.bootstrapWorldSourceLabel },
+                { key: 'auditBootstrapError', label: 'Bootstrap World Error', input: 'text', value: sourceAudit.bootstrapWorldError ?? 'none' },
+                { key: 'auditInitialDraftPresent', label: 'Draft Present on Boot', input: 'text', value: sourceAudit.initialDraftPresent ? 'yes' : 'no' },
+                { key: 'auditDraftPresentNow', label: 'Draft Present Now', input: 'text', value: sourceAudit.draftPresent ? 'yes' : 'no' },
+                { key: 'auditDraftValidNow', label: 'Draft Valid Now', input: 'text', value: sourceAudit.draftValid ? 'yes' : 'no' },
+                { key: 'auditDraftStorageKey', label: 'Draft Storage Key', input: 'text', value: sourceAudit.draftStorageKey },
+                { key: 'auditDraftNpcCount', label: 'Draft NPC Count', input: 'number', value: sourceAudit.draftNpcCount },
+                { key: 'auditDraftNpcIds', label: 'Draft NPC Ids', input: 'textarea', value: sourceAudit.draftNpcIds.join('\n') },
+                { key: 'auditDraftParseError', label: 'Draft Parse Error', input: 'text', value: sourceAudit.draftParseError ?? 'none' },
+                { key: 'auditFileNpcCount', label: 'File NPC Count', input: 'number', value: sourceAudit.fileNpcCount },
+                { key: 'auditFileNpcIds', label: 'File NPC Ids', input: 'textarea', value: sourceAudit.fileNpcIds.join('\n') },
+                { key: 'auditCampaignNpcCount', label: 'Campaign NPC Count', input: 'number', value: sourceAudit.campaignNpcCount },
+                { key: 'auditCampaignNpcIds', label: 'Campaign NPC Ids', input: 'textarea', value: sourceAudit.campaignNpcIds.join('\n') },
+                { key: 'auditLoadedNpcCount', label: 'Loaded NPC Count', input: 'number', value: sourceAudit.loadedNpcCount },
+                { key: 'auditLoadedNpcIds', label: 'Loaded NPC Ids', input: 'textarea', value: sourceAudit.loadedNpcIds.join('\n') }
             ]
         }
     ];

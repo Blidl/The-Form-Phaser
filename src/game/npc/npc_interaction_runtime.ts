@@ -1,13 +1,16 @@
 import type { PlayerWorldActor } from '../player/player_runtime_contracts';
-import { resolveTestNpcConfig } from './npc_profiles';
+import { isTestCutsceneRef } from '../cutscene/test_cutscene_registry';
+import { getTestNpcProfile, resolveTestNpcConfig } from './npc_profiles';
 import type { TestNpcRuntime } from './npc_runtime';
 import type {
     TestNpcInteractionAvailability,
     TestNpcInteractionArbitrationSource,
+    TestNpcInteractionCutsceneRefStatus,
     TestNpcInteractionDebugState,
     TestNpcInteractionDispatchResult,
     TestNpcInteractionInputAttemptDebugEntry,
     TestNpcInteractionObservableResult,
+    TestNpcInteractionOutcomeSource,
     TestNpcInteractionOutcome,
     TestNpcInteractionTargetDebugEntry,
     TestNpcInteractionUnavailableReason,
@@ -20,6 +23,7 @@ interface InteractionActorEntry {
     actorId: string;
     displayName: string;
     interaction: NonNullable<NonNullable<ReturnType<typeof resolveTestNpcConfig>>['interaction']>;
+    outcomeSource: TestNpcInteractionOutcomeSource;
 }
 
 export interface TestNpcInteractionRuntime {
@@ -38,21 +42,82 @@ const getOutcomeRef = (outcome: TestNpcInteractionOutcome): string => {
     return outcome.cutsceneRef;
 };
 
+const resolveOutcomeSource = (
+    instance: TestNpcInstanceConfig
+): TestNpcInteractionOutcomeSource => {
+    return instance.interactionOverride?.outcome !== undefined
+        ? 'instance_override'
+        : 'profile_default';
+};
+
+const resolveCutsceneRefDebug = (
+    outcome: TestNpcInteractionOutcome,
+    source: TestNpcInteractionOutcomeSource
+): {
+    effectiveCutsceneRef: string | null;
+    cutsceneRefSource: TestNpcInteractionOutcomeSource | null;
+    cutsceneRefStatus: TestNpcInteractionCutsceneRefStatus;
+    cutsceneRefIssue: string | null;
+} => {
+    if (outcome.kind !== 'request_cutscene_ref') {
+        return {
+            effectiveCutsceneRef: null,
+            cutsceneRefSource: null,
+            cutsceneRefStatus: 'n/a',
+            cutsceneRefIssue: null
+        };
+    }
+
+    const cutsceneRef = outcome.cutsceneRef.trim();
+    if (cutsceneRef.length <= 0) {
+        return {
+            effectiveCutsceneRef: null,
+            cutsceneRefSource: source,
+            cutsceneRefStatus: 'missing_ref',
+            cutsceneRefIssue: 'cutscene ref is empty'
+        };
+    }
+    if (!isTestCutsceneRef(cutsceneRef)) {
+        return {
+            effectiveCutsceneRef: cutsceneRef,
+            cutsceneRefSource: source,
+            cutsceneRefStatus: 'invalid_ref',
+            cutsceneRefIssue: `unknown cutscene ref "${cutsceneRef}"`
+        };
+    }
+    return {
+        effectiveCutsceneRef: cutsceneRef,
+        cutsceneRefSource: source,
+        cutsceneRefStatus: 'valid',
+        cutsceneRefIssue: null
+    };
+};
+
 export const createTestNpcInteractionRuntime = (
     player: PlayerWorldActor,
     npcRuntime: Pick<TestNpcRuntime, 'dispatchInteractionOutcome' | 'getActorBounds' | 'getDebugEntries'>,
     instances: readonly TestNpcInstanceConfig[]
 ): TestNpcInteractionRuntime => {
     const interactionActors = instances
-        .map((instance) => resolveTestNpcConfig(instance))
-        .filter((entry): entry is NonNullable<ReturnType<typeof resolveTestNpcConfig>> => entry !== null)
-        .filter((entry): entry is NonNullable<ReturnType<typeof resolveTestNpcConfig>> & {
-            interaction: NonNullable<NonNullable<ReturnType<typeof resolveTestNpcConfig>>['interaction']>;
-        } => entry.interaction !== null)
+        .map((instance) => {
+            const profile = getTestNpcProfile(instance.profileId);
+            const resolved = resolveTestNpcConfig(instance);
+            if (!profile || !resolved?.interaction) {
+                return null;
+            }
+            return {
+                actorId: instance.id,
+                displayName: profile.displayName,
+                interaction: resolved.interaction,
+                outcomeSource: resolveOutcomeSource(instance)
+            } satisfies InteractionActorEntry;
+        })
+        .filter((entry): entry is InteractionActorEntry => entry !== null)
         .map((entry) => ({
-            actorId: entry.instance.id,
-            displayName: entry.profile.displayName,
-            interaction: entry.interaction
+            actorId: entry.actorId,
+            displayName: entry.displayName,
+            interaction: entry.interaction,
+            outcomeSource: entry.outcomeSource
         } satisfies InteractionActorEntry));
     let currentTarget: TestNpcInteractionTargetDebugEntry | null = null;
     let arbitrationSource: TestNpcInteractionArbitrationSource = 'none';
@@ -111,6 +176,8 @@ export const createTestNpcInteractionRuntime = (
                     maxDistancePx: entry.interaction.distancePx,
                     outcomeKind: entry.interaction.outcome.kind,
                     outcomeRef: getOutcomeRef(entry.interaction.outcome),
+                    outcomeSource: entry.outcomeSource,
+                    ...resolveCutsceneRefDebug(entry.interaction.outcome, entry.outcomeSource),
                     availability,
                     unavailableReason
                 };
@@ -175,6 +242,11 @@ export const createTestNpcInteractionRuntime = (
                     unavailableReason: sourceTarget?.unavailableReason ?? null,
                     outcomeKind: sourceTarget?.outcomeKind ?? null,
                     outcomeRef: sourceTarget?.outcomeRef ?? null,
+                    outcomeSource: sourceTarget?.outcomeSource ?? null,
+                    effectiveCutsceneRef: sourceTarget?.effectiveCutsceneRef ?? null,
+                    cutsceneRefSource: sourceTarget?.cutsceneRefSource ?? null,
+                    cutsceneRefStatus: sourceTarget?.cutsceneRefStatus ?? 'n/a',
+                    cutsceneRefIssue: sourceTarget?.cutsceneRefIssue ?? null,
                     observableResult,
                     detail
                 };

@@ -50,10 +50,14 @@ export const createPlayerTuningPanelRuntime = (
             }
 
             isFieldMutating = true;
-            tuningRuntime.updateDraft((draft) => {
-                field.write(draft, value);
-            });
-            isFieldMutating = false;
+            try {
+                tuningRuntime.updateDraft((draft) => {
+                    field.write(draft, value);
+                });
+            } finally {
+                isFieldMutating = false;
+                syncSidebar();
+            }
         },
         onSaveToProject: () => {
             void tuningRuntime.saveToProject();
@@ -128,7 +132,7 @@ export const createPlayerTuningPanelRuntime = (
         close: (): void => {
             close();
         },
-        shouldMuteGameplayInput: (): boolean => active || isDomTextInputFocused(),
+        shouldMuteGameplayInput: (): boolean => isDomTextInputFocused(),
         destroy: (): void => {
             close();
             sidebar.destroy();

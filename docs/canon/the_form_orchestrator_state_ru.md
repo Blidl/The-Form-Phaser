@@ -101,6 +101,15 @@
 
 ---
 
+## Canon Patch - Player Form Animation Profiles (2026-04-21)
+- NPC-first presentation backbone remains the target for full animation profile rollout.
+- Allowed TEMPORARY exception for demo feel: narrow first-pass player-form hooks for `ball/triangle/square` only.
+- First-pass vocabulary hooks: `jump_start`, `land_impact`, `airborne`, `form_switch`.
+- Optional form-specific hooks: `ball_rebound_launch`, `triangle_flight_start`, `square_attach_start`, `square_attach_jump_start`.
+- Scope guardrails: this is not a universal animation framework, not a new editor, not a player giant-controller migration, and does not change the physics contract.
+
+---
+
 ## Stop Gates
 - Не переходить к NPC/cutscene/presentation, пока core stability не закрыла критические баги форм.
 - Не собирать многоуровневую demo flow, пока нет `finish + nextLevelId`.

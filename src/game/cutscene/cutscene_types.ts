@@ -1,5 +1,12 @@
 export type TestCutsceneMode = 'in_level' | 'overlay';
 export type TestCutsceneRunStatus = 'running' | 'completed' | 'cancelled' | 'failed';
+export type TestCutsceneRequestResult =
+    | 'accepted'
+    | 'rejected'
+    | 'missing_ref'
+    | 'already_running'
+    | 'completed'
+    | 'failed';
 
 interface TestCutsceneStepBase {
     kind: string;
@@ -17,6 +24,9 @@ export interface TestCutsceneUnlockInputStep extends TestCutsceneStepBase {
 export interface TestCutsceneCameraFocusActorStep extends TestCutsceneStepBase {
     kind: 'camera_focus_actor';
     actorId: string;
+    durationMs?: number;
+    ease?: string;
+    tolerancePx?: number;
 }
 
 export interface TestCutsceneCameraPanToStep extends TestCutsceneStepBase {
@@ -75,9 +85,29 @@ export interface TestCutsceneDefinition {
 }
 
 export interface TestCutsceneDebugState {
+    lastCutsceneRequestRef: string | null;
+    lastCutsceneRequestResult: TestCutsceneRequestResult | null;
     activeCutsceneRef: string | null;
     activeStepIndex: number;
     activeStepKind: string | null;
     status: TestCutsceneRunStatus | null;
+    failureReason: string | null;
     detail: string | null;
+    blockReason: string | null;
+    cameraOwner: 'cutscene_runtime' | 'player_follow_runtime';
+    cameraFocusActorId: string | null;
+    cameraTransitionMode: 'none' | 'pan_to_point' | 'focus_actor_handoff';
+    cameraTargetX: number | null;
+    cameraTargetY: number | null;
+    cameraRemainingDeltaX: number | null;
+    cameraRemainingDeltaY: number | null;
+    cameraRemainingDistancePx: number | null;
+    activeActorSequenceActorId: string | null;
+    activeActorSequenceRef: string | null;
+    activeActorSequenceId: string | null;
+    activeActorSequenceStatus: 'running' | 'succeeded' | 'failed' | 'cancelled' | null;
+    cutsceneActive: boolean;
+    normalCameraPathStatus: 'none' | 'applied' | 'skipped';
+    normalCameraPathSource: string | null;
+    normalCameraPathReason: string | null;
 }

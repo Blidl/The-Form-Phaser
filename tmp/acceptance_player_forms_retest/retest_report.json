@@ -1,0 +1,14 @@
+{
+  "squareFormReady": true,
+  "squareFormAfterEnsure": "square",
+  "attachText": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: ball\ncontact: arcade\nbody: 360, 518\nanchor: 360, 518\nhazard shape: circle\ntriangle points: 0\nsquare attached: no\nsquare normal: -\nsquare zones: -",
+  "attachJumpA": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: ball\ncontact: arcade\nbody: 360, 624\nanchor: 360, 624\nhazard shape: circle\ntriangle points: 0\nsquare attached: no\nsquare normal: -\nsquare zones: -",
+  "attachJumpB": "Debug Dock\n1 Interaction\n2 NPC\n3 Player\n4 Log\nNo interaction attempts yet.\nPlayer\nform: ball\ncontact: arcade\nbody: 360, 435\nanchor: 360, 435\nhazard shape: circle\ntriangle points: 0\nsquare attached: no\nsquare normal: -\nsquare zones: -",
+  "attachDetected": false,
+  "attachJumpDetected": false,
+  "tuningStatusesAfterChange": [
+    "persisted snapshot loaded",
+    "Draft matches persisted"
+  ],
+  "liveApplyStatusSeen": false
+}

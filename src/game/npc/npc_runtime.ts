@@ -45,6 +45,7 @@ import {
     getTestNpcScriptedSequenceDefinition,
     resolveTestNpcScriptedSequence
 } from './npc_scripted_sequences';
+import { isTestCutsceneRef } from '../cutscene/test_cutscene_registry';
 
 const NPC_GRAVITY_Y = 2200;
 const NPC_MAX_FALL_SPEED = 1600;
@@ -1101,15 +1102,32 @@ export const createTestNpcRuntime = (
             }
 
             if (outcome.kind === 'request_cutscene_ref') {
+                const cutsceneRef = outcome.cutsceneRef.trim();
+                if (cutsceneRef.length <= 0) {
+                    return {
+                        actorId,
+                        outcomeKind: outcome.kind,
+                        result: 'invalid_outcome',
+                        detail: 'missing cutscene ref'
+                    };
+                }
+                if (!isTestCutsceneRef(cutsceneRef)) {
+                    return {
+                        actorId,
+                        outcomeKind: outcome.kind,
+                        result: 'invalid_outcome',
+                        detail: `unknown cutscene ref "${cutsceneRef}"`
+                    };
+                }
                 scene.events.emit('pf:npc_interaction_cutscene_request', {
                     actorId: actor.id,
-                    cutsceneRef: outcome.cutsceneRef
+                    cutsceneRef
                 });
                 return {
                     actorId,
                     outcomeKind: outcome.kind,
                     result: 'requested_cutscene',
-                    detail: outcome.cutsceneRef
+                    detail: cutsceneRef
                 };
             }
 

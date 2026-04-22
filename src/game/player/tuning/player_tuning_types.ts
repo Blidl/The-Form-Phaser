@@ -92,22 +92,45 @@ export interface PlayerSquareRolloverTuningRaw {
     surfaceValidationRangePx: number;
 }
 
+export interface PlayerFormAnimationTuningRaw {
+    jumpSquashScaleX: number;
+    jumpSquashScaleY: number;
+    jumpSquashDurationMs: number;
+    jumpStretchScaleX: number;
+    jumpStretchScaleY: number;
+    jumpStretchDurationMs: number;
+    jumpRecoverDurationMs: number;
+    landImpactSpeedForMax: number;
+    landSquashScaleX: number;
+    landSquashScaleY: number;
+    landSquashDurationMs: number;
+    landRecoverDurationMs: number;
+    airScaleX: number;
+    airScaleY: number;
+    airSpeedForMax: number;
+    airSmoothingTimeSec: number;
+    switchRecoverDurationMs: number;
+}
+
 export interface PlayerTuningRawSnapshot {
     common: PlayerCommonTuningRaw;
     ball: {
         movement: PlayerMovementTuningRaw;
         jump: PlayerJumpProfileTuningRaw;
+        animation: PlayerFormAnimationTuningRaw;
         boost: PlayerBallBoostTuningRaw;
         rebound: PlayerBallReboundTuningRaw;
     };
     triangle: {
         movement: PlayerMovementTuningRaw;
         jump: PlayerJumpProfileTuningRaw;
+        animation: PlayerFormAnimationTuningRaw;
         flight: PlayerTriangleFlightTuningRaw;
     };
     square: {
         movement: PlayerMovementTuningRaw;
         jump: PlayerJumpProfileTuningRaw;
+        animation: PlayerFormAnimationTuningRaw;
         attach: PlayerSquareAttachTuningRaw;
         trail: PlayerSquareTrailTuningRaw;
         attachJump: PlayerSquareAttachJumpTuningRaw;
@@ -130,17 +153,20 @@ export const clonePlayerTuningSnapshot = (snapshot: PlayerTuningSnapshot): Playe
             ball: {
                 movement: { ...snapshot.raw.ball.movement },
                 jump: { ...snapshot.raw.ball.jump },
+                animation: { ...snapshot.raw.ball.animation },
                 boost: { ...snapshot.raw.ball.boost },
                 rebound: { ...snapshot.raw.ball.rebound }
             },
             triangle: {
                 movement: { ...snapshot.raw.triangle.movement },
                 jump: { ...snapshot.raw.triangle.jump },
+                animation: { ...snapshot.raw.triangle.animation },
                 flight: { ...snapshot.raw.triangle.flight }
             },
             square: {
                 movement: { ...snapshot.raw.square.movement },
                 jump: { ...snapshot.raw.square.jump },
+                animation: { ...snapshot.raw.square.animation },
                 attach: { ...snapshot.raw.square.attach },
                 trail: { ...snapshot.raw.square.trail },
                 attachJump: { ...snapshot.raw.square.attachJump },
