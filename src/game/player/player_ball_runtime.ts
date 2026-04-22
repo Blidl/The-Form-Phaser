@@ -42,6 +42,8 @@ export interface BallReboundTickResult {
     horizontalDir: -1 | 0 | 1;
     isPauseHolding: boolean;
     didLaunchThisFrame: boolean;
+    launchVelocityX: number | null;
+    launchVelocityY: number | null;
     preservedVelocityX: number | null;
 }
 
@@ -171,6 +173,8 @@ export const tickBallReboundRuntimeFlow = (params: TickBallReboundParams): BallR
         horizontalDir,
         isPauseHolding: reboundPausePhase === 'holding',
         didLaunchThisFrame: reboundPausePhase === 'launched',
+        launchVelocityX: reboundPausePhase === 'launched' ? physicsBody.velocity.x : null,
+        launchVelocityY: reboundPausePhase === 'launched' ? physicsBody.velocity.y : null,
         preservedVelocityX: resolveBallReboundPreservedVelocityXForRuntime(
             runtime,
             isBallForm,
@@ -248,7 +252,7 @@ interface ApplyBallJumpParams {
     hasBoostHold: boolean;
 }
 
-export const applyBallJumpRuntime = (params: ApplyBallJumpParams): void => {
+export const applyBallJumpRuntime = (params: ApplyBallJumpParams): { velocityX: number; velocityY: number } => {
     const { mutable, physicsBody, timers, horizontalDir, isBallForm, grounded, hasBoostHold } = params;
     const hasCoyoteJump = hasCoyoteTime(timers);
     const hasReboundJump = grounded && mutable.reboundWindowMs > 0;
@@ -270,6 +274,7 @@ export const applyBallJumpRuntime = (params: ApplyBallJumpParams): void => {
     clearJumpBuffer(timers);
     clearCoyoteTime(timers);
     mutable.lastAirborneDownwardSpeed = 0;
+    return ballJumpLaunch;
 };
 
 export const queueOrApplyBallActionBoost = (

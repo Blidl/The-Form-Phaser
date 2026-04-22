@@ -80,6 +80,9 @@ interface SquareAttachCandidateSample {
     restrictToAttachedNormal?: boolean;
 }
 
+const TRAIL_FULL_RESOURCE_EPSILON = 0.0001;
+const TRAIL_MANUAL_REGEN_WALL_TO_FLOOR_DELAY_MS = 1000;
+
 export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
     const {
         state,
@@ -207,6 +210,15 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
     const currentSurfaceNormalY = state.squareShell.isAttached
         ? state.squareShell.attachNormalY
         : squareContact.normalY;
+    const wallToFloorRegenDelayMs = resolveWallToFloorRegenDelayMs(
+        state.squareShell,
+        deltaMs,
+        input,
+        verticalDir as -1 | 0 | 1,
+        currentRegenSurfacePose !== null,
+        currentSurfaceNormalX,
+        currentSurfaceNormalY
+    );
     const attachJumpActive = isSquareAttachJumpActive(state.squareShell);
     const squareAttachStartDecision = resolveSquareAttachStartDecision({
         currentForm: state.currentForm,
@@ -233,7 +245,8 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
         squareContact.hasContact || state.squareShell.isAttached,
         physicsBody.velocity.x,
         physicsBody.velocity.y,
-        squareAttachStartDecision.canStart
+        squareAttachStartDecision.canStart,
+        wallToFloorRegenDelayMs
     );
     if (attachJumpActive) {
         state.squareShell.isOnTrail = false;
@@ -418,6 +431,7 @@ export const tickSquareRuntime = (params: TickSquareRuntimeParams): void => {
                 state.squareShell.trailResourceMax
             );
         }
+        clearSquareTrailIfFullyRecharged(state.squareShell);
     }
 
     if (!isSquareRolloverActive(state.squareShell) && !state.squareShell.isTrailRegenerating) {
@@ -489,6 +503,33 @@ export const applySquareDetachedTrailRefund = (state: PlayerShellState, deltaMs:
         0,
         state.squareShell.trailResourceMax
     );
+    clearSquareTrailIfFullyRecharged(state.squareShell);
+};
+
+const clearSquareTrailIfFullyRecharged = (squareShell: PlayerShellState['squareShell']): void => {
+    if (squareShell.trailSegments.length <= 0) {
+        return;
+    }
+
+    if (squareShell.trailResourceCurrent + TRAIL_FULL_RESOURCE_EPSILON < squareShell.trailResourceMax) {
+        return;
+    }
+
+    squareShell.trailSegments.length = 0;
+    squareShell.isOnTrail = false;
+    squareShell.isTrailRegenerating = false;
+    squareShell.isTrailLockedAtBoundary = false;
+    squareShell.trailAnchorActive = false;
+    squareShell.trailAnchorX = 0;
+    squareShell.trailAnchorY = 0;
+    squareShell.trailAnchorLocalX = 0;
+    squareShell.trailAnchorLocalY = 0;
+    squareShell.trailAnchorSupportBody = null;
+    squareShell.trailAnchorSupportOriginX = 0;
+    squareShell.trailAnchorSupportOriginY = 0;
+    squareShell.trailAnchorNormalX = 0;
+    squareShell.trailAnchorNormalY = -1;
+    clearSquareTrailLatch(squareShell);
 };
 
 const resolveBestSquareAttachCandidate = (
@@ -701,6 +742,35 @@ const resolveAttachCandidateNormals = (
     return ordered;
 };
 
+const resolveWallToFloorRegenDelayMs = (
+    squareShell: PlayerShellState['squareShell'],
+    deltaMs: number,
+    input: PlayerInputSnapshot,
+    verticalDir: -1 | 0 | 1,
+    hasSurfacePose: boolean,
+    surfaceNormalX: -1 | 0 | 1,
+    surfaceNormalY: -1 | 0 | 1
+): number => {
+    const hadWallSurfaceOnPreviousTick = squareShell.trailManualRegenLastHadSurfacePose
+        && squareShell.trailManualRegenLastSurfaceNormalX !== 0
+        && squareShell.trailManualRegenLastSurfaceNormalY === 0;
+    const hasFloorSurfaceOnCurrentTick = hasSurfacePose
+        && surfaceNormalX === 0
+        && surfaceNormalY === -1;
+    const hasManualRegenIntent = input.regenPressed && verticalDir === 1;
+
+    let nextDelayMs = Math.max(0, squareShell.trailManualRegenWallToFloorDelayMs - deltaMs);
+    if (hadWallSurfaceOnPreviousTick && hasFloorSurfaceOnCurrentTick && hasManualRegenIntent) {
+        nextDelayMs = TRAIL_MANUAL_REGEN_WALL_TO_FLOOR_DELAY_MS;
+    }
+
+    squareShell.trailManualRegenWallToFloorDelayMs = nextDelayMs;
+    squareShell.trailManualRegenLastHadSurfacePose = hasSurfacePose;
+    squareShell.trailManualRegenLastSurfaceNormalX = surfaceNormalX;
+    squareShell.trailManualRegenLastSurfaceNormalY = surfaceNormalY;
+    return nextDelayMs;
+};
+
 const shouldRunSquareTrailManualRegen = (
     squareShell: PlayerShellState['squareShell'],
     input: PlayerInputSnapshot,
@@ -712,19 +782,20 @@ const shouldRunSquareTrailManualRegen = (
     _hasSurfaceContact: boolean,
     velocityX: number,
     velocityY: number,
-    _canStartAttachThisFrame: boolean
+    _canStartAttachThisFrame: boolean,
+    wallToFloorRegenDelayMs: number
 ): boolean => {
     const isStandingOnFloor = hasSurfacePose
         && surfaceNormalX === 0
         && surfaceNormalY === -1;
     const isStableAtRest = Math.abs(velocityX) <= 8 && Math.abs(velocityY) <= 8;
 
-    return !squareShell.isAttached
-        && isStandingOnFloor
+    return isStandingOnFloor
         && isStableAtRest
         && input.regenPressed
         && horizontalDir === 0
         && verticalDir === 1
+        && wallToFloorRegenDelayMs <= 0
         && squareShell.trailResourceCurrent < squareShell.trailResourceMax
         && squareShell.trailSegments.length > 0;
 };

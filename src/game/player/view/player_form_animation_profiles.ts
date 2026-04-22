@@ -67,7 +67,7 @@ const TRIANGLE_PROFILE: PlayerFormAnimationProfile = {
 
 const SQUARE_PROFILE: PlayerFormAnimationProfile = {
     jumpIntent: { scaleX: 1.00, scaleY: 1.00, durationMs: 0 },
-    jumpCommit: { scaleX: 0.90, scaleY: 1.12, durationMs: 83 },
+    jumpCommit: { scaleX: 0.86, scaleY: 1.16, durationMs: 95 },
     apexEnter: { scaleX: 1.00, scaleY: 1.00, durationMs: 0 },
     fallEnter: { scaleX: 1.00, scaleY: 1.00, durationMs: 0 },
     landImpactMax: { scaleX: 1.18, scaleY: 0.82, durationMs: 83 },
@@ -75,7 +75,7 @@ const SQUARE_PROFILE: PlayerFormAnimationProfile = {
     formSwitchIn: { scaleX: 1.00, scaleY: 1.00, durationMs: 133 },
     squareAttachEnter: { scaleX: 1.00, scaleY: 1.00, durationMs: 0 },
     squareAttachExit: { scaleX: 1.00, scaleY: 1.00, durationMs: 0 },
-    squareAttachJumpCommit: { scaleX: 0.90, scaleY: 1.12, durationMs: 83 },
+    squareAttachJumpCommit: { scaleX: 0.84, scaleY: 1.18, durationMs: 100 },
     landImpactSpeedForMax: PLAYER_SQUARE_ANIM_LAND_IMPACT_SPEED_FOR_MAX,
     airScaleX: 1.00,
     airScaleY: 1.00,

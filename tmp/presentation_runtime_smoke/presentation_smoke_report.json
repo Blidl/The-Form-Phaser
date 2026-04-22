@@ -1,0 +1,31 @@
+{
+  "startedAt": "2026-04-22T20:38:28.435Z",
+  "checks": {
+    "ball_form_ready": true,
+    "ball_jump_delay_ms": null,
+    "ball_jump_no_delay": false,
+    "ball_rebound_jump_stretch_visible": true,
+    "wall_rebound_launch_detected": true,
+    "wall_jump_stretch_aligned_with_launch": true,
+    "ball_apex_returns_to_circle": true,
+    "ball_ground_boost_has_readable_deformation": true,
+    "ball_ground_boost_axis_horizontal_bias": true,
+    "square_form_ready": true,
+    "square_jump_delay_ms": 135,
+    "square_jump_no_delay": false,
+    "square_no_fall_stretch": true,
+    "no_gameplay_delay_added": false
+  },
+  "samples": {
+    "ball_rebound_jump_stretch_max": 0.5314984859728676,
+    "wall_alignment_dot": 0.9999999999999999,
+    "ball_apex_sample": {
+      "scaleX": 0.99716739840281,
+      "scaleY": 1.004532162555504,
+      "velocityY": 1.5
+    },
+    "ball_boost_stretch_max": 0.5160517320677459,
+    "square_late_fall_anisotropy_max": 0
+  },
+  "finishedAt": "2026-04-22T20:38:53.004Z"
+}

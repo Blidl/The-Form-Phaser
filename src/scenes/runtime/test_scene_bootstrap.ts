@@ -240,6 +240,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
                 y: player.arcadeBodyObject.y,
                 form: player.currentForm
             }),
+            getPlayerVisualSnapshot: () => player.presentationDebugState,
             teleportPlayer: (x: number, y: number): void => {
                 if (!Number.isFinite(x) || !Number.isFinite(y)) {
                     return;

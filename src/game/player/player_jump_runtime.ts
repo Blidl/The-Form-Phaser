@@ -34,8 +34,8 @@ interface HandleJumpFlowParams {
     preMoveVelocityX: number;
     preMoveVelocityY: number;
     ballReboundRuntime: BallReboundRuntimeState;
-    onJumpCommitted?: () => void;
-    onSquareAttachJumpCommitted?: () => void;
+    onJumpCommitted?: (impulseX: number, impulseY: number) => void;
+    onSquareAttachJumpCommitted?: (impulseX: number, impulseY: number) => void;
 }
 
 export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
@@ -66,11 +66,13 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
         && hasJumpBuffer(timers);
 
     if (canStartSquareAttachJump && tryStartSquareAttachJump(state.squareShell, physicsBody)) {
+        const attachJumpImpulseX = state.squareShell.attachJumpState.normalX;
+        const attachJumpImpulseY = state.squareShell.attachJumpState.normalY;
         mutable.jumpCutConsumed = false;
         clearJumpBuffer(timers);
         clearCoyoteTime(timers);
-        params.onSquareAttachJumpCommitted?.();
-        params.onJumpCommitted?.();
+        params.onSquareAttachJumpCommitted?.(attachJumpImpulseX, attachJumpImpulseY);
+        params.onJumpCommitted?.(attachJumpImpulseX, attachJumpImpulseY);
         return;
     }
 
@@ -108,12 +110,12 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
         clearJumpBuffer(timers);
         clearCoyoteTime(timers);
         mutable.lastAirborneDownwardSpeed = 0;
-        params.onJumpCommitted?.();
+        params.onJumpCommitted?.(0, triangleJumpLaunch.velocityY);
         return;
     }
 
     if (isBallForm) {
-        applyBallJumpRuntime({
+        const ballJumpLaunch = applyBallJumpRuntime({
             mutable,
             physicsBody,
             timers,
@@ -122,7 +124,7 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
             grounded,
             hasBoostHold
         });
-        params.onJumpCommitted?.();
+        params.onJumpCommitted?.(ballJumpLaunch.velocityX, ballJumpLaunch.velocityY);
         return;
     }
 
@@ -132,7 +134,7 @@ export const handlePlayerJumpFlow = (params: HandleJumpFlowParams): void => {
     clearJumpBuffer(timers);
     clearCoyoteTime(timers);
     mutable.lastAirborneDownwardSpeed = 0;
-    params.onJumpCommitted?.();
+    params.onJumpCommitted?.(physicsBody.velocity.x, physicsBody.velocity.y);
 };
 
 interface ApplyJumpCutParams {

@@ -19,6 +19,7 @@ import type { PlayerTickRuntimeContext } from './player_runtime_types';
 
 const APEX_ENTER_SPEED_THRESHOLD = 24;
 const FALL_ENTER_SPEED_THRESHOLD = 36;
+const BALL_BOOST_VISUAL_SUSTAIN_MIN_HORIZONTAL_SPEED = 60;
 
 export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const { state, timers, physicsBody, input, deltaMs, ballReboundRuntime } = context;
@@ -86,7 +87,11 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     tickPlayerMarkerState(state.marker, state, input, deltaSec);
 
     if (isBallForm && grounded && input.actionHeld && !context.mutable.boostActive && rawHorizontalDir !== 0) {
+        const wasBoostActive = context.mutable.boostActive;
         tryApplyBallBoost(context.mutable, physicsBody, grounded, rawHorizontalDir);
+        if (!wasBoostActive && context.mutable.boostActive) {
+            context.notifyBallBoostGroundStart(physicsBody.velocity.x, 0);
+        }
     }
 
     const reboundTick = tickBallReboundRuntimeFlow({
@@ -106,7 +111,10 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const didLaunchBallReboundThisFrame = reboundTick.didLaunchThisFrame;
     const preservedReboundVelocityX = reboundTick.preservedVelocityX;
     if (didLaunchBallReboundThisFrame) {
-        context.notifyBallReboundLaunch();
+        context.notifyBallReboundLaunch(
+            reboundTick.launchVelocityX ?? 0,
+            reboundTick.launchVelocityY ?? 0
+        );
     }
 
     let isTriangleFlightActive = isTriangleForm && state.triangleFlight.isActive;
@@ -227,8 +235,8 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         preMoveVelocityX,
         preMoveVelocityY,
         ballReboundRuntime,
-        onJumpCommitted: () => context.notifyJumpCommit(),
-        onSquareAttachJumpCommitted: () => context.notifySquareAttachJumpCommit()
+        onJumpCommitted: (impulseX, impulseY) => context.notifyJumpCommit(impulseX, impulseY),
+        onSquareAttachJumpCommitted: (impulseX, impulseY) => context.notifySquareAttachJumpCommit(impulseX, impulseY)
     });
 
     applyJumpCutRuntime({
@@ -251,7 +259,19 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     });
 
     queueOrApplyBallActionBoost(context.mutable, physicsBody, input, isBallForm, grounded, horizontalDir);
+    const boostStateBeforeQueuedConsume = context.mutable.boostActive;
     tryConsumeQueuedGroundBoost(context.mutable, physicsBody, input, isBallForm, justLanded, grounded, horizontalDir);
+    if (!boostStateBeforeQueuedConsume && context.mutable.boostActive && isBallForm && grounded) {
+        context.notifyBallBoostGroundStart(physicsBody.velocity.x, 0);
+    }
+    const canEmitBallBoostGroundSustain = isBallForm
+        && grounded
+        && context.mutable.boostActive
+        && input.actionHeld
+        && Math.abs(physicsBody.velocity.x) >= BALL_BOOST_VISUAL_SUSTAIN_MIN_HORIZONTAL_SPEED;
+    if (canEmitBallBoostGroundSustain) {
+        context.notifyBallBoostGroundSustain(physicsBody.velocity.x, 0);
+    }
 
     tickTriangleFlightActiveRuntime({
         state,

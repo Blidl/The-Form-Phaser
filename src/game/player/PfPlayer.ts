@@ -104,6 +104,16 @@ export class PfPlayer {
         return this.runtime.squareDebugView;
     }
 
+    public get presentationDebugState(): {
+        ball: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+        triangle: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+        square: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+        velocityX: number;
+        velocityY: number;
+    } {
+        return this.runtime.presentationDebugState;
+    }
+
     public setDebugVisualsVisible(visible: boolean): void {
         this.runtime.setDebugVisualsVisible(visible);
     }

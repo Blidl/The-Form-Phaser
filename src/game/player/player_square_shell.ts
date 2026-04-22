@@ -44,6 +44,10 @@ export const createSquareShellState = (): PlayerSquareShellState => {
         trailLatchSupportOriginY: 0,
         trailLatchNormalX: 0,
         trailLatchNormalY: -1,
+        trailManualRegenWallToFloorDelayMs: 0,
+        trailManualRegenLastHadSurfacePose: false,
+        trailManualRegenLastSurfaceNormalX: 0,
+        trailManualRegenLastSurfaceNormalY: -1,
         attachJumpState: createSquareAttachJumpState(),
         rolloverState: createSquareRolloverState()
     };
@@ -86,6 +90,10 @@ export const resetSquareShellState = (
     squareShell.trailLatchSupportOriginY = 0;
     squareShell.trailLatchNormalX = 0;
     squareShell.trailLatchNormalY = -1;
+    squareShell.trailManualRegenWallToFloorDelayMs = 0;
+    squareShell.trailManualRegenLastHadSurfacePose = false;
+    squareShell.trailManualRegenLastSurfaceNormalX = 0;
+    squareShell.trailManualRegenLastSurfaceNormalY = -1;
     resetSquareAttachJumpState(squareShell.attachJumpState);
     resetSquareRolloverState(squareShell.rolloverState);
 };

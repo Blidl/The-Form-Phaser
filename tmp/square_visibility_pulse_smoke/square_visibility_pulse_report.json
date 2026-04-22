@@ -1,0 +1,19 @@
+{
+  "startedAt": "2026-04-22T21:18:07.744Z",
+  "checks": {
+    "square_form_ready": true,
+    "square_form_ready_after_teleport": true,
+    "square_visibility_matches_form": true,
+    "square_jump_pulse_visible": true,
+    "square_form_ready_after_attach_teleport": true,
+    "square_attach_jump_pulse_visible": true
+  },
+  "samples": {
+    "form_at_visibility_check": "square",
+    "ball_visible_at_square": false,
+    "square_visible_at_square": true,
+    "square_jump_anisotropy_max": 0.28846153846153844,
+    "square_attach_jump_anisotropy_max": 0.28335599999999983
+  },
+  "finishedAt": "2026-04-22T21:18:21.390Z"
+}

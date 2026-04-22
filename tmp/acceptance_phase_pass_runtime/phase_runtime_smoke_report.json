@@ -1,14 +1,14 @@
 {
-  "startedAt": "2026-04-22T19:10:19.022Z",
+  "startedAt": "2026-04-22T20:39:18.678Z",
   "checks": {
     "ball_form_ready": true,
-    "ball_jump_commit_delay_ms": 42,
+    "ball_jump_commit_delay_ms": 44,
     "ball_jump_commit_no_delay": true,
     "ball_apex_detected": true,
     "ball_fall_detected": true,
     "ball_land_detected": true,
     "triangle_form_ready": true,
-    "triangle_jump_commit_delay_ms": 44,
+    "triangle_jump_commit_delay_ms": 43,
     "triangle_jump_commit_no_delay": true,
     "triangle_apex_detected": true,
     "triangle_fall_detected": true,
@@ -18,22 +18,22 @@
     "triangle_flight_samples": {
       "triBeforeFlight": {
         "x": 520,
-        "y": 771.26108014,
+        "y": 769.6246719519999,
         "form": "triangle"
       },
       "triDuringFlight": {
-        "x": 704.8207112400002,
-        "y": 775.5850522192,
+        "x": 693.2601,
+        "y": 777.3820311519999,
         "form": "triangle"
       },
       "triAfterFlight": {
-        "x": 912.2057014584457,
-        "y": 810.0659542178878,
+        "x": 911.189048070455,
+        "y": 813.6950941778878,
         "form": "triangle"
       }
     },
     "square_form_ready": true,
-    "square_jump_commit_delay_ms": 45,
+    "square_jump_commit_delay_ms": 47,
     "square_jump_commit_no_delay": true,
     "square_apex_detected": true,
     "square_fall_detected": true,
@@ -55,20 +55,20 @@
       },
       "midAirBeforeSwitch": {
         "x": 520,
-        "y": 783.2333333333331,
+        "y": 775.0749999999998,
         "form": "ball"
       },
       "postSwitch": {
         "x": 520,
-        "y": 779.333333333333,
+        "y": 770.6499999999997,
         "form": "triangle"
       },
       "postSwitchRecover": {
-        "x": 502.5307985653157,
-        "y": 808.6155200283364,
+        "x": 509.60716134062227,
+        "y": 804.3119264533537,
         "form": "triangle"
       }
     }
   },
-  "finishedAt": "2026-04-22T19:10:35.537Z"
+  "finishedAt": "2026-04-22T20:39:35.622Z"
 }

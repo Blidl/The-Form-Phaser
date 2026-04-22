@@ -80,14 +80,16 @@ export interface PlayerTickRuntimeContext {
     ) => boolean;
     isCurrentlyGrounded: () => boolean;
     notifyJumpIntent: () => void;
-    notifyJumpCommit: () => void;
+    notifyJumpCommit: (impulseX: number, impulseY: number) => void;
     notifyApexEnter: () => void;
     notifyFallEnter: () => void;
     notifyLandImpact: (impactSpeed: number) => void;
-    notifyBallReboundLaunch: () => void;
+    notifyBallReboundLaunch: (impulseX: number, impulseY: number) => void;
+    notifyBallBoostGroundStart: (impulseX: number, impulseY: number) => void;
+    notifyBallBoostGroundSustain: (dirX: number, dirY: number) => void;
     notifyTriangleFlightStart: () => void;
     notifyTriangleFlightEnd: () => void;
     notifySquareAttachEnter: () => void;
     notifySquareAttachExit: () => void;
-    notifySquareAttachJumpCommit: () => void;
+    notifySquareAttachJumpCommit: (impulseX: number, impulseY: number) => void;
 }

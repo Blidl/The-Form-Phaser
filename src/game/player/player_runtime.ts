@@ -408,6 +408,20 @@ export class PfPlayerRuntime {
         return this.triangleMatterRuntime.debugPoints;
     }
 
+    public get presentationDebugState(): {
+        ball: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+        triangle: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+        square: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+        velocityX: number;
+        velocityY: number;
+    } {
+        return {
+            ...this.view.getPresentationDebugState(),
+            velocityX: this.physicsBody.velocity.x,
+            velocityY: this.physicsBody.velocity.y
+        };
+    }
+
     public get squareDebugView(): PlayerSquareDebugView | null {
         if (this.state.currentForm !== 'square') {
             return null;
@@ -525,16 +539,18 @@ export class PfPlayerRuntime {
             isSquareRolloverPoseClear: (centerX, centerY, orientationRad, ignoreBodyA, ignoreBodyB) => this.isSquareRolloverPoseClear(centerX, centerY, orientationRad, ignoreBodyA, ignoreBodyB),
             isCurrentlyGrounded: () => this.computeIsCurrentlyGrounded(),
             notifyJumpIntent: () => this.queuePresentationJumpIntent(),
-            notifyJumpCommit: () => this.queuePresentationJumpCommit(),
+            notifyJumpCommit: (impulseX, impulseY) => this.queuePresentationJumpCommit(impulseX, impulseY),
             notifyApexEnter: () => this.queuePresentationApexEnter(),
             notifyFallEnter: () => this.queuePresentationFallEnter(),
             notifyLandImpact: (impactSpeed) => this.queuePresentationLandImpact(impactSpeed),
-            notifyBallReboundLaunch: () => this.queuePresentationBallReboundLaunch(),
+            notifyBallReboundLaunch: (impulseX, impulseY) => this.queuePresentationBallReboundLaunch(impulseX, impulseY),
+            notifyBallBoostGroundStart: (impulseX, impulseY) => this.queuePresentationBallBoostGroundStart(impulseX, impulseY),
+            notifyBallBoostGroundSustain: (dirX, dirY) => this.queuePresentationBallBoostGroundSustain(dirX, dirY),
             notifyTriangleFlightStart: () => this.queuePresentationTriangleFlightStart(),
             notifyTriangleFlightEnd: () => this.queuePresentationTriangleFlightEnd(),
             notifySquareAttachEnter: () => this.queuePresentationSquareAttachEnter(),
             notifySquareAttachExit: () => this.queuePresentationSquareAttachExit(),
-            notifySquareAttachJumpCommit: () => this.queuePresentationSquareAttachJumpCommit()
+            notifySquareAttachJumpCommit: (impulseX, impulseY) => this.queuePresentationSquareAttachJumpCommit(impulseX, impulseY)
         };
 
         tickPlayerRuntime(tickContext);
@@ -570,6 +586,7 @@ export class PfPlayerRuntime {
             this.state.currentForm === 'ball' && this.boostModeActive,
             presentationHooks,
             grounded,
+            this.physicsBody.velocity.x,
             this.physicsBody.velocity.y,
             this.lastVisualDeltaMs
         );
@@ -585,8 +602,10 @@ export class PfPlayerRuntime {
         this.pendingPresentationHooks.jumpIntent = true;
     }
 
-    private queuePresentationJumpCommit(): void {
+    private queuePresentationJumpCommit(impulseX: number, impulseY: number): void {
         this.pendingPresentationHooks.jumpCommit = true;
+        this.pendingPresentationHooks.jumpCommitImpulseX = impulseX;
+        this.pendingPresentationHooks.jumpCommitImpulseY = impulseY;
     }
 
     private queuePresentationApexEnter(): void {
@@ -614,8 +633,22 @@ export class PfPlayerRuntime {
         this.pendingPresentationHooks.formSwitchIn = nextForm;
     }
 
-    private queuePresentationBallReboundLaunch(): void {
+    private queuePresentationBallReboundLaunch(impulseX: number, impulseY: number): void {
         this.pendingPresentationHooks.ballReboundLaunch = true;
+        this.pendingPresentationHooks.ballReboundLaunchImpulseX = impulseX;
+        this.pendingPresentationHooks.ballReboundLaunchImpulseY = impulseY;
+    }
+
+    private queuePresentationBallBoostGroundStart(impulseX: number, impulseY: number): void {
+        this.pendingPresentationHooks.ballBoostGroundStart = true;
+        this.pendingPresentationHooks.ballBoostGroundStartImpulseX = impulseX;
+        this.pendingPresentationHooks.ballBoostGroundStartImpulseY = impulseY;
+    }
+
+    private queuePresentationBallBoostGroundSustain(dirX: number, dirY: number): void {
+        this.pendingPresentationHooks.ballBoostGroundSustain = true;
+        this.pendingPresentationHooks.ballBoostGroundSustainDirX = dirX;
+        this.pendingPresentationHooks.ballBoostGroundSustainDirY = dirY;
     }
 
     private queuePresentationTriangleFlightStart(): void {
@@ -634,8 +667,10 @@ export class PfPlayerRuntime {
         this.pendingPresentationHooks.squareAttachExit = true;
     }
 
-    private queuePresentationSquareAttachJumpCommit(): void {
+    private queuePresentationSquareAttachJumpCommit(impulseX: number, impulseY: number): void {
         this.pendingPresentationHooks.squareAttachJumpCommit = true;
+        this.pendingPresentationHooks.squareAttachJumpCommitImpulseX = impulseX;
+        this.pendingPresentationHooks.squareAttachJumpCommitImpulseY = impulseY;
     }
 
     private applyCurrentFormCollisionBody(): void {

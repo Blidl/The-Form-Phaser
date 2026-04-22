@@ -94,6 +94,33 @@ export class PlayerView {
         return this.triangleVisual;
     }
 
+    public getPresentationDebugState(): {
+        ball: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+        triangle: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+        square: { visible: boolean; scaleX: number; scaleY: number; rotationRad: number };
+    } {
+        return {
+            ball: {
+                visible: this.ballVisual.visible,
+                scaleX: this.ballVisual.scaleX,
+                scaleY: this.ballVisual.scaleY,
+                rotationRad: this.ballVisual.rotation
+            },
+            triangle: {
+                visible: this.triangleVisual.visible,
+                scaleX: this.triangleVisual.scaleX,
+                scaleY: this.triangleVisual.scaleY,
+                rotationRad: this.triangleVisual.rotation
+            },
+            square: {
+                visible: this.squareVisual.visible,
+                scaleX: this.squareVisual.scaleX,
+                scaleY: this.squareVisual.scaleY,
+                rotationRad: this.squareVisual.rotation
+            }
+        };
+    }
+
     public hideTransientMarkers(): void {
         this.squareContactMarker.setVisible(false);
         this.squareAttachJumpTetherGraphics.clear();
@@ -140,6 +167,7 @@ export class PlayerView {
         ballBoostActive: boolean,
         presentationHooks: PlayerPresentationFrameHooks,
         grounded: boolean,
+        velocityX: number,
         verticalSpeed: number,
         deltaMs: number
     ): void {
@@ -147,21 +175,32 @@ export class PlayerView {
             currentForm,
             grounded,
             hooks: presentationHooks,
-            verticalSpeed,
+            velocityX,
+            velocityY: verticalSpeed,
             deltaMs
         });
+        const ballStretchRotationRad = resolveStretchRotationRad(animationPose.stretchAxisX, animationPose.stretchAxisY);
         const anchoredVisualOffset = this.resolveAnchoredFormVisualOffset(
             currentForm,
             grounded,
             animationPose.scaleX,
             animationPose.scaleY,
+            ballStretchRotationRad,
             triangleShell,
             squareShell
         );
         this.ballVisual.setPosition(playerX + anchoredVisualOffset.x, playerY + anchoredVisualOffset.y);
         this.triangleVisual.setPosition(formAnchor.x + anchoredVisualOffset.x, formAnchor.y + anchoredVisualOffset.y);
         this.squareVisual.setPosition(playerX + anchoredVisualOffset.x, playerY + anchoredVisualOffset.y);
-        this.applyFormAnimationPose(currentForm, triangleShell.orientationRad, squareShell.orientationRad, animationPose.scaleX, animationPose.scaleY);
+        this.applyFormAnimationPose(
+            currentForm,
+            triangleShell.orientationRad,
+            squareShell.orientationRad,
+            animationPose.scaleX,
+            animationPose.scaleY,
+            animationPose.stretchAxisX,
+            animationPose.stretchAxisY
+        );
         this.updateBallBoostVisualState(currentForm, ballBoostActive);
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached, squareShell.isTrailRegenerating);
         this.updateSquareContactVisual(playerX, playerY, currentForm, squareShell);
@@ -175,11 +214,14 @@ export class PlayerView {
         triangleBaseRotationRad: number,
         squareBaseRotationRad: number,
         scaleX: number = 1,
-        scaleY: number = 1
+        scaleY: number = 1,
+        stretchAxisX: number | null = null,
+        stretchAxisY: number | null = null
     ): void {
         this.ballVisual.setScale(1, 1);
         this.triangleVisual.setScale(1, 1);
         this.squareVisual.setScale(1, 1);
+        this.ballVisual.setRotation(0);
         this.triangleVisual.setRotation(triangleBaseRotationRad);
         this.squareVisual.setRotation(squareBaseRotationRad);
 
@@ -191,13 +233,22 @@ export class PlayerView {
         }
 
         if (currentForm === 'square') {
+            const alignedSquareScale = resolveSquareAlignedScale(
+                squareBaseRotationRad,
+                scaleX,
+                scaleY,
+                stretchAxisX,
+                stretchAxisY
+            );
             this.squareVisual
-                .setScale(scaleX, scaleY)
+                .setScale(alignedSquareScale.scaleX, alignedSquareScale.scaleY)
                 .setRotation(squareBaseRotationRad);
             return;
         }
 
-        this.ballVisual.setScale(scaleX, scaleY);
+        this.ballVisual
+            .setScale(scaleX, scaleY)
+            .setRotation(resolveStretchRotationRad(stretchAxisX, stretchAxisY));
     }
 
     private updateSquareContactVisual(
@@ -271,6 +322,7 @@ export class PlayerView {
         grounded: boolean,
         scaleX: number,
         scaleY: number,
+        ballStretchRotationRad: number,
         triangleShell: PlayerTriangleShellState,
         squareShell: PlayerSquareShellState
     ): { x: number; y: number } {
@@ -279,9 +331,14 @@ export class PlayerView {
         }
 
         if (currentForm === 'ball') {
+            const sin = Math.sin(ballStretchRotationRad);
+            const cos = Math.cos(ballStretchRotationRad);
+            const verticalRadiusFactor = Math.sqrt(
+                (scaleX * sin * scaleX * sin) + (scaleY * cos * scaleY * cos)
+            );
             return {
                 x: 0,
-                y: PLAYER_PLACEHOLDER_RADIUS * (1 - scaleY)
+                y: PLAYER_PLACEHOLDER_RADIUS * (1 - verticalRadiusFactor)
             };
         }
 
@@ -444,6 +501,52 @@ const resolveTriangleCentroidWorldOffset = (orientationRad: number): { x: number
         x: (centroidOffset.x * cos) - (centroidOffset.y * sin),
         y: (centroidOffset.x * sin) + (centroidOffset.y * cos)
     };
+};
+
+const resolveStretchRotationRad = (
+    stretchAxisX: number | null,
+    stretchAxisY: number | null
+): number => {
+    if (stretchAxisX === null || stretchAxisY === null) {
+        return 0;
+    }
+
+    return Math.atan2(stretchAxisY, stretchAxisX) - (Math.PI * 0.5);
+};
+
+const resolveSquareAlignedScale = (
+    squareBaseRotationRad: number,
+    scaleX: number,
+    scaleY: number,
+    stretchAxisX: number | null,
+    stretchAxisY: number | null
+): { scaleX: number; scaleY: number } => {
+    if (stretchAxisX === null || stretchAxisY === null) {
+        return { scaleX, scaleY };
+    }
+
+    const axisMagnitude = Math.hypot(stretchAxisX, stretchAxisY);
+    if (axisMagnitude <= 0.0001) {
+        return { scaleX, scaleY };
+    }
+
+    const axisX = stretchAxisX / axisMagnitude;
+    const axisY = stretchAxisY / axisMagnitude;
+    const localXAxisX = Math.cos(squareBaseRotationRad);
+    const localXAxisY = Math.sin(squareBaseRotationRad);
+    const localYAxisX = -Math.sin(squareBaseRotationRad);
+    const localYAxisY = Math.cos(squareBaseRotationRad);
+    const alignX = Math.abs((localXAxisX * axisX) + (localXAxisY * axisY));
+    const alignY = Math.abs((localYAxisX * axisX) + (localYAxisY * axisY));
+
+    if (alignX > alignY) {
+        return {
+            scaleX: scaleY,
+            scaleY: scaleX
+        };
+    }
+
+    return { scaleX, scaleY };
 };
 
 const rotateTriangleLocalOffset = (

@@ -57,6 +57,10 @@ export interface PlayerSquareShellState {
     trailLatchSupportOriginY: number;
     trailLatchNormalX: -1 | 0 | 1;
     trailLatchNormalY: -1 | 0 | 1;
+    trailManualRegenWallToFloorDelayMs: number;
+    trailManualRegenLastHadSurfacePose: boolean;
+    trailManualRegenLastSurfaceNormalX: -1 | 0 | 1;
+    trailManualRegenLastSurfaceNormalY: -1 | 0 | 1;
     attachJumpState: PlayerSquareAttachJumpState;
     rolloverState: PlayerSquareRolloverState;
 }
