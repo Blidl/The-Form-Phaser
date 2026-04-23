@@ -13,7 +13,10 @@ export const createPlayerMarkerState = (): PlayerMarkerState => {
         currentOffsetX: 0,
         currentOffsetY: 0,
         targetOffsetX: 0,
-        targetOffsetY: 0
+        targetOffsetY: 0,
+        lastNonZeroDirectionX: 0,
+        lastNonZeroDirectionY: 0,
+        hasLastNonZeroDirection: false
     };
 };
 
@@ -22,6 +25,9 @@ export const resetPlayerMarkerState = (marker: PlayerMarkerState): void => {
     marker.currentOffsetY = 0;
     marker.targetOffsetX = 0;
     marker.targetOffsetY = 0;
+    marker.lastNonZeroDirectionX = 0;
+    marker.lastNonZeroDirectionY = 0;
+    marker.hasLastNonZeroDirection = false;
 };
 
 export const clampPlayerMarkerStateToForm = (
@@ -43,20 +49,23 @@ export const tickPlayerMarkerState = (
     deltaSec: number
 ): void => {
     const form = state.currentForm;
-    const intentX = input.forcePointX;
-    const intentY = input.forcePointY;
-    const hasIntent = input.forcePointActive;
-    const groundedTriangleTarget = resolveGroundedTriangleMarkerTarget(state, input);
-    const moveSpeed = hasIntent ? PLAYER_MARKER_MOVE_SPEED_PX_PER_SEC : PLAYER_MARKER_RETURN_SPEED_PX_PER_SEC;
+    const markerIntent = resolvePersistentMarkerIntent(marker, input);
+    const groundedTriangleTarget = resolveGroundedTriangleMarkerTarget(state, markerIntent.intentX, markerIntent.intentY, markerIntent.hasIntent);
+    const squareTarget = resolveSquareMarkerTarget(form, markerIntent.intentX, markerIntent.intentY, markerIntent.hasIntent);
+    const moveSpeed = markerIntent.hasIntent ? PLAYER_MARKER_MOVE_SPEED_PX_PER_SEC : PLAYER_MARKER_RETURN_SPEED_PX_PER_SEC;
     const nextTargetX = groundedTriangleTarget !== null
         ? moveToward(marker.targetOffsetX, groundedTriangleTarget.x, moveSpeed * deltaSec)
-        : hasIntent
-            ? marker.targetOffsetX + (intentX * moveSpeed * deltaSec)
+        : squareTarget !== null
+            ? moveToward(marker.targetOffsetX, squareTarget.x, moveSpeed * deltaSec)
+        : markerIntent.hasIntent
+            ? marker.targetOffsetX + (markerIntent.intentX * moveSpeed * deltaSec)
             : moveToward(marker.targetOffsetX, 0, moveSpeed * deltaSec);
     const nextTargetY = groundedTriangleTarget !== null
         ? moveToward(marker.targetOffsetY, groundedTriangleTarget.y, moveSpeed * deltaSec)
-        : hasIntent
-            ? marker.targetOffsetY + (intentY * moveSpeed * deltaSec)
+        : squareTarget !== null
+            ? moveToward(marker.targetOffsetY, squareTarget.y, moveSpeed * deltaSec)
+        : markerIntent.hasIntent
+            ? marker.targetOffsetY + (markerIntent.intentY * moveSpeed * deltaSec)
             : moveToward(marker.targetOffsetY, 0, moveSpeed * deltaSec);
     const clampedTarget = clampMarkerOffsetToForm(form, nextTargetX, nextTargetY);
 
@@ -74,7 +83,9 @@ export const tickPlayerMarkerState = (
 
 const resolveGroundedTriangleMarkerTarget = (
     state: PlayerShellState,
-    input: PlayerInputSnapshot
+    intentX: -1 | 0 | 1,
+    intentY: -1 | 0 | 1,
+    hasIntent: boolean
 ): { x: number; y: number } | null => {
     if (state.currentForm !== 'triangle') {
         return null;
@@ -85,15 +96,66 @@ const resolveGroundedTriangleMarkerTarget = (
         return null;
     }
 
-    if (!input.forcePointActive) {
+    if (!hasIntent) {
         return { x: 0, y: 0 };
     }
 
     return resolveGroundedTriangleMarkerOffset(
-        input.forcePointX,
-        input.forcePointY,
+        intentX,
+        intentY,
         state.triangleShell.orientationRad
     );
+};
+
+const resolveSquareMarkerTarget = (
+    form: PlayerFormId,
+    intentX: -1 | 0 | 1,
+    intentY: -1 | 0 | 1,
+    hasIntent: boolean
+): { x: number; y: number } | null => {
+    if (form !== 'square' || !hasIntent) {
+        return null;
+    }
+
+    if (intentX !== 0 && intentY === 0) {
+        return clampMarkerOffsetToForm('square', intentX * 1000, 0);
+    }
+
+    if (intentX === 0 && intentY !== 0) {
+        return clampMarkerOffsetToForm('square', 0, intentY * 1000);
+    }
+
+    return clampMarkerOffsetToForm('square', intentX * 1000, intentY * 1000);
+};
+
+const resolvePersistentMarkerIntent = (
+    marker: PlayerMarkerState,
+    input: PlayerInputSnapshot
+): { intentX: -1 | 0 | 1; intentY: -1 | 0 | 1; hasIntent: boolean } => {
+    if (input.forcePointActive) {
+        marker.lastNonZeroDirectionX = input.forcePointX;
+        marker.lastNonZeroDirectionY = input.forcePointY;
+        marker.hasLastNonZeroDirection = true;
+        return {
+            intentX: input.forcePointX,
+            intentY: input.forcePointY,
+            hasIntent: true
+        };
+    }
+
+    if (marker.hasLastNonZeroDirection) {
+        return {
+            intentX: marker.lastNonZeroDirectionX,
+            intentY: marker.lastNonZeroDirectionY,
+            hasIntent: true
+        };
+    }
+
+    return {
+        intentX: 0,
+        intentY: 0,
+        hasIntent: false
+    };
 };
 
 const moveToward = (current: number, target: number, maxDelta: number): number => {

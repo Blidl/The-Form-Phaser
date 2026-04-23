@@ -1,0 +1,392 @@
+[
+  {
+    "name": "00_before",
+    "r": {
+      "x": 699,
+      "y": 814,
+      "form": "square"
+    },
+    "v": {
+      "ball": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f01",
+    "r": {
+      "x": 699,
+      "y": 814,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f02",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f03",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f04",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f05",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f06",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f07",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f08",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f09",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f10",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f11",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  },
+  {
+    "name": "f12",
+    "r": {
+      "x": 699,
+      "y": 812,
+      "form": "ball"
+    },
+    "v": {
+      "ball": {
+        "visible": true,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "triangle": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "square": {
+        "visible": false,
+        "scaleX": 1,
+        "scaleY": 1,
+        "rotationRad": 0
+      },
+      "velocityX": 0,
+      "velocityY": 0
+    }
+  }
+]

@@ -1,0 +1,840 @@
+{
+  "startedAt": "2026-04-23T15:24:26.323Z",
+  "scenarios": {
+    "ball": {
+      "formReady": true,
+      "yOsc": 79.5,
+      "minY": 244.5,
+      "maxY": 324,
+      "touchCount": 0,
+      "samples": [
+        {
+          "t": 0,
+          "player": {
+            "x": 1228,
+            "y": 244.5,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 30
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 120,
+          "player": {
+            "x": 1228,
+            "y": 258,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 210
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 240,
+          "player": {
+            "x": 1208,
+            "y": 244.5,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 30
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 360,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 271.2980708240848,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 210
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 480,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 302.7980708240848,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 390
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 600,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 720,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 840,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 960,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 1080,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 1200,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 1320,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 1440,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 1560,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 1680,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 1800,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 1920,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 2040,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 2160,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 2280,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 2400,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 2520,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 2640,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 2760,
+          "player": {
+            "x": 1205.3681915739157,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1248,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": false
+        }
+      ]
+    },
+    "square": {
+      "formReady": true,
+      "yOsc": 78.5,
+      "minY": 245.5,
+      "maxY": 324,
+      "touchCount": 20,
+      "samples": [
+        {
+          "t": 0,
+          "player": {
+            "x": 1184.4961780196136,
+            "y": 245.5,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 60
+          },
+          "npc": {
+            "x": 1218.1333333333314,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 120,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 249,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 120
+          },
+          "npc": {
+            "x": 1211.5999999999976,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 240,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1205.0666666666639,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 360,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1198.5333333333301,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": false
+        },
+        {
+          "t": 480,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1192.466666666663,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 600,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1185.9333333333293,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 720,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1179.3999999999955,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 840,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1172.8666666666618,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 960,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1166.333333333328,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 1080,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1159.7999999999943,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 1200,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1153.7333333333272,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 1320,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1147.1999999999935,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 1440,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1140.6666666666597,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 1560,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134.133333333326,
+            "y": 324,
+            "velocityX": -28,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 1680,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 1800,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 1920,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 2040,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 2160,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 2280,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 2400,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 2520,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 2640,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        },
+        {
+          "t": 2760,
+          "player": {
+            "x": 1163.5628446862802,
+            "y": 324,
+            "form": "ball",
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "npc": {
+            "x": 1134,
+            "y": 324,
+            "velocityX": 0,
+            "velocityY": 0
+          },
+          "touching": true
+        }
+      ]
+    }
+  },
+  "finishedAt": "2026-04-23T15:24:41.963Z"
+}

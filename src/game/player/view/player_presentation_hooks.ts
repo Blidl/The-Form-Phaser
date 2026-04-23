@@ -1,5 +1,10 @@
 import type { PlayerFormId } from '../player_types';
 
+export interface PlayerFormSwitchStartHook {
+    outgoingForm: PlayerFormId;
+    incomingForm: PlayerFormId;
+}
+
 export interface PlayerPresentationFrameHooks {
     jumpIntent: boolean;
     jumpCommit: boolean;
@@ -9,6 +14,9 @@ export interface PlayerPresentationFrameHooks {
     fallEnter: boolean;
     landImpactSpeed: number | null;
     formSwitchIn: PlayerFormId | null;
+    formSwitchStart: PlayerFormSwitchStartHook | null;
+    formSwitchCommit: PlayerFormId | null;
+    formSwitchEnd: PlayerFormId | null;
     ballReboundLaunch: boolean;
     ballReboundLaunchImpulseX: number | null;
     ballReboundLaunchImpulseY: number | null;
@@ -37,6 +45,9 @@ export const createEmptyPlayerPresentationFrameHooks = (): PlayerPresentationFra
         fallEnter: false,
         landImpactSpeed: null,
         formSwitchIn: null,
+        formSwitchStart: null,
+        formSwitchCommit: null,
+        formSwitchEnd: null,
         ballReboundLaunch: false,
         ballReboundLaunchImpulseX: null,
         ballReboundLaunchImpulseY: null,

@@ -1,0 +1,152 @@
+{
+  "startedAt": "2026-04-23T11:46:04.831Z",
+  "scenarios": {
+    "hold_input": {
+      "before": {
+        "x": 680,
+        "y": 812,
+        "form": "ball"
+      },
+      "samples": [
+        {
+          "tag": "t12",
+          "snap": {
+            "x": 680,
+            "y": 812,
+            "form": "ball"
+          }
+        },
+        {
+          "tag": "t24",
+          "snap": {
+            "x": 680,
+            "y": 812,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t40",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t60",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t90",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t120",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t170",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t220",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        }
+      ]
+    },
+    "zero_frame": {
+      "before": {
+        "x": 680,
+        "y": 812,
+        "form": "ball"
+      },
+      "samples": [
+        {
+          "tag": "t12",
+          "snap": {
+            "x": 680,
+            "y": 812,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t24",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t40",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t60",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t90",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t120",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t170",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        },
+        {
+          "tag": "t220",
+          "snap": {
+            "x": 680,
+            "y": 813,
+            "form": "triangle"
+          }
+        }
+      ]
+    }
+  },
+  "finishedAt": "2026-04-23T11:46:15.285Z"
+}

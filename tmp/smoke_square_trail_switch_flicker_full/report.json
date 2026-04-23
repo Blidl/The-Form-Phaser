@@ -1,0 +1,102 @@
+{
+  "startedAt": "2026-04-23T11:12:12.045Z",
+  "samples": [
+    {
+      "tag": "before_switch",
+      "snap": {
+        "x": 310,
+        "y": 814,
+        "form": "square"
+      }
+    },
+    {
+      "tag": "t8",
+      "snap": {
+        "x": 310,
+        "y": 814,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t16",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t24",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t34",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t48",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t64",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t82",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t104",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t128",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "t156",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    },
+    {
+      "tag": "post_transition",
+      "snap": {
+        "x": 310,
+        "y": 812,
+        "form": "ball"
+      }
+    }
+  ],
+  "finishedAt": "2026-04-23T11:12:23.552Z"
+}

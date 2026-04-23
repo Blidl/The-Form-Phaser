@@ -1,0 +1,52 @@
+{
+  "before": {
+    "x": 680,
+    "y": 797.5,
+    "form": "ball"
+  },
+  "beforeCap": {
+    "x": 680,
+    "y": 800.5,
+    "form": "ball"
+  },
+  "t12": {
+    "x": 680,
+    "y": 812,
+    "form": "ball"
+  },
+  "t24": {
+    "x": 680,
+    "y": 812,
+    "form": "triangle"
+  },
+  "t36": {
+    "x": 680,
+    "y": 813,
+    "form": "triangle"
+  },
+  "t52": {
+    "x": 680,
+    "y": 813,
+    "form": "triangle"
+  },
+  "t70": {
+    "x": 680,
+    "y": 813,
+    "form": "triangle"
+  },
+  "t90": {
+    "x": 680,
+    "y": 813,
+    "form": "triangle"
+  },
+  "t110": {
+    "x": 680,
+    "y": 813,
+    "form": "triangle"
+  },
+  "t140": {
+    "x": 680,
+    "y": 813,
+    "form": "triangle"
+  }
+}

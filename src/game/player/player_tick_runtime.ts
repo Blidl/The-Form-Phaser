@@ -26,7 +26,7 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
     const deltaSec = deltaMs / 1000;
     let triangleFlightEndNotified = false;
 
-    context.handleFormSwitch();
+    context.handleFormSwitch(deltaMs);
     context.refreshTrianglePhysicsState();
 
     const isTriangleForm = state.currentForm === 'triangle';

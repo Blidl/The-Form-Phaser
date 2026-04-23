@@ -1,0 +1,76 @@
+{
+  "startedAt": "2026-04-23T09:05:56.534Z",
+  "consoleErrors": [],
+  "scenarios": {
+    "groundBallToTriangle": {
+      "before": {
+        "x": 680,
+        "y": 797.5,
+        "form": "ball"
+      },
+      "t18": {
+        "x": 680,
+        "y": 812,
+        "form": "ball"
+      },
+      "t42": {
+        "x": 680,
+        "y": 812,
+        "form": "triangle"
+      },
+      "t70": {
+        "x": 680,
+        "y": 813,
+        "form": "triangle"
+      },
+      "t105": {
+        "x": 680,
+        "y": 813,
+        "form": "triangle"
+      },
+      "t150": {
+        "x": 680,
+        "y": 813,
+        "form": "triangle"
+      }
+    },
+    "airBallToTriangle": {
+      "before": {
+        "x": 820,
+        "y": 298,
+        "form": "ball"
+      },
+      "t18": {
+        "x": 820,
+        "y": 395.5,
+        "form": "triangle"
+      },
+      "t42": {
+        "x": 820,
+        "y": 626.0776018600001,
+        "form": "triangle"
+      },
+      "t70": {
+        "x": 834.7869975188385,
+        "y": 813,
+        "form": "triangle"
+      },
+      "t105": {
+        "x": 834.7869975188385,
+        "y": 813,
+        "form": "triangle"
+      },
+      "t150": {
+        "x": 834.7869975188385,
+        "y": 813,
+        "form": "triangle"
+      }
+    }
+  },
+  "finalSnapshot": {
+    "x": 834.7869975188385,
+    "y": 813,
+    "form": "triangle"
+  },
+  "finishedAt": "2026-04-23T09:06:04.532Z"
+}

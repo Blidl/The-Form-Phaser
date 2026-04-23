@@ -53,7 +53,7 @@ export interface PlayerTickRuntimeContext {
     externalHorizontalInfluenceX: number;
     mutable: PlayerMutableRuntimeState;
     groundedDragX: number;
-    handleFormSwitch: () => void;
+    handleFormSwitch: (deltaMs: number) => void;
     refreshTrianglePhysicsState: () => void;
     commitTrianglePhysicsState: (deltaSec: number) => void;
     getTransformLockMs: () => number;

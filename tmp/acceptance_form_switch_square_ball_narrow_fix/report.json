@@ -1,0 +1,306 @@
+{
+  "startedAt": "2026-04-23T10:07:18.751Z",
+  "samples": [
+    {
+      "tag": "00_before",
+      "runtime": {
+        "x": 699,
+        "y": 814,
+        "form": "square"
+      },
+      "visual": {
+        "ball": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t16",
+      "runtime": {
+        "x": 699,
+        "y": 814,
+        "form": "square"
+      },
+      "visual": {
+        "ball": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t34",
+      "runtime": {
+        "x": 699,
+        "y": 812,
+        "form": "ball"
+      },
+      "visual": {
+        "ball": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t54",
+      "runtime": {
+        "x": 699,
+        "y": 812,
+        "form": "ball"
+      },
+      "visual": {
+        "ball": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t76",
+      "runtime": {
+        "x": 699,
+        "y": 812,
+        "form": "ball"
+      },
+      "visual": {
+        "ball": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t96",
+      "runtime": {
+        "x": 699,
+        "y": 812,
+        "form": "ball"
+      },
+      "visual": {
+        "ball": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t118",
+      "runtime": {
+        "x": 699,
+        "y": 812,
+        "form": "ball"
+      },
+      "visual": {
+        "ball": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t136",
+      "runtime": {
+        "x": 699,
+        "y": 812,
+        "form": "ball"
+      },
+      "visual": {
+        "ball": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t154",
+      "runtime": {
+        "x": 699,
+        "y": 812,
+        "form": "ball"
+      },
+      "visual": {
+        "ball": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    },
+    {
+      "tag": "t176",
+      "runtime": {
+        "x": 699,
+        "y": 812,
+        "form": "ball"
+      },
+      "visual": {
+        "ball": {
+          "visible": true,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 0
+      }
+    }
+  ],
+  "finishedAt": "2026-04-23T10:07:25.107Z"
+}

@@ -227,6 +227,11 @@ const isSurfaceSolid = (config: TestWorldSurfaceConfig): boolean => {
     return (config.collisionMode ?? 'solid') === 'solid';
 };
 
+const NPC_ARCADE_CARRY_SOURCE_DATA_KEY = 'pf_npc_arcade_carry_source';
+const NPC_CARRY_TOP_GAP_TOLERANCE_UP_PX = 8;
+const NPC_CARRY_TOP_GAP_TOLERANCE_DOWN_PX = 6;
+const NPC_CARRY_MIN_OVERLAP_X_PX = 8;
+
 const createCutsceneActorSequenceFromRef = (
     actorId: string,
     sequenceRef: string,
@@ -1487,6 +1492,68 @@ const buildWorldInstance = (
                     horizontalInfluenceX += zone.force * zone.directionX;
                 }
             });
+
+            if (player.currentForm === 'triangle') {
+                return horizontalInfluenceX;
+            }
+            const playerBody = playerObject.body as Physics.Arcade.Body | undefined;
+            if (!playerBody) {
+                return horizontalInfluenceX;
+            }
+            const isGrounded = playerBody.blocked.down || playerBody.touching.down;
+            if (!isGrounded) {
+                return horizontalInfluenceX;
+            }
+
+            const probeBodies = scene.physics.overlapRect(
+                playerBody.x + 1,
+                playerBody.bottom - 2,
+                Math.max(2, playerBody.width - 2),
+                4,
+                true,
+                true
+            ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
+
+            let bestNpcCarryVelocityX = 0;
+            let bestOverlapX = 0;
+            probeBodies.forEach((candidateBody) => {
+                const candidateGameObject = candidateBody.gameObject;
+                if (
+                    candidateBody === playerBody
+                    || candidateBody.enable === false
+                    || candidateGameObject?.active !== true
+                    || candidateGameObject.getData(NPC_ARCADE_CARRY_SOURCE_DATA_KEY) !== true
+                ) {
+                    return;
+                }
+
+                const candidateVelocityX = (candidateBody as Physics.Arcade.Body).velocity?.x;
+                if (typeof candidateVelocityX !== 'number' || !Number.isFinite(candidateVelocityX)) {
+                    return;
+                }
+
+                const overlapX = Math.min(
+                    playerBody.right,
+                    candidateBody.x + candidateBody.width
+                ) - Math.max(
+                    playerBody.x,
+                    candidateBody.x
+                );
+                if (overlapX < NPC_CARRY_MIN_OVERLAP_X_PX) {
+                    return;
+                }
+
+                const topGap = candidateBody.y - playerBody.bottom;
+                if (topGap > NPC_CARRY_TOP_GAP_TOLERANCE_UP_PX || topGap < -NPC_CARRY_TOP_GAP_TOLERANCE_DOWN_PX) {
+                    return;
+                }
+
+                if (overlapX > bestOverlapX) {
+                    bestOverlapX = overlapX;
+                    bestNpcCarryVelocityX = candidateVelocityX;
+                }
+            });
+            horizontalInfluenceX += bestNpcCarryVelocityX;
             return horizontalInfluenceX;
         },
         getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => npcRuntime.getDebugEntries(),

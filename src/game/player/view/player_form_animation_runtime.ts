@@ -153,6 +153,7 @@ export class PlayerFormAnimationRuntime {
             return;
         }
 
+        const hasBallLaunchImpulse = hooks.jumpCommit || hooks.ballReboundLaunch || hooks.ballBoostGroundStart;
         if (hooks.jumpCommit) {
             this.phasePulse.trigger([profile.jumpCommit, PlayerFormAnimationRuntime.IMPULSE_RECOVER_SCALE]);
             this.applyImpulseAxisFromHook(
@@ -190,7 +191,7 @@ export class PlayerFormAnimationRuntime {
                 PlayerFormAnimationRuntime.BOOST_SUSTAIN_AXIS_HOLD_MS
             );
         }
-        if (hooks.landImpactSpeed !== null) {
+        if (!hasBallLaunchImpulse && hooks.landImpactSpeed !== null) {
             this.onLandImpact(hooks.landImpactSpeed, profile);
         }
     }

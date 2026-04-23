@@ -539,3 +539,61 @@
 - Architecture Decisions: Gameplay phase detection оставлена в existing player runtime slices (`tick/jump/lifecycle/square`), visual apply остаётся в `PlayerView`, phase consumption в existing player presentation runtime/hooks. Новый global animation framework и расширение runtime editor не добавлялись.
 - Risks / Open Items: Это first-pass phase presentation; возможны вторичные feel-тюнинги по порогам `apex/fall` и приоритетам одновременных pulses после in-engine ручного smoke.
 - Next Recommended Step: Выполнить ручной in-engine smoke на `ball/triangle/square` сценариях (`jump intent->commit`, apex/fall readability, triangle flight end, square attach enter/exit/attach-jump commit) и только затем решать вопрос о second-pass tuning exposure.
+
+### Entry
+- Date: 2026-04-23
+- Task: Animation Profiles - Player Form Switch Transition Overlay (first pass)
+- Status: done
+- Summary: Added a narrow `PlayerView`-owned form-switch visual overlay so gameplay form switching stays immediate while presentation gets a short readable transition. Implemented one shared staged transition (`outgoing compress -> mid morph diamond -> incoming settle`) with fixed timing `35+35+40=110ms` and no pair-specific morph framework. Hooking reuses existing `formSwitchIn` presentation signal and keeps fallback start on direct form mismatch, without changing physics body, collision shapes, hitbox logic, or runtime editor contracts.
+- Files:
+  - src/game/player/view/player_form_switch_transition.ts
+  - src/game/player/view/player_view.ts
+- Manual Check: `npm run build-nolog` passed; `npm run build` passed. `npx tsc --noEmit` fails on existing repository baseline issues in `cutscene/npc/world/editor` and existing square strictness files; no new typecheck failures were introduced by the form-switch overlay slice. Live browser visual acceptance (ground/air switch feel) was not automated in this chat and still requires manual runtime smoke.
+- Architecture Decisions: First pass intentionally stays a local `Graphics` overlay slice in `PlayerView` with hardcoded timings; no tuning-schema expansion, no global animation manager, no new editor authoring surface, and no universal point-based morph engine were added.
+- Risks / Open Items: Visual quality/final feel for all six transitions still needs manual in-engine verification, especially support-readability on ground and no lingering malformed silhouette in air under rapid repeated switching.
+- Next Recommended Step: Run focused browser smoke on `ball <-> triangle <-> square` (air + ground + rapid switch spam), then only do second-pass refinements if concrete visual issues are reproduced.
+
+### Entry
+- Date: 2026-04-23
+- Task: Animation Profiles - Form Switch Window Contract (start/commit/end) first pass
+- Status: done
+- Summary: Reworked player form switching from immediate gameplay swap + overlay to a narrow timed switch window contract. Added `form_switch_start` at transition begin, moved real gameplay form/hitbox commit to `form_switch_commit` at `30ms`, and finish via `form_switch_end` at `90ms`. During the active window `PlayerView` now hides regular player visuals and renders only the transition overlay, so switching reads as a metamorphosis instead of blinking. Repeated switch input is intentionally ignored while transition is active in this first pass to keep state deterministic and avoid overlapping transition timelines.
+- Files:
+  - src/game/player/player_runtime.ts
+  - src/game/player/player_runtime_types.ts
+  - src/game/player/player_tick_runtime.ts
+  - src/game/player/player_lifecycle_runtime.ts
+  - src/game/player/view/player_presentation_hooks.ts
+  - src/game/player/view/player_view.ts
+  - src/game/player/view/player_form_switch_transition.ts
+- Manual Check: `npm run build-nolog` passed; `npm run build` passed. `npx tsc --noEmit` fails on existing repo baseline in `cutscene/npc/world/editor` and existing square strictness files; no new failures from updated form-switch files were observed in the compiler output list. Visual manual smoke in browser was not automated in this chat and still requires in-engine acceptance pass.
+- Architecture Decisions: This pass keeps Phaser player architecture unchanged and does not add a universal morph framework or physics-body morphing. Timings are fixed locally for first pass (`total=90ms`, `commitDelay=30ms`, `postCommitReveal=60ms`) and tuning schema/editor contracts were not expanded.
+- Risks / Open Items: Final visual quality still requires manual in-engine verification for ground/air switching and fast repeated input cadence.
+- Next Recommended Step: Run focused runtime visual smoke for all six form pairs on ground and in air, then tune only overlay shaping/timing if concrete readability issues remain.
+### Entry
+- Date: 2026-04-23
+- Task: Animation Profiles - Pair-Specific Form Switch Transition Proxy (demo first pass)
+- Status: done
+- Summary: Свернут неудачный generic overlay/morph path для form switch и заменён на узкий pair-specific transition runtime: один `Graphics` proxy, key-pose data по парам, без universal geometry morph framework. Gameplay switch перенесён внутрь transition window (`total=140ms`, `commitDelay=40ms`), при активном окне базовые визуалы форм полностью скрыты и на экране остаётся только proxy. Сначала был реализован и проверен `ball -> triangle`; после этого добавлены first-pass data для `triangle -> square` и `square -> ball` (reverse остаётся через зеркалирование stage data, без расширения архитектуры).
+- Files:
+  - src/game/player/view/player_form_switch_transition.ts
+  - src/game/player/view/player_form_switch_transition_data.ts
+  - src/game/player/player_runtime.ts
+  - docs/canon/the_form_orchestrator_log_ru.md
+- Manual Check: Playwright runtime pass выполнен для `ball -> triangle` с артефактами в `tmp/acceptance_form_switch_ball_triangle_firstpass/` и zoom-кадрами в `tmp/acceptance_form_switch_ball_triangle_zoom/`; по debug snapshots подтверждены delayed commit внутри окна и скрытие base visuals во время активного proxy. Дополнительно выполнен smoke на `triangle -> square` и `square -> ball` через `window.__THE_FORM_DEBUG__` snapshots (без полного покадрового визуального acceptance для этих двух пар в этом чате).
+- Architecture Decisions: Для demo закреплён pair-specific путь с pose-параметрами (`widthScale/heightScale/roundness/cornerSharpness/diamondness/wedgeBias/apexBias`) и staged interpolation (`source->compress->bridge->emerge->target`) вместо generic morph/overlay модели.
+- Risks / Open Items: Для `triangle -> square` и `square -> ball` пока выполнен только smoke/contract check; возможно потребуется второй визуальный pass в runtime для финального polish пары/реверсов до demo-lock.
+- Next Recommended Step: Провести короткий manual visual acceptance в браузере именно для `triangle -> square` и `square -> ball` (ground + air), и только при обнаружении конкретного артефакта добавить точечные правки pose-data без изменения runtime контракта.
+### Entry
+- Date: 2026-04-23
+- Task: Form Switch Transition - square -> ball narrow readability fix
+- Status: done
+- Summary: В существующей pair-specific архитектуре выполнен узкий fix только для `square -> ball`: добавлены отдельные pair-specific timing данные (150ms, сегменты 35/40/40/35) и усилены stage poses в data слое, чтобы bridge читался как rounded diamond перед near-circle. Также сделан минимальный runtime/view refactor чтения pair-specific timing без изменения архитектуры generic morph path. Остальные пары не трогались по pose данным.
+- Files:
+  - src/game/player/view/player_form_switch_transition_data.ts
+  - src/game/player/view/player_form_switch_transition.ts
+  - src/game/player/player_runtime.ts
+- Manual Check: Короткий targeted pass по `square -> ball` выполнен через Playwright артефакты `tmp/acceptance_form_switch_square_ball_narrow_fix/` и framewalk `tmp/acceptance_form_switch_square_ball_framewalk/` с проверкой runtime/visual snapshot последовательности.
+- Architecture Decisions: Reverse-path для `square -> ball` оставлен неосновным, используется отдельный direct pair data профиль с собственным timing и позами.
+- Risks / Open Items: В headless frame pacing первый тик после switch может быть крупным, из-за чего визуальная стадия в автоматических снимках выглядит короче ожидаемого; для финального demo-polish полезно дополнительно проверить руками в обычном интерактивном runtime.
+- Next Recommended Step: Сделать короткий ручной интерактивный pass `square -> ball` (ground+air) и при необходимости править только `square -> ball` data, без изменения runtime контракта.

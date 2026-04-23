@@ -30,6 +30,7 @@ import { resolveTriangleCentroidOffset, resolveTriangleLocalVertices } from '../
 import { squareSupportLocalToWorld } from '../player_square_support_space';
 import { resolveSquareTrailSegmentWorldLine } from '../player_square_trail';
 import { PlayerFormAnimationRuntime } from './player_form_animation_runtime';
+import { PlayerFormSwitchTransition } from './player_form_switch_transition';
 import type { PlayerPresentationFrameHooks } from './player_presentation_hooks';
 import type {
     PlayerFormId,
@@ -49,6 +50,7 @@ export class PlayerView {
     private readonly squareTrailGraphics: GameObjects.Graphics;
     private readonly squareAttachJumpTetherGraphics: GameObjects.Graphics;
     private readonly formAnimationRuntime: PlayerFormAnimationRuntime;
+    private readonly formSwitchTransition: PlayerFormSwitchTransition;
     private debugVisualsVisible: boolean = false;
 
     public constructor(scene: Scene, x: number, y: number) {
@@ -88,6 +90,7 @@ export class PlayerView {
         this.squareTrailGraphics = scene.add.graphics().setDepth(4900);
         this.squareAttachJumpTetherGraphics = scene.add.graphics().setDepth(4499);
         this.formAnimationRuntime = new PlayerFormAnimationRuntime('ball');
+        this.formSwitchTransition = new PlayerFormSwitchTransition(scene);
     }
 
     public get triangleVisualObject(): GameObjects.Triangle {
@@ -128,7 +131,9 @@ export class PlayerView {
 
     public resetFormAnimationPose(currentForm: PlayerFormId): void {
         this.formAnimationRuntime.resetPose(currentForm);
+        this.formSwitchTransition.reset();
         this.applyFormAnimationPose(currentForm, PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD, PLAYER_SQUARE_EDGE_DOWN_POSE_RAD);
+        this.applyBaseFormVisibility(currentForm);
     }
 
     public setDebugVisualsVisible(visible: boolean): void {
@@ -143,13 +148,16 @@ export class PlayerView {
         squareShell: PlayerSquareShellState,
         ballBoostActive: boolean
     ): void {
-        this.ballVisual.setVisible(currentForm === 'ball');
-        this.triangleVisual.setVisible(currentForm === 'triangle');
-        this.squareVisual.setVisible(currentForm === 'square');
-        this.markerVisual.setVisible(true);
-        this.squareContactMarker.setVisible(
-            this.debugVisualsVisible && currentForm === 'square' && squareShell.hasContact
-        );
+        if (this.formSwitchTransition.isActive) {
+            this.hideBasePlayerVisuals();
+            this.squareContactMarker.setVisible(false);
+            this.squareAttachJumpTetherGraphics.clear();
+        } else {
+            this.applyBaseFormVisibility(currentForm);
+            this.squareContactMarker.setVisible(
+                this.debugVisualsVisible && currentForm === 'square' && squareShell.hasContact
+            );
+        }
         this.updateBallBoostVisualState(currentForm, ballBoostActive);
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached, squareShell.isTrailRegenerating);
         this.applyFormAnimationPose(currentForm, PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD, PLAYER_SQUARE_EDGE_DOWN_POSE_RAD);
@@ -171,6 +179,10 @@ export class PlayerView {
         verticalSpeed: number,
         deltaMs: number
     ): void {
+        if (presentationHooks.formSwitchEnd !== null) {
+            this.formSwitchTransition.reset();
+        }
+
         const animationPose = this.formAnimationRuntime.tick({
             currentForm,
             grounded,
@@ -203,10 +215,67 @@ export class PlayerView {
         );
         this.updateBallBoostVisualState(currentForm, ballBoostActive);
         this.updateSquareAttachVisualState(currentForm, squareShell.isAttached, squareShell.isTrailRegenerating);
+
+        if (presentationHooks.formSwitchStart !== null) {
+            const transitionStartCenter = this.resolveFormVisualCenter(
+                presentationHooks.formSwitchStart.outgoingForm
+            );
+            this.formSwitchTransition.start(
+                presentationHooks.formSwitchStart.outgoingForm,
+                presentationHooks.formSwitchStart.incomingForm,
+                transitionStartCenter.x,
+                transitionStartCenter.y,
+                playerX,
+                playerY
+            );
+        }
+
+        this.formSwitchTransition.tickAndRender(
+            playerX,
+            playerY,
+            grounded,
+            deltaMs
+        );
+        const isFormSwitchTransitionActive = this.formSwitchTransition.isActive;
+        if (isFormSwitchTransitionActive) {
+            this.hideBasePlayerVisuals();
+            this.squareContactMarker.setVisible(false);
+            this.squareAttachJumpTetherGraphics.clear();
+            this.updateMarkerVisual(currentForm, playerX, playerY, formAnchor, marker, triangleShell, triangleFlight);
+            return;
+        }
+
+        this.applyBaseFormVisibility(currentForm);
         this.updateSquareContactVisual(playerX, playerY, currentForm, squareShell);
         this.renderSquareTrail(squareShell.trailSegments);
         this.renderSquareAttachJumpTether(playerX, playerY, currentForm, squareShell);
         this.updateMarkerVisual(currentForm, playerX, playerY, formAnchor, marker, triangleShell, triangleFlight);
+    }
+
+    private resolveFormVisualCenter(form: PlayerFormId): { x: number; y: number } {
+        if (form === 'triangle') {
+            return { x: this.triangleVisual.x, y: this.triangleVisual.y };
+        }
+
+        if (form === 'square') {
+            return { x: this.squareVisual.x, y: this.squareVisual.y };
+        }
+
+        return { x: this.ballVisual.x, y: this.ballVisual.y };
+    }
+
+    private applyBaseFormVisibility(currentForm: PlayerFormId): void {
+        this.ballVisual.setVisible(currentForm === 'ball');
+        this.triangleVisual.setVisible(currentForm === 'triangle');
+        this.squareVisual.setVisible(currentForm === 'square');
+        this.markerVisual.setVisible(true);
+    }
+
+    private hideBasePlayerVisuals(): void {
+        this.ballVisual.setVisible(false);
+        this.triangleVisual.setVisible(false);
+        this.squareVisual.setVisible(false);
+        this.markerVisual.setVisible(true);
     }
 
     private applyFormAnimationPose(

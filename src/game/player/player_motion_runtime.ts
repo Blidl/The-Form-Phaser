@@ -79,6 +79,7 @@ export const applyCommonHorizontalMotion = (params: ApplyCommonHorizontalMotionP
         preservedReboundVelocityX
     } = params;
 
+    const carryBaseVelocityX = grounded ? effectiveExternalInfluenceX : 0;
     const currentVelocityX = physicsBody.velocity.x;
     let nextVelocityX = currentVelocityX;
 
@@ -100,15 +101,32 @@ export const applyCommonHorizontalMotion = (params: ApplyCommonHorizontalMotionP
             effectiveExternalInfluenceX
         );
         const maxStepX = moveResponse * ballBoostAirControlFactor * deltaSec;
-        nextVelocityX = resolveNextVelocityXWithAirborneBallBoostInertia({
-            currentVelocityX,
-            targetVelocityX,
-            maxStepX,
-            grounded,
-            isBallForm,
-            hasBoostHold,
-            horizontalDir
-        });
+        if (grounded) {
+            // Keep platform/NPC carry velocity perfectly in sync.
+            // Acceleration smoothing should only affect player's relative input speed.
+            const relativeCurrentVelocityX = currentVelocityX - carryBaseVelocityX;
+            const relativeTargetVelocityX = targetVelocityX - carryBaseVelocityX;
+            const relativeNextVelocityX = resolveNextVelocityXWithAirborneBallBoostInertia({
+                currentVelocityX: relativeCurrentVelocityX,
+                targetVelocityX: relativeTargetVelocityX,
+                maxStepX,
+                grounded,
+                isBallForm,
+                hasBoostHold,
+                horizontalDir
+            });
+            nextVelocityX = relativeNextVelocityX + carryBaseVelocityX;
+        } else {
+            nextVelocityX = resolveNextVelocityXWithAirborneBallBoostInertia({
+                currentVelocityX,
+                targetVelocityX,
+                maxStepX,
+                grounded,
+                isBallForm,
+                hasBoostHold,
+                horizontalDir
+            });
+        }
 
         if (grounded) {
             mutable.airborneWindDriftX = 0;

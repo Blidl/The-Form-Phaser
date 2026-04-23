@@ -68,6 +68,8 @@ interface RegisteredActorEntry {
     ) => TestWorldActorPairContactMode;
     touchingPlayer: boolean;
     touchingOtherActor: boolean;
+    frameStartX: number;
+    frameStartY: number;
 }
 
 interface OwnedColliderEntry {
@@ -81,6 +83,73 @@ interface ActorPairColliderEntry {
     pairContactMode: TestWorldActorPairContactMode;
     collider: Physics.Arcade.Collider;
 }
+
+const PLAYER_NPC_CARRY_TOP_TOLERANCE_PX = 8;
+const PLAYER_NPC_CARRY_MIN_OVERLAP_X_PX = 8;
+const PLAYER_NPC_CARRY_SIDE_MARGIN_PX = 4;
+
+const isPlayerNpcPair = (
+    firstActor: RegisteredActorEntry,
+    secondActor: RegisteredActorEntry
+): boolean => (
+    (firstActor.kind === 'player' && secondActor.kind === 'npc')
+    || (firstActor.kind === 'npc' && secondActor.kind === 'player')
+);
+
+const tryApplyPlayerNpcTopCarry = (
+    firstActor: RegisteredActorEntry,
+    secondActor: RegisteredActorEntry
+): boolean => {
+    if (!isPlayerNpcPair(firstActor, secondActor)) {
+        return false;
+    }
+
+    const playerActor = firstActor.kind === 'player' ? firstActor : secondActor;
+    const npcActor = firstActor.kind === 'npc' ? firstActor : secondActor;
+    if (!playerActor.applyContactPush) {
+        return false;
+    }
+
+    const npcDeltaX = npcActor.bodyObject.x - npcActor.frameStartX;
+    const npcDeltaY = npcActor.bodyObject.y - npcActor.frameStartY;
+    if (Math.abs(npcDeltaX) <= 0.0001 && Math.abs(npcDeltaY) <= 0.0001) {
+        return false;
+    }
+
+    const playerShape = playerActor.getContactShapeSnapshot();
+    const npcShape = npcActor.getContactShapeSnapshot();
+    if (playerShape.kind !== 'arcade_body' || npcShape.kind !== 'arcade_body') {
+        return false;
+    }
+
+    const playerBounds = playerShape.bounds;
+    const npcBounds = npcShape.bounds;
+    const overlapX = Math.min(playerBounds.right, npcBounds.right) - Math.max(playerBounds.left, npcBounds.left);
+    if (overlapX < PLAYER_NPC_CARRY_MIN_OVERLAP_X_PX) {
+        return false;
+    }
+
+    const playerCenterWithinNpcTop = playerBounds.centerX >= (npcBounds.left - PLAYER_NPC_CARRY_SIDE_MARGIN_PX)
+        && playerBounds.centerX <= (npcBounds.right + PLAYER_NPC_CARRY_SIDE_MARGIN_PX);
+    if (!playerCenterWithinNpcTop) {
+        return false;
+    }
+
+    const topGap = npcBounds.top - playerBounds.bottom;
+    const playerIsOnTop = playerBounds.top < npcBounds.top
+        && topGap >= -PLAYER_NPC_CARRY_TOP_TOLERANCE_PX
+        && topGap <= PLAYER_NPC_CARRY_TOP_TOLERANCE_PX
+        && playerActor.body.velocity.y >= -0.001;
+    if (!playerIsOnTop) {
+        return false;
+    }
+
+    playerActor.applyContactPush(npcDeltaX, topGap + npcDeltaY);
+    if (playerActor.body.velocity.y > 0) {
+        playerActor.body.setVelocityY(0);
+    }
+    return true;
+};
 
 const resolveEffectivePairContactMode = (
     firstActor: RegisteredActorEntry,
@@ -135,6 +204,8 @@ export const createTestWorldActorContactRuntime = (
         actors.forEach((actor) => {
             actor.touchingPlayer = false;
             actor.touchingOtherActor = false;
+            actor.frameStartX = actor.bodyObject.x;
+            actor.frameStartY = actor.bodyObject.y;
         });
     };
 
@@ -196,6 +267,10 @@ export const createTestWorldActorContactRuntime = (
             }
             if (entry.pairContactMode === 'ignore') {
                 return;
+            }
+
+            if (tryApplyPlayerNpcTopCarry(firstActor, secondActor)) {
+                markActorPairContact(firstActor.actorId, secondActor.actorId);
             }
 
             const firstShape = firstActor.getContactShapeSnapshot();
@@ -297,7 +372,9 @@ export const createTestWorldActorContactRuntime = (
                 applyContactPush: actor.applyContactPush ?? null,
                 getPairContactMode: actor.getPairContactMode ?? (() => 'block'),
                 touchingPlayer: false,
-                touchingOtherActor: false
+                touchingOtherActor: false,
+                frameStartX: actor.bodyObject.x,
+                frameStartY: actor.bodyObject.y
             });
             rebuildColliders();
 

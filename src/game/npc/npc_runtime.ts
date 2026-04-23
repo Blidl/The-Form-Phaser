@@ -51,6 +51,7 @@ const NPC_GRAVITY_Y = 2200;
 const NPC_MAX_FALL_SPEED = 1600;
 const NPC_GROUND_TOLERANCE_PX = 2;
 const NPC_PLAYER_DISTANCE_HYSTERESIS_PX = 8;
+const NPC_ARCADE_CARRY_SOURCE_DATA_KEY = 'pf_npc_arcade_carry_source';
 
 interface TestNpcActorRuntime {
     id: string;
@@ -885,6 +886,10 @@ export const createTestNpcRuntime = (
                 NPC_MAX_FALL_SPEED
             );
             body.pushable = false;
+            bodyObject.setData(
+                NPC_ARCADE_CARRY_SOURCE_DATA_KEY,
+                shouldNpcBlockPlayerBody(resolved.playerBodyContactMode)
+            );
             const supportMatterBody = scene.matter.add.rectangle(
                 resolved.instance.x,
                 resolved.instance.y,

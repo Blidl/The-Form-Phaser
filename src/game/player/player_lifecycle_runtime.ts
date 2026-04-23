@@ -31,6 +31,7 @@ import {
 import { resetBallReboundRuntimeState } from './player_ball_rebound_runtime';
 import type { PlayerInputSnapshot } from './player_input';
 import type { PlayerLifecycleRuntimeContext } from './player_runtime_types';
+import type { PlayerFormId } from './player_types';
 
 export const freezePlayerForRespawn = (context: PlayerLifecycleRuntimeContext): void => {
     const freezeDirective = resolveFreezeResetDirective();
@@ -166,16 +167,24 @@ export const handlePlayerFormSwitch = (
         return;
     }
 
-    const previousForm = context.state.currentForm;
-    context.state.currentForm = switchDecision.targetForm;
-    context.notifyFormSwitchIn(switchDecision.targetForm);
+    commitPlayerFormSwitch(context, switchDecision.targetForm, switchDecision.shouldApplyTransformLock);
+};
 
-    if (switchDecision.shouldApplyTransformLock) {
+export const commitPlayerFormSwitch = (
+    context: PlayerLifecycleRuntimeContext,
+    targetForm: PlayerFormId,
+    shouldApplyTransformLock: boolean = true
+): void => {
+    const previousForm = context.state.currentForm;
+    context.state.currentForm = targetForm;
+    context.notifyFormSwitchIn(targetForm);
+
+    if (shouldApplyTransformLock) {
         context.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;
     }
 
-    const transitionReset = resolveFormTransitionResetDirective(previousForm, switchDecision.targetForm);
-    clampPlayerMarkerStateToForm(context.state.marker, switchDecision.targetForm);
+    const transitionReset = resolveFormTransitionResetDirective(previousForm, targetForm);
+    clampPlayerMarkerStateToForm(context.state.marker, targetForm);
     if (transitionReset.resetTriangleShell) {
         resetTriangleShellState(context.state.triangleShell, context.mutable.lastMoveDirection);
     }
