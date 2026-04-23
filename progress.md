@@ -68,3 +68,7 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
 - Verification: npm run build-nolog (pass).
 - 2026-04-23: Rolled back last positional-carry experiment (`applyNpcArcadeCarry`) after regression (bounce + unstable stand-on-NPC). Restored prior carry path via `resolveWindInfluenceX` NPC velocity contribution.
 - Regression cause hypothesis: positional push was applied after player physics step and after NPC movement, so next Arcade solver pass repeatedly re-resolved penetration/top-gap, producing vertical oscillation and side kick-out near edge contact.
+- 2026-04-23: Investigated video `Видео-23-04-2026 192345.mp4` frame-by-frame (extracted local frames via OpenCV). Observed NPC-vs-player drift consistent with intermittent carry drop frames (~player advances on NPC at lower effective rate).
+- Applied grounded-detection stabilization for Arcade forms to prevent carry gating flicker on moving NPC contacts: added `wasTouching.down` and `onFloor()` to grounded checks in `player_tick_runtime.ts`, `player_runtime.ts`, and NPC-carry gate in `test_world_runtime.ts`.
+- Verification: npm run build-nolog (pass).
+- 2026-04-23: Documented the confirmed NPC carry desync fix for Arcade forms in docs/canon/the_form_mini_spec_npc_carry_sync_ru.md and linked it from docs/canon/the_form_docs_index_ru.md. Key rule: disable grounded dragX while grounded external carry is active (`player_tick_runtime.ts`).

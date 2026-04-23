@@ -368,3 +368,13 @@
 5. РїРѕСЃР»Рµ РІРЅРµС€РЅРµРіРѕ С‡Р°С‚Р° Р·Р°РїРѕР»РЅРёС‚СЊ `the_form_external_chat_intake_template_ru.md` Рё РѕР±РЅРѕРІРёС‚СЊ `the_form_orchestrator_log_ru.md`.
 
 Р­С‚РѕС‚ РёРЅРґРµРєСЃ СЃСѓС‰РµСЃС‚РІСѓРµС‚ РёРјРµРЅРЅРѕ РґР»СЏ С‚РѕРіРѕ, С‡С‚РѕР±С‹ РЅРµ С‚Р°С‰РёС‚СЊ РІ РєР°Р¶РґС‹Р№ РЅРѕРІС‹Р№ slice РІРµСЃСЊ РїР°РєРµС‚ С†РµР»РёРєРѕРј.
+
+---
+
+### 20. Mini Spec: NPC Carry Sync (Arcade Forms)
+**Файл:** `the_form_mini_spec_npc_carry_sync_ru.md`
+
+**Назначение:**
+- фиксирует проверенный паттерн устранения рассинхрона Ball/Square на движущемся NPC;
+- описывает root cause (`dragX` vs external carry) и production-safe решение;
+- даёт короткий regression checklist для повторного применения.

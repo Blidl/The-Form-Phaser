@@ -72,6 +72,7 @@ export const createTestSceneFrameRuntime = (
             }
 
             worldRuntime.updateMovingPlatforms();
+            worldRuntime.updateNpcs(deltaMs);
             worldRuntime.syncNpcTriangleSupportSurfaces();
             worldRuntime.syncPlayerCollisionMode();
 
@@ -87,8 +88,6 @@ export const createTestSceneFrameRuntime = (
             if (!cutsceneRuntime.isInputLocked() && temporaryInteractionKey && Input.Keyboard.JustDown(temporaryInteractionKey)) {
                 worldRuntime.tryTriggerNpcInteraction();
             }
-            worldRuntime.updateNpcs(deltaMs);
-            worldRuntime.syncNpcTriangleSupportSurfaces();
             if (worldRuntime.consumeFinishReached()) {
                 const nextLevelId = worldRuntime.getNextLevelId();
                 if (nextLevelId) {

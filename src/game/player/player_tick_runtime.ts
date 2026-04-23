@@ -35,7 +35,12 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
 
     const grounded = isTriangleForm
         ? state.triangleCollision.hasGroundContact && state.triangleCollision.groundSupportEdgeIndex !== null
-        : physicsBody.blocked.down || physicsBody.touching.down;
+        : (
+            physicsBody.blocked.down
+            || physicsBody.touching.down
+            || physicsBody.wasTouching.down
+            || physicsBody.onFloor()
+        );
     if (input.jumpPressed) {
         context.notifyJumpIntent();
     }
@@ -162,6 +167,10 @@ export const tickPlayerRuntime = (context: PlayerTickRuntimeContext): void => {
         grounded,
         externalHorizontalInfluenceX: context.externalHorizontalInfluenceX
     });
+    const hasGroundExternalCarry = !isTriangleForm
+        && grounded
+        && Math.abs(effectiveExternalInfluenceX) > 0.001;
+    physicsBody.setDragX((grounded && !hasGroundExternalCarry) ? context.groundedDragX : 0);
     const motionFlags = resolvePlayerMotionFlags({
         state,
         isSquareForm

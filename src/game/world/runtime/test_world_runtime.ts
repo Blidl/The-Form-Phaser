@@ -228,9 +228,12 @@ const isSurfaceSolid = (config: TestWorldSurfaceConfig): boolean => {
 };
 
 const NPC_ARCADE_CARRY_SOURCE_DATA_KEY = 'pf_npc_arcade_carry_source';
-const NPC_CARRY_TOP_GAP_TOLERANCE_UP_PX = 8;
-const NPC_CARRY_TOP_GAP_TOLERANCE_DOWN_PX = 6;
-const NPC_CARRY_MIN_OVERLAP_X_PX = 8;
+const NPC_ARCADE_CARRY_VELOCITY_X_DATA_KEY = 'pf_npc_arcade_carry_velocity_x';
+const NPC_CARRY_TOP_GAP_TOLERANCE_UP_PX = 12;
+const NPC_CARRY_TOP_GAP_TOLERANCE_DOWN_PX = 10;
+const NPC_CARRY_MIN_OVERLAP_X_PX = 4;
+const NPC_CARRY_SUPPORT_GRACE_FRAMES = 3;
+const NPC_CARRY_GRACE_MAX_UPWARD_VELOCITY = -40;
 
 const createCutsceneActorSequenceFromRef = (
     actorId: string,
@@ -1402,6 +1405,8 @@ const buildWorldInstance = (
         npcRuntime,
         config.npcs
     );
+    let npcCarrySupportGraceFramesRemaining = 0;
+    let npcCarrySupportGraceVelocityX = 0;
     addCleanup(() => npcRuntime.destroy());
     npcRuntime.syncTriangleSupportSurfaces();
     actorContactRuntime.rebuildColliders();
@@ -1500,16 +1505,12 @@ const buildWorldInstance = (
             if (!playerBody) {
                 return horizontalInfluenceX;
             }
-            const isGrounded = playerBody.blocked.down || playerBody.touching.down;
-            if (!isGrounded) {
-                return horizontalInfluenceX;
-            }
 
             const probeBodies = scene.physics.overlapRect(
                 playerBody.x + 1,
-                playerBody.bottom - 2,
+                playerBody.bottom - 6,
                 Math.max(2, playerBody.width - 2),
-                4,
+                12,
                 true,
                 true
             ) as Array<Physics.Arcade.Body | Physics.Arcade.StaticBody>;
@@ -1527,7 +1528,13 @@ const buildWorldInstance = (
                     return;
                 }
 
-                const candidateVelocityX = (candidateBody as Physics.Arcade.Body).velocity?.x;
+                const dataVelocityX = candidateGameObject.getData(NPC_ARCADE_CARRY_VELOCITY_X_DATA_KEY);
+                const bodyVelocityX = (candidateBody as Physics.Arcade.Body).velocity?.x;
+                const hasDataVelocityX = typeof dataVelocityX === 'number' && Number.isFinite(dataVelocityX);
+                const hasBodyVelocityX = typeof bodyVelocityX === 'number' && Number.isFinite(bodyVelocityX);
+                const candidateVelocityX = hasDataVelocityX && hasBodyVelocityX
+                    ? (Math.abs(dataVelocityX) >= Math.abs(bodyVelocityX) ? dataVelocityX : bodyVelocityX)
+                    : (hasDataVelocityX ? dataVelocityX : bodyVelocityX);
                 if (typeof candidateVelocityX !== 'number' || !Number.isFinite(candidateVelocityX)) {
                     return;
                 }
@@ -1553,6 +1560,21 @@ const buildWorldInstance = (
                     bestNpcCarryVelocityX = candidateVelocityX;
                 }
             });
+
+            if (bestOverlapX > 0) {
+                npcCarrySupportGraceFramesRemaining = NPC_CARRY_SUPPORT_GRACE_FRAMES;
+                npcCarrySupportGraceVelocityX = bestNpcCarryVelocityX;
+            } else if (
+                npcCarrySupportGraceFramesRemaining > 0
+                && playerBody.velocity.y >= NPC_CARRY_GRACE_MAX_UPWARD_VELOCITY
+            ) {
+                bestNpcCarryVelocityX = npcCarrySupportGraceVelocityX;
+                npcCarrySupportGraceFramesRemaining -= 1;
+            } else {
+                npcCarrySupportGraceFramesRemaining = 0;
+                npcCarrySupportGraceVelocityX = 0;
+            }
+
             horizontalInfluenceX += bestNpcCarryVelocityX;
             return horizontalInfluenceX;
         },

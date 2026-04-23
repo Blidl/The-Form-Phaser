@@ -310,7 +310,10 @@ export class PfPlayerRuntime {
 
         return {
             mode: 'arcade',
-            grounded: this.physicsBody.blocked.down || this.physicsBody.touching.down || this.physicsBody.onFloor(),
+            grounded: this.physicsBody.blocked.down
+                || this.physicsBody.touching.down
+                || this.physicsBody.wasTouching.down
+                || this.physicsBody.onFloor(),
             blockedLeft: this.physicsBody.blocked.left,
             blockedRight: this.physicsBody.blocked.right
         };
@@ -978,7 +981,10 @@ export class PfPlayerRuntime {
             return this.state.triangleCollision.hasGroundContact && this.state.triangleCollision.groundSupportEdgeIndex !== null;
         }
 
-        return this.physicsBody.blocked.down || this.physicsBody.touching.down;
+        return this.physicsBody.blocked.down
+            || this.physicsBody.touching.down
+            || this.physicsBody.wasTouching.down
+            || this.physicsBody.onFloor();
     }
 
     private refreshTrianglePhysicsState(): void {

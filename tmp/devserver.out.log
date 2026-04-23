@@ -111,3 +111,16 @@ Port 8080 is in use, trying another one...
 [2m18:51:51[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/world/runtime/test_world_runtime.ts[22m
 [2m18:52:08[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/world/runtime/test_world_runtime.ts[22m
 [2m18:52:13[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/scenes/runtime/test_scene_frame_runtime.ts[22m
+[2m19:27:51[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/player/player_tick_runtime.ts[22m
+[2m19:28:04[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/world/runtime/test_world_runtime.ts[22m
+[2m19:28:20[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/player/player_runtime.ts[22m
+[2m21:46:28[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/scenes/runtime/test_scene_frame_runtime.ts[22m
+[2m22:05:01[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/npc/npc_runtime.ts[22m
+[2m22:05:05[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/npc/npc_runtime.ts[22m
+[2m22:05:09[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/npc/npc_runtime.ts[22m
+[2m22:05:15[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/npc/npc_runtime.ts[22m
+[2m22:05:24[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/world/runtime/test_world_runtime.ts[22m
+[2m22:07:14[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/world/runtime/test_world_runtime.ts[22m
+[2m22:08:37[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/world/runtime/test_world_runtime.ts[22m
+[2m22:10:05[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/world/runtime/test_world_runtime.ts[22m
+[2m22:18:20[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mpage reload [39m[2msrc/game/player/player_tick_runtime.ts[22m

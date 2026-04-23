@@ -52,6 +52,7 @@ const NPC_MAX_FALL_SPEED = 1600;
 const NPC_GROUND_TOLERANCE_PX = 2;
 const NPC_PLAYER_DISTANCE_HYSTERESIS_PX = 8;
 const NPC_ARCADE_CARRY_SOURCE_DATA_KEY = 'pf_npc_arcade_carry_source';
+const NPC_ARCADE_CARRY_VELOCITY_X_DATA_KEY = 'pf_npc_arcade_carry_velocity_x';
 
 interface TestNpcActorRuntime {
     id: string;
@@ -117,6 +118,7 @@ interface TestNpcActorRuntime {
     } | null;
     nextInteractionActivationNonce: number;
     actionRuntime: ActorActionSequenceRuntime;
+    frameCarryVelocityX: number;
 }
 
 interface PendingNpcTriggerEvent {
@@ -965,7 +967,8 @@ export const createTestNpcRuntime = (
                 activeCutscene: null,
                 lastCutsceneCompletion: null,
                 nextInteractionActivationNonce: 1,
-                actionRuntime: null as unknown as ActorActionSequenceRuntime
+                actionRuntime: null as unknown as ActorActionSequenceRuntime,
+                frameCarryVelocityX: 0
             };
             actor.actionRuntime = createActorActionSequenceRuntime(createTestNpcActorActionAdapter({
                 getX: () => getActorX(actor),
@@ -1009,6 +1012,7 @@ export const createTestNpcRuntime = (
             const triggerEventsForFrame = pendingTriggerEvents.splice(0, pendingTriggerEvents.length);
 
             actors.forEach((actor) => {
+                const frameStartX = actor.bodyObject.x;
                 actor.stateElapsedMs += safeDeltaMs;
                 clearCompletedInteraction(actor);
                 clearCompletedCutscene(actor);
@@ -1041,6 +1045,9 @@ export const createTestNpcRuntime = (
                 }
 
                 refreshActorVisual(actor);
+                const deltaSec = safeDeltaMs / 1000;
+                const deltaX = actor.bodyObject.x - frameStartX;
+                actor.frameCarryVelocityX = deltaSec > 0 ? (deltaX / deltaSec) : 0;
             });
         },
         dispatchInteractionOutcome: (actorId: string, outcome: TestNpcInteractionOutcome): TestNpcInteractionDispatchResult => {
@@ -1236,6 +1243,10 @@ export const createTestNpcRuntime = (
                     typedSupportBody.pfCarryDeltaX = 0;
                     typedSupportBody.pfCarryDeltaY = 0;
                 }
+                actor.bodyObject.setData(
+                    NPC_ARCADE_CARRY_VELOCITY_X_DATA_KEY,
+                    actor.exportsTriangleSupportSurface ? actor.frameCarryVelocityX : 0
+                );
             });
         },
         getDebugEntries: (): readonly TestNpcDebugEntry[] => {
