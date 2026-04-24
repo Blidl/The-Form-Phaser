@@ -1,0 +1,288 @@
+{
+  "startedAt": "2026-04-24T09:36:24.949Z",
+  "targets": [
+    0.08,
+    0.28,
+    0.55
+  ],
+  "captures": [
+    {
+      "mode": "normal",
+      "p": 0.08,
+      "ok": true,
+      "png": "normal_p08.png",
+      "debugState": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 4,
+        "debugOverlayEnabled": false,
+        "progressOverride": 0.08,
+        "lastProgress": 0.08,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.18249284540119,
+        "hasFrameData": true,
+        "halfGap": 3.020676857355258,
+        "openLength": 119.59992432090975,
+        "unwrapFront": 0,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      },
+      "visualState": {
+        "ball": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 90
+      }
+    },
+    {
+      "mode": "overlay",
+      "p": 0.08,
+      "ok": true,
+      "png": "overlay_p08.png",
+      "debugState": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 30,
+        "debugOverlayEnabled": true,
+        "progressOverride": 0.08,
+        "lastProgress": 0.08,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.18249284540119,
+        "hasFrameData": true,
+        "halfGap": 3.020676857355258,
+        "openLength": 119.59992432090975,
+        "unwrapFront": 0,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      },
+      "visualState": {
+        "ball": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 120
+      }
+    },
+    {
+      "mode": "normal",
+      "p": 0.28,
+      "ok": true,
+      "png": "normal_p28.png",
+      "debugState": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 55,
+        "debugOverlayEnabled": false,
+        "progressOverride": 0.28,
+        "lastProgress": 0.28,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.18249284540119,
+        "hasFrameData": true,
+        "halfGap": 10.051302242849621,
+        "openLength": 105.53867354992101,
+        "unwrapFront": 37.149613089572206,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      },
+      "visualState": {
+        "ball": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 120
+      }
+    },
+    {
+      "mode": "overlay",
+      "p": 0.28,
+      "ok": true,
+      "png": "overlay_p28.png",
+      "debugState": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 78,
+        "debugOverlayEnabled": true,
+        "progressOverride": 0.28,
+        "lastProgress": 0.28,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.24311381398086,
+        "hasFrameData": true,
+        "halfGap": 10.057537150498053,
+        "openLength": 105.60414008022954,
+        "unwrapFront": 37.17265730824081,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      },
+      "visualState": {
+        "ball": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 180
+      }
+    },
+    {
+      "mode": "normal",
+      "p": 0.55,
+      "ok": true,
+      "png": "normal_p55.png",
+      "debugState": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 105,
+        "debugOverlayEnabled": false,
+        "progressOverride": 0.55,
+        "lastProgress": 0.55,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.25175003835542,
+        "hasFrameData": true,
+        "halfGap": 10.058425303278181,
+        "openLength": 105.6134656844209,
+        "unwrapFront": 104.51846527220482,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      },
+      "visualState": {
+        "ball": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 300
+      }
+    },
+    {
+      "mode": "overlay",
+      "p": 0.55,
+      "ok": true,
+      "png": "overlay_p55.png",
+      "debugState": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 131,
+        "debugOverlayEnabled": true,
+        "progressOverride": 0.55,
+        "lastProgress": 0.55,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.2537629773395,
+        "hasFrameData": true,
+        "halfGap": 10.058632311553357,
+        "openLength": 105.61563927131024,
+        "unwrapFront": 104.5206163233453,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      },
+      "visualState": {
+        "ball": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "triangle": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "square": {
+          "visible": false,
+          "scaleX": 1,
+          "scaleY": 1,
+          "rotationRad": 0
+        },
+        "velocityX": 0,
+        "velocityY": 330
+      }
+    }
+  ],
+  "consoleErrors": [],
+  "finishedAt": "2026-04-24T09:36:34.600Z"
+}

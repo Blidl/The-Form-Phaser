@@ -1,7 +1,11 @@
 import { Scene } from 'phaser';
-import { PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS } from '../../player/player_constants';
 import type { PlayerWorldActor } from '../../player/player_runtime_contracts';
-import { doesHazardOverlapPlayerShape, type HazardObject } from '../hazard';
+import {
+    doesHazardOverlapPlayerShape,
+    resolveHazardContactPoint,
+    type HazardContactPoint,
+    type HazardObject
+} from '../hazard';
 import type { RespawnPoint } from './world_runtime_types';
 
 export interface PlayerRespawnRuntime {
@@ -17,6 +21,8 @@ interface CreatePlayerRespawnRuntimeParams {
     initialRespawnPoint: RespawnPoint;
 }
 
+const PLAYER_DEATH_TRANSITION_DURATION_MS = 260;
+
 export const createPlayerRespawnRuntime = (
     params: CreatePlayerRespawnRuntimeParams
 ): PlayerRespawnRuntime => {
@@ -28,15 +34,22 @@ export const createPlayerRespawnRuntime = (
     let respawnInProgress = false;
     let onPlayerRespawned: (() => void) | null = null;
 
-    const handlePlayerDefeat = (): void => {
+    const handlePlayerDefeat = (contactPoint: HazardContactPoint): void => {
         if (respawnInProgress) {
             return;
         }
 
         respawnInProgress = true;
+        player.startDeathTransition(
+            contactPoint.pointX,
+            contactPoint.pointY,
+            contactPoint.normalX,
+            contactPoint.normalY,
+            PLAYER_DEATH_TRANSITION_DURATION_MS
+        );
         player.freezeForRespawn();
 
-        scene.time.delayedCall(PLAYER_TIMER_DEFAULT_DEATH_PAUSE_MS, () => {
+        scene.time.delayedCall(PLAYER_DEATH_TRANSITION_DURATION_MS, () => {
             player.respawnAt(currentRespawnPoint.x, currentRespawnPoint.y);
             onPlayerRespawned?.();
             respawnInProgress = false;
@@ -56,12 +69,13 @@ export const createPlayerRespawnRuntime = (
         }
 
         const playerHazardShape = player.hazardHitShape;
-        const isTouchingHazard = hazards.some((hazard) => {
+        const collidedHazard = hazards.find((hazard) => {
             return doesHazardOverlapPlayerShape(hazard, playerHazardShape);
         });
 
-        if (isTouchingHazard) {
-            handlePlayerDefeat();
+        if (collidedHazard) {
+            const contactPoint = resolveHazardContactPoint(collidedHazard, playerHazardShape);
+            handlePlayerDefeat(contactPoint);
         }
     };
 

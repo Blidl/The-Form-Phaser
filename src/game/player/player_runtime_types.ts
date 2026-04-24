@@ -38,7 +38,7 @@ export interface PlayerLifecycleRuntimeContext {
     applyCurrentFormCollisionBody: () => void;
     applyCurrentFormVisual: () => void;
     syncVisualPosition: () => void;
-    notifyFormSwitchIn: (nextForm: PlayerFormId) => void;
+    notifyFormSwitchIn: (previousForm: PlayerFormId, nextForm: PlayerFormId) => void;
     resetVisualPose: () => void;
 }
 

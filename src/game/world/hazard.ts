@@ -22,6 +22,13 @@ interface HazardRect {
     bottom: number;
 }
 
+export interface HazardContactPoint {
+    pointX: number;
+    pointY: number;
+    normalX: number;
+    normalY: number;
+}
+
 export const createHazard = (scene: Scene, config: HazardConfig): HazardObject => {
     const trigger = scene.add.rectangle(config.x, config.y, config.width, config.height, config.fillColor ?? 0xef5350, 0.75)
         .setStrokeStyle(2, config.strokeColor ?? 0xb71c1c)
@@ -47,13 +54,7 @@ export const doesHazardOverlapPlayerShape = (
     hazard: HazardObject,
     shape: PlayerHazardHitShape
 ): boolean => {
-    const hazardBody = hazard.trigger.body as Physics.Arcade.StaticBody;
-    const hazardRect: HazardRect = {
-        left: hazardBody.x,
-        top: hazardBody.y,
-        right: hazardBody.x + hazardBody.width,
-        bottom: hazardBody.y + hazardBody.height
-    };
+    const hazardRect = resolveHazardRect(hazard);
 
     if (shape.kind === 'circle') {
         return circleIntersectsRect(shape.centerX, shape.centerY, shape.radius, hazardRect);
@@ -72,6 +73,184 @@ export const doesHazardOverlapPlayerShape = (
     }
 
     return triangleIntersectsRect(shape.points, hazardRect);
+};
+
+export const resolveHazardContactPoint = (
+    hazard: HazardObject,
+    shape: PlayerHazardHitShape
+): HazardContactPoint => {
+    const hazardRect = resolveHazardRect(hazard);
+    const shapeCenter = resolveShapeCenter(shape);
+    const closestOnHazard = resolveClosestPointOnRectBoundary(shapeCenter.centerX, shapeCenter.centerY, hazardRect);
+    const resolvedNormal = normalizeVector(
+        shapeCenter.centerX - closestOnHazard.x,
+        shapeCenter.centerY - closestOnHazard.y
+    ) ?? normalizeVector(
+        shapeCenter.centerX - ((hazardRect.left + hazardRect.right) * 0.5),
+        shapeCenter.centerY - ((hazardRect.top + hazardRect.bottom) * 0.5)
+    ) ?? { x: 0, y: -1 };
+
+    const impactPoint = resolveShapeBoundaryImpactPoint(shape, closestOnHazard.x, closestOnHazard.y, resolvedNormal);
+    return {
+        pointX: impactPoint.x,
+        pointY: impactPoint.y,
+        normalX: resolvedNormal.x,
+        normalY: resolvedNormal.y
+    };
+};
+
+const resolveHazardRect = (hazard: HazardObject): HazardRect => {
+    const hazardBody = hazard.trigger.body as Physics.Arcade.StaticBody;
+    return {
+        left: hazardBody.x,
+        top: hazardBody.y,
+        right: hazardBody.x + hazardBody.width,
+        bottom: hazardBody.y + hazardBody.height
+    };
+};
+
+const resolveShapeCenter = (
+    shape: PlayerHazardHitShape
+): { centerX: number; centerY: number } => {
+    if (shape.kind === 'circle' || shape.kind === 'box') {
+        return {
+            centerX: shape.centerX,
+            centerY: shape.centerY
+        };
+    }
+
+    const centerX = (shape.points[0].x + shape.points[1].x + shape.points[2].x) / 3;
+    const centerY = (shape.points[0].y + shape.points[1].y + shape.points[2].y) / 3;
+    return {
+        centerX,
+        centerY
+    };
+};
+
+const resolveClosestPointOnRectBoundary = (x: number, y: number, rect: HazardRect): { x: number; y: number } => {
+    const clampedX = clamp(x, rect.left, rect.right);
+    const clampedY = clamp(y, rect.top, rect.bottom);
+    const insideRect = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+
+    if (!insideRect) {
+        return { x: clampedX, y: clampedY };
+    }
+
+    const distanceLeft = Math.abs(x - rect.left);
+    const distanceRight = Math.abs(rect.right - x);
+    const distanceTop = Math.abs(y - rect.top);
+    const distanceBottom = Math.abs(rect.bottom - y);
+    const minDistance = Math.min(distanceLeft, distanceRight, distanceTop, distanceBottom);
+
+    if (minDistance === distanceLeft) {
+        return { x: rect.left, y };
+    }
+    if (minDistance === distanceRight) {
+        return { x: rect.right, y };
+    }
+    if (minDistance === distanceTop) {
+        return { x, y: rect.top };
+    }
+    return { x, y: rect.bottom };
+};
+
+const resolveShapeBoundaryImpactPoint = (
+    shape: PlayerHazardHitShape,
+    hazardPointX: number,
+    hazardPointY: number,
+    normal: { x: number; y: number }
+): { x: number; y: number } => {
+    if (shape.kind === 'circle') {
+        return {
+            x: shape.centerX - (normal.x * shape.radius),
+            y: shape.centerY - (normal.y * shape.radius)
+        };
+    }
+
+    if (shape.kind === 'box') {
+        const halfWidth = shape.width * 0.5;
+        const halfHeight = shape.height * 0.5;
+        const absNormalX = Math.abs(normal.x);
+        const absNormalY = Math.abs(normal.y);
+        const xFactor = absNormalX > 1e-5 ? halfWidth / absNormalX : Number.POSITIVE_INFINITY;
+        const yFactor = absNormalY > 1e-5 ? halfHeight / absNormalY : Number.POSITIVE_INFINITY;
+        const rayScale = Math.min(xFactor, yFactor);
+
+        if (!Number.isFinite(rayScale)) {
+            return { x: shape.centerX, y: shape.centerY };
+        }
+
+        return {
+            x: shape.centerX - (normal.x * rayScale),
+            y: shape.centerY - (normal.y * rayScale)
+        };
+    }
+
+    return resolveClosestPointOnTriangleEdges(shape.points, hazardPointX, hazardPointY);
+};
+
+const resolveClosestPointOnTriangleEdges = (
+    points: [ { x: number; y: number }, { x: number; y: number }, { x: number; y: number } ],
+    targetX: number,
+    targetY: number
+): { x: number; y: number } => {
+    let bestPoint = points[0];
+    let bestDistanceSq = Number.POSITIVE_INFINITY;
+    const edges = [
+        [points[0], points[1]],
+        [points[1], points[2]],
+        [points[2], points[0]]
+    ] as const;
+
+    edges.forEach(([start, end]) => {
+        const candidate = closestPointOnSegment(start.x, start.y, end.x, end.y, targetX, targetY);
+        const dx = candidate.x - targetX;
+        const dy = candidate.y - targetY;
+        const distanceSq = (dx * dx) + (dy * dy);
+        if (distanceSq < bestDistanceSq) {
+            bestDistanceSq = distanceSq;
+            bestPoint = candidate;
+        }
+    });
+
+    return {
+        x: bestPoint.x,
+        y: bestPoint.y
+    };
+};
+
+const closestPointOnSegment = (
+    ax: number,
+    ay: number,
+    bx: number,
+    by: number,
+    px: number,
+    py: number
+): { x: number; y: number } => {
+    const abx = bx - ax;
+    const aby = by - ay;
+    const abLenSq = (abx * abx) + (aby * aby);
+    if (abLenSq <= 1e-7) {
+        return { x: ax, y: ay };
+    }
+
+    const t = clamp((((px - ax) * abx) + ((py - ay) * aby)) / abLenSq, 0, 1);
+    return {
+        x: ax + (abx * t),
+        y: ay + (aby * t)
+    };
+};
+
+const normalizeVector = (x: number, y: number): { x: number; y: number } | null => {
+    const magnitude = Math.hypot(x, y);
+    if (magnitude <= 1e-5) {
+        return null;
+    }
+
+    return {
+        x: x / magnitude,
+        y: y / magnitude
+    };
 };
 
 const circleIntersectsRect = (

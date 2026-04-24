@@ -1,0 +1,8 @@
+
+> template-vite-ts@1.4.0 dev-nolog
+> vite --config vite/config.dev.mjs --host 127.0.0.1 --port 8082
+
+
+  [32m[1mVITE[22m v6.3.2[39m  [2mready in [0m[1m127[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m8082[22m/[39m

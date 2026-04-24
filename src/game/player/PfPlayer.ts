@@ -2,6 +2,7 @@ import { GameObjects, Physics, Scene } from 'phaser';
 import type { PlayerFormAnchor, PlayerHazardHitShape } from './geometry/player_geometry_types';
 import type { PlayerSquareDebugView } from './player_runtime_contracts';
 import type { PlayerFormId, PlayerShellState } from './player_types';
+import type { PlayerDeathTransitionDebugSnapshot } from './view/player_death_transition';
 import { PfPlayerRuntime } from './player_runtime';
 import type {
     TestWorldActorContactMode,
@@ -88,6 +89,16 @@ export class PfPlayer {
         return this.runtime.hazardHitShape;
     }
 
+    public startDeathTransition(
+        impactX: number,
+        impactY: number,
+        impactNormalX: number,
+        impactNormalY: number,
+        durationMs: number
+    ): void {
+        this.runtime.startDeathTransition(impactX, impactY, impactNormalX, impactNormalY, durationMs);
+    }
+
     public get formAnchor(): PlayerFormAnchor {
         return this.runtime.formAnchor;
     }
@@ -116,6 +127,14 @@ export class PfPlayer {
 
     public setDebugVisualsVisible(visible: boolean): void {
         this.runtime.setDebugVisualsVisible(visible);
+    }
+
+    public setDeathDebugOverlay(enabled: boolean, progressOverride: number | null): void {
+        this.runtime.setDeathDebugOverlay(enabled, progressOverride);
+    }
+
+    public get deathDebugSnapshot(): PlayerDeathTransitionDebugSnapshot {
+        return this.runtime.deathDebugSnapshot;
     }
 
     public refillTriangleFlightResource(): void {

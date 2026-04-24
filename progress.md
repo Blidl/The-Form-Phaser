@@ -72,3 +72,62 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
 - Applied grounded-detection stabilization for Arcade forms to prevent carry gating flicker on moving NPC contacts: added `wasTouching.down` and `onFloor()` to grounded checks in `player_tick_runtime.ts`, `player_runtime.ts`, and NPC-carry gate in `test_world_runtime.ts`.
 - Verification: npm run build-nolog (pass).
 - 2026-04-23: Documented the confirmed NPC carry desync fix for Arcade forms in docs/canon/the_form_mini_spec_npc_carry_sync_ru.md and linked it from docs/canon/the_form_docs_index_ru.md. Key rule: disable grounded dragX while grounded external carry is active (`player_tick_runtime.ts`).
+
+- 2026-04-24: Implemented first-pass player death transition window for hazard hits.
+  - Added narrow death pipeline in `player_respawn_runtime.ts`: hazard overlap now resolves contact point/normal, starts player death transition, freezes runtime, and respawns after `240ms` (no same-frame instant respawn).
+  - Added hazard contact resolver in `src/game/world/hazard.ts` (`resolveHazardContactPoint`) with narrow fallback from shape center to nearest hazard boundary and shape-specific impact point mapping (circle/box/triangle).
+  - Extended player contract/runtime to support presentation-start hook: `startDeathTransition(impactX, impactY, impactNormalX, impactNormalY, durationMs)`.
+  - Added dedicated presentation runtime `src/game/player/view/player_death_transition.ts` (outline tear/unwrap line, fill split clouds, marker flash) and integrated it into `PlayerView` with highest-priority visibility handling during dying window.
+  - During frozen-for-respawn ticks, player runtime now continues ticking death presentation (`view.tickDeathTransition(deltaMs)`), and transition is hard-reset on respawn to avoid lingering visuals.
+  - Verification:
+    - `npm run build-nolog`: pass
+    - `npm run build`: pass
+    - `npx tsc --noEmit`: fails on pre-existing baseline errors outside this task; no new task-scoped TS errors remain.
+  - Smoke artifacts:
+    - Playwright client fallback run (skill client local copy): `tmp/death_transition_client/`
+    - Focused death smoke with screenshots and report: `tmp/death_transition_smoke/report.json`, `tmp/death_transition_smoke/*.png`
+    - Square-specific focused confirmation: `tmp/death_transition_smoke/square_fix_report.json`
+- 2026-04-24 (regression pass): Debugged form-switch transition regression and restored start contract.
+  - Root cause: `PlayerView` starts switch proxy on `formSwitchStart`, but hook was not emitted in runtime commit path; result was missing/unstable switch proxy visibility.
+  - Fix: lifecycle notify now carries `(previousForm, nextForm)` and runtime emits both `formSwitchIn` and `formSwitchStart` in `pendingPresentationHooks`.
+  - Additional safety: `PlayerView` keeps fallback start path from `formSwitchIn` using `lastPresentedForm`.
+  - Death visual tuning (separate step): boosted marker flash readability (longer flash window + stronger glow/rings/diagonals) in `player_death_transition.ts`.
+  - Verification artifacts: `tmp/death_transition_smoke/switch_afterkey_raf_report.json`, `switch_afterkey_raf_00..05.png`, `death_ball_flash_t12.png`, `death_square_flash_t20.png`.
+- 2026-04-24: Death visual contour-driven rework (narrow scope) in `src/game/player/view/player_death_transition.ts` + minimal scale wiring in `src/game/player/view/player_view.ts`.
+  - Outline layer replaced with arc-length contour pipeline: nearest impact projection on real sampled silhouette, progressive tear-gap around impact, open-chain construction, unwrap front propagation (`F(p)`), local unwrap weight (`lambda(u,p)`), straightened target line `S(u)=O+D*u`, plus early broken-rim contour fragments.
+  - Fill layer updated from center-symmetric blobs to tear-sourced dual lobes anchored at contour edges around the gap and drifting by impact normal.
+  - Marker tuned to short readable flash window with rapid fade-out (no long linger).
+  - Source silhouette now uses current visual pose scale+rotation (including ball stretch rotation) passed from `PlayerView` to death transition start params.
+  - Verification:
+    - `npm run build-nolog`: pass.
+    - Playwright client check via local fallback `tmp/web_game_playwright_client.local.js` (skill client still cannot resolve `playwright` module from skill path).
+    - Manual smoke artifacts: `tmp/death_transition_rework_smoke/report.json` and frame captures (`ball_*`, `triangle_*`, `square_*`, `switch_*`).
+  - Smoke limitation note:
+    - Existing debug bridge only exposes `teleportPlayer` (it also resets respawn/form), so isolated triangle/square death capture in hazard area is partially constrained; screenshots still confirm new contour-origin tear/unwrap behavior, but a perfect per-form hazard trigger without debug-side respawn mutation remains limited in this run.
+- 2026-04-24: DEBUG-PROOF outline pass for death transition.
+  - Added runtime death-outline debug snapshot + overlay controls in `PlayerDeathTransition` (`setDebugOverlay`, `getDebugSnapshot`).
+  - Outline renderer now computes explicit frame data object (`Q`, `S`, `R`, gap edges, unwrap front) and renders outline strictly from `R` polyline; debug overlay visualizes source contour / impact / gap / Q / S / R.
+  - Exposed debug bridge methods via `__THE_FORM_DEBUG__`:
+    - `setDeathDebugOverlay(enabled, progressOverride)`
+    - `getDeathDebugSnapshot()`
+  - Captured artifacts in `tmp/death_transition_debug/`:
+    - normal: `normal_p08.png`, `normal_p28.png`, `normal_p55.png`
+    - overlay: `overlay_p08.png`, `overlay_p28.png`, `overlay_p55.png`
+    - callpath probe: `callpath_probe.json` (shows active contour renderer + growing render call count during dying)
+  - Build verification:
+    - `npm run build-nolog`: pass
+    - `npm run build`: pass
+- 2026-04-24: Narrow death presentation simplification pass (deterministic stylized split) in `src/game/player/view/player_death_transition.ts` + death window timing update in `src/game/world/runtime/player_respawn_runtime.ts`.
+  - Removed contour-chain unwrap/line-unfold active render path; replaced with a single stylized deterministic renderer:
+    - marker flash (short bright burst with rays, fast fade);
+    - outline split into two source-contour pieces that separate laterally from impact, darken toward black, thin, drift down and fade;
+    - fill split into two soft cloud lobes from impact sides with expansion + dissolve.
+  - Kept runtime contract narrow: existing `startDeathTransition(...)` + frozen dying window path unchanged; respawn delay set to `260ms`.
+  - Timing now first-pass aligned in renderer constants: `flash=45ms`, `outline=160ms`, `smoke=220ms`.
+  - Verification:
+    - `npm run build-nolog`: pass.
+    - Runtime smoke (Playwright): `tmp/death_transition_rework_smoke/report.json` + fresh frame captures.
+  - Smoke notes:
+    - No console errors in smoke report.
+    - Base player visuals stay hidden during death window and restore after respawn.
+    - Current debug teleport helper still resets form to ball in hazard trigger scenario, so triangle/square hazard captures remain partially constrained by tooling, not by the death runtime contract.

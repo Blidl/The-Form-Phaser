@@ -177,7 +177,7 @@ export const commitPlayerFormSwitch = (
 ): void => {
     const previousForm = context.state.currentForm;
     context.state.currentForm = targetForm;
-    context.notifyFormSwitchIn(targetForm);
+    context.notifyFormSwitchIn(previousForm, targetForm);
 
     if (shouldApplyTransformLock) {
         context.timers.transformLockMs = PLAYER_TIMER_DEFAULT_TRANSFORM_LOCK_MS;

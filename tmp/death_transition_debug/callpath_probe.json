@@ -1,0 +1,89 @@
+{
+  "capturedAt": "2026-04-24T09:37:33.965Z",
+  "samples": [
+    {
+      "t": 0,
+      "snap": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 1,
+        "debugOverlayEnabled": false,
+        "progressOverride": null,
+        "lastProgress": 0,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.18249284540119,
+        "hasFrameData": true,
+        "halfGap": 0,
+        "openLength": 125.64127803562026,
+        "unwrapFront": 0,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      }
+    },
+    {
+      "t": 40,
+      "snap": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 2,
+        "debugOverlayEnabled": false,
+        "progressOverride": null,
+        "lastProgress": 0.06944444444444443,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.18249284540119,
+        "hasFrameData": true,
+        "halfGap": 2.3722455413351438,
+        "openLength": 120.89678695294997,
+        "unwrapFront": 0,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      }
+    },
+    {
+      "t": 90,
+      "snap": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 4,
+        "debugOverlayEnabled": false,
+        "progressOverride": null,
+        "lastProgress": 0.20833333333333331,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.18249284540119,
+        "hasFrameData": true,
+        "halfGap": 9.969500985014008,
+        "openLength": 105.70227606559224,
+        "unwrapFront": 17.315731885759284,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      }
+    },
+    {
+      "t": 150,
+      "snap": {
+        "rendererKind": "contour_chain_unwrap_v1",
+        "isActive": true,
+        "hasLegacyTailPath": false,
+        "outlineRenderCallCount": 6,
+        "debugOverlayEnabled": false,
+        "progressOverride": null,
+        "lastProgress": 0.34722222222222215,
+        "contourSampleCount": 96,
+        "projectedImpactArc": 95.18249284540119,
+        "hasFrameData": true,
+        "halfGap": 10.051302242849621,
+        "openLength": 105.53867354992101,
+        "unwrapFront": 58.21354244575655,
+        "qSampleCount": 96,
+        "sSampleCount": 96,
+        "rSampleCount": 96
+      }
+    }
+  ]
+}

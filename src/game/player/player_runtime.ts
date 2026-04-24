@@ -75,6 +75,7 @@ import type {
 } from './geometry/player_geometry_types';
 import type { PlayerSquareDebugView, PlayerSquareDebugZoneId } from './player_runtime_contracts';
 import { PlayerView } from './view/player_view';
+import type { PlayerDeathTransitionDebugSnapshot } from './view/player_death_transition';
 import { isPlatformSurfaceGameObject } from '../world/world_surface_tags';
 import {
     createBallReboundRuntimeState,
@@ -185,7 +186,7 @@ export class PfPlayerRuntime {
             applyCurrentFormCollisionBody: () => this.applyCurrentFormCollisionBody(),
             applyCurrentFormVisual: () => this.applyCurrentFormVisual(),
             syncVisualPosition: () => this.syncVisualPosition(),
-            notifyFormSwitchIn: (nextForm) => this.queuePresentationFormSwitchIn(nextForm),
+            notifyFormSwitchIn: (previousForm, nextForm) => this.queuePresentationFormSwitchIn(previousForm, nextForm),
             resetVisualPose: () => this.view.resetFormAnimationPose(this.state.currentForm)
         };
         this.applyCurrentFormCollisionBody();
@@ -478,6 +479,14 @@ export class PfPlayerRuntime {
         this.view.setDebugVisualsVisible(visible);
     }
 
+    public setDeathDebugOverlay(enabled: boolean, progressOverride: number | null): void {
+        this.view.setDeathDebugOverlay(enabled, progressOverride);
+    }
+
+    public get deathDebugSnapshot(): PlayerDeathTransitionDebugSnapshot {
+        return this.view.getDeathDebugSnapshot();
+    }
+
     public refillTriangleFlightResource(): void {
         refillTriangleFlightResource(this.state.triangleFlight);
     }
@@ -489,9 +498,30 @@ export class PfPlayerRuntime {
         this.mutableState = this.lifecycleContext.mutable;
     }
 
+    public startDeathTransition(
+        impactX: number,
+        impactY: number,
+        impactNormalX: number,
+        impactNormalY: number,
+        durationMs: number
+    ): void {
+        this.view.startDeathTransition(
+            this.state.currentForm,
+            impactX,
+            impactY,
+            impactNormalX,
+            impactNormalY,
+            this.physicsBody.velocity.x,
+            this.physicsBody.velocity.y,
+            this.computeIsCurrentlyGrounded(),
+            durationMs
+        );
+    }
+
     public respawnAt(x: number, y: number): void {
         this.lifecycleContext.mutable = this.mutableState;
         respawnPlayerAt(this.lifecycleContext, x, y);
+        this.view.resetDeathTransition();
         this.mutableState = this.lifecycleContext.mutable;
     }
 
@@ -512,6 +542,8 @@ export class PfPlayerRuntime {
 
     public tick(deltaMs: number, input: PlayerInputSnapshot, externalHorizontalInfluenceX: number = 0): void {
         if (this.frozenForRespawn) {
+            this.lastVisualDeltaMs = deltaMs;
+            this.view.tickDeathTransition(deltaMs);
             return;
         }
 
@@ -632,8 +664,12 @@ export class PfPlayerRuntime {
         );
     }
 
-    private queuePresentationFormSwitchIn(nextForm: PlayerFormId): void {
+    private queuePresentationFormSwitchIn(previousForm: PlayerFormId, nextForm: PlayerFormId): void {
         this.pendingPresentationHooks.formSwitchIn = nextForm;
+        this.pendingPresentationHooks.formSwitchStart = {
+            outgoingForm: previousForm,
+            incomingForm: nextForm
+        };
     }
 
     private queuePresentationBallReboundLaunch(impulseX: number, impulseY: number): void {

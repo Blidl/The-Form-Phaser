@@ -19,6 +19,13 @@ export interface PlayerWorldActor {
     isTriangleFlightActive: boolean;
     isTriangleBreakWallActive: boolean;
     hazardHitShape: PlayerHazardHitShape;
+    startDeathTransition: (
+        impactX: number,
+        impactY: number,
+        impactNormalX: number,
+        impactNormalY: number,
+        durationMs: number
+    ) => void;
     refillTriangleFlightResource: () => void;
     freezeForRespawn: () => void;
     respawnAt: (x: number, y: number) => void;

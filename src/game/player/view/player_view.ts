@@ -31,6 +31,7 @@ import { squareSupportLocalToWorld } from '../player_square_support_space';
 import { resolveSquareTrailSegmentWorldLine } from '../player_square_trail';
 import { PlayerFormAnimationRuntime } from './player_form_animation_runtime';
 import { PlayerFormSwitchTransition } from './player_form_switch_transition';
+import { PlayerDeathTransition, type PlayerDeathTransitionDebugSnapshot } from './player_death_transition';
 import type { PlayerPresentationFrameHooks } from './player_presentation_hooks';
 import type {
     PlayerFormId,
@@ -51,6 +52,8 @@ export class PlayerView {
     private readonly squareAttachJumpTetherGraphics: GameObjects.Graphics;
     private readonly formAnimationRuntime: PlayerFormAnimationRuntime;
     private readonly formSwitchTransition: PlayerFormSwitchTransition;
+    private readonly deathTransition: PlayerDeathTransition;
+    private lastPresentedForm: PlayerFormId = 'ball';
     private debugVisualsVisible: boolean = false;
 
     public constructor(scene: Scene, x: number, y: number) {
@@ -91,6 +94,7 @@ export class PlayerView {
         this.squareAttachJumpTetherGraphics = scene.add.graphics().setDepth(4499);
         this.formAnimationRuntime = new PlayerFormAnimationRuntime('ball');
         this.formSwitchTransition = new PlayerFormSwitchTransition(scene);
+        this.deathTransition = new PlayerDeathTransition(scene);
     }
 
     public get triangleVisualObject(): GameObjects.Triangle {
@@ -124,6 +128,14 @@ export class PlayerView {
         };
     }
 
+    public setDeathDebugOverlay(enabled: boolean, progressOverride: number | null): void {
+        this.deathTransition.setDebugOverlay(enabled, progressOverride);
+    }
+
+    public getDeathDebugSnapshot(): PlayerDeathTransitionDebugSnapshot {
+        return this.deathTransition.getDebugSnapshot();
+    }
+
     public hideTransientMarkers(): void {
         this.squareContactMarker.setVisible(false);
         this.squareAttachJumpTetherGraphics.clear();
@@ -132,8 +144,72 @@ export class PlayerView {
     public resetFormAnimationPose(currentForm: PlayerFormId): void {
         this.formAnimationRuntime.resetPose(currentForm);
         this.formSwitchTransition.reset();
+        this.lastPresentedForm = currentForm;
         this.applyFormAnimationPose(currentForm, PLAYER_TRIANGLE_EDGE_DOWN_POSE_RAD, PLAYER_SQUARE_EDGE_DOWN_POSE_RAD);
+        if (this.deathTransition.isActive) {
+            this.hideAllBasePlayerVisuals();
+            return;
+        }
+
         this.applyBaseFormVisibility(currentForm);
+    }
+
+    public startDeathTransition(
+        currentForm: PlayerFormId,
+        impactX: number,
+        impactY: number,
+        impactNormalX: number,
+        impactNormalY: number,
+        velocityX: number,
+        velocityY: number,
+        grounded: boolean,
+        durationMs: number
+    ): void {
+        const formCenter = this.resolveFormVisualCenter(currentForm);
+        const formOrientationRad = currentForm === 'triangle'
+            ? this.triangleVisual.rotation
+            : currentForm === 'square'
+                ? this.squareVisual.rotation
+                : this.ballVisual.rotation;
+        const formScale = this.resolveFormVisualScale(currentForm);
+        this.deathTransition.start({
+            currentForm,
+            formCenterX: formCenter.x,
+            formCenterY: formCenter.y,
+            formOrientationRad,
+            formScaleX: formScale.x,
+            formScaleY: formScale.y,
+            impactX,
+            impactY,
+            impactNormalX,
+            impactNormalY,
+            markerX: this.markerVisual.x,
+            markerY: this.markerVisual.y,
+            velocityX,
+            velocityY,
+            grounded,
+            durationMs
+        });
+        this.hideAllBasePlayerVisuals();
+        this.squareContactMarker.setVisible(false);
+        this.squareTrailGraphics.clear();
+        this.squareAttachJumpTetherGraphics.clear();
+    }
+
+    public tickDeathTransition(deltaMs: number): void {
+        if (!this.deathTransition.isActive) {
+            return;
+        }
+
+        this.hideAllBasePlayerVisuals();
+        this.squareContactMarker.setVisible(false);
+        this.squareTrailGraphics.clear();
+        this.squareAttachJumpTetherGraphics.clear();
+        this.deathTransition.tickAndRender(deltaMs);
+    }
+
+    public resetDeathTransition(): void {
+        this.deathTransition.reset();
     }
 
     public setDebugVisualsVisible(visible: boolean): void {
@@ -148,7 +224,11 @@ export class PlayerView {
         squareShell: PlayerSquareShellState,
         ballBoostActive: boolean
     ): void {
-        if (this.formSwitchTransition.isActive) {
+        if (this.deathTransition.isActive) {
+            this.hideAllBasePlayerVisuals();
+            this.squareContactMarker.setVisible(false);
+            this.squareAttachJumpTetherGraphics.clear();
+        } else if (this.formSwitchTransition.isActive) {
             this.hideBasePlayerVisuals();
             this.squareContactMarker.setVisible(false);
             this.squareAttachJumpTetherGraphics.clear();
@@ -228,6 +308,25 @@ export class PlayerView {
                 playerX,
                 playerY
             );
+        } else if (presentationHooks.formSwitchIn !== null) {
+            const transitionStartCenter = this.resolveFormVisualCenter(this.lastPresentedForm);
+            this.formSwitchTransition.start(
+                this.lastPresentedForm,
+                presentationHooks.formSwitchIn,
+                transitionStartCenter.x,
+                transitionStartCenter.y,
+                playerX,
+                playerY
+            );
+        }
+
+        if (this.deathTransition.isActive) {
+            this.hideAllBasePlayerVisuals();
+            this.squareContactMarker.setVisible(false);
+            this.squareTrailGraphics.clear();
+            this.squareAttachJumpTetherGraphics.clear();
+            this.deathTransition.tickAndRender(deltaMs);
+            return;
         }
 
         this.formSwitchTransition.tickAndRender(
@@ -250,6 +349,17 @@ export class PlayerView {
         this.renderSquareTrail(squareShell.trailSegments);
         this.renderSquareAttachJumpTether(playerX, playerY, currentForm, squareShell);
         this.updateMarkerVisual(currentForm, playerX, playerY, formAnchor, marker, triangleShell, triangleFlight);
+        this.lastPresentedForm = currentForm;
+    }
+
+    private resolveFormVisualScale(form: PlayerFormId): { x: number; y: number } {
+        if (form === 'triangle') {
+            return { x: this.triangleVisual.scaleX, y: this.triangleVisual.scaleY };
+        }
+        if (form === 'square') {
+            return { x: this.squareVisual.scaleX, y: this.squareVisual.scaleY };
+        }
+        return { x: this.ballVisual.scaleX, y: this.ballVisual.scaleY };
     }
 
     private resolveFormVisualCenter(form: PlayerFormId): { x: number; y: number } {
@@ -276,6 +386,13 @@ export class PlayerView {
         this.triangleVisual.setVisible(false);
         this.squareVisual.setVisible(false);
         this.markerVisual.setVisible(true);
+    }
+
+    private hideAllBasePlayerVisuals(): void {
+        this.ballVisual.setVisible(false);
+        this.triangleVisual.setVisible(false);
+        this.squareVisual.setVisible(false);
+        this.markerVisual.setVisible(false);
     }
 
     private applyFormAnimationPose(

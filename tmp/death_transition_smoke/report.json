@@ -1,0 +1,207 @@
+{
+  "startedAt": "2026-04-23T21:34:27.806Z",
+  "sequences": [
+    {
+      "form": "ball",
+      "hiddenAt": 20,
+      "respawnAt": 120,
+      "samples": [
+        {
+          "name": "ball_t20",
+          "tMs": 20,
+          "form": "ball",
+          "x": 580.8333333333333,
+          "y": 542.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "name": "ball_t60",
+          "tMs": 60,
+          "form": "ball",
+          "x": 584.3872685185185,
+          "y": 575,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "name": "ball_t120",
+          "tMs": 120,
+          "form": "ball",
+          "x": 570,
+          "y": 530.5,
+          "baseVisible": {
+            "ball": true,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "name": "ball_t220",
+          "tMs": 220,
+          "form": "ball",
+          "x": 570,
+          "y": 596.5,
+          "baseVisible": {
+            "ball": true,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "name": "ball_t320",
+          "tMs": 320,
+          "form": "ball",
+          "x": 570,
+          "y": 723,
+          "baseVisible": {
+            "ball": true,
+            "triangle": false,
+            "square": false
+          }
+        }
+      ]
+    },
+    {
+      "form": "triangle",
+      "hiddenAt": 20,
+      "respawnAt": 120,
+      "samples": [
+        {
+          "name": "triangle_t20",
+          "tMs": 20,
+          "form": "triangle",
+          "x": 621,
+          "y": 523,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "name": "triangle_t60",
+          "tMs": 60,
+          "form": "ball",
+          "x": 570,
+          "y": 658,
+          "baseVisible": {
+            "ball": true,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "name": "triangle_t120",
+          "tMs": 120,
+          "form": "ball",
+          "x": 570,
+          "y": 812,
+          "baseVisible": {
+            "ball": true,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "name": "triangle_t220",
+          "tMs": 220,
+          "form": "ball",
+          "x": 570,
+          "y": 812,
+          "baseVisible": {
+            "ball": true,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "name": "triangle_t320",
+          "tMs": 320,
+          "form": "ball",
+          "x": 570,
+          "y": 812,
+          "baseVisible": {
+            "ball": true,
+            "triangle": false,
+            "square": false
+          }
+        }
+      ]
+    },
+    {
+      "form": "square",
+      "hiddenAt": null,
+      "respawnAt": null,
+      "samples": [
+        {
+          "name": "square_t20",
+          "tMs": 20,
+          "form": "square",
+          "x": 597.5932999999999,
+          "y": 784,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": true
+          }
+        },
+        {
+          "name": "square_t60",
+          "tMs": 60,
+          "form": "square",
+          "x": 613.9667033333334,
+          "y": 814,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": true
+          }
+        },
+        {
+          "name": "square_t120",
+          "tMs": 120,
+          "form": "square",
+          "x": 613.9667033333334,
+          "y": 814,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": true
+          }
+        },
+        {
+          "name": "square_t220",
+          "tMs": 220,
+          "form": "square",
+          "x": 613.9667033333334,
+          "y": 814,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": true
+          }
+        },
+        {
+          "name": "square_t320",
+          "tMs": 320,
+          "form": "square",
+          "x": 613.9667033333334,
+          "y": 814,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": true
+          }
+        }
+      ]
+    }
+  ],
+  "finishedAt": "2026-04-23T21:34:39.242Z"
+}

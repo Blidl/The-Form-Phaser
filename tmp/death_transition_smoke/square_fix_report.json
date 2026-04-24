@@ -1,0 +1,67 @@
+[
+  {
+    "t": 20,
+    "s": {
+      "x": 575.8333333333334,
+      "y": 553,
+      "form": "square"
+    },
+    "v": {
+      "ball": false,
+      "triangle": false,
+      "square": true
+    }
+  },
+  {
+    "t": 60,
+    "s": {
+      "x": 584.9813124608,
+      "y": 598.5,
+      "form": "square"
+    },
+    "v": {
+      "ball": false,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "t": 120,
+    "s": {
+      "x": 570,
+      "y": 521.5,
+      "form": "ball"
+    },
+    "v": {
+      "ball": true,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "t": 220,
+    "s": {
+      "x": 570,
+      "y": 565.5,
+      "form": "ball"
+    },
+    "v": {
+      "ball": true,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "t": 320,
+    "s": {
+      "x": 570,
+      "y": 670,
+      "form": "ball"
+    },
+    "v": {
+      "ball": true,
+      "triangle": false,
+      "square": false
+    }
+  }
+]

@@ -241,6 +241,10 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
                 form: player.currentForm
             }),
             getPlayerVisualSnapshot: () => player.presentationDebugState,
+            getDeathDebugSnapshot: () => player.deathDebugSnapshot,
+            setDeathDebugOverlay: (enabled: boolean, progressOverride: number | null = null): void => {
+                player.setDeathDebugOverlay(Boolean(enabled), progressOverride);
+            },
             teleportPlayer: (x: number, y: number): void => {
                 if (!Number.isFinite(x) || !Number.isFinite(y)) {
                     return;

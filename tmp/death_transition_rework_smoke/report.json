@@ -1,0 +1,410 @@
+{
+  "startedAt": "2026-04-24T10:07:31.270Z",
+  "consoleErrors": [],
+  "deathScenarios": [
+    {
+      "form": "ball",
+      "success": true,
+      "samples": [
+        {
+          "tMs": 12,
+          "form": "ball",
+          "x": 600,
+          "y": 521,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 25,
+          "form": "ball",
+          "x": 600,
+          "y": 553.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 45,
+          "form": "ball",
+          "x": 600,
+          "y": 527.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 60,
+          "form": "ball",
+          "x": 600,
+          "y": 580,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 95,
+          "form": "ball",
+          "x": 600,
+          "y": 542.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 140,
+          "form": "ball",
+          "x": 600,
+          "y": 525,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 190,
+          "form": "ball",
+          "x": 600,
+          "y": 580,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 245,
+          "form": "ball",
+          "x": 600,
+          "y": 559,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        }
+      ],
+      "postRespawn": {
+        "form": "ball",
+        "baseVisible": {
+          "ball": true,
+          "triangle": false,
+          "square": false
+        },
+        "hidden": false
+      },
+      "trigger": {
+        "started": true
+      }
+    },
+    {
+      "form": "triangle",
+      "success": true,
+      "samples": [
+        {
+          "tMs": 12,
+          "form": "ball",
+          "x": 600,
+          "y": 524.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 25,
+          "form": "ball",
+          "x": 600,
+          "y": 565.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 45,
+          "form": "ball",
+          "x": 600,
+          "y": 521.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 60,
+          "form": "ball",
+          "x": 600,
+          "y": 553,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 95,
+          "form": "ball",
+          "x": 600,
+          "y": 523,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 140,
+          "form": "ball",
+          "x": 600,
+          "y": 520,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 190,
+          "form": "ball",
+          "x": 600,
+          "y": 565.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 245,
+          "form": "ball",
+          "x": 600,
+          "y": 527.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        }
+      ],
+      "postRespawn": {
+        "form": "ball",
+        "baseVisible": {
+          "ball": true,
+          "triangle": false,
+          "square": false
+        },
+        "hidden": false
+      },
+      "trigger": {
+        "started": true
+      }
+    },
+    {
+      "form": "square",
+      "success": true,
+      "samples": [
+        {
+          "tMs": 12,
+          "form": "ball",
+          "x": 600,
+          "y": 524.5,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 25,
+          "form": "ball",
+          "x": 600,
+          "y": 553,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 45,
+          "form": "ball",
+          "x": 600,
+          "y": 520,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 60,
+          "form": "ball",
+          "x": 600,
+          "y": 538,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 95,
+          "form": "ball",
+          "x": 600,
+          "y": 520,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 140,
+          "form": "ball",
+          "x": 600,
+          "y": 553,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 190,
+          "form": "ball",
+          "x": 600,
+          "y": 523,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        },
+        {
+          "tMs": 245,
+          "form": "ball",
+          "x": 600,
+          "y": 559,
+          "baseVisible": {
+            "ball": false,
+            "triangle": false,
+            "square": false
+          }
+        }
+      ],
+      "postRespawn": {
+        "form": "ball",
+        "baseVisible": {
+          "ball": true,
+          "triangle": false,
+          "square": false
+        },
+        "hidden": false
+      },
+      "trigger": {
+        "started": true
+      }
+    }
+  ],
+  "switchRegression": {
+    "samples": [
+      {
+        "tMs": 0,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": false,
+          "square": false
+        }
+      },
+      {
+        "tMs": 16,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": true,
+          "square": false
+        }
+      },
+      {
+        "tMs": 32,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": true,
+          "square": false
+        }
+      },
+      {
+        "tMs": 48,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": true,
+          "square": false
+        }
+      },
+      {
+        "tMs": 72,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": true,
+          "square": false
+        }
+      },
+      {
+        "tMs": 96,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": true,
+          "square": false
+        }
+      },
+      {
+        "tMs": 128,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": true,
+          "square": false
+        }
+      },
+      {
+        "tMs": 156,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": true,
+          "square": false
+        }
+      },
+      {
+        "tMs": 186,
+        "form": "triangle",
+        "baseVisible": {
+          "ball": false,
+          "triangle": true,
+          "square": false
+        }
+      }
+    ]
+  },
+  "finishedAt": "2026-04-24T10:07:54.167Z"
+}

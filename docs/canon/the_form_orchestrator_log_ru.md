@@ -597,3 +597,37 @@
 - Architecture Decisions: Reverse-path для `square -> ball` оставлен неосновным, используется отдельный direct pair data профиль с собственным timing и позами.
 - Risks / Open Items: В headless frame pacing первый тик после switch может быть крупным, из-за чего визуальная стадия в автоматических снимках выглядит короче ожидаемого; для финального demo-polish полезно дополнительно проверить руками в обычном интерактивном runtime.
 - Next Recommended Step: Сделать короткий ручной интерактивный pass `square -> ball` (ground+air) и при необходимости править только `square -> ball` data, без изменения runtime контракта.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` Animation Profiles — Hazard Death Transition First Pass
+- `Status:` done
+- `Summary:` Добавлено узкое окно `dying` для смерти игрока от hazard без изменения physics/hitbox contract. Hazard overlap теперь собирает impact point/normal и запускает presentation-only death transition (outline tear/unwrap line, fill split, marker flash), после чего respawn выполняется через `240ms`. Во время `dying` runtime frozen, base player visuals скрыты, а death presentation тикает отдельно до respawn cleanup.
+- `Files:`
+  - `src/game/world/runtime/player_respawn_runtime.ts`
+  - `src/game/world/hazard.ts`
+  - `src/game/player/player_runtime_contracts.ts`
+  - `src/game/player/PfPlayer.ts`
+  - `src/game/player/player_runtime.ts`
+  - `src/game/player/view/player_view.ts`
+  - `src/game/player/view/player_death_transition.ts`
+- `Manual Check:` `npm run build-nolog` и `npm run build` прошли. `npx tsc --noEmit` падает на pre-existing baseline ошибках вне scope задачи. Playwright smoke: `tmp/death_transition_client/`, `tmp/death_transition_smoke/report.json`, `tmp/death_transition_smoke/square_fix_report.json` + кадры эффекта (`ball_t20`, `square_fix_t60`, `triangle_fix_t5`).
+- `Architecture Decisions:` Death pipeline реализован как узкий runtime slice: `hazard hit -> start death transition -> freeze runtime -> delayed respawn`. Transition runtime вынесен в отдельный presentation module `player_death_transition.ts`; respawn path сохранён существующий, только сдвинут по времени после death window.
+- `Risks / Open Items:` Triangle/square smoke воспроизводился в узких debug-сценариях возле hazard; для second-pass желательно добавить более стабильный scripted acceptance path по всем формам и кадрам.
+- `Next Recommended Step:` Подкрутить визуальную амплитуду/читабельность early triangle silhouette и marker flash по референсу без расширения архитектуры.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` Animation Profiles — Switch Regression + Death Transition Debug/Fix Pass
+- `Status:` done
+- `Summary:` Проведён узкий regression-debug после death pipeline. Подтверждён runtime-факт: switch proxy path стартовал от `formSwitchStart`, но hook не эмитился в commit-path; добавлен явный emit `formSwitchStart(previous->next)` вместе с `formSwitchIn`, плюс fallback старт в `PlayerView`. Death window сохранён; marker flash отдельно усилен (более яркий/дольше читаемый) без изменения physics/hitbox.
+- `Files:`
+  - `src/game/player/player_runtime_types.ts`
+  - `src/game/player/player_lifecycle_runtime.ts`
+  - `src/game/player/player_runtime.ts`
+  - `src/game/player/view/player_view.ts`
+  - `src/game/player/view/player_death_transition.ts`
+- `Manual Check:` Build pass: `npm run build-nolog`, `npm run build`; `npx tsc --noEmit` — baseline pre-existing errors. Runtime smoke: RAF-capture form-switch (`tmp/death_transition_smoke/switch_afterkey_raf_report.json`, `switch_afterkey_raf_00..05.png`) показывает скрытие base visuals и видимый proxy-силуэт в начале окна; death still delayed + marker flash visibly present (`death_ball_flash_t12.png`, `death_square_flash_t20.png`).
+- `Architecture Decisions:` Regression fix сделан узко в существующем presentation hook contract; editor/schema/physics paths не тронуты.
+- `Risks / Open Items:` Death визуал стал лучше, но всё ещё не 1:1 с референсом (особенно сложные outline/fill нюансы).
+- `Next Recommended Step:` Second-pass визуальный тюнинг death sequence без расширения runtime architecture.

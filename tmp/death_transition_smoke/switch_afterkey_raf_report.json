@@ -1,0 +1,122 @@
+[
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": false,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": false,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": false,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": false,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": false,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": true,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": true,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": true,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": true,
+      "triangle": false,
+      "square": false
+    }
+  },
+  {
+    "snap": {
+      "x": 679,
+      "y": 812,
+      "form": "ball"
+    },
+    "vis": {
+      "ball": true,
+      "triangle": false,
+      "square": false
+    }
+  }
+]
