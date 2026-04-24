@@ -131,3 +131,29 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
     - No console errors in smoke report.
     - Base player visuals stay hidden during death window and restore after respawn.
     - Current debug teleport helper still resets form to ball in hazard trigger scenario, so triangle/square hazard captures remain partially constrained by tooling, not by the death runtime contract.
+- 2026-04-24: Implemented NPC Manpu first-pass slice.
+  - Added `src/game/npc/npc_manpu.ts` with canonical ids (`sweat_drop`, `anger`, `sparkles`), aliases (`manpu_*`, plus safe legacy `alert->anger`, `curious->sparkles`), and hide ids (`calm`, `none`, `off`, empty/null).
+  - Extended `src/game/npc/npc_visuals.ts` with actor-local Manpu overlay container/graphics (primitive-based icons + facing offset + sparkle tween + cleanup).
+  - Added narrow NPC runtime API `setPresentationEmotionFromTrigger(actorId, emotionId)` in `src/game/npc/npc_runtime.ts`.
+- 2026-04-24: Implemented Trigger Volume -> NPC emotion path.
+  - Extended trigger command unions in `src/game/world/runtime/test_world_config.ts` with `targetType: "npc"`, `operation: "set_emotion"`, string value support.
+  - Extended safe command sanitization in `src/game/world/runtime/test_world_config_validation.ts` (target existence + operation/value compatibility, including npc ids).
+  - Extended `src/game/world/runtime/test_world_trigger_runtime.ts` with narrow routing callback `setNpcPresentationEmotionFromTrigger` and npc/set_emotion execution branch.
+  - Wired callback from world runtime in `src/game/world/runtime/test_world_runtime.ts` to NPC runtime method.
+- 2026-04-24: Runtime editor + demo data.
+  - Updated trigger volume inspector fields in `src/game/world/runtime/test_world_editor_runtime.ts` to include target type `npc`, operation `set_emotion`, and emotion values (`sweat_drop`, `anger`, `sparkles`, `calm`) while preserving existing trigger/moving options.
+  - Updated trigger command patching in `src/game/world/runtime/test_world_editor_adapters.ts` to accept npc/set_emotion shape.
+  - Added demo trigger volume case in `src/game/world/runtime/data/levels/test_world_level_01.json` targeting `npc_passive_lookout` (`enter: anger`, `exit: calm`).
+- Next: run `npm run build-nolog`, resolve any compile issues from the patch, then provide manual verification notes (including localStorage draft caveat).
+- 2026-04-24: Implemented NPC Manpu Editor Authoring patch (no architecture rewrite).
+  - Added shared editor options in `src/game/npc/npc_manpu.ts` and wired instance field `initialManpuEmotionId?: string | null` in `src/game/npc/npc_types.ts`.
+  - NPC runtime now applies authored initial Manpu on actor creation (`src/game/npc/npc_runtime.ts`) through existing presentation emotion stub path.
+  - NPC inspector now exposes `Manpu Emotion` dropdown (`none/sweat_drop/anger/sparkles`) and patches instance config via adapter.
+  - Trigger Volume authoring now uses target-type-aware dropdowns (target id by selected type, operation constrained per type, NPC emotion values from shared options) while preserving existing trigger/moving platform flows.
+  - Sequence editor `set_emotion` now uses canonical dropdown values; legacy aliases still load through resolver mapping.
+  - Cutscene vocabulary extended with direct `set_emotion` step in types/registry/editor/runtime; runtime executes synchronously through world->npc actor-local path (no separate cutscene VFX ownership).
+  - Demo data updated: `npc_passive_lookout.initialManpuEmotionId = "sparkles"`; `observer_smoke_cutscene_v1` now includes direct `set_emotion` steps (`sparkles` then `calm`).
+  - Docs updated with minimal append-only patches for authoring contract and orchestrator tracking.
+- Verification:
+  - `npm run build-nolog` passed.
+  - `npm run build` passed.

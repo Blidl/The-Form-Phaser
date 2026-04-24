@@ -44,6 +44,10 @@ import {
     resolveTestNpcConfig
 } from '../../npc/npc_profiles';
 import {
+    TEST_NPC_MANPU_EMOTION_OPTIONS,
+    resolveTestNpcManpuEmotion
+} from '../../npc/npc_manpu';
+import {
     TEST_NPC_SCRIPTED_SEQUENCE_ACTION_KINDS,
     cloneTestNpcScriptedSequenceAction,
     cloneTestNpcScriptedSequenceDefinition,
@@ -86,6 +90,7 @@ import type {
     TestCutsceneCameraFocusActorStep,
     TestCutsceneCameraPanToStep,
     TestCutscenePlaySfxStep,
+    TestCutsceneSetEmotionStep,
     TestCutsceneSpawnVfxStep,
     TestCutsceneStep,
     TestCutsceneSubtitleStep,
@@ -152,6 +157,8 @@ const EDITOR_FALLBACK_BACKGROUND_COLOR = 0x263238;
 const RULER_THICKNESS_PX = 20;
 const DEFAULT_SEQUENCE_ID_PREFIX = 'scripted_sequence';
 const DEFAULT_CUTSCENE_ID_PREFIX = 'cutscene';
+const NPC_INITIAL_MANPU_OPTIONS = TEST_NPC_MANPU_EMOTION_OPTIONS.filter((option) => option.value !== 'calm');
+const NPC_SET_EMOTION_OPTIONS = TEST_NPC_MANPU_EMOTION_OPTIONS.filter((option) => option.value !== 'none');
 
 const createDefaultScriptedSequenceAction = (
     kind: TestNpcScriptedSequenceActionKind
@@ -293,6 +300,14 @@ const createDefaultCutsceneStep = (
             durationMs: 900
         };
     }
+    if (kind === 'set_emotion') {
+        return {
+            kind,
+            ref: 'set_emotion_step',
+            actorId: 'npc_actor',
+            emotionId: 'sparkles'
+        };
+    }
     return {
         kind,
         ref: 'actor_sequence_step',
@@ -336,6 +351,9 @@ const describeCutsceneStep = (step: TestCutsceneStep, index: number): string => 
     }
     if (step.kind === 'subtitle') {
         return `${index + 1}. subtitle "${step.text}"`;
+    }
+    if (step.kind === 'set_emotion') {
+        return `${index + 1}. set_emotion ${step.actorId}:${step.emotionId}`;
     }
     return `${index + 1}. actor_sequence_ref ${step.actorId}:${step.sequenceRef}`;
 };
@@ -1215,7 +1233,7 @@ export const createTestWorldEditorRuntime = (
                 }))
                 : [],
             cutsceneStepIndex: selectedCutsceneStep ? selectedCutsceneStepIndex : -1,
-            cutsceneStepSections: buildCutsceneStepSections(selectedCutsceneStep),
+            cutsceneStepSections: buildCutsceneStepSections(config, selectedCutsceneStep),
             selectedLocked: getSelectedHandle()?.isLocked() ?? false
         };
     };
@@ -1805,7 +1823,12 @@ export const createTestWorldEditorRuntime = (
             } else if (nextAction.kind === 'play_animation' && key === 'animationId' && typeof value === 'string') {
                 nextAction = { ...nextAction, animationId: value };
             } else if (nextAction.kind === 'set_emotion' && key === 'emotionId' && typeof value === 'string') {
-                nextAction = { ...nextAction, emotionId: value };
+                const emotionId = value.trim();
+                const supportedEmotion = NPC_SET_EMOTION_OPTIONS.some((option) => option.value === emotionId);
+                if (!supportedEmotion) {
+                    return;
+                }
+                nextAction = { ...nextAction, emotionId };
             } else if (nextAction.kind === 'trigger_event' && key === 'eventId' && typeof value === 'string') {
                 nextAction = { ...nextAction, eventId: value };
             } else if (nextAction.kind === 'trigger_event' && key === 'payloadJson' && typeof value === 'string') {
@@ -1988,6 +2011,15 @@ export const createTestWorldEditorRuntime = (
                 nextStep = { ...nextStep, actorId: value.trim() };
             } else if (nextStep.kind === 'actor_sequence_ref' && key === 'sequenceRef' && typeof value === 'string') {
                 nextStep = { ...nextStep, sequenceRef: value.trim() };
+            } else if (nextStep.kind === 'set_emotion' && key === 'actorId' && typeof value === 'string') {
+                nextStep = { ...nextStep, actorId: value.trim() };
+            } else if (nextStep.kind === 'set_emotion' && key === 'emotionId' && typeof value === 'string') {
+                const emotionId = value.trim();
+                const supportedEmotion = NPC_SET_EMOTION_OPTIONS.some((option) => option.value === emotionId);
+                if (!supportedEmotion) {
+                    return;
+                }
+                nextStep = { ...nextStep, emotionId };
             } else {
                 return;
             }
@@ -3104,6 +3136,16 @@ const buildInspectorSections = (
             { key: 'strokeColor', label: 'Stroke', input: 'color', value: entry.strokeColor ?? 0xffffff }
         ]
     });
+    const resolveInitialManpuValue = (value: string | null | undefined): string => {
+        if (value === undefined) {
+            return 'none';
+        }
+        const resolved = resolveTestNpcManpuEmotion(value);
+        if (resolved.shouldHide) {
+            return 'none';
+        }
+        return resolved.canonicalEmotionId ?? 'none';
+    };
     const npcSections = (entry: NonNullable<ReturnType<typeof findById<TestWorldConfig['npcs'][number]>>>): TestWorldEditorSidebarSection[] => {
         const profile = getTestNpcProfile(entry.profileId);
         const resolved = resolveTestNpcConfig(entry);
@@ -3175,6 +3217,16 @@ const buildInspectorSections = (
                         input: 'select',
                         value: entry.profileId,
                         options: profileOptions
+                    },
+                    {
+                        key: 'initialManpuEmotionId',
+                        label: 'Manpu Emotion',
+                        input: 'select',
+                        value: resolveInitialManpuValue(entry.initialManpuEmotionId),
+                        options: NPC_INITIAL_MANPU_OPTIONS.map((option) => ({
+                            value: option.value,
+                            label: option.label
+                        }))
                     },
                     {
                         key: 'facing',
@@ -3473,6 +3525,96 @@ const buildInspectorSections = (
         const entry = findById(config.triggerVolumes);
         const enterCommand = entry?.enterCommand ?? null;
         const exitCommand = entry?.exitCommand ?? null;
+        const triggerTargetTypeOptions = [
+            { value: 'trigger_platform', label: 'Trigger Platform' },
+            { value: 'moving_platform', label: 'Moving Platform' },
+            { value: 'npc', label: 'NPC' }
+        ];
+        const triggerBooleanValueOptions = [
+            { value: 'true', label: 'True / Activate' },
+            { value: 'false', label: 'False / Deactivate' }
+        ];
+        const triggerMotionValueOptions = [
+            { value: 'running_loop', label: 'Running Loop' },
+            { value: 'stopped', label: 'Stopped' },
+            { value: 'run_once', label: 'Run Once' }
+        ];
+        const triggerEmotionValueOptions = NPC_SET_EMOTION_OPTIONS.map((option) => ({
+            value: option.value,
+            label: option.label
+        }));
+
+        const getCommandTargetOptions = (
+            targetType: 'trigger_platform' | 'moving_platform' | 'npc'
+        ): Array<{ value: string; label: string }> => {
+            if (targetType === 'trigger_platform') {
+                return config.triggerPlatforms.map((triggerPlatform) => ({
+                    value: triggerPlatform.id,
+                    label: triggerPlatform.id
+                }));
+            }
+            if (targetType === 'moving_platform') {
+                return config.movingPlatforms.map((movingPlatform) => ({
+                    value: movingPlatform.id,
+                    label: movingPlatform.id
+                }));
+            }
+            return config.npcs.map((npc) => ({
+                value: npc.id,
+                label: npc.id
+            }));
+        };
+
+        const resolveOperationOptions = (
+            targetType: 'trigger_platform' | 'moving_platform' | 'npc'
+        ): Array<{ value: string; label: string }> => {
+            if (targetType === 'trigger_platform') {
+                return [{ value: 'set_active', label: 'Set Active' }];
+            }
+            if (targetType === 'moving_platform') {
+                return [{ value: 'set_motion_state', label: 'Set Motion State' }];
+            }
+            return [{ value: 'set_emotion', label: 'Set Emotion' }];
+        };
+
+        const resolveCommandFieldModel = (
+            command: typeof enterCommand
+        ) => {
+            const targetType = (command?.targetType ?? 'trigger_platform');
+            const targetOptions = getCommandTargetOptions(targetType);
+            const selectedTargetId = command?.targetId ?? '';
+            const operation = targetType === 'npc'
+                ? 'set_emotion'
+                : (targetType === 'moving_platform' ? 'set_motion_state' : 'set_active');
+            const valueOptions = operation === 'set_active'
+                ? triggerBooleanValueOptions
+                : (operation === 'set_motion_state' ? triggerMotionValueOptions : triggerEmotionValueOptions);
+            const fallbackValue = valueOptions[0]?.value ?? '';
+            const value = operation === 'set_active'
+                ? (typeof command?.value === 'boolean' ? String(command.value) : fallbackValue)
+                : (typeof command?.value === 'string' ? command.value : fallbackValue);
+            const normalizedValueOptions = valueOptions.some((option) => option.value === value)
+                ? valueOptions
+                : [{ value, label: `${value} (legacy)` }, ...valueOptions];
+            const normalizedTargetOptions = targetOptions.some((option) => option.value === selectedTargetId)
+                ? targetOptions
+                : (selectedTargetId.length > 0
+                    ? [{ value: selectedTargetId, label: `${selectedTargetId} (missing)` }, ...targetOptions]
+                    : targetOptions);
+            return {
+                targetType,
+                targetOptions: normalizedTargetOptions.length > 0
+                    ? normalizedTargetOptions
+                    : [{ value: '', label: 'No targets' }],
+                operation,
+                operationOptions: resolveOperationOptions(targetType),
+                value,
+                valueOptions: normalizedValueOptions
+            };
+        };
+
+        const enterFieldModel = resolveCommandFieldModel(enterCommand);
+        const exitFieldModel = resolveCommandFieldModel(exitCommand);
         return entry ? [
             {
                 title: 'Trigger Zone',
@@ -3502,15 +3644,15 @@ const buildInspectorSections = (
                     { key: 'activator', label: 'Activator', input: 'select', value: entry.activator, options: [{ value: 'player', label: 'Player' }, { value: 'drag_box', label: 'Drag Box' }] },
                     { key: 'sourceIdsCsv', label: 'Source Ids CSV', input: 'text', value: (entry.sourceIds ?? []).join(', ') },
                     { key: 'enterCommandEnabled', label: 'Enter Command', input: 'checkbox', value: enterCommand !== null },
-                    { key: 'enterTargetType', label: 'Enter Target Type', input: 'select', value: enterCommand?.targetType ?? 'trigger_platform', options: [{ value: 'trigger_platform', label: 'Trigger Platform' }, { value: 'moving_platform', label: 'Moving Platform' }] },
-                    { key: 'enterTargetId', label: 'Enter Target Id', input: 'text', value: enterCommand?.targetId ?? '' },
-                    { key: 'enterOperation', label: 'Enter Operation', input: 'select', value: enterCommand?.operation ?? 'set_active', options: [{ value: 'set_active', label: 'Set Active' }, { value: 'set_motion_state', label: 'Set Motion State' }] },
-                    { key: 'enterValue', label: 'Enter Value', input: 'select', value: typeof enterCommand?.value === 'boolean' ? String(enterCommand.value) : (enterCommand?.value ?? 'running_loop'), options: [{ value: 'true', label: 'True / Activate' }, { value: 'false', label: 'False / Deactivate' }, { value: 'running_loop', label: 'Running Loop' }, { value: 'stopped', label: 'Stopped' }, { value: 'run_once', label: 'Run Once' }] },
+                    { key: 'enterTargetType', label: 'Enter Target Type', input: 'select', value: enterFieldModel.targetType, options: triggerTargetTypeOptions },
+                    { key: 'enterTargetId', label: 'Enter Target Id', input: 'select', value: enterCommand?.targetId ?? '', options: enterFieldModel.targetOptions },
+                    { key: 'enterOperation', label: 'Enter Operation', input: 'select', value: enterFieldModel.operation, options: enterFieldModel.operationOptions },
+                    { key: 'enterValue', label: 'Enter Value', input: 'select', value: enterFieldModel.value, options: enterFieldModel.valueOptions },
                     { key: 'exitCommandEnabled', label: 'Exit Command', input: 'checkbox', value: exitCommand !== null },
-                    { key: 'exitTargetType', label: 'Exit Target Type', input: 'select', value: exitCommand?.targetType ?? 'trigger_platform', options: [{ value: 'trigger_platform', label: 'Trigger Platform' }, { value: 'moving_platform', label: 'Moving Platform' }] },
-                    { key: 'exitTargetId', label: 'Exit Target Id', input: 'text', value: exitCommand?.targetId ?? '' },
-                    { key: 'exitOperation', label: 'Exit Operation', input: 'select', value: exitCommand?.operation ?? 'set_active', options: [{ value: 'set_active', label: 'Set Active' }, { value: 'set_motion_state', label: 'Set Motion State' }] },
-                    { key: 'exitValue', label: 'Exit Value', input: 'select', value: typeof exitCommand?.value === 'boolean' ? String(exitCommand.value) : (exitCommand?.value ?? 'running_loop'), options: [{ value: 'true', label: 'True / Activate' }, { value: 'false', label: 'False / Deactivate' }, { value: 'running_loop', label: 'Running Loop' }, { value: 'stopped', label: 'Stopped' }, { value: 'run_once', label: 'Run Once' }] }
+                    { key: 'exitTargetType', label: 'Exit Target Type', input: 'select', value: exitFieldModel.targetType, options: triggerTargetTypeOptions },
+                    { key: 'exitTargetId', label: 'Exit Target Id', input: 'select', value: exitCommand?.targetId ?? '', options: exitFieldModel.targetOptions },
+                    { key: 'exitOperation', label: 'Exit Operation', input: 'select', value: exitFieldModel.operation, options: exitFieldModel.operationOptions },
+                    { key: 'exitValue', label: 'Exit Value', input: 'select', value: exitFieldModel.value, options: exitFieldModel.valueOptions }
                 ]
             },
             buildVisualOrderSection(type, entry)
@@ -3680,11 +3822,24 @@ const buildScriptedSequenceActionSections = (
         }];
     }
     if (action.kind === 'set_emotion') {
+        const resolvedEmotion = resolveTestNpcManpuEmotion(action.emotionId);
+        const canonicalEmotionValue = resolvedEmotion.shouldHide
+            ? 'calm'
+            : (resolvedEmotion.canonicalEmotionId ?? 'calm');
         return [{
             title: 'Action',
             fields: [
                 ...baseFields,
-                { key: 'emotionId', label: 'Emotion Id', input: 'text', value: action.emotionId }
+                {
+                    key: 'emotionId',
+                    label: 'Emotion',
+                    input: 'select',
+                    value: canonicalEmotionValue,
+                    options: NPC_SET_EMOTION_OPTIONS.map((option) => ({
+                        value: option.value,
+                        label: option.label
+                    }))
+                }
             ]
         }];
     }
@@ -3781,11 +3936,25 @@ const buildCutsceneAuditSections = (): TestWorldEditorSidebarSection[] => {
 };
 
 const buildCutsceneStepSections = (
+    config: TestWorldConfig,
     step: TestCutsceneStep | null
 ): TestWorldEditorSidebarSection[] => {
     if (!step) {
         return [];
     }
+
+    const actorIdOptions = [
+        { value: 'player', label: 'player' },
+        ...config.npcs.map((npc) => ({
+            value: npc.id,
+            label: npc.id
+        }))
+    ];
+    const withSelectedActorOption = (actorId: string): Array<{ value: string; label: string }> => {
+        return actorIdOptions.some((option) => option.value === actorId)
+            ? actorIdOptions
+            : [{ value: actorId, label: `${actorId} (missing)` }, ...actorIdOptions];
+    };
 
     const baseFields: TestWorldEditorSidebarSection['fields'] = [
         {
@@ -3815,7 +3984,13 @@ const buildCutsceneStepSections = (
             title: 'Step',
             fields: [
                 ...baseFields,
-                { key: 'actorId', label: 'Actor Id', input: 'text', value: cameraStep.actorId },
+                {
+                    key: 'actorId',
+                    label: 'Actor Id',
+                    input: 'select',
+                    value: cameraStep.actorId,
+                    options: withSelectedActorOption(cameraStep.actorId)
+                },
                 { key: 'durationMs', label: 'Duration Ms', input: 'number', value: cameraStep.durationMs ?? 280, min: 0, step: 1 },
                 { key: 'ease', label: 'Ease', input: 'text', value: cameraStep.ease ?? '' },
                 { key: 'tolerancePx', label: 'Tolerance Px', input: 'number', value: cameraStep.tolerancePx ?? 1.25, min: 0.1, step: 0.1 }
@@ -3880,12 +4055,49 @@ const buildCutsceneStepSections = (
         }];
     }
 
+    if (step.kind === 'set_emotion') {
+        const setEmotionStep = step as TestCutsceneSetEmotionStep;
+        const resolvedEmotion = resolveTestNpcManpuEmotion(setEmotionStep.emotionId);
+        const canonicalEmotionValue = resolvedEmotion.shouldHide
+            ? 'calm'
+            : (resolvedEmotion.canonicalEmotionId ?? 'calm');
+        return [{
+            title: 'Step',
+            fields: [
+                ...baseFields,
+                {
+                    key: 'actorId',
+                    label: 'Actor Id',
+                    input: 'select',
+                    value: setEmotionStep.actorId,
+                    options: withSelectedActorOption(setEmotionStep.actorId)
+                },
+                {
+                    key: 'emotionId',
+                    label: 'Emotion',
+                    input: 'select',
+                    value: canonicalEmotionValue,
+                    options: NPC_SET_EMOTION_OPTIONS.map((option) => ({
+                        value: option.value,
+                        label: option.label
+                    }))
+                }
+            ]
+        }];
+    }
+
     const actorSequenceStep = step as TestCutsceneActorSequenceRefStep;
     return [{
         title: 'Step',
         fields: [
             ...baseFields,
-            { key: 'actorId', label: 'Actor Id', input: 'text', value: actorSequenceStep.actorId },
+            {
+                key: 'actorId',
+                label: 'Actor Id',
+                input: 'select',
+                value: actorSequenceStep.actorId,
+                options: withSelectedActorOption(actorSequenceStep.actorId)
+            },
             {
                 key: 'sequenceRef',
                 label: 'Sequence Ref',

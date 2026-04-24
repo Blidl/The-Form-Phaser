@@ -79,10 +79,27 @@
         "actorId": "npc_passive_cutscene_console"
       },
       {
+        "kind": "set_emotion",
+        "ref": "smoke_show_sparkles",
+        "actorId": "npc_passive_cutscene_console",
+        "emotionId": "sparkles"
+      },
+      {
         "kind": "actor_sequence_ref",
         "ref": "smoke_console_walk_sequence",
         "actorId": "npc_passive_cutscene_console",
         "sequenceRef": "observer_interaction_smoke_walk"
+      },
+      {
+        "kind": "wait",
+        "ref": "smoke_hold_emotion",
+        "durationMs": 260
+      },
+      {
+        "kind": "set_emotion",
+        "ref": "smoke_hide_sparkles",
+        "actorId": "npc_passive_cutscene_console",
+        "emotionId": "calm"
       },
       {
         "kind": "subtitle",

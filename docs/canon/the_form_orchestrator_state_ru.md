@@ -30,6 +30,7 @@
 - `docs/canon/the_form_mini_spec_ball_distance_coyote_ru.md`
 - `docs/canon/the_form_mini_spec_square_rollover_trail_ru.md`
 - `docs/canon/the_form_mini_spec_npc_archetypes_ru.md`
+- `docs/canon/the_form_mini_spec_npc_manpu_emotions_ru.md`
 - `docs/canon/the_form_mini_spec_cutscene_vocabulary_ru.md`
 - `docs/canon/the_form_mini_spec_lighting_direction_ru.md`
 
@@ -107,6 +108,14 @@
 - First-pass vocabulary hooks: `jump_start`, `land_impact`, `airborne`, `form_switch`.
 - Optional form-specific hooks: `ball_rebound_launch`, `triangle_flight_start`, `square_attach_start`, `square_attach_jump_start`.
 - Scope guardrails: this is not a universal animation framework, not a new editor, not a player giant-controller migration, and does not change the physics contract.
+
+---
+
+## Canon Patch - NPC Manpu Emotions from Triggers (2026-04-24)
+- Allowed as a narrow extension of `NPC presentation` only.
+- Canonical input path remains actor-local `set_emotion`.
+- Trigger volumes are allowed to set NPC emotion via narrow command (`targetType: "npc"`, `operation: "set_emotion"`).
+- This patch is not a universal VFX framework, not NPC AI expansion, and not cutscene ownership change.
 
 ---
 

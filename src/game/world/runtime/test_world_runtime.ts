@@ -110,6 +110,14 @@ export interface TestWorldRuntime {
         detail: string;
         sequenceId: string | null;
     };
+    dispatchCutsceneSetEmotion: (
+        actorId: string,
+        emotionId: string
+    ) => {
+        actorId: string;
+        result: 'applied' | 'unknown_actor';
+        detail: string;
+    };
     getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
     getConfig: () => TestWorldConfig;
@@ -180,6 +188,14 @@ interface BuiltWorldInstance {
         result: 'dispatched' | 'invalid_sequence_ref' | 'unknown_actor' | 'busy';
         detail: string;
         sequenceId: string | null;
+    };
+    dispatchCutsceneSetEmotion: (
+        actorId: string,
+        emotionId: string
+    ) => {
+        actorId: string;
+        result: 'applied' | 'unknown_actor';
+        detail: string;
     };
     getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
@@ -384,6 +400,10 @@ export const createTestWorldRuntime = (
             cutsceneRef: string,
             stepRef: string
         ) => instance.dispatchCutsceneActorSequenceRef(actorId, sequenceRef, cutsceneRef, stepRef),
+        dispatchCutsceneSetEmotion: (
+            actorId: string,
+            emotionId: string
+        ) => instance.dispatchCutsceneSetEmotion(actorId, emotionId),
         getCutsceneActorSequenceSnapshot: (actorId: string): TestNpcCutsceneSequenceSnapshot | null => (
             instance.getCutsceneActorSequenceSnapshot(actorId)
         ),
@@ -1427,6 +1447,9 @@ const buildWorldInstance = (
         },
         setMovingPlatformMotionState: (id, mode) => {
             movingPlatformRuntime.setMotionState(id, mode);
+        },
+        setNpcPresentationEmotionFromTrigger: (id, emotionId) => {
+            return npcRuntime.setPresentationEmotionFromTrigger(id, emotionId);
         }
     });
 
@@ -1607,6 +1630,21 @@ const buildWorldInstance = (
                 result: dispatchResult.result,
                 detail: dispatchResult.detail,
                 sequenceId: dispatchResult.sequenceId
+            };
+        },
+        dispatchCutsceneSetEmotion: (actorId: string, emotionId: string) => {
+            const applied = npcRuntime.setPresentationEmotionFromTrigger(actorId, emotionId);
+            if (!applied) {
+                return {
+                    actorId,
+                    result: 'unknown_actor' as const,
+                    detail: `npc actor was not found for "${actorId}"`
+                };
+            }
+            return {
+                actorId,
+                result: 'applied' as const,
+                detail: emotionId
             };
         },
         getCutsceneActorSequenceSnapshot: (actorId: string): TestNpcCutsceneSequenceSnapshot | null => {

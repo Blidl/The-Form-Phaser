@@ -34,6 +34,7 @@ interface CreateTestWorldTriggerRuntimeParams {
     getDragBox: (id: string) => DraggableBoxObject | null;
     setTriggerPlatformActive: (id: string, active: boolean) => void;
     setMovingPlatformMotionState: (id: string, mode: TestWorldMovingPlatformMotionState) => void;
+    setNpcPresentationEmotionFromTrigger: (id: string, emotionId: string) => boolean;
 }
 
 interface TriggerSourceRuntime {
@@ -217,6 +218,10 @@ const executeTriggerCommand = (
     }
     if (command.targetType === 'moving_platform' && command.operation === 'set_motion_state' && typeof command.value === 'string') {
         params.setMovingPlatformMotionState(command.targetId, command.value);
+        return;
+    }
+    if (command.targetType === 'npc' && command.operation === 'set_emotion' && typeof command.value === 'string') {
+        params.setNpcPresentationEmotionFromTrigger(command.targetId, command.value);
     }
 };
 

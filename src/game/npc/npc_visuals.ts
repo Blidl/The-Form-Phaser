@@ -6,6 +6,7 @@ import type {
     TestNpcState,
     TestNpcVisualConfig
 } from './npc_types';
+import { resolveTestNpcManpuEmotion } from './npc_manpu';
 
 export interface TestNpcVisualRuntime {
     rootObject: Phaser.GameObjects.Container;
@@ -35,9 +36,14 @@ export const createTestNpcVisualRuntime = (
         fontSize: '10px',
         color: visual.textColor ?? '#ffffff'
     }).setOrigin(0.5);
-    const container = scene.add.container(x, y, [body, accent, eye, label]).setDepth(archetype === 'enemy' ? 4248 : 4244);
+    const manpuContainer = scene.add.container(0, 0).setVisible(false);
+    const manpuGraphics = scene.add.graphics();
+    manpuContainer.add(manpuGraphics);
+    const container = scene.add.container(x, y, [body, accent, eye, label, manpuContainer]).setDepth(archetype === 'enemy' ? 4248 : 4244);
     let presentationAnimation: TestNpcPresentationAnimation | null = null;
     let presentationEmotion: TestNpcPresentationEmotion | null = null;
+    let facing: -1 | 1 = 1;
+    let manpuTweens: Phaser.Tweens.Tween[] = [];
 
     const applyStateStyle = (state: TestNpcState): void => {
         if (state === 'chase') {
@@ -73,6 +79,98 @@ export const createTestNpcVisualRuntime = (
         eye.setFillStyle(0xf5f5f5, 0.88);
     };
 
+    const stopManpuTweens = (): void => {
+        manpuTweens.forEach((tween) => tween.stop());
+        manpuTweens = [];
+        scene.tweens.killTweensOf(manpuContainer);
+    };
+
+    const setManpuVisible = (visible: boolean): void => {
+        if (!visible) {
+            stopManpuTweens();
+            manpuGraphics.clear();
+        }
+        manpuContainer.setVisible(visible);
+    };
+
+    const applyManpuPlacement = (): void => {
+        manpuContainer.setPosition(facing * 7, -(visual.bodyHeight * 0.72));
+    };
+
+    const drawSweatDropManpu = (): void => {
+        // Keep the shape primitive-only and avoid curve APIs that can fail on some Phaser builds.
+        manpuGraphics.fillStyle(0x96d6ff, 1);
+        manpuGraphics.lineStyle(2, 0x1f4d6f, 0.95);
+        manpuGraphics.fillTriangle(0, -9, 6, 0, -6, 0);
+        manpuGraphics.strokeTriangle(0, -9, 6, 0, -6, 0);
+        manpuGraphics.fillEllipse(0, 3, 10, 12);
+        manpuGraphics.strokeEllipse(0, 3, 10, 12);
+    };
+
+    const drawAngerManpu = (): void => {
+        manpuGraphics.lineStyle(2.5, 0xb71c1c, 1);
+        manpuGraphics.strokeLineShape(new Phaser.Geom.Line(-8, -6, -2, -10));
+        manpuGraphics.strokeLineShape(new Phaser.Geom.Line(-2, -10, 2, -4));
+        manpuGraphics.strokeLineShape(new Phaser.Geom.Line(2, -4, 8, -8));
+        manpuGraphics.strokeLineShape(new Phaser.Geom.Line(0, -2, -2, 3));
+        manpuGraphics.strokeLineShape(new Phaser.Geom.Line(0, -2, 2, 3));
+        manpuGraphics.strokeLineShape(new Phaser.Geom.Line(-2, 3, 2, 3));
+    };
+
+    const drawSparklesManpu = (): void => {
+        const drawStar = (xPos: number, yPos: number, size: number): void => {
+            manpuGraphics.lineStyle(2, 0xfff4a5, 1);
+            manpuGraphics.strokeLineShape(new Phaser.Geom.Line(xPos - size, yPos, xPos + size, yPos));
+            manpuGraphics.strokeLineShape(new Phaser.Geom.Line(xPos, yPos - size, xPos, yPos + size));
+        };
+        drawStar(-5, -6, 4);
+        drawStar(5, -2, 3);
+        drawStar(0, 4, 2);
+
+        stopManpuTweens();
+        manpuTweens = [
+            scene.tweens.add({
+                targets: manpuContainer,
+                alpha: { from: 0.65, to: 1 },
+                duration: 280,
+                yoyo: true,
+                repeat: -1
+            })
+        ];
+    };
+
+    const applyManpuStyle = (): void => {
+        applyManpuPlacement();
+        const resolvedManpu = resolveTestNpcManpuEmotion(presentationEmotion);
+        if (resolvedManpu.shouldHide) {
+            setManpuVisible(false);
+            return;
+        }
+        if (!resolvedManpu.canonicalEmotionId) {
+            setManpuVisible(false);
+            return;
+        }
+
+        setManpuVisible(true);
+        manpuContainer.alpha = 1;
+        stopManpuTweens();
+        manpuGraphics.clear();
+        try {
+            if (resolvedManpu.canonicalEmotionId === 'sweat_drop') {
+                drawSweatDropManpu();
+                return;
+            }
+            if (resolvedManpu.canonicalEmotionId === 'anger') {
+                drawAngerManpu();
+                return;
+            }
+            drawSparklesManpu();
+        } catch {
+            // Fail-safe: never let visual issues break NPC runtime behavior.
+            setManpuVisible(false);
+        }
+    };
+
     const applyPresentationStyle = (): void => {
         if (presentationEmotion === 'alert') {
             eye.setScale(1.2);
@@ -89,6 +187,7 @@ export const createTestNpcVisualRuntime = (
         } else {
             accent.setScale(1);
         }
+        applyManpuStyle();
     };
 
     applyStateStyle(archetype === 'enemy' ? 'patrol' : 'idle');
@@ -99,9 +198,11 @@ export const createTestNpcVisualRuntime = (
         setPosition: (nextX, nextY): void => {
             container.setPosition(nextX, nextY);
         },
-        setFacing: (facing): void => {
-            eye.setX(facing * 4);
-            accent.setX(facing * 2);
+        setFacing: (nextFacing): void => {
+            facing = nextFacing;
+            eye.setX(nextFacing * 4);
+            accent.setX(nextFacing * 2);
+            applyManpuPlacement();
         },
         setState: (state): void => {
             applyStateStyle(state);
@@ -113,6 +214,8 @@ export const createTestNpcVisualRuntime = (
             applyPresentationStyle();
         },
         destroy: (): void => {
+            stopManpuTweens();
+            scene.tweens.killTweensOf(manpuContainer);
             container.destroy(true);
         }
     };

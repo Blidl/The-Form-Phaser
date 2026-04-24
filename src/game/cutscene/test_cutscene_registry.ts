@@ -37,7 +37,8 @@ export const TEST_CUTSCENE_STEP_KINDS = [
     'play_sfx',
     'spawn_vfx',
     'subtitle',
-    'actor_sequence_ref'
+    'actor_sequence_ref',
+    'set_emotion'
 ] as const;
 
 const asObject = (value: unknown): Record<string, unknown> | null => {
@@ -200,6 +201,19 @@ const normalizeStepFromUnknown = (
             return null;
         }
         return { kind, ref, actorId, sequenceRef };
+    }
+    if (kind === 'set_emotion') {
+        const actorId = asTrimmedString(raw.actorId);
+        if (!actorId) {
+            issues.push({ path: `${path}.actorId`, message: 'set_emotion.actorId must be a non-empty string' });
+            return null;
+        }
+        const emotionId = asTrimmedString(raw.emotionId);
+        if (!emotionId) {
+            issues.push({ path: `${path}.emotionId`, message: 'set_emotion.emotionId must be a non-empty string' });
+            return null;
+        }
+        return { kind, ref, actorId, emotionId };
     }
 
     issues.push({

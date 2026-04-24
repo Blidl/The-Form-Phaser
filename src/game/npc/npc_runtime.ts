@@ -46,6 +46,7 @@ import {
     resolveTestNpcScriptedSequence
 } from './npc_scripted_sequences';
 import { isTestCutsceneRef } from '../cutscene/test_cutscene_registry';
+import { resolveTestNpcManpuEmotion } from './npc_manpu';
 
 const NPC_GRAVITY_Y = 2200;
 const NPC_MAX_FALL_SPEED = 1600;
@@ -119,6 +120,7 @@ interface TestNpcActorRuntime {
     nextInteractionActivationNonce: number;
     actionRuntime: ActorActionSequenceRuntime;
     frameCarryVelocityX: number;
+    hasAuthoredInitialManpuEmotion: boolean;
 }
 
 interface PendingNpcTriggerEvent {
@@ -148,6 +150,7 @@ export interface TestNpcCutsceneSequenceSnapshot {
 export interface TestNpcRuntime {
     update: (deltaMs: number) => void;
     syncTriangleSupportSurfaces: () => void;
+    setPresentationEmotionFromTrigger: (actorId: string, emotionId: string) => boolean;
     dispatchInteractionOutcome: (actorId: string, outcome: TestNpcInteractionOutcome) => TestNpcInteractionDispatchResult;
     dispatchCutsceneSequence: (
         actorId: string,
@@ -968,8 +971,18 @@ export const createTestNpcRuntime = (
                 lastCutsceneCompletion: null,
                 nextInteractionActivationNonce: 1,
                 actionRuntime: null as unknown as ActorActionSequenceRuntime,
-                frameCarryVelocityX: 0
+                frameCarryVelocityX: 0,
+                hasAuthoredInitialManpuEmotion: resolved.instance.initialManpuEmotionId !== undefined
             };
+            if (resolved.instance.initialManpuEmotionId !== undefined) {
+                const resolvedInitialEmotion = resolveTestNpcManpuEmotion(resolved.instance.initialManpuEmotionId);
+                setPresentationEmotionStub(
+                    actor,
+                    resolvedInitialEmotion.shouldHide
+                        ? null
+                        : (resolvedInitialEmotion.canonicalEmotionId ?? null)
+                );
+            }
             actor.actionRuntime = createActorActionSequenceRuntime(createTestNpcActorActionAdapter({
                 getX: () => getActorX(actor),
                 stopHorizontalMovement: () => {
@@ -985,6 +998,12 @@ export const createTestNpcRuntime = (
                     setPresentationAnimationStub(actor, animationId);
                 },
                 setPresentationEmotionStub: (emotionId) => {
+                    // Keep authored NPC-inspector emotion stable against profile hooks
+                    // (on_spawn/on_player_near/on_player_far), but allow non-hook
+                    // paths to update emotion when needed.
+                    if (actor.hasAuthoredInitialManpuEmotion && actor.activeHook) {
+                        return;
+                    }
                     setPresentationEmotionStub(actor, emotionId);
                 },
                 emitActorActionEvent: (eventId, payload) => {
@@ -1049,6 +1068,14 @@ export const createTestNpcRuntime = (
                 const deltaX = actor.bodyObject.x - frameStartX;
                 actor.frameCarryVelocityX = deltaSec > 0 ? (deltaX / deltaSec) : 0;
             });
+        },
+        setPresentationEmotionFromTrigger: (actorId: string, emotionId: string): boolean => {
+            const actor = actors.find((entry) => entry.id === actorId) ?? null;
+            if (!actor) {
+                return false;
+            }
+            setPresentationEmotionStub(actor, emotionId);
+            return true;
         },
         dispatchInteractionOutcome: (actorId: string, outcome: TestNpcInteractionOutcome): TestNpcInteractionDispatchResult => {
             const actor = actors.find((entry) => entry.id === actorId) ?? null;

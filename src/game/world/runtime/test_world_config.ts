@@ -120,14 +120,14 @@ export interface TestWorldMovingPlatformConfig extends TestWorldEditorLockable, 
 export type TestWorldTriggerPlatformActivator = 'player' | 'drag_box';
 export type TestWorldTriggerPlatformAction = 'activate' | 'deactivate';
 export type TestWorldMovingPlatformMotionState = 'running_loop' | 'stopped' | 'run_once';
-export type TestWorldTriggerTargetType = 'trigger_platform' | 'moving_platform';
-export type TestWorldTriggerCommandOperation = 'set_active' | 'set_motion_state';
+export type TestWorldTriggerTargetType = 'trigger_platform' | 'moving_platform' | 'npc';
+export type TestWorldTriggerCommandOperation = 'set_active' | 'set_motion_state' | 'set_emotion';
 
 export interface TestWorldTriggerCommandConfig {
     targetType: TestWorldTriggerTargetType;
     targetId: string;
     operation: TestWorldTriggerCommandOperation;
-    value: boolean | TestWorldMovingPlatformMotionState;
+    value: boolean | TestWorldMovingPlatformMotionState | string;
 }
 
 export interface TestWorldTriggerPlatformConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {

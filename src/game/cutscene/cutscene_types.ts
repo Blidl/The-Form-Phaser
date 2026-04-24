@@ -67,6 +67,12 @@ export interface TestCutsceneActorSequenceRefStep extends TestCutsceneStepBase {
     sequenceRef: string;
 }
 
+export interface TestCutsceneSetEmotionStep extends TestCutsceneStepBase {
+    kind: 'set_emotion';
+    actorId: string;
+    emotionId: string;
+}
+
 export type TestCutsceneStep =
     | TestCutsceneLockInputStep
     | TestCutsceneUnlockInputStep
@@ -76,7 +82,8 @@ export type TestCutsceneStep =
     | TestCutscenePlaySfxStep
     | TestCutsceneSpawnVfxStep
     | TestCutsceneSubtitleStep
-    | TestCutsceneActorSequenceRefStep;
+    | TestCutsceneActorSequenceRefStep
+    | TestCutsceneSetEmotionStep;
 
 export interface TestCutsceneDefinition {
     id: string;

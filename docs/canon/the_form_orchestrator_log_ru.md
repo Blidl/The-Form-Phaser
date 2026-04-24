@@ -631,3 +631,65 @@
 - `Architecture Decisions:` Regression fix сделан узко в существующем presentation hook contract; editor/schema/physics paths не тронуты.
 - `Risks / Open Items:` Death визуал стал лучше, но всё ещё не 1:1 с референсом (особенно сложные outline/fill нюансы).
 - `Next Recommended Step:` Second-pass визуальный тюнинг death sequence без расширения runtime architecture.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` NPC Manpu emotions from triggers (canon patch)
+- `Status:` done
+- `Summary:` Добавлен новый mini spec `NPC Manpu Emotions` как узкое расширение NPC presentation слоя. Зафиксировано, что Manpu не является AI/cutscene state и не требует нового universal VFX framework. Canonical вход оставлен через actor-local `set_emotion`, а для trigger volumes разрешена узкая команда `targetType: "npc"`, `operation: "set_emotion"` с canonical IDs `sweat_drop/anger/sparkles`. Дополнительно закреплены правила скрытия (`calm/none/null/empty`) и safe-поведение для unknown emotionId.
+- `Files:`
+  - `docs/canon/the_form_mini_spec_npc_manpu_emotions_ru.md`
+  - `docs/canon/the_form_orchestrator_state_ru.md`
+  - `docs/canon/the_form_orchestrator_work_queue_ru.md`
+  - `docs/canon/the_form_orchestrator_log_ru.md`
+- `Manual Check:` Проверены действующие NPC runtime контракты (`set_emotion` в actor action adapter, `presentationEmotion` в debug/runtime state) и trigger runtime контракт в `test_world_trigger_runtime.ts`/`test_world_config.ts` для совместимого узкого расширения.
+- `Architecture Decisions:` Manpu закреплён как actor-local NPC presentation overlay first pass, временно допустимый в существующем presentation stub до отдельного presentation layer.
+- `Risks / Open Items:` `the_form_orchestrator_state_ru.md`, `the_form_orchestrator_work_queue_ru.md` и часть canon-файлов уже содержат mojibake/encoding-искажения в текущем репозитории; правки внесены только точечно, без полного rewrite.
+- `Next Recommended Step:` Реализовать runtime slice `NPC Manpu emotions from triggers` в `npc_visuals`/`npc_runtime` и расширить trigger command union в `test_world_config` + `test_world_trigger_runtime` без изменения ownership слоёв.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` NPC Manpu emotions from triggers
+- `Status:` done
+- `Summary:` Реализован first-pass `NPC Manpu emotions from triggers` без расширения архитектуры: Manpu рендерится как actor-local NPC presentation overlay, а trigger volumes выставляют emotion через узкую команду `targetType: "npc"`, `operation: "set_emotion"`. Поддержаны IDs `sweat_drop`, `anger`, `sparkles`; `calm` скрывает overlay. Existing scripted `set_emotion` path сохранён и совместим с Manpu отображением.
+- `Files:`
+  - `src/game/npc/npc_manpu.ts`
+  - `src/game/npc/npc_visuals.ts`
+  - `src/game/npc/npc_runtime.ts`
+  - `src/game/world/runtime/test_world_config.ts`
+  - `src/game/world/runtime/test_world_config_validation.ts`
+  - `src/game/world/runtime/test_world_trigger_runtime.ts`
+  - `src/game/world/runtime/test_world_runtime.ts`
+  - `src/game/world/runtime/test_world_editor_adapters.ts`
+  - `src/game/world/runtime/test_world_editor_runtime.ts`
+  - `src/game/world/runtime/data/levels/test_world_level_01.json`
+- `Manual Check:` `npm run build-nolog` passed.
+- `Architecture Decisions:` Решение оставлено узким: presentation overlay в NPC visual/runtime, trigger runtime только маршрутизирует `npc/set_emotion`, без universal VFX framework и без смешивания behavior/cutscene ownership.
+- `Risks / Open Items:` Реализация остаётся TEMPORARY first-pass в presentation stub; second-pass может вынести Manpu в отдельный presentation layer без смены входных контрактов.
+- `Next Recommended Step:` Выполнить короткий ручной smoke в runtime editor/level (`enter -> emotion`, `exit -> calm hide`) и при необходимости сделать только visual polish icons/timing.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` NPC Manpu Editor Authoring
+- `Status:` done
+- `Summary:` Добавлен полный designer-facing authoring для Manpu без смены архитектуры: NPC initial emotion в inspector, trigger volume npc/set_emotion с dropdown target/value, sequence `set_emotion` с canonical dropdown, и прямой cutscene step `set_emotion` (actor-local synchronous apply). Добавлен единый source-of-truth опций Manpu в `npc_manpu.ts`; runtime cutscene path не получил отдельный VFX ownership и не переписывался.
+- `Files:`
+  - `src/game/npc/npc_manpu.ts`
+  - `src/game/npc/npc_types.ts`
+  - `src/game/npc/npc_runtime.ts`
+  - `src/game/world/runtime/test_world_config_validation.ts`
+  - `src/game/world/runtime/test_world_editor_adapters.ts`
+  - `src/game/world/runtime/test_world_editor_runtime.ts`
+  - `src/game/world/runtime/test_world_runtime.ts`
+  - `src/game/cutscene/cutscene_types.ts`
+  - `src/game/cutscene/test_cutscene_registry.ts`
+  - `src/scenes/runtime/test_cutscene_runtime.ts`
+  - `src/game/cutscene/data/test_cutscenes.json`
+  - `src/game/world/runtime/data/levels/test_world_level_01.json`
+  - `docs/canon/the_form_mini_spec_npc_manpu_emotions_ru.md`
+  - `docs/canon/the_form_orchestrator_log_ru.md`
+  - `docs/canon/the_form_orchestrator_work_queue_ru.md`
+- `Manual Check:` запущен `npm run build-nolog`.
+- `Architecture Decisions:` Cutscene `set_emotion` выполняется через world->npc actor-local API (`dispatchCutsceneSetEmotion`), без sequence-wrapper workaround и без отдельного cutscene VFX path.
+- `Risks / Open Items:` Manpu presentation остаётся в TEMPORARY stub (`npc_visuals`/`npc_runtime`), что соответствует текущему first-pass contract.
+- `Next Recommended Step:` Прогнать короткий ручной smoke в editor: NPC initial, trigger enter/exit, sequence action dropdown, cutscene direct step.

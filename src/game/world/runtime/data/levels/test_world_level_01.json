@@ -34,6 +34,7 @@
       "profileId": "passive_observer",
       "x": 1248,
       "y": 324,
+      "initialManpuEmotionId": "sparkles",
       "facing": "right",
       "behavior": {
         "patrolDistance": 84,
@@ -548,6 +549,37 @@
       "deactivateTriggerStrokeColor": 15092249,
       "platformFillColor": 6381921,
       "platformStrokeColor": 11583173,
+      "editorLocked": false
+    }
+  ],
+  "triggerVolumes": [
+    {
+      "id": "trigger_volume_npc_manpu_demo",
+      "triggerX": 1184,
+      "triggerY": 324,
+      "triggerWidth": 96,
+      "triggerHeight": 96,
+      "deactivateTriggerX": 1120,
+      "deactivateTriggerY": 324,
+      "deactivateTriggerWidth": 96,
+      "deactivateTriggerHeight": 96,
+      "activator": "player",
+      "enterCommand": {
+        "targetType": "npc",
+        "targetId": "npc_passive_lookout",
+        "operation": "set_emotion",
+        "value": "anger"
+      },
+      "exitCommand": {
+        "targetType": "npc",
+        "targetId": "npc_passive_lookout",
+        "operation": "set_emotion",
+        "value": "calm"
+      },
+      "triggerFillColor": 11724284,
+      "triggerStrokeColor": 1616738,
+      "deactivateTriggerFillColor": 16764092,
+      "deactivateTriggerStrokeColor": 15092249,
       "editorLocked": false
     }
   ],

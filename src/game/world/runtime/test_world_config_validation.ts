@@ -174,14 +174,18 @@ const asTriggerTargetType = (
     value: unknown,
     fallback: TestWorldTriggerCommandConfig['targetType']
 ): TestWorldTriggerCommandConfig['targetType'] => {
-    return value === 'moving_platform' || value === 'trigger_platform' ? value : fallback;
+    return value === 'moving_platform' || value === 'trigger_platform' || value === 'npc'
+        ? value
+        : fallback;
 };
 
 const asTriggerOperation = (
     value: unknown,
     fallback: TestWorldTriggerCommandConfig['operation']
 ): TestWorldTriggerCommandConfig['operation'] => {
-    return value === 'set_motion_state' || value === 'set_active' ? value : fallback;
+    return value === 'set_motion_state' || value === 'set_active' || value === 'set_emotion'
+        ? value
+        : fallback;
 };
 
 const normalizeTriggerCommand = (
@@ -206,8 +210,20 @@ const normalizeTriggerCommand = (
     const targetType = asTriggerTargetType(raw?.targetType, safeFallback.targetType);
     const operation = asTriggerOperation(raw?.operation, safeFallback.operation);
     const value = operation === 'set_motion_state'
-        ? asMotionState(raw?.value, safeFallback.operation === 'set_motion_state' ? safeFallback.value as TestWorldMovingPlatformMotionState : 'running_loop')
-        : asBoolean(raw?.value, safeFallback.operation === 'set_active' ? safeFallback.value as boolean : true);
+        ? asMotionState(
+            raw?.value,
+            safeFallback.operation === 'set_motion_state'
+                ? safeFallback.value as TestWorldMovingPlatformMotionState
+                : 'running_loop'
+        )
+        : operation === 'set_active'
+            ? asBoolean(raw?.value, safeFallback.operation === 'set_active' ? safeFallback.value as boolean : true)
+            : asString(
+                raw?.value,
+                safeFallback.operation === 'set_emotion'
+                    ? safeFallback.value as string
+                    : ''
+            );
 
     return {
         targetType,
@@ -751,6 +767,9 @@ const normalizeNpcInstance = (
         profileId,
         x: asNumber(raw?.x, 0),
         y: asNumber(raw?.y, 0),
+        initialManpuEmotionId: raw?.initialManpuEmotionId === null
+            ? null
+            : asOptionalString(raw?.initialManpuEmotionId),
         facing: raw?.facing === 'left' ? 'left' : raw?.facing === 'right' ? 'right' : undefined,
         scriptedLoopRef,
         sequenceHookOverrides,
@@ -779,6 +798,7 @@ const normalizeNpcInstances = (
             profileId: entry.profileId,
             x: entry.x,
             y: entry.y,
+            initialManpuEmotionId: entry.initialManpuEmotionId,
             facing: entry.facing,
             scriptedLoopRef: entry.scriptedLoopRef,
             sequenceHookOverrides: entry.sequenceHookOverrides,
@@ -834,6 +854,7 @@ const fixDanglingDragBoxTargets = (config: TestWorldConfig): void => {
 const fixDanglingTriggerCommandTargets = (config: TestWorldConfig): void => {
     const triggerPlatformIds = new Set(config.triggerPlatforms.map((entry) => entry.id));
     const movingPlatformIds = new Set(config.movingPlatforms.map((entry) => entry.id));
+    const npcIds = new Set(config.npcs.map((entry) => entry.id));
     const dragBoxIds = new Set(config.dragBoxes.map((entry) => entry.id));
 
     const sanitizeCommand = (command: TestWorldTriggerCommandConfig | null | undefined): TestWorldTriggerCommandConfig | null => {
@@ -843,8 +864,35 @@ const fixDanglingTriggerCommandTargets = (config: TestWorldConfig): void => {
         if (command.targetType === 'trigger_platform' && !triggerPlatformIds.has(command.targetId)) {
             return null;
         }
+        if (command.targetType === 'trigger_platform') {
+            if (command.operation !== 'set_active') {
+                return null;
+            }
+            if (typeof command.value !== 'boolean') {
+                return null;
+            }
+        }
         if (command.targetType === 'moving_platform' && !movingPlatformIds.has(command.targetId)) {
             return null;
+        }
+        if (command.targetType === 'moving_platform') {
+            if (command.operation !== 'set_motion_state') {
+                return null;
+            }
+            if (typeof command.value !== 'string') {
+                return null;
+            }
+        }
+        if (command.targetType === 'npc') {
+            if (!npcIds.has(command.targetId)) {
+                return null;
+            }
+            if (command.operation !== 'set_emotion') {
+                return null;
+            }
+            if (typeof command.value !== 'string') {
+                return null;
+            }
         }
         return command;
     };

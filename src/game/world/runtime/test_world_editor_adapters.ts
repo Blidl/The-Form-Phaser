@@ -1,6 +1,7 @@
 import type {
     TestNpcInstanceConfig
 } from '../../npc/npc_types';
+import { resolveTestNpcManpuEmotion } from '../../npc/npc_manpu';
 import { isTestNpcScriptedSequenceRef } from '../../npc/npc_scripted_sequences';
 import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
 import type {
@@ -521,6 +522,19 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         }
         if (typeof patch.profileId === 'string' && patch.profileId.trim().length > 0) {
             config.profileId = patch.profileId.trim();
+        }
+        if (typeof patch.initialManpuEmotionId === 'string') {
+            const nextEmotionId = patch.initialManpuEmotionId.trim();
+            if (nextEmotionId.length <= 0 || nextEmotionId === 'none') {
+                config.initialManpuEmotionId = undefined;
+            } else {
+                const resolved = resolveTestNpcManpuEmotion(nextEmotionId);
+                if (resolved.shouldHide) {
+                    config.initialManpuEmotionId = null;
+                } else if (resolved.canonicalEmotionId) {
+                    config.initialManpuEmotionId = resolved.canonicalEmotionId;
+                }
+            }
         }
         if (patch.facing === 'left' || patch.facing === 'right') {
             config.facing = patch.facing;
@@ -1140,20 +1154,34 @@ const patchTriggerCommand = (
             value: true
         };
 
-    if (patch[targetTypeKey] === 'trigger_platform' || patch[targetTypeKey] === 'moving_platform') {
+    if (patch[targetTypeKey] === 'trigger_platform' || patch[targetTypeKey] === 'moving_platform' || patch[targetTypeKey] === 'npc') {
         nextCommand.targetType = patch[targetTypeKey];
     }
     if (typeof patch[targetIdKey] === 'string') {
         nextCommand.targetId = patch[targetIdKey].trim();
     }
-    if (patch[operationKey] === 'set_active' || patch[operationKey] === 'set_motion_state') {
+    if (patch[operationKey] === 'set_active' || patch[operationKey] === 'set_motion_state' || patch[operationKey] === 'set_emotion') {
         nextCommand.operation = patch[operationKey];
     }
+    if (nextCommand.targetType === 'npc') {
+        nextCommand.operation = 'set_emotion';
+    } else if (nextCommand.targetType === 'moving_platform') {
+        nextCommand.operation = 'set_motion_state';
+    } else {
+        nextCommand.operation = 'set_active';
+    }
+
     if (nextCommand.operation === 'set_motion_state') {
         if (patch[valueKey] === 'running_loop' || patch[valueKey] === 'stopped' || patch[valueKey] === 'run_once') {
             nextCommand.value = patch[valueKey];
         } else if (typeof nextCommand.value !== 'string') {
             nextCommand.value = 'running_loop';
+        }
+    } else if (nextCommand.operation === 'set_emotion') {
+        if (typeof patch[valueKey] === 'string') {
+            nextCommand.value = patch[valueKey];
+        } else if (typeof nextCommand.value !== 'string') {
+            nextCommand.value = '';
         }
     } else if (typeof patch[valueKey] === 'boolean') {
         nextCommand.value = patch[valueKey];

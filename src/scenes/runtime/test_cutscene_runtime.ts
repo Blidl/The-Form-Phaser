@@ -8,6 +8,7 @@ import type {
     TestCutsceneCameraPanToStep,
     TestCutsceneDebugState,
     TestCutsceneDefinition,
+    TestCutsceneSetEmotionStep,
     TestCutsceneRequestResult,
     TestCutsceneRunStatus,
     TestCutsceneStep,
@@ -57,7 +58,10 @@ interface CreateTestCutsceneRuntimeParams {
     player: PlayerWorldActor;
     worldRuntime: Pick<
         TestWorldRuntime,
-        'dispatchCutsceneActorSequenceRef' | 'getCutsceneActorSequenceSnapshot' | 'getNpcCameraFocusObject'
+        | 'dispatchCutsceneActorSequenceRef'
+        | 'dispatchCutsceneSetEmotion'
+        | 'getCutsceneActorSequenceSnapshot'
+        | 'getNpcCameraFocusObject'
     >;
 }
 
@@ -418,6 +422,17 @@ export const createTestCutsceneRuntime = (
         return true;
     };
 
+    const runSetEmotionStep = (
+        step: TestCutsceneSetEmotionStep
+    ): boolean => {
+        const dispatchResult = worldRuntime.dispatchCutsceneSetEmotion(step.actorId, step.emotionId);
+        if (dispatchResult.result !== 'applied') {
+            finishRun('failed', `set_emotion failed: ${dispatchResult.detail}`);
+            return false;
+        }
+        return true;
+    };
+
     const executeInstantStep = (step: TestCutsceneStep, stepIndex: number): 'advanced' | 'blocked' => {
         if (!activeRun) {
             return 'blocked';
@@ -484,6 +499,9 @@ export const createTestCutsceneRuntime = (
                 );
             }
             return 'blocked';
+        }
+        if (step.kind === 'set_emotion') {
+            return runSetEmotionStep(step) ? 'advanced' : 'blocked';
         }
         finishRun('failed', `unsupported cutscene step kind "${step.kind}"`);
         return 'blocked';

@@ -129,6 +129,7 @@ export interface TestNpcInstanceConfig {
     profileId: string;
     x: number;
     y: number;
+    initialManpuEmotionId?: string | null;
     facing?: TestNpcFacing;
     scriptedLoopRef?: string | null;
     sequenceHookOverrides?: TestNpcInstanceSequenceHookRefOverrides;

@@ -68,6 +68,7 @@
 | Task | Status | Notes |
 | --- | --- | --- |
 | Animation Profiles | in_progress | NPC-first backbone сохраняется; TEMPORARY узкий demo-feel first-pass для player forms (`ball/triangle/square`) разрешён через hooks `jump_start`, `land_impact`, `airborne`, `form_switch` + optional `ball_rebound_launch`, `triangle_flight_start`, `square_attach_start`, `square_attach_jump_start`; это не universal animation framework и не новый editor |
+| NPC Manpu emotions from triggers | done | Реализовано узким runtime-slice: NPC presentation overlay + trigger volume command `targetType: "npc"`, `operation: "set_emotion"`; canonical IDs `sweat_drop/anger/sparkles`, hide через `calm`; `npm run build-nolog` passed |
 | Lighting Profiles + Debug Tuning | todo | Atmosphere-first |
 | Parallax Profiles | todo | Background profiles |
 | VFX Profiles | todo | Square attach + triangle break |
@@ -128,3 +129,8 @@
 - Notes: Зафиксирован TEMPORARY узкий demo-feel slice для player forms без отмены NPC-first presentation backbone. Vocabulary first-pass hooks: `jump_start`, `land_impact`, `airborne`, `form_switch`; optional form-specific: `ball_rebound_launch`, `triangle_flight_start`, `square_attach_start`, `square_attach_jump_start`.
 - Next: Реализовать player-form hook emission/consumption в существующих player/view runtime slices и подключить live tuning без добавления нового editor/framework.
 
+- Date: 2026-04-24
+- Task: NPC Manpu Editor Authoring
+- Status: done
+- Notes: Закрыт editor authoring слой в 4 местах: NPC initial Manpu, Trigger Volume npc/set_emotion dropdown UX, Sequence set_emotion canonical dropdown, Cutscene direct set_emotion step (actor-local path).
+- Next: Условные/контекстные rules для эмоций оставлены на отдельный future polish, без расширения текущей архитектуры.
