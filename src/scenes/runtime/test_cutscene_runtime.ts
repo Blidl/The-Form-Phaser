@@ -15,6 +15,7 @@ import type {
     TestCutsceneSubtitleStep
 } from '../../game/cutscene/cutscene_types';
 import type { TestWorldRuntime } from '../../game/world/runtime/test_world_runtime';
+import type { TestWorldLogicEvent } from '../../game/events/test_world_logic_rules';
 
 interface ActiveCutsceneRun {
     definition: TestCutsceneDefinition;
@@ -60,6 +61,7 @@ interface CreateTestCutsceneRuntimeParams {
         TestWorldRuntime,
         | 'dispatchCutsceneActorSequenceRef'
         | 'dispatchCutsceneSetEmotion'
+        | 'dispatchWorldLogicEvent'
         | 'getCutsceneActorSequenceSnapshot'
         | 'getNpcCameraFocusObject'
     >;
@@ -208,6 +210,13 @@ export const createTestCutsceneRuntime = (
         if (nextStatus === 'completed') {
             lastCutsceneRequestResult = 'completed';
             emitCutsceneDebugFeedback('completed', completedCutsceneRef, nextDetail, null);
+            if (completedCutsceneRef) {
+                const event: TestWorldLogicEvent = {
+                    kind: 'cutscene_finished',
+                    cutsceneRef: completedCutsceneRef
+                };
+                worldRuntime.dispatchWorldLogicEvent(event);
+            }
         } else if (nextStatus === 'failed') {
             lastCutsceneRequestResult = 'failed';
             emitCutsceneDebugFeedback('failed', completedCutsceneRef, nextDetail, failureReason);

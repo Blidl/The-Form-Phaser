@@ -1,5 +1,7 @@
 import defaultLevelJson from './data/levels/test_world_level_01.json';
 import type { TestNpcInstanceConfig } from '../../npc/npc_types';
+import type { TestEventBlock } from '../../events/test_event_actions';
+import type { TestWorldLogicRule } from '../../events/test_world_logic_rules';
 
 export interface TestWorldEditorLockable {
     editorLocked?: boolean;
@@ -170,6 +172,9 @@ export interface TestWorldTriggerVolumeConfig extends TestWorldEditorLockable, T
     sourceIds?: string[];
     enterCommand?: TestWorldTriggerCommandConfig | null;
     exitCommand?: TestWorldTriggerCommandConfig | null;
+    onEnter?: TestEventBlock[];
+    onExit?: TestEventBlock[];
+    onStay?: TestEventBlock[];
     triggerFillColor?: number;
     triggerStrokeColor?: number;
     deactivateTriggerFillColor?: number;
@@ -227,6 +232,8 @@ export interface TestWorldConfig {
     meta: TestWorldMetaConfig;
     worldBounds: TestWorldBoundsConfig;
     background: TestWorldBackgroundConfig | null;
+    worldFlags?: Record<string, boolean>;
+    worldLogicRules?: TestWorldLogicRule[];
     playerSpawn: TestWorldPlayerSpawnConfig;
     npcs: TestNpcInstanceConfig[];
     surfaces: TestWorldSurfaceConfig[];

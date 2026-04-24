@@ -134,3 +134,38 @@
 - Status: done
 - Notes: Закрыт editor authoring слой в 4 местах: NPC initial Manpu, Trigger Volume npc/set_emotion dropdown UX, Sequence set_emotion canonical dropdown, Cutscene direct set_emotion step (actor-local path).
 - Next: Условные/контекстные rules для эмоций оставлены на отдельный future polish, без расширения текущей архитектуры.
+
+- Date: 2026-04-24
+- Task: Editor Authoring Workspace Split (canon patch)
+- Status: done
+- Notes: Added mini spec `the_form_mini_spec_editor_authoring_workspace_ru.md`. Canon split fixed: `F2` keeps level/object placement + lightweight inspector; new top-level `Logic` menu owns trigger/cutscene/NPC behavior/flags authoring with `Triggers` as first full tab.
+- Next: Implementation stages — (1) add `Logic` menu shell with tabs (`Triggers/Cutscenes/NPC Behavior/Flags`), (2) move Trigger Event Blocks UI from F2 trigger inspector into `Logic > Triggers` while keeping deep-links/legacy visibility, (3) keep cutscene/NPC tabs placeholder until runtime readiness.
+
+## Canon-derived Workspace Split Work Packages (2026-04-24)
+
+| Task | Status | Notes |
+| --- | --- | --- |
+| Logic Menu Shell (`Logic` top-level + tabs) | todo | Add `Triggers/Cutscenes/NPC Behavior/Flags`; Cutscenes/NPC tabs may be disabled placeholders first |
+| Trigger Logic Authoring in Logic Menu | todo | Move/reuse existing Event Blocks editor into `Logic > Triggers` without runtime rewrite |
+| F2 Inspector Slimming + Deep Links | todo | Keep placement/basics/references only; add `Open Logic Editor` links |
+| Legacy Compatibility Bridge | todo | Keep `enterCommand/exitCommand` visible/compatible during transition |
+| Draft/localStorage Continuity | todo | Existing runtime editor draft flow must remain unchanged |
+| Data Safety Verification | todo | No trigger/NPC/cutscene data loss after workspace split |
+
+- Date: 2026-04-24
+- Task: Logic Workspace First Pass (runtime editor UX)
+- Status: done
+- Notes: Added top-level `Logic` workspace with tabs (`Triggers/Cutscenes/NPC Behavior/Flags`). `Logic > Triggers` now hosts full Event Blocks authoring for trigger volumes; F2 trigger inspector reduced to geometry/legacy + Event Blocks summary with `Open in Logic` deep-link.
+- Next: choose next implementation package: (1) widen actor_action runtime support, (2) Cutscene 2.0 shared event-action integration, (3) NPC Behavior Pages runtime/editor.
+
+- Date: 2026-04-24
+- Task: World Logic Rules / Event Listeners layer
+- Status: done
+- Notes: Added world-level `Logic > Rules` tab and runtime listener execution path with matcher kinds `object_state_changed`, `trigger_event`, `npc_event`, `cutscene_finished`. `Logic > Triggers` kept separate and unchanged for spatial trigger authoring.
+- Next: widen object-state emitters and actor_action coverage as follow-up.
+
+- Date: 2026-04-24
+- Task: F2 cleanup pass (placement/basic only, logic in Logic workspace)
+- Status: done
+- Notes: Trigger inspector in F2 now shows geometry/basic refs + compact logic summary (`enter/exit present|none`, block counts) and `Open in Logic`; nested trigger logic authoring removed from F2 surface. NPC inspector in F2 reduced to placement/profile/basic summary + `Open in Logic / NPC Behavior` placeholder. Rules list label improved to compact `WHEN ... -> DO ...` summary; sections in rule card use `WHEN / IF / DO` headings.
+- Next: run manual smoke for scroll preservation in F2 + Logic (Triggers/Rules) and verify legacy/event/rules data is preserved after F2 geometry edits.

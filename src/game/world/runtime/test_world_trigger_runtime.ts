@@ -1,5 +1,15 @@
 import type { Scene } from 'phaser';
 import type { PlayerWorldActor } from '../../player/player_runtime_contracts';
+import type { ActorAction } from '../../actor_actions/actor_action_types';
+import {
+    executeTestEventBlock,
+    type TestEventBlockExecutionResult,
+    type TestEventRuntimeContext
+} from '../../events/test_event_actions';
+import {
+    getWorldFlag,
+    setWorldFlag
+} from '../../events/test_world_flags';
 import type { DraggableBoxObject } from '../draggable_box';
 import type { TriggerPlatformObject } from '../trigger_platform';
 import type {
@@ -35,6 +45,12 @@ interface CreateTestWorldTriggerRuntimeParams {
     setTriggerPlatformActive: (id: string, active: boolean) => void;
     setMovingPlatformMotionState: (id: string, mode: TestWorldMovingPlatformMotionState) => void;
     setNpcPresentationEmotionFromTrigger: (id: string, emotionId: string) => boolean;
+    getPlayerFormId: () => string | null;
+    executeActorAction: (actorId: string, action: ActorAction) => boolean;
+    startCutscene: (cutsceneRef: string) => boolean;
+    dispatchTriggerEvent?: (eventId: string, payload?: Record<string, unknown>) => boolean;
+    playSfx?: (sfxId: string) => boolean;
+    spawnVfx?: (vfxId: string, actorId?: string, x?: number, y?: number) => boolean;
 }
 
 interface TriggerSourceRuntime {
@@ -48,10 +64,32 @@ interface TriggerOccupancyState {
     insideDeactivateZone: Set<string>;
 }
 
+interface TriggerBlockExecutionRecord {
+    triggerId: string;
+    sourceId: string;
+    phase: 'onEnter' | 'onExit' | 'onStay';
+    blockResult: TestEventBlockExecutionResult;
+}
+
 export const createTestWorldTriggerRuntime = (
     params: CreateTestWorldTriggerRuntimeParams
 ): TestWorldTriggerRuntime => {
     const occupancyByTriggerId = new Map<string, TriggerOccupancyState>();
+    const consumedOnceKeys = new Set<string>();
+    const eventRuntimeContext: TestEventRuntimeContext = {
+        getWorldFlag,
+        setWorldFlag,
+        getPlayerFormId: () => params.getPlayerFormId(),
+        executeActorAction: (actorId, action) => params.executeActorAction(actorId, action),
+        startCutscene: (cutsceneRef) => params.startCutscene(cutsceneRef),
+        dispatchTriggerEvent: params.dispatchTriggerEvent,
+        playSfx: params.playSfx,
+        spawnVfx: params.spawnVfx,
+        isOnceConsumed: (key) => consumedOnceKeys.has(key),
+        consumeOnceKey: (key) => {
+            consumedOnceKeys.add(key);
+        }
+    };
 
     return {
         update: (): void => {
@@ -81,8 +119,13 @@ export const createTestWorldTriggerRuntime = (
                     sources,
                     createLegacyTriggerEnterCommand(triggerConfig),
                     createLegacyTriggerExitCommand(triggerConfig),
+                    undefined,
+                    undefined,
+                    undefined,
                     occupancyByTriggerId,
-                    (command) => executeTriggerCommand(command, params)
+                    (command) => executeTriggerCommand(command, params),
+                    (_record) => {},
+                    eventRuntimeContext
                 );
             });
 
@@ -106,8 +149,13 @@ export const createTestWorldTriggerRuntime = (
                     sources,
                     triggerVolumeConfig.enterCommand ?? null,
                     triggerVolumeConfig.exitCommand ?? null,
+                    triggerVolumeConfig.onEnter,
+                    triggerVolumeConfig.onExit,
+                    triggerVolumeConfig.onStay,
                     occupancyByTriggerId,
-                    (command) => executeTriggerCommand(command, params)
+                    (command) => executeTriggerCommand(command, params),
+                    (_record) => {},
+                    eventRuntimeContext
                 );
             });
         }
@@ -121,8 +169,13 @@ const stepTriggerVolume = (
     sources: readonly TriggerSourceRuntime[],
     enterCommand: TestWorldTriggerCommandConfig | null,
     exitCommand: TestWorldTriggerCommandConfig | null,
+    onEnterBlocks: readonly TestEventBlock[] | undefined,
+    onExitBlocks: readonly TestEventBlock[] | undefined,
+    onStayBlocks: readonly TestEventBlock[] | undefined,
     occupancyByTriggerId: Map<string, TriggerOccupancyState>,
-    executeCommand: (command: TestWorldTriggerCommandConfig) => void
+    executeCommand: (command: TestWorldTriggerCommandConfig) => void,
+    onBlockExecution: (record: TriggerBlockExecutionRecord) => void,
+    eventRuntimeContext: TestEventRuntimeContext
 ): void => {
     const previousOccupancy = occupancyByTriggerId.get(triggerId) ?? {
         insideTriggerZone: new Set<string>(),
@@ -141,6 +194,11 @@ const stepTriggerVolume = (
             if (!previousOccupancy.insideTriggerZone.has(source.id) && enterCommand) {
                 executeCommand(enterCommand);
             }
+            if (!previousOccupancy.insideTriggerZone.has(source.id)) {
+                executeTriggerEventBlocks(triggerId, source.id, 'onEnter', onEnterBlocks, onBlockExecution, eventRuntimeContext);
+            } else {
+                executeTriggerEventBlocks(triggerId, source.id, 'onStay', onStayBlocks, onBlockExecution, eventRuntimeContext);
+            }
         }
 
         const isInsideDeactivateZone = triggerVolume.deactivateTriggerZone !== null && (
@@ -152,10 +210,40 @@ const stepTriggerVolume = (
             if (!previousOccupancy.insideDeactivateZone.has(source.id) && exitCommand) {
                 executeCommand(exitCommand);
             }
+            if (!previousOccupancy.insideDeactivateZone.has(source.id)) {
+                executeTriggerEventBlocks(triggerId, source.id, 'onExit', onExitBlocks, onBlockExecution, eventRuntimeContext);
+            }
         }
     });
 
     occupancyByTriggerId.set(triggerId, nextOccupancy);
+};
+
+const executeTriggerEventBlocks = (
+    triggerId: string,
+    sourceId: string,
+    phase: 'onEnter' | 'onExit' | 'onStay',
+    blocks: readonly TestEventBlock[] | undefined,
+    onBlockExecution: (record: TriggerBlockExecutionRecord) => void,
+    eventRuntimeContext: TestEventRuntimeContext
+): void => {
+    if (!blocks || blocks.length <= 0) {
+        return;
+    }
+
+    blocks.forEach((block, index) => {
+        const normalizedBlockId = typeof block.id === 'string' && block.id.trim().length > 0
+            ? block.id.trim()
+            : `block_${index + 1}`;
+        const ownerKey = `trigger:${triggerId}:${phase}:${normalizedBlockId}`;
+        const blockResult = executeTestEventBlock(eventRuntimeContext, block, ownerKey);
+        onBlockExecution({
+            triggerId,
+            sourceId,
+            phase,
+            blockResult
+        });
+    });
 };
 
 const resolveSourcesForActivator = (

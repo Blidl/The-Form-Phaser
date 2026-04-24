@@ -139,3 +139,25 @@
 Локальные результаты отдельных задач сюда не писать. Для этого есть:
 - `the_form_orchestrator_log_ru.md`
 - `the_form_orchestrator_work_queue_ru.md`
+
+## Canon Patch - Editor Authoring Workspace Split (2026-04-24)
+- Added canon mini spec: `docs/canon/the_form_mini_spec_editor_authoring_workspace_ru.md`.
+- Runtime editor authoring is split into two workspaces:
+  - `F2 / Level Editor` = placement, geometry, base props, logic references;
+  - `Logic Editor` = trigger/cutscene/NPC behavior/flags authoring.
+- UX contract is explicit:
+  - F2 answers `where is the thing?`;
+  - Logic editor answers `what happens?`.
+- Ownership remains unchanged:
+  - logic editor edits data only;
+  - execution remains in Event Action Runtime, Trigger Runtime, NPC Runtime, Cutscene Runtime, Actor Action Layer.
+- Scope guardrails:
+  - no giant editor controller;
+  - no node graph editor;
+  - no arbitrary scripting;
+  - no Unity migration.
+- Migration contract:
+  - keep existing F2 inspector functional;
+  - keep legacy `enterCommand/exitCommand` visible/compatible during transition;
+  - keep runtime editor draft/localStorage flow working;
+  - no data loss for trigger/NPC/cutscene content.

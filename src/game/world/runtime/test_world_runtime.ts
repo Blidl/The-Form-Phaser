@@ -59,10 +59,17 @@ import {
 import { createTestNpcInteractionRuntime, type TestNpcInteractionRuntime } from '../../npc/npc_interaction_runtime';
 import type { TestNpcDebugEntry, TestNpcInteractionDebugState } from '../../npc/npc_types';
 import type { ActorActionSequence } from '../../actor_actions/actor_action_types';
+import type { TestEventRuntimeContext } from '../../events/test_event_actions';
 import {
     cloneTestNpcScriptedSequenceAction,
     getTestNpcScriptedSequenceDefinition
 } from '../../npc/npc_scripted_sequences';
+import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
+import { getWorldFlag, resetWorldFlags, setWorldFlag } from '../../events/test_world_flags';
+import {
+    executeMatchingWorldLogicRules,
+    type TestWorldLogicEvent
+} from '../../events/test_world_logic_rules';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -99,6 +106,7 @@ export interface TestWorldRuntime {
     getNextLevelId: () => string | null;
     getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
     getNpcInteractionDebugState: () => TestNpcInteractionDebugState;
+    dispatchWorldLogicEvent: (event: TestWorldLogicEvent) => boolean;
     dispatchCutsceneActorSequenceRef: (
         actorId: string,
         sequenceRef: string,
@@ -178,6 +186,7 @@ interface BuiltWorldInstance {
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
     getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
     getNpcInteractionDebugState: () => TestNpcInteractionDebugState;
+    dispatchWorldLogicEvent: (event: TestWorldLogicEvent) => boolean;
     dispatchCutsceneActorSequenceRef: (
         actorId: string,
         sequenceRef: string,
@@ -394,6 +403,7 @@ export const createTestWorldRuntime = (
         getNextLevelId: (): string | null => currentConfig.nextLevelId,
         getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => instance.getNpcDebugEntries(),
         getNpcInteractionDebugState: (): TestNpcInteractionDebugState => instance.getNpcInteractionDebugState(),
+        dispatchWorldLogicEvent: (event: TestWorldLogicEvent): boolean => instance.dispatchWorldLogicEvent(event),
         dispatchCutsceneActorSequenceRef: (
             actorId: string,
             sequenceRef: string,
@@ -622,12 +632,113 @@ const buildWorldInstance = (
     let finishReached = false;
     let wasTriangleGrounded = false;
     let finishTriggerObject: FinishTriggerObject | null = null;
+    const consumedWorldRuleOnceKeys = new Set<string>();
+    const MAX_WORLD_LOGIC_DISPATCH_DEPTH = 8;
+    let worldLogicDispatchDepth = 0;
     const surfaceOutlineRenderer = createTestWorldSurfaceOutlineRenderer(scene, config.surfaces);
 
     const addCleanup = (cleanupFn: () => void): void => {
         cleanup.push(cleanupFn);
     };
     addCleanup(() => surfaceOutlineRenderer.destroy());
+
+    const dispatchWorldLogicEvent = (event: TestWorldLogicEvent): boolean => {
+        if (!event || typeof event !== 'object' || typeof event.kind !== 'string') {
+            return false;
+        }
+        if (worldLogicDispatchDepth >= MAX_WORLD_LOGIC_DISPATCH_DEPTH) {
+            return false;
+        }
+
+        const eventRuntimeContext: TestEventRuntimeContext = {
+            getWorldFlag: (flagId) => getWorldFlag(flagId),
+            setWorldFlag: (flagId, value) => {
+                setWorldFlag(flagId, value);
+            },
+            getPlayerFormId: () => player.currentForm,
+            executeActorAction: (actorId, action) => {
+                if (action.kind === 'set_emotion') {
+                    return npcRuntime.setPresentationEmotionFromTrigger(actorId, action.emotionId);
+                }
+                if (action.kind === 'trigger_event') {
+                    return dispatchTriggerEvent(action.eventId, action.payload, actorId);
+                }
+                return false;
+            },
+            startCutscene: (cutsceneRef) => {
+                const normalizedCutsceneRef = cutsceneRef.trim();
+                if (normalizedCutsceneRef.length <= 0 || !isTestCutsceneRef(normalizedCutsceneRef)) {
+                    return false;
+                }
+                scene.events.emit('pf:npc_interaction_cutscene_request', {
+                    actorId: 'world_logic_rule_runtime',
+                    cutsceneRef: normalizedCutsceneRef
+                });
+                return true;
+            },
+            dispatchTriggerEvent: (eventId, payload) => dispatchTriggerEvent(eventId, payload, 'world_logic_rule_runtime'),
+            playSfx: (sfxId) => {
+                const normalizedSfxId = sfxId.trim();
+                if (normalizedSfxId.length <= 0) {
+                    return false;
+                }
+                scene.events.emit('pf:test_world_play_sfx_stub', {
+                    source: 'world_logic_rule_runtime',
+                    sfxId: normalizedSfxId
+                });
+                return true;
+            },
+            spawnVfx: (vfxId, actorId, x, y) => {
+                const normalizedVfxId = vfxId.trim();
+                if (normalizedVfxId.length <= 0) {
+                    return false;
+                }
+                scene.events.emit('pf:test_world_spawn_vfx_stub', {
+                    source: 'world_logic_rule_runtime',
+                    vfxId: normalizedVfxId,
+                    actorId: actorId ?? null,
+                    x: typeof x === 'number' ? x : null,
+                    y: typeof y === 'number' ? y : null
+                });
+                return true;
+            },
+            isOnceConsumed: (key) => consumedWorldRuleOnceKeys.has(key),
+            consumeOnceKey: (key) => {
+                consumedWorldRuleOnceKeys.add(key);
+            }
+        };
+
+        worldLogicDispatchDepth += 1;
+        try {
+            executeMatchingWorldLogicRules(eventRuntimeContext, config.worldLogicRules, event);
+        } finally {
+            worldLogicDispatchDepth = Math.max(0, worldLogicDispatchDepth - 1);
+        }
+        return true;
+    };
+
+    const dispatchTriggerEvent = (
+        eventId: string,
+        payload?: Record<string, unknown>,
+        sourceId: string = 'trigger_runtime'
+    ): boolean => {
+        const normalizedEventId = eventId.trim();
+        if (normalizedEventId.length <= 0) {
+            return false;
+        }
+        dispatchWorldLogicEvent({
+            kind: 'trigger_event',
+            eventId: normalizedEventId,
+            sourceId,
+            payload
+        });
+        scene.events.emit('pf:npc_actor_action_event', {
+            actorId: sourceId,
+            eventId: normalizedEventId,
+            payload
+        });
+        return true;
+    };
 
     const destroyColliderList = (colliders: Physics.Arcade.Collider[]): void => {
         colliders.splice(0, colliders.length).forEach((collider) => collider.destroy());
@@ -1428,11 +1539,38 @@ const buildWorldInstance = (
     let npcCarrySupportGraceFramesRemaining = 0;
     let npcCarrySupportGraceVelocityX = 0;
     addCleanup(() => npcRuntime.destroy());
+    const handleNpcActorActionEvent = (payload: unknown): void => {
+        if (!payload || typeof payload !== 'object') {
+            return;
+        }
+        const raw = payload as Record<string, unknown>;
+        const actorId = typeof raw.actorId === 'string' ? raw.actorId.trim() : '';
+        const eventId = typeof raw.eventId === 'string' ? raw.eventId.trim() : '';
+        if (actorId.length <= 0 || eventId.length <= 0 || actorId === 'trigger_runtime') {
+            return;
+        }
+        const eventPayload = (
+            raw.payload && typeof raw.payload === 'object' && !Array.isArray(raw.payload)
+                ? raw.payload as Record<string, unknown>
+                : undefined
+        );
+        dispatchWorldLogicEvent({
+            kind: 'npc_event',
+            actorId,
+            eventId,
+            payload: eventPayload
+        });
+    };
+    scene.events.on('pf:npc_actor_action_event', handleNpcActorActionEvent);
+    addCleanup(() => {
+        scene.events.off('pf:npc_actor_action_event', handleNpcActorActionEvent);
+    });
     npcRuntime.syncTriangleSupportSurfaces();
     actorContactRuntime.rebuildColliders();
     rebuildPlayerDragBoxColliders();
     rebuildDragBoxWorldColliders();
     refreshVisualDepths();
+    resetWorldFlags(config.worldFlags);
     const triggerRuntime = createTestWorldTriggerRuntime({
         scene,
         player,
@@ -1450,6 +1588,55 @@ const buildWorldInstance = (
         },
         setNpcPresentationEmotionFromTrigger: (id, emotionId) => {
             return npcRuntime.setPresentationEmotionFromTrigger(id, emotionId);
+        },
+        getPlayerFormId: () => player.currentForm,
+        executeActorAction: (actorId, action) => {
+            if (action.kind === 'set_emotion') {
+                return npcRuntime.setPresentationEmotionFromTrigger(actorId, action.emotionId);
+            }
+            if (action.kind === 'trigger_event') {
+                return dispatchTriggerEvent(action.eventId, action.payload, actorId);
+            }
+            return false;
+        },
+        startCutscene: (cutsceneRef) => {
+            const normalizedCutsceneRef = cutsceneRef.trim();
+            if (normalizedCutsceneRef.length <= 0 || !isTestCutsceneRef(normalizedCutsceneRef)) {
+                return false;
+            }
+            scene.events.emit('pf:npc_interaction_cutscene_request', {
+                actorId: 'trigger_runtime',
+                cutsceneRef: normalizedCutsceneRef
+            });
+            return true;
+        },
+        dispatchTriggerEvent: (eventId, payload) => {
+            return dispatchTriggerEvent(eventId, payload, 'trigger_runtime');
+        },
+        playSfx: (sfxId) => {
+            const normalizedSfxId = sfxId.trim();
+            if (normalizedSfxId.length <= 0) {
+                return false;
+            }
+            scene.events.emit('pf:test_world_play_sfx_stub', {
+                source: 'trigger_event_runtime',
+                sfxId: normalizedSfxId
+            });
+            return true;
+        },
+        spawnVfx: (vfxId, actorId, x, y) => {
+            const normalizedVfxId = vfxId.trim();
+            if (normalizedVfxId.length <= 0) {
+                return false;
+            }
+            scene.events.emit('pf:test_world_spawn_vfx_stub', {
+                source: 'trigger_event_runtime',
+                vfxId: normalizedVfxId,
+                actorId: actorId ?? null,
+                x: typeof x === 'number' ? x : null,
+                y: typeof y === 'number' ? y : null
+            });
+            return true;
         }
     });
 
@@ -1476,13 +1663,26 @@ const buildWorldInstance = (
         },
         postPlayerTickUpdate: (): void => {
             if (player.currentForm === 'triangle' && player.isTriangleBreakWallActive) {
-                triangleFlightBreakWalls.forEach((wall) => {
+                config.triangleFlightBreakWalls.forEach((wallConfig) => {
+                    const wall = triangleFlightBreakWallsById.get(wallConfig.id);
+                    if (!wall) {
+                        return;
+                    }
                     if (wall.isBroken()) {
                         return;
                     }
 
                     if (doesTriangleFlightBreakWallOverlapPlayerShape(wall, player.hazardHitShape)) {
+                        const previousBroken = wall.isBroken();
                         wall.breakWall();
+                        if (!previousBroken && wall.isBroken()) {
+                            dispatchWorldLogicEvent({
+                                kind: 'object_state_changed',
+                                objectId: wallConfig.id,
+                                fromState: 'intact',
+                                toState: 'broken'
+                            });
+                        }
                     }
                 });
             }
@@ -1603,6 +1803,7 @@ const buildWorldInstance = (
         },
         getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => npcRuntime.getDebugEntries(),
         getNpcInteractionDebugState: (): TestNpcInteractionDebugState => npcInteractionRuntime.getDebugState(),
+        dispatchWorldLogicEvent,
         dispatchCutsceneActorSequenceRef: (
             actorId: string,
             sequenceRef: string,

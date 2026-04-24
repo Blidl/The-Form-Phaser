@@ -34,6 +34,18 @@ export interface TestWorldEditorSidebarCutsceneStepItem {
     selected: boolean;
 }
 
+export interface TestWorldEditorSidebarTriggerItem {
+    id: string;
+    label: string;
+    selected: boolean;
+}
+
+export interface TestWorldEditorSidebarRuleItem {
+    id: string;
+    label: string;
+    selected: boolean;
+}
+
 export interface TestWorldEditorSidebarFieldOption {
     value: string;
     label: string;
@@ -52,6 +64,10 @@ export interface TestWorldEditorSidebarField {
 export interface TestWorldEditorSidebarSection {
     title: string;
     fields: TestWorldEditorSidebarField[];
+    actions?: ReadonlyArray<{
+        id: string;
+        label: string;
+    }>;
 }
 
 export interface TestWorldEditorSidebarState {
@@ -84,6 +100,14 @@ export interface TestWorldEditorSidebarState {
     cutsceneStepItems: TestWorldEditorSidebarCutsceneStepItem[];
     cutsceneStepIndex: number;
     cutsceneStepSections: TestWorldEditorSidebarSection[];
+    logicTab: TestWorldEditorLogicTabId;
+    logicTriggerItems: TestWorldEditorSidebarTriggerItem[];
+    logicTriggerId: string | null;
+    logicTriggerSections: TestWorldEditorSidebarSection[];
+    logicRuleItems: TestWorldEditorSidebarRuleItem[];
+    logicRuleId: string | null;
+    logicRuleSections: TestWorldEditorSidebarSection[];
+    logicFlagsSections: TestWorldEditorSidebarSection[];
     selectedLocked: boolean;
 }
 
@@ -127,15 +151,21 @@ export interface TestWorldEditorSidebarCallbacks {
     onToggleSelectedLock: () => void;
     onLevelFieldChange: (key: string, value: string | number | boolean) => void;
     onInspectorFieldChange: (key: string, value: string | number | boolean) => void;
+    onInspectorAction: (actionId: string) => void;
     onSequenceFieldChange: (key: string, value: string | number | boolean) => void;
     onSequenceActionFieldChange: (key: string, value: string | number | boolean) => void;
     onCutsceneFieldChange: (key: string, value: string | number | boolean) => void;
     onCutsceneStepFieldChange: (key: string, value: string | number | boolean) => void;
     onTabChanged: (tabId: TestWorldEditorTabId) => void;
+    onLogicTabChanged: (tabId: TestWorldEditorLogicTabId) => void;
+    onSelectLogicTrigger: (id: string) => void;
+    onSelectLogicRule: (id: string) => void;
 }
 
-type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'npc' | 'sequences' | 'cutscenes' | 'inspector';
+type TestWorldEditorTabId = 'level' | 'background' | 'objects' | 'npc' | 'sequences' | 'cutscenes' | 'inspector' | 'logic';
+type TestWorldEditorLogicTabId = 'triggers' | 'rules' | 'cutscenes' | 'npc_behavior' | 'flags';
 export type { TestWorldEditorTabId };
+export type { TestWorldEditorLogicTabId };
 
 const escapeHtml = (value: string): string => {
     return value
@@ -212,6 +242,8 @@ export class TestWorldEditorSidebar {
     private state: TestWorldEditorSidebarState;
     private readonly collapsedSectionKeys = new Set<string>();
     private activeTab: TestWorldEditorTabId = 'level';
+    private activeLogicTab: TestWorldEditorLogicTabId = 'triggers';
+    private lastLogicConsoleMarkerKey: string | null = null;
     private pendingImportMode: 'world' | 'sequence' | 'cutscene' = 'world';
     private pendingScrollRestore: { inner: number; list: number } | null = null;
     private pendingFocusRestore: { selector: string; selectionStart: number | null; selectionEnd: number | null } | null = null;
@@ -281,6 +313,14 @@ export class TestWorldEditorSidebar {
             cutsceneStepItems: [],
             cutsceneStepIndex: -1,
             cutsceneStepSections: [],
+            logicTab: 'triggers',
+            logicTriggerItems: [],
+            logicTriggerId: null,
+            logicTriggerSections: [],
+            logicRuleItems: [],
+            logicRuleId: null,
+            logicRuleSections: [],
+            logicFlagsSections: [],
             selectedLocked: false
         };
         this.root.addEventListener('click', this.handleClick);
@@ -296,6 +336,7 @@ export class TestWorldEditorSidebar {
         this.captureScrollPosition();
         this.captureFocusedField();
         this.state = nextState;
+        this.activeLogicTab = nextState.logicTab;
         applyDomAnchorLayout(this.root, TEST_EDITOR_SIDEBAR_LAYOUT);
         this.render();
     }
@@ -460,6 +501,12 @@ export class TestWorldEditorSidebar {
             }
         }
 
+        const inspectorAction = target?.closest<HTMLElement>('[data-editor-inspector-action]')?.dataset.editorInspectorAction;
+        if (inspectorAction) {
+            this.callbacks.onInspectorAction(inspectorAction);
+            return;
+        }
+
         const paletteType = target?.closest<HTMLElement>('[data-editor-palette-type]')?.dataset.editorPaletteType;
         if (paletteType) {
             this.activeTab = 'objects';
@@ -495,6 +542,38 @@ export class TestWorldEditorSidebar {
         const cutsceneStepIndexValue = target?.closest<HTMLElement>('[data-editor-cutscene-step-index]')?.dataset.editorCutsceneStepIndex;
         if (cutsceneStepIndexValue !== undefined) {
             this.callbacks.onSelectCutsceneStep(Number(cutsceneStepIndexValue));
+            return;
+        }
+
+        const logicTriggerId = target?.closest<HTMLElement>('[data-editor-logic-trigger-id]')?.dataset.editorLogicTriggerId;
+        if (logicTriggerId) {
+            this.activeTab = 'logic';
+            this.activeLogicTab = 'triggers';
+            this.callbacks.onTabChanged(this.activeTab);
+            this.callbacks.onLogicTabChanged(this.activeLogicTab);
+            this.callbacks.onSelectLogicTrigger(logicTriggerId);
+            return;
+        }
+
+        const logicRuleId = target?.closest<HTMLElement>('[data-editor-logic-rule-id]')?.dataset.editorLogicRuleId;
+        if (logicRuleId) {
+            this.activeTab = 'logic';
+            this.activeLogicTab = 'rules';
+            this.callbacks.onTabChanged(this.activeTab);
+            this.callbacks.onLogicTabChanged(this.activeLogicTab);
+            this.callbacks.onSelectLogicRule(logicRuleId);
+            return;
+        }
+
+        const logicTabId = target?.closest<HTMLElement>('[data-editor-logic-tab]')?.dataset.editorLogicTab as TestWorldEditorLogicTabId | undefined;
+        if (logicTabId) {
+            const nextLogicTab = logicTabId;
+            console.info(`[editor] Logic subtab clicked: ${nextLogicTab}`);
+            this.activeTab = 'logic';
+            this.activeLogicTab = nextLogicTab;
+            this.callbacks.onTabChanged(this.activeTab);
+            this.callbacks.onLogicTabChanged(nextLogicTab);
+            this.render();
             return;
         }
 
@@ -785,6 +864,13 @@ export class TestWorldEditorSidebar {
                             <div class="test-world-editor__fields">
                                 ${section.fields.map((field) => buildFieldMarkup(field, attributeName)).join('')}
                             </div>
+                            ${(section.actions && section.actions.length > 0) ? `
+                                <div class="test-world-editor__toolbar">
+                                    ${section.actions.map((action) => (
+                                        `<button type="button" class="test-world-editor__button" data-editor-inspector-action="${escapeHtml(action.id)}">${escapeHtml(action.label)}</button>`
+                                    )).join('')}
+                                </div>
+                            ` : ''}
                         `}
                     </section>
                 `;
@@ -831,6 +917,9 @@ export class TestWorldEditorSidebar {
         const sequenceActionMarkup = renderCollapsibleSections(state.sequenceActionSections, 'data-editor-sequence-action-field', 'sequence-action');
         const cutsceneMarkup = renderCollapsibleSections(state.cutsceneSections, 'data-editor-cutscene-field', 'cutscene');
         const cutsceneStepMarkup = renderCollapsibleSections(state.cutsceneStepSections, 'data-editor-cutscene-step-field', 'cutscene-step');
+        const logicTriggerMarkup = renderCollapsibleSections(state.logicTriggerSections, 'data-editor-field', 'logic-trigger');
+        const logicRuleMarkup = renderCollapsibleSections(state.logicRuleSections, 'data-editor-field', 'logic-rule');
+        const logicFlagsMarkup = renderCollapsibleSections(state.logicFlagsSections, 'data-editor-field', 'logic-flags');
         const levelMarkup = renderCollapsibleSections(state.levelSections, 'data-editor-level-field', 'level');
         const backgroundMarkup = renderCollapsibleSections(state.backgroundSections, 'data-editor-level-field', 'background');
         const tabBarMarkup = `
@@ -842,6 +931,7 @@ export class TestWorldEditorSidebar {
                 ${buildTabButton('sequences', 'Sequences')}
                 ${buildTabButton('cutscenes', 'Cutscenes')}
                 ${buildTabButton('inspector', 'Inspector')}
+                ${buildTabButton('logic', 'Logic')}
             </div>
         `;
         const levelPanelMarkup = `
@@ -1028,6 +1118,105 @@ export class TestWorldEditorSidebar {
                 ${cutsceneStepMarkup || '<div class="test-world-editor__empty">Select a step</div>'}
             </section>
         `;
+        const logicTriggerItemsMarkup = state.logicTriggerItems.map((entry) => {
+            const className = entry.selected
+                ? 'test-world-editor__list-item is-selected'
+                : 'test-world-editor__list-item';
+            return `
+                <button type="button" class="${className}" data-editor-logic-trigger-id="${escapeHtml(entry.id)}">
+                    <span>${escapeHtml(entry.label)}</span>
+                    <small>${escapeHtml(entry.id)}</small>
+                </button>
+            `;
+        }).join('');
+        const logicRuleItemsMarkup = state.logicRuleItems.map((entry) => {
+            const className = entry.selected
+                ? 'test-world-editor__list-item is-selected'
+                : 'test-world-editor__list-item';
+            return `
+                <button type="button" class="${className}" data-editor-logic-rule-id="${escapeHtml(entry.id)}">
+                    <span>${escapeHtml(entry.label)}</span>
+                    <small>${escapeHtml(entry.id)}</small>
+                </button>
+            `;
+        }).join('');
+        const buildLogicTabButton = (tabId: TestWorldEditorLogicTabId, label: string): string => {
+            const className = tabId === this.activeLogicTab
+                ? 'test-world-editor__button is-active'
+                : 'test-world-editor__button';
+            return `<button type="button" class="${className}" data-editor-logic-tab="${tabId}">${escapeHtml(label)}</button>`;
+        };
+        const logicTriggersPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Logic Editor / Triggers</h3>
+                <div class="test-world-editor__meta">
+                    <div><strong>Selected Trigger</strong> ${escapeHtml(state.logicTriggerId ?? 'None')}</div>
+                </div>
+            </section>
+            <section class="test-world-editor__section">
+                <h3>Trigger Volumes</h3>
+                <div class="test-world-editor__list">${logicTriggerItemsMarkup || '<div class="test-world-editor__empty">No trigger volumes in this level</div>'}</div>
+            </section>
+            <section class="test-world-editor__section">
+                ${logicTriggerMarkup || '<div class="test-world-editor__empty">No trigger selected. Select a trigger volume from the list.</div>'}
+            </section>
+        `;
+        const logicCutscenesPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Logic Editor / Cutscenes</h3>
+                <div class="test-world-editor__empty">Cutscene 2.0 pending</div>
+            </section>
+        `;
+        const logicRulesPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Logic Editor / Rules</h3>
+                <div class="test-world-editor__meta">
+                    <div><strong>Selected Rule</strong> ${escapeHtml(state.logicRuleId ?? 'None')}</div>
+                </div>
+            </section>
+            <section class="test-world-editor__section">
+                <h3>World Rules</h3>
+                <div class="test-world-editor__list">${logicRuleItemsMarkup || '<div class="test-world-editor__empty">No world rules in this level</div>'}</div>
+            </section>
+            <section class="test-world-editor__section">
+                ${logicRuleMarkup || '<div class="test-world-editor__empty">No rule selected. Select a world rule from the list.</div>'}
+            </section>
+        `;
+        const logicNpcBehaviorPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Logic Editor / NPC Behavior</h3>
+                <div class="test-world-editor__empty">NPC Behavior Pages pending</div>
+            </section>
+        `;
+        const logicFlagsPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Logic Editor / Flags</h3>
+                ${logicFlagsMarkup || '<div class="test-world-editor__empty">Flags editor pending. Runtime flags are available through Event Actions.</div>'}
+            </section>
+        `;
+        let logicInnerPanelMarkup = logicTriggersPanelMarkup;
+        if (this.activeLogicTab === 'cutscenes') {
+            logicInnerPanelMarkup = logicCutscenesPanelMarkup;
+        } else if (this.activeLogicTab === 'rules') {
+            logicInnerPanelMarkup = logicRulesPanelMarkup;
+        } else if (this.activeLogicTab === 'npc_behavior') {
+            logicInnerPanelMarkup = logicNpcBehaviorPanelMarkup;
+        } else if (this.activeLogicTab === 'flags') {
+            logicInnerPanelMarkup = logicFlagsPanelMarkup;
+        }
+        const logicPanelMarkup = `
+            <section class="test-world-editor__section">
+                <h3>Logic Workspace</h3>
+                <div class="test-world-editor__toolbar">
+                    ${buildLogicTabButton('triggers', 'Triggers')}
+                    ${buildLogicTabButton('rules', 'Rules')}
+                    ${buildLogicTabButton('cutscenes', 'Cutscenes')}
+                    ${buildLogicTabButton('npc_behavior', 'NPC Behavior')}
+                    ${buildLogicTabButton('flags', 'Flags')}
+                </div>
+            </section>
+            ${logicInnerPanelMarkup}
+        `;
 
         let activePanelMarkup = levelPanelMarkup;
         if (this.activeTab === 'background') {
@@ -1042,6 +1231,15 @@ export class TestWorldEditorSidebar {
             activePanelMarkup = cutscenesPanelMarkup;
         } else if (this.activeTab === 'inspector') {
             activePanelMarkup = inspectorPanelMarkup;
+        } else if (this.activeTab === 'logic') {
+            activePanelMarkup = logicPanelMarkup;
+            const markerKey = `logic:${this.activeLogicTab}`;
+            if (this.lastLogicConsoleMarkerKey !== markerKey) {
+                console.info(`[editor] Logic subtab rendered: ${this.activeLogicTab}`);
+            }
+            this.lastLogicConsoleMarkerKey = markerKey;
+        } else {
+            this.lastLogicConsoleMarkerKey = null;
         }
 
         this.root.innerHTML = `
@@ -1065,7 +1263,7 @@ export class TestWorldEditorSidebar {
             </div>
         `;
         this.root.appendChild(this.fileInput);
-        this.restoreScrollPosition();
         this.restoreFocusedField();
+        this.restoreScrollPosition();
     }
 }

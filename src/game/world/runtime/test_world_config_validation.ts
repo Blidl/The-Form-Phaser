@@ -24,6 +24,14 @@ import {
     type TestWorldTriggerVolumeConfig,
     type TestWorldWindZoneConfig
 } from './test_world_config';
+import type { PlayerFormId } from '../../player/player_types';
+import type { ActorAction } from '../../actor_actions/actor_action_types';
+import type { TestEventAction, TestEventBlock } from '../../events/test_event_actions';
+import type { TestEventCondition } from '../../events/test_event_conditions';
+import type {
+    TestWorldLogicEventMatcher,
+    TestWorldLogicRule
+} from '../../events/test_world_logic_rules';
 import type { TestNpcInstanceConfig } from '../../npc/npc_types';
 import { isTestNpcScriptedSequenceRef } from '../../npc/npc_scripted_sequences';
 import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
@@ -43,6 +51,7 @@ const DEFAULT_TRIGGER_VOLUME_FILL_COLOR = 0xb3e5fc;
 const DEFAULT_TRIGGER_VOLUME_STROKE_COLOR = 0x0277bd;
 const DEFAULT_TRIGGER_VOLUME_DEACTIVATE_FILL_COLOR = 0xffccbc;
 const DEFAULT_TRIGGER_VOLUME_DEACTIVATE_STROKE_COLOR = 0xe64a19;
+const PLAYER_FORM_IDS = new Set<PlayerFormId>(['ball', 'triangle', 'square']);
 
 const asNumber = (value: unknown, fallback: number): number => {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -231,6 +240,369 @@ const normalizeTriggerCommand = (
         operation,
         value
     };
+};
+
+const normalizeWorldFlags = (
+    raw: Record<string, unknown> | null,
+    fallback: Record<string, boolean> | undefined
+): Record<string, boolean> | undefined => {
+    const source = raw ?? fallback ?? null;
+    if (!source) {
+        return undefined;
+    }
+
+    const normalized: Record<string, boolean> = {};
+    Object.entries(source).forEach(([rawFlagId, rawValue]) => {
+        const flagId = rawFlagId.trim();
+        if (flagId.length <= 0 || typeof rawValue !== 'boolean') {
+            return;
+        }
+        normalized[flagId] = rawValue;
+    });
+    return Object.keys(normalized).length > 0 ? normalized : undefined;
+};
+
+const normalizeActorAction = (
+    raw: Record<string, unknown> | null
+): ActorAction | null => {
+    if (!raw || typeof raw.kind !== 'string') {
+        return null;
+    }
+
+    if (raw.kind === 'wait') {
+        if (typeof raw.durationMs !== 'number' || !Number.isFinite(raw.durationMs) || raw.durationMs < 0) {
+            return null;
+        }
+        return {
+            kind: 'wait',
+            durationMs: raw.durationMs
+        };
+    }
+
+    if (raw.kind === 'face') {
+        if (raw.facing !== -1 && raw.facing !== 1) {
+            return null;
+        }
+        return {
+            kind: 'face',
+            facing: raw.facing
+        };
+    }
+
+    if (raw.kind === 'walk_to_x') {
+        if (typeof raw.targetX !== 'number' || !Number.isFinite(raw.targetX)) {
+            return null;
+        }
+        if (typeof raw.moveSpeed !== 'number' || !Number.isFinite(raw.moveSpeed) || raw.moveSpeed < 0) {
+            return null;
+        }
+        if (typeof raw.tolerancePx !== 'number' || !Number.isFinite(raw.tolerancePx) || raw.tolerancePx < 0) {
+            return null;
+        }
+        return {
+            kind: 'walk_to_x',
+            targetX: raw.targetX,
+            moveSpeed: raw.moveSpeed,
+            tolerancePx: raw.tolerancePx
+        };
+    }
+
+    if (raw.kind === 'play_animation') {
+        const animationId = asOptionalString(raw.animationId);
+        if (!animationId) {
+            return null;
+        }
+        return {
+            kind: 'play_animation',
+            animationId
+        };
+    }
+
+    if (raw.kind === 'set_emotion') {
+        const emotionId = asOptionalString(raw.emotionId);
+        if (!emotionId) {
+            return null;
+        }
+        return {
+            kind: 'set_emotion',
+            emotionId
+        };
+    }
+
+    if (raw.kind === 'trigger_event') {
+        const eventId = asOptionalString(raw.eventId);
+        if (!eventId) {
+            return null;
+        }
+        const payload = asObject(raw.payload) ?? undefined;
+        return {
+            kind: 'trigger_event',
+            eventId,
+            payload
+        };
+    }
+
+    return null;
+};
+
+const normalizeTestEventCondition = (
+    raw: Record<string, unknown> | null
+): TestEventCondition | null => {
+    if (!raw || typeof raw.kind !== 'string') {
+        return null;
+    }
+
+    if (raw.kind === 'flag') {
+        const flagId = asOptionalString(raw.flagId);
+        if (!flagId || typeof raw.equals !== 'boolean') {
+            return null;
+        }
+        return {
+            kind: 'flag',
+            flagId,
+            equals: raw.equals
+        };
+    }
+
+    if (raw.kind === 'once') {
+        const key = asOptionalString(raw.key);
+        return key ? { kind: 'once', key } : { kind: 'once' };
+    }
+
+    if (raw.kind === 'player_form') {
+        const form = asOptionalString(raw.form);
+        if (!form || !PLAYER_FORM_IDS.has(form as PlayerFormId)) {
+            return null;
+        }
+        return {
+            kind: 'player_form',
+            form
+        };
+    }
+
+    return null;
+};
+
+const normalizeTestEventAction = (
+    raw: Record<string, unknown> | null
+): TestEventAction | null => {
+    if (!raw || typeof raw.kind !== 'string') {
+        return null;
+    }
+
+    if (raw.kind === 'actor_action') {
+        const actorId = asOptionalString(raw.actorId);
+        const action = normalizeActorAction(asObject(raw.action));
+        if (!actorId || !action) {
+            return null;
+        }
+        return {
+            kind: 'actor_action',
+            actorId,
+            action
+        };
+    }
+
+    if (raw.kind === 'start_cutscene') {
+        const cutsceneRef = asOptionalString(raw.cutsceneRef);
+        if (!cutsceneRef) {
+            return null;
+        }
+        return {
+            kind: 'start_cutscene',
+            cutsceneRef
+        };
+    }
+
+    if (raw.kind === 'set_flag') {
+        const flagId = asOptionalString(raw.flagId);
+        if (!flagId || typeof raw.value !== 'boolean') {
+            return null;
+        }
+        return {
+            kind: 'set_flag',
+            flagId,
+            value: raw.value
+        };
+    }
+
+    if (raw.kind === 'trigger_event') {
+        const eventId = asOptionalString(raw.eventId);
+        if (!eventId) {
+            return null;
+        }
+        return {
+            kind: 'trigger_event',
+            eventId,
+            payload: asObject(raw.payload) ?? undefined
+        };
+    }
+
+    if (raw.kind === 'play_sfx') {
+        const sfxId = asOptionalString(raw.sfxId);
+        if (!sfxId) {
+            return null;
+        }
+        return {
+            kind: 'play_sfx',
+            sfxId
+        };
+    }
+
+    if (raw.kind === 'spawn_vfx') {
+        const vfxId = asOptionalString(raw.vfxId);
+        if (!vfxId) {
+            return null;
+        }
+        const actorId = asOptionalString(raw.actorId) ?? undefined;
+        const x = typeof raw.x === 'number' && Number.isFinite(raw.x) ? raw.x : undefined;
+        const y = typeof raw.y === 'number' && Number.isFinite(raw.y) ? raw.y : undefined;
+        return {
+            kind: 'spawn_vfx',
+            vfxId,
+            actorId,
+            x,
+            y
+        };
+    }
+
+    return null;
+};
+
+const normalizeTestEventBlock = (
+    raw: Record<string, unknown> | null,
+    fallbackId: string
+): TestEventBlock | null => {
+    if (!raw) {
+        return null;
+    }
+    const id = asString(raw.id, fallbackId);
+    const actions = asArray(raw.actions)
+        .map((entry) => normalizeTestEventAction(asObject(entry)))
+        .filter((entry): entry is TestEventAction => entry !== null);
+    if (actions.length <= 0) {
+        return null;
+    }
+    const conditions = asArray(raw.conditions)
+        .map((entry) => normalizeTestEventCondition(asObject(entry)))
+        .filter((entry): entry is TestEventCondition => entry !== null);
+    return {
+        id,
+        conditions: conditions.length > 0 ? conditions : undefined,
+        actions
+    };
+};
+
+const normalizeTestEventBlocks = (
+    raw: unknown,
+    ownerPrefix: string
+): TestEventBlock[] | undefined => {
+    const blocks = asArray(raw)
+        .map((entry, index) => normalizeTestEventBlock(asObject(entry), `${ownerPrefix}_block_${index + 1}`))
+        .filter((entry): entry is TestEventBlock => entry !== null);
+    return blocks.length > 0 ? blocks : undefined;
+};
+
+const normalizeTestWorldLogicEventMatcher = (
+    raw: Record<string, unknown> | null
+): TestWorldLogicEventMatcher | null => {
+    if (!raw || typeof raw.kind !== 'string') {
+        return null;
+    }
+    if (raw.kind === 'object_state_changed') {
+        const objectId = asOptionalString(raw.objectId);
+        if (!objectId) {
+            return null;
+        }
+        return {
+            kind: 'object_state_changed',
+            objectId,
+            fromState: asOptionalString(raw.fromState),
+            toState: asOptionalString(raw.toState)
+        };
+    }
+    if (raw.kind === 'trigger_event') {
+        const eventId = asOptionalString(raw.eventId);
+        if (!eventId) {
+            return null;
+        }
+        return {
+            kind: 'trigger_event',
+            eventId,
+            sourceId: asOptionalString(raw.sourceId)
+        };
+    }
+    if (raw.kind === 'npc_event') {
+        const eventId = asOptionalString(raw.eventId);
+        if (!eventId) {
+            return null;
+        }
+        return {
+            kind: 'npc_event',
+            actorId: asOptionalString(raw.actorId),
+            eventId
+        };
+    }
+    if (raw.kind === 'cutscene_finished') {
+        return {
+            kind: 'cutscene_finished',
+            cutsceneRef: asOptionalString(raw.cutsceneRef)
+        };
+    }
+    return null;
+};
+
+const normalizeTestWorldLogicRule = (
+    raw: Record<string, unknown> | null,
+    fallbackId: string
+): TestWorldLogicRule | null => {
+    if (!raw) {
+        return null;
+    }
+    const id = asString(raw.id, fallbackId);
+    const when = normalizeTestWorldLogicEventMatcher(asObject(raw.when));
+    if (!when) {
+        return null;
+    }
+    const actions = asArray(raw.actions)
+        .map((entry) => normalizeTestEventAction(asObject(entry)))
+        .filter((entry): entry is TestEventAction => entry !== null);
+    if (actions.length <= 0) {
+        return null;
+    }
+    const conditions = asArray(raw.conditions)
+        .map((entry) => normalizeTestEventCondition(asObject(entry)))
+        .filter((entry): entry is TestEventCondition => entry !== null);
+    const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : undefined;
+    return {
+        id,
+        enabled,
+        when,
+        conditions: conditions.length > 0 ? conditions : undefined,
+        actions
+    };
+};
+
+const normalizeTestWorldLogicRules = (
+    raw: unknown,
+    fallback: readonly TestWorldLogicRule[] | undefined
+): TestWorldLogicRule[] | undefined => {
+    if (raw === undefined) {
+        return fallback ? fallback.map((entry) => ({
+            ...entry,
+            when: { ...entry.when },
+            conditions: entry.conditions?.map((condition) => ({ ...condition })),
+            actions: entry.actions.map((action) => (
+                action.kind === 'actor_action'
+                    ? { ...action, action: { ...action.action } }
+                    : { ...action }
+            ))
+        })) : undefined;
+    }
+    const normalized = asArray(raw)
+        .map((entry, index) => normalizeTestWorldLogicRule(asObject(entry), `world_logic_rule_${index + 1}`))
+        .filter((entry): entry is TestWorldLogicRule => entry !== null);
+    return normalized.length > 0 ? normalized : undefined;
 };
 
 const normalizePlayerSpawn = (raw: Record<string, unknown> | null): TestWorldPlayerSpawnConfig => {
@@ -520,8 +892,9 @@ const normalizeTriggerVolume = (
         .map((entry) => entry.trim())
         .filter((entry) => entry.length > 0);
 
+    const id = ensureUniqueId(asString(raw?.id, fallback.id), usedIds, `trigger_volume_${index + 1}`);
     return {
-        id: ensureUniqueId(asString(raw?.id, fallback.id), usedIds, `trigger_volume_${index + 1}`),
+        id,
         triggerX: asNumber(raw?.triggerX, fallback.triggerX),
         triggerY: asNumber(raw?.triggerY, fallback.triggerY),
         triggerWidth: clampRectSize(asNumber(raw?.triggerWidth, fallback.triggerWidth)),
@@ -538,6 +911,9 @@ const normalizeTriggerVolume = (
         sourceIds: sourceIds.length > 0 ? sourceIds : fallback.sourceIds,
         enterCommand: normalizeTriggerCommand(asObject(raw?.enterCommand), fallback.enterCommand ?? null),
         exitCommand: normalizeTriggerCommand(asObject(raw?.exitCommand), fallback.exitCommand ?? null),
+        onEnter: normalizeTestEventBlocks(raw?.onEnter, `trigger:${id}:onEnter`),
+        onExit: normalizeTestEventBlocks(raw?.onExit, `trigger:${id}:onExit`),
+        onStay: normalizeTestEventBlocks(raw?.onStay, `trigger:${id}:onStay`),
         triggerFillColor: asColor(raw?.triggerFillColor, fallback.triggerFillColor ?? DEFAULT_TRIGGER_VOLUME_FILL_COLOR),
         triggerStrokeColor: asColor(raw?.triggerStrokeColor, fallback.triggerStrokeColor ?? DEFAULT_TRIGGER_VOLUME_STROKE_COLOR),
         deactivateTriggerFillColor: asColor(
@@ -897,9 +1273,130 @@ const fixDanglingTriggerCommandTargets = (config: TestWorldConfig): void => {
         return command;
     };
 
+    const sanitizeEventBlocks = (
+        blocks: TestEventBlock[] | undefined
+    ): TestEventBlock[] | undefined => {
+        if (!blocks || blocks.length <= 0) {
+            return undefined;
+        }
+        const sanitizeEventActions = (
+            actions: readonly TestEventAction[]
+        ): TestEventAction[] => {
+            return actions.filter((action) => {
+                if (action.kind === 'actor_action') {
+                    return npcIds.has(action.actorId);
+                }
+                if (action.kind === 'start_cutscene') {
+                    return isTestCutsceneRef(action.cutsceneRef);
+                }
+                if (action.kind === 'set_flag') {
+                    return action.flagId.trim().length > 0;
+                }
+                if (action.kind === 'trigger_event') {
+                    return action.eventId.trim().length > 0;
+                }
+                if (action.kind === 'play_sfx') {
+                    return action.sfxId.trim().length > 0;
+                }
+                if (action.kind === 'spawn_vfx') {
+                    return action.vfxId.trim().length > 0;
+                }
+                return false;
+            });
+        };
+        const sanitizedBlocks = blocks
+            .map((block) => {
+                const actions = sanitizeEventActions(block.actions);
+                if (actions.length <= 0) {
+                    return null;
+                }
+                return {
+                    ...block,
+                    actions
+                } satisfies TestEventBlock;
+            })
+            .filter((entry): entry is TestEventBlock => entry !== null);
+
+        return sanitizedBlocks.length > 0 ? sanitizedBlocks : undefined;
+    };
+
+    const sanitizeWorldLogicRules = (
+        rules: TestWorldLogicRule[] | undefined
+    ): TestWorldLogicRule[] | undefined => {
+        if (!rules || rules.length <= 0) {
+            return undefined;
+        }
+        const worldObjectIds = new Set<string>([
+            ...config.surfaces.map((entry) => entry.id),
+            ...config.hazards.map((entry) => entry.id),
+            ...config.checkpoints.map((entry) => entry.id),
+            ...config.movingPlatforms.map((entry) => entry.id),
+            ...config.triggerPlatforms.map((entry) => entry.id),
+            ...config.triggerVolumes.map((entry) => entry.id),
+            ...config.dragBoxes.map((entry) => entry.id),
+            ...config.windZones.map((entry) => entry.id),
+            ...config.triangleFlightBreakWalls.map((entry) => entry.id),
+            ...config.trianglePickups.map((entry) => entry.id),
+            ...(config.finish ? [config.finish.id] : []),
+            'player'
+        ]);
+        const normalizedRules = rules
+            .map((rule) => {
+                if (!rule.id || !rule.when || !Array.isArray(rule.actions) || rule.actions.length <= 0) {
+                    return null;
+                }
+                if (rule.when.kind === 'object_state_changed' && !worldObjectIds.has(rule.when.objectId)) {
+                    return null;
+                }
+                if (rule.when.kind === 'npc_event' && rule.when.actorId && !npcIds.has(rule.when.actorId)) {
+                    return null;
+                }
+                if (rule.when.kind === 'cutscene_finished' && rule.when.cutsceneRef && !isTestCutsceneRef(rule.when.cutsceneRef)) {
+                    return null;
+                }
+                if (rule.when.kind === 'trigger_event' && rule.when.eventId.trim().length <= 0) {
+                    return null;
+                }
+
+                const actions = rule.actions.filter((action) => {
+                    if (action.kind === 'actor_action') {
+                        return npcIds.has(action.actorId);
+                    }
+                    if (action.kind === 'start_cutscene') {
+                        return isTestCutsceneRef(action.cutsceneRef);
+                    }
+                    if (action.kind === 'set_flag') {
+                        return action.flagId.trim().length > 0;
+                    }
+                    if (action.kind === 'trigger_event') {
+                        return action.eventId.trim().length > 0;
+                    }
+                    if (action.kind === 'play_sfx') {
+                        return action.sfxId.trim().length > 0;
+                    }
+                    if (action.kind === 'spawn_vfx') {
+                        return action.vfxId.trim().length > 0;
+                    }
+                    return false;
+                });
+                if (actions.length <= 0) {
+                    return null;
+                }
+                return {
+                    ...rule,
+                    actions
+                } satisfies TestWorldLogicRule;
+            })
+            .filter((entry): entry is TestWorldLogicRule => entry !== null);
+        return normalizedRules.length > 0 ? normalizedRules : undefined;
+    };
+
     config.triggerVolumes.forEach((triggerVolume) => {
         triggerVolume.enterCommand = sanitizeCommand(triggerVolume.enterCommand);
         triggerVolume.exitCommand = sanitizeCommand(triggerVolume.exitCommand);
+        triggerVolume.onEnter = sanitizeEventBlocks(triggerVolume.onEnter);
+        triggerVolume.onExit = sanitizeEventBlocks(triggerVolume.onExit);
+        triggerVolume.onStay = sanitizeEventBlocks(triggerVolume.onStay);
         if (triggerVolume.activator === 'drag_box' && triggerVolume.sourceIds) {
             triggerVolume.sourceIds = triggerVolume.sourceIds.filter((entry) => dragBoxIds.has(entry));
             if (triggerVolume.sourceIds.length === 0) {
@@ -907,6 +1404,7 @@ const fixDanglingTriggerCommandTargets = (config: TestWorldConfig): void => {
             }
         }
     });
+    config.worldLogicRules = sanitizeWorldLogicRules(config.worldLogicRules);
 };
 
 export interface ParseTestWorldConfigResult {
@@ -929,6 +1427,8 @@ export const normalizeTestWorldConfig = (
         meta: normalizeMeta(asObject(root?.meta), defaults.meta),
         worldBounds: normalizeWorldBounds(asObject(root?.worldBounds), defaults.worldBounds),
         background: normalizeBackground(root?.background, defaults.background),
+        worldFlags: normalizeWorldFlags(asObject(root?.worldFlags), defaults.worldFlags),
+        worldLogicRules: normalizeTestWorldLogicRules(root?.worldLogicRules, defaults.worldLogicRules),
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
         npcs: normalizeNpcInstances(root?.npcs, defaults.npcs, usedIds),
         surfaces: normalizeArray(root?.surfaces, defaults.surfaces, normalizeSurface, usedIds, (entry) => entry.id),
@@ -995,6 +1495,7 @@ export const createMinimalTestWorldConfig = (
             height: 900
         },
         background: null,
+        worldLogicRules: [],
         playerSpawn: {
             x: 128,
             y: 128,

@@ -693,3 +693,72 @@
 - `Architecture Decisions:` Cutscene `set_emotion` выполняется через world->npc actor-local API (`dispatchCutsceneSetEmotion`), без sequence-wrapper workaround и без отдельного cutscene VFX path.
 - `Risks / Open Items:` Manpu presentation остаётся в TEMPORARY stub (`npc_visuals`/`npc_runtime`), что соответствует текущему first-pass contract.
 - `Next Recommended Step:` Прогнать короткий ручной smoke в editor: NPC initial, trigger enter/exit, sequence action dropdown, cutscene direct step.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` Editor Authoring Workspace Split (canon patch)
+- `Status:` done
+- `Summary:` Добавлен новый mini spec `the_form_mini_spec_editor_authoring_workspace_ru.md` для канонического разделения runtime editor на два authoring workspace: `F2 / Level Editor` и `Logic Editor`. Зафиксировано, что F2 остаётся зоной placement/geometry/basic props/references, а trigger/cutscene/NPC behavior/flags authoring выносится в отдельное logic menu. Закреплены ownership/guardrails: logic editor правит только данные, runtime execution остаётся в существующих runtime slices, без giant controller/node graph/scripting/Unity migration. Миграционный контракт требует сохранить legacy trigger commands и draft/localStorage flow без потери данных.
+- `Files:`
+  - `docs/canon/the_form_mini_spec_editor_authoring_workspace_ru.md`
+  - `docs/canon/the_form_orchestrator_state_ru.md`
+  - `docs/canon/the_form_orchestrator_work_queue_ru.md`
+  - `docs/canon/the_form_orchestrator_log_ru.md`
+- `Manual Check:` Сверены формулировки с source-of-truth документами по Event Authoring Foundation, Cutscene Vocabulary, NPC/Actor ownership и demo orchestration. Из-за существующих encoding искажений в части canon-файлов применён только append/minimal patch без полного rewrite.
+- `Architecture Decisions:` Принят двухрабочий editor contract: `where is the thing?` остаётся в F2, `what happens?` уходит в Logic menu; first full implementation target — только `Logic > Triggers`.
+- `Risks / Open Items:` Нужен аккуратный UX bridge между F2 inspector и Logic menu, чтобы не задублировать authoring surfaces в переходный период. Требуется проверка, что перенос UI не ломает legacy `enterCommand/exitCommand` и существующие draft'ы.
+- `Next Recommended Step:` Начать implementation pass с shell-меню `Logic` и вкладки `Triggers`, переиспользовать текущие Event Blocks editors, затем облегчить F2 inspector до summary+deep links.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` Logic Workspace First Pass (runtime editor UX)
+- `Status:` done
+- `Summary:` В runtime editor добавлен отдельный workspace `Logic` с внутренними tabs `Triggers/Cutscenes/NPC Behavior/Flags`. Полный authoring Trigger Event Blocks вынесен в `Logic > Triggers` через переиспользование существующего helper `buildTriggerEventEditorSections(...)` и существующего mutation path. Trigger inspector в F2 облегчен: сохранены placement/geometry и legacy commands, добавлены Event Blocks summary и рабочий deep-link `Open in Logic`. Добавлен dev breadcrumb `Logic Editor / Triggers` и console marker `[editor] Logic > Triggers mounted`.
+- `Files:`
+  - `src/game/world/runtime/test_world_editor_sidebar.ts`
+  - `src/game/world/runtime/test_world_editor_runtime.ts`
+  - `docs/canon/the_form_mini_spec_editor_authoring_workspace_ru.md`
+  - `docs/canon/the_form_orchestrator_work_queue_ru.md`
+  - `docs/canon/the_form_orchestrator_log_ru.md`
+- `Manual Check:` `npm run build-nolog` passed. Проверен активный editor path: Event Blocks UI ранее рендерился только в `Inspector` tab для selected `triggerVolume`, что могло быть неочевидно пользователю.
+- `Architecture Decisions:` Logic workspace добавлен как расширение текущего sidebar/editor, без нового editor application и без runtime rewrite. Legacy `enterCommand/exitCommand` и existing draft/localStorage flow сохранены.
+- `Risks / Open Items:` Cutscenes/NPC Behavior/Flags в Logic workspace пока placeholders (кроме flags debug snapshot). Для полного переноса authoring UX возможно потребуется дополнительный polish trigger list labels/filters.
+- `Next Recommended Step:` Следующий pass выбрать из трёх направлений: widen actor_action runtime support, Cutscene 2.0, NPC Behavior Pages.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` World Logic Rules / Event Listeners layer
+- `Status:` done
+- `Summary:` Added `World Logic Rules` as world-level listener layer over Event Authoring Foundation with new `Logic > Rules` authoring tab, runtime dispatch API, and rule execution through existing Event Actions runtime. `Logic > Triggers` remains intact as separate spatial authoring tab. Runtime now emits/matches `object_state_changed`, `trigger_event`, `npc_event`, and `cutscene_finished` events for rules.
+- `Files:`
+  - `docs/canon/the_form_mini_spec_world_logic_rules_ru.md`
+  - `src/game/events/test_world_logic_rules.ts`
+  - `src/game/world/runtime/test_world_config.ts`
+  - `src/game/world/runtime/test_world_config_validation.ts`
+  - `src/game/world/runtime/test_world_runtime.ts`
+  - `src/game/world/runtime/test_world_editor_sidebar.ts`
+  - `src/game/world/runtime/test_world_editor_runtime.ts`
+  - `src/game/world/runtime/test_world_logic_rules_editor.ts`
+  - `src/game/world/runtime/data/levels/test_world_level_01.json`
+  - `src/scenes/runtime/test_cutscene_runtime.ts`
+- `Manual Check:` `npm run build-nolog`.
+- `Architecture Decisions:` Rules execution reuses existing Event Conditions/Actions; no giant controller/node graph/arbitrary script introduced.
+- `Risks / Open Items:` `npc_event` currently piggybacks on `pf:npc_actor_action_event`; source filtering excludes synthetic `trigger_runtime` actor id.
+- `Next Recommended Step:` Extend object state emitters beyond triangle break wall where additional object state transitions exist.
+
+### Entry
+- `Date:` 2026-04-24
+- `Task:` F2 / Level Editor cleanup pass (placement-only focus)
+- `Status:` done
+- `Summary:` F2 inspector reduced to placement/basic editing. Trigger Volume inspector now keeps geometry/basic trigger refs + compact logic summary and `Open in Logic`; full nested logic authoring stays in `Logic > Triggers`. NPC inspector now keeps placement/profile/basic summary and `Open in Logic / NPC Behavior` placeholder. No legacy/event/rules data deletion introduced.
+- `Files:`
+  - `src/game/world/runtime/test_world_editor_runtime.ts`
+  - `src/game/world/runtime/test_world_logic_rules_editor.ts`
+  - `src/game/world/runtime/test_world_editor_sidebar.ts`
+  - `docs/canon/the_form_mini_spec_editor_authoring_workspace_ru.md`
+  - `docs/canon/the_form_orchestrator_log_ru.md`
+  - `docs/canon/the_form_orchestrator_work_queue_ru.md`
+- `Manual Check:` planned `npm run build-nolog`.
+- `Architecture Decisions:` no runtime gameplay rewrite; cleanup remains UI/authoring-surface change.
+- `Risks / Open Items:` `Logic > NPC Behavior` still placeholder tab by design.
+- `Next Recommended Step:` manual smoke for F2->Logic deep-links and scroll stability in long panels.

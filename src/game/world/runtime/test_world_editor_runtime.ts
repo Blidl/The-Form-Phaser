@@ -17,7 +17,23 @@ import {
     type TestWorldEditorObjectType,
     type TestWorldEditorSelectionPart
 } from './test_world_editor_adapters';
-import { TestWorldEditorSidebar, type TestWorldEditorSidebarSection, type TestWorldEditorSidebarState, type TestWorldEditorTabId } from './test_world_editor_sidebar';
+import {
+    TestWorldEditorSidebar,
+    type TestWorldEditorLogicTabId,
+    type TestWorldEditorSidebarSection,
+    type TestWorldEditorSidebarState,
+    type TestWorldEditorTabId
+} from './test_world_editor_sidebar';
+import {
+    applyTriggerEventEditorAction,
+    applyTriggerEventEditorFieldChange,
+    buildTriggerEventEditorSections
+} from './test_world_event_authoring_editor';
+import {
+    applyWorldLogicRuleEditorAction,
+    applyWorldLogicRuleEditorFieldChange,
+    buildWorldLogicRuleEditorSections
+} from './test_world_logic_rules_editor';
 import {
     clearTestWorldEditorDraft,
     getTestWorldEditorDraftStorageAuditSnapshot,
@@ -39,7 +55,6 @@ import {
     TEST_EDITOR_HELP_OVERLAY_LAYOUT
 } from '../../../ui/runtime/test_hud_layout';
 import {
-    getTestNpcProfile,
     getTestNpcProfiles,
     resolveTestNpcConfig
 } from '../../npc/npc_profiles';
@@ -85,6 +100,7 @@ import {
     saveTestCutsceneDraft
 } from '../../cutscene/cutscene_storage';
 import type { ActorAction } from '../../actor_actions/actor_action_types';
+import type { TestWorldLogicRule } from '../../events/test_world_logic_rules';
 import type {
     TestCutsceneActorSequenceRefStep,
     TestCutsceneCameraFocusActorStep,
@@ -96,6 +112,7 @@ import type {
     TestCutsceneSubtitleStep,
     TestCutsceneWaitStep
 } from '../../cutscene/cutscene_types';
+import { getWorldFlagsDebugSnapshot } from '../../events/test_world_flags';
 import {
     TEST_WORLD_VISUAL_LAYER_OPTIONS,
     resolveTestWorldRenderOrder,
@@ -790,7 +807,10 @@ export const createTestWorldEditorRuntime = (
     let pendingPlacementType: TestWorldEditorObjectType | null = null;
     let gameplayCameraSnapshot: EditorCameraSnapshot | null = null;
     let activeTab: TestWorldEditorTabId = 'level';
+    let logicActiveTab: TestWorldEditorLogicTabId = 'triggers';
     let selectedBackgroundId: BackgroundSelectionId | null = null;
+    let selectedLogicTriggerId: string | null = null;
+    let selectedLogicRuleId: string | null = null;
     let selectedSequenceId: string | null = getTestNpcScriptedSequenceDefinitions()[0]?.id ?? null;
     let selectedSequenceActionIndex = 0;
     let suppressCutsceneDraftPersistUntilNextTick = false;
@@ -823,6 +843,9 @@ export const createTestWorldEditorRuntime = (
     const isSequencesTabActive = (): boolean => activeTab === 'sequences';
     const isCutscenesTabActive = (): boolean => activeTab === 'cutscenes';
     const isInspectorTabActive = (): boolean => activeTab === 'inspector';
+    const isLogicTabActive = (): boolean => activeTab === 'logic';
+    const isLogicTriggersTabActive = (): boolean => isLogicTabActive() && logicActiveTab === 'triggers';
+    const isLogicRulesTabActive = (): boolean => isLogicTabActive() && logicActiveTab === 'rules';
     const isObjectInteractionTabActive = (): boolean => isObjectsTabActive() || isNpcTabActive() || isInspectorTabActive();
     const isBackgroundTabActive = (): boolean => activeTab === 'background';
     const getSelectableHandles = (): readonly TestWorldEditorHandle[] => {
@@ -872,6 +895,41 @@ export const createTestWorldEditorRuntime = (
         });
 
         return handles;
+    };
+
+    const getTriggerVolumes = (): readonly TestWorldTriggerVolumeConfig[] => {
+        return worldRuntime.getConfig().triggerVolumes;
+    };
+    const getWorldLogicRules = (): readonly TestWorldLogicRule[] => {
+        return worldRuntime.getConfig().worldLogicRules ?? [];
+    };
+
+    const normalizeSelectedLogicTriggerState = (): void => {
+        const triggerVolumes = getTriggerVolumes();
+        if (triggerVolumes.length <= 0) {
+            selectedLogicTriggerId = null;
+            return;
+        }
+        const hasSelected = selectedLogicTriggerId
+            ? triggerVolumes.some((entry) => entry.id === selectedLogicTriggerId)
+            : false;
+        if (!hasSelected) {
+            selectedLogicTriggerId = triggerVolumes[0]?.id ?? null;
+        }
+    };
+
+    const normalizeSelectedLogicRuleState = (): void => {
+        const rules = getWorldLogicRules();
+        if (rules.length <= 0) {
+            selectedLogicRuleId = null;
+            return;
+        }
+        const hasSelected = selectedLogicRuleId
+            ? rules.some((entry) => entry.id === selectedLogicRuleId)
+            : false;
+        if (!hasSelected) {
+            selectedLogicRuleId = rules[0]?.id ?? null;
+        }
     };
 
     const getSelectedBackgroundHandle = (): BackgroundEditorHandle | null => {
@@ -1150,8 +1208,16 @@ export const createTestWorldEditorRuntime = (
         const config = worldRuntime.getConfig();
         const sourceAudit = getSourceAuditView(config);
         normalizeSelectedScriptedSequenceState();
+        normalizeSelectedLogicTriggerState();
+        normalizeSelectedLogicRuleState();
         const selectedRootId = getSelectedRootId();
         const selectedType = worldRuntime.getEditorObjects().find((entry) => entry.id === selectedRootId)?.type ?? null;
+        const selectedLogicTrigger = selectedLogicTriggerId
+            ? config.triggerVolumes.find((entry) => entry.id === selectedLogicTriggerId) ?? null
+            : null;
+        const selectedLogicRule = selectedLogicRuleId
+            ? (config.worldLogicRules ?? []).find((entry) => entry.id === selectedLogicRuleId) ?? null
+            : null;
         const selectedSequence = getSelectedScriptedSequence();
         const selectedSequenceAction = selectedSequence?.actions[selectedSequenceActionIndex] ?? null;
         const selectedCutscene = getSelectedCutscene();
@@ -1234,6 +1300,22 @@ export const createTestWorldEditorRuntime = (
                 : [],
             cutsceneStepIndex: selectedCutsceneStep ? selectedCutsceneStepIndex : -1,
             cutsceneStepSections: buildCutsceneStepSections(config, selectedCutsceneStep),
+            logicTab: logicActiveTab,
+            logicTriggerItems: config.triggerVolumes.map((entry) => ({
+                id: entry.id,
+                label: entry.id,
+                selected: entry.id === selectedLogicTriggerId
+            })),
+            logicTriggerId: selectedLogicTriggerId,
+            logicTriggerSections: buildLogicTriggerSections(config, selectedLogicTrigger),
+            logicRuleItems: (config.worldLogicRules ?? []).map((entry) => ({
+                id: entry.id,
+                label: summarizeWorldLogicRule(entry),
+                selected: entry.id === selectedLogicRuleId
+            })),
+            logicRuleId: selectedLogicRuleId,
+            logicRuleSections: buildLogicRuleSections(config, selectedLogicRule),
+            logicFlagsSections: buildLogicFlagsSections(),
             selectedLocked: getSelectedHandle()?.isLocked() ?? false
         };
     };
@@ -1439,6 +1521,37 @@ export const createTestWorldEditorRuntime = (
             } else if (tabId !== 'background') {
                 selectedBackgroundId = null;
             }
+            if (tabId === 'logic') {
+                normalizeSelectedLogicTriggerState();
+                normalizeSelectedLogicRuleState();
+            }
+            syncSidebar();
+        },
+        onLogicTabChanged: (tabId) => {
+            const didChange = logicActiveTab !== tabId;
+            logicActiveTab = tabId;
+            if (didChange) {
+                console.info(`[editor] Logic active subtab: ${logicActiveTab}`);
+            }
+            if (tabId === 'triggers') {
+                normalizeSelectedLogicTriggerState();
+            } else if (tabId === 'rules') {
+                normalizeSelectedLogicRuleState();
+            }
+            syncSidebar();
+        },
+        onSelectLogicTrigger: (id) => {
+            selectedLogicTriggerId = id;
+            selectRoot(id);
+            focusTarget(id);
+            activeTab = 'logic';
+            logicActiveTab = 'triggers';
+            syncSidebar();
+        },
+        onSelectLogicRule: (id) => {
+            selectedLogicRuleId = id;
+            activeTab = 'logic';
+            logicActiveTab = 'rules';
             syncSidebar();
         },
         onDuplicateSelected: () => {
@@ -1733,6 +1846,90 @@ export const createTestWorldEditorRuntime = (
         onInspectorFieldChange: (key, value) => {
             const rootId = getSelectedRootId();
             if (!rootId) {
+                const isLogicRuleField = key.startsWith('logic_rule:') && isLogicRulesTabActive() && !!selectedLogicRuleId;
+                if (
+                    !isLogicRuleField
+                    && (!key.startsWith('event:') || !isLogicTriggersTabActive() || !selectedLogicTriggerId)
+                ) {
+                    return;
+                }
+            }
+            const selectedType = getSelectedHandle()?.type ?? null;
+            if (key.startsWith('logic_rule:') && isLogicRulesTabActive()) {
+                const config = worldRuntime.getConfig();
+                config.worldLogicRules = config.worldLogicRules ?? [];
+                const rule = selectedLogicRuleId
+                    ? config.worldLogicRules.find((entry) => entry.id === selectedLogicRuleId) ?? null
+                    : null;
+                if (!rule) {
+                    return;
+                }
+                const result = applyWorldLogicRuleEditorFieldChange(rule, key, value, {
+                    npcIds: config.npcs.map((npc) => npc.id),
+                    cutsceneRefs: getTestCutsceneRefs(),
+                    objectIds: collectWorldLogicObjectIds(config)
+                });
+                if (!result.handled) {
+                    return;
+                }
+                if (!result.changed) {
+                    if (result.warning) {
+                        setStatus(result.warning);
+                    }
+                    return;
+                }
+                if (typeof result.selectedRuleId !== 'undefined') {
+                    selectedLogicRuleId = result.selectedRuleId;
+                }
+                worldRuntime.setConfig(config);
+                redoStack.length = 0;
+                onLevelConfigChanged?.(worldRuntime.getConfig());
+                markConfigDirty({
+                    refreshGeometry: false,
+                    syncSidebar: true
+                });
+                if (result.warning) {
+                    setStatus(result.warning);
+                }
+                return;
+            }
+            if (key.startsWith('logic:')) {
+                return;
+            }
+            if (key.startsWith('event:')) {
+                const config = worldRuntime.getConfig();
+                const triggerId = isLogicTriggersTabActive()
+                    ? selectedLogicTriggerId
+                    : (selectedType === 'triggerVolume' ? rootId : null);
+                const trigger = triggerId
+                    ? config.triggerVolumes.find((entry) => entry.id === triggerId)
+                    : null;
+                if (!trigger) {
+                    return;
+                }
+                const result = applyTriggerEventEditorFieldChange(trigger, key, value, {
+                    npcIds: config.npcs.map((npc) => npc.id),
+                    cutsceneRefs: getTestCutsceneRefs()
+                });
+                if (!result.handled) {
+                    return;
+                }
+                if (!result.changed) {
+                    if (result.warning) {
+                        setStatus(result.warning);
+                    }
+                    return;
+                }
+                worldRuntime.setConfig(config);
+                redoStack.length = 0;
+                onLevelConfigChanged?.(worldRuntime.getConfig());
+                markConfigDirty({
+                    refreshGeometry: false,
+                    syncSidebar: true
+                });
+                if (result.warning) {
+                    setStatus(result.warning);
+                }
                 return;
             }
             if (key === 'directionX') {
@@ -1744,6 +1941,118 @@ export const createTestWorldEditorRuntime = (
                 worldRuntime.patchObjectFields(rootId, { [key]: value });
             }
             markConfigDirty();
+        },
+        onInspectorAction: (actionId) => {
+            if (actionId === 'open_logic_trigger') {
+                const rootId = getSelectedRootId();
+                const selectedType = getSelectedHandle()?.type ?? null;
+                if (!rootId || selectedType !== 'triggerVolume') {
+                    return;
+                }
+                selectedLogicTriggerId = rootId;
+                activeTab = 'logic';
+                const didChange = logicActiveTab !== 'triggers';
+                logicActiveTab = 'triggers';
+                if (didChange) {
+                    console.info(`[editor] Logic active subtab: ${logicActiveTab}`);
+                }
+                setStatus(`opened Logic > Triggers for ${rootId}`);
+                syncSidebar();
+                return;
+            }
+            if (actionId === 'open_logic_npc_behavior') {
+                const rootId = getSelectedRootId();
+                const selectedType = getSelectedHandle()?.type ?? null;
+                if (!rootId || selectedType !== 'npc') {
+                    return;
+                }
+                activeTab = 'logic';
+                const didChange = logicActiveTab !== 'npc_behavior';
+                logicActiveTab = 'npc_behavior';
+                if (didChange) {
+                    console.info(`[editor] Logic active subtab: ${logicActiveTab}`);
+                }
+                setStatus(`opened Logic > NPC Behavior for ${rootId}`);
+                syncSidebar();
+                return;
+            }
+
+            if (actionId.startsWith('logic_rule:') && isLogicRulesTabActive()) {
+                const config = worldRuntime.getConfig();
+                config.worldLogicRules = [...(config.worldLogicRules ?? [])];
+                const result = applyWorldLogicRuleEditorAction(
+                    config.worldLogicRules,
+                    selectedLogicRuleId,
+                    actionId,
+                    {
+                        npcIds: config.npcs.map((npc) => npc.id),
+                        cutsceneRefs: getTestCutsceneRefs(),
+                        objectIds: collectWorldLogicObjectIds(config)
+                    }
+                );
+                if (!result.handled) {
+                    return;
+                }
+                if (!result.changed) {
+                    if (result.warning) {
+                        setStatus(result.warning);
+                    }
+                    return;
+                }
+                if (typeof result.selectedRuleId !== 'undefined') {
+                    selectedLogicRuleId = result.selectedRuleId;
+                }
+                worldRuntime.setConfig(config);
+                redoStack.length = 0;
+                onLevelConfigChanged?.(worldRuntime.getConfig());
+                markConfigDirty({
+                    refreshGeometry: false,
+                    syncSidebar: true
+                });
+                if (result.warning) {
+                    setStatus(result.warning);
+                }
+                return;
+            }
+
+            const rootId = getSelectedRootId();
+            if (!rootId && (!isLogicTriggersTabActive() || !selectedLogicTriggerId)) {
+                return;
+            }
+            const selectedType = getSelectedHandle()?.type ?? null;
+            const config = worldRuntime.getConfig();
+            const triggerId = isLogicTriggersTabActive()
+                ? selectedLogicTriggerId
+                : (selectedType === 'triggerVolume' ? rootId : null);
+            const trigger = triggerId
+                ? config.triggerVolumes.find((entry) => entry.id === triggerId)
+                : null;
+            if (!trigger) {
+                return;
+            }
+            const result = applyTriggerEventEditorAction(trigger, actionId, {
+                npcIds: config.npcs.map((npc) => npc.id),
+                cutsceneRefs: getTestCutsceneRefs()
+            });
+            if (!result.handled) {
+                return;
+            }
+            if (!result.changed) {
+                if (result.warning) {
+                    setStatus(result.warning);
+                }
+                return;
+            }
+            worldRuntime.setConfig(config);
+            redoStack.length = 0;
+            onLevelConfigChanged?.(worldRuntime.getConfig());
+            markConfigDirty({
+                refreshGeometry: false,
+                syncSidebar: true
+            });
+            if (result.warning) {
+                setStatus(result.warning);
+            }
         },
         onSequenceFieldChange: (key, value) => {
             const selectedSequence = getSelectedScriptedSequence();
@@ -3087,6 +3396,135 @@ const drawPlacementPreview = (
     graphics.lineBetween(preview.anchorX, preview.anchorY - size * 1.4, preview.anchorX, preview.anchorY + size * 1.4);
 };
 
+const summarizeTriggerCommand = (
+    command: TestWorldTriggerVolumeConfig['enterCommand'] | TestWorldTriggerVolumeConfig['exitCommand']
+): string => {
+    if (!command) {
+        return 'None';
+    }
+    const valueText = typeof command.value === 'boolean'
+        ? String(command.value)
+        : String(command.value ?? '');
+    return `${command.targetType}:${command.targetId} / ${command.operation} = ${valueText}`;
+};
+
+const summarizeTriggerCommandPresence = (
+    command: TestWorldTriggerVolumeConfig['enterCommand'] | TestWorldTriggerVolumeConfig['exitCommand']
+): string => {
+    return command ? 'present' : 'none';
+};
+
+const buildLogicTriggerSections = (
+    config: TestWorldConfig,
+    trigger: TestWorldTriggerVolumeConfig | null
+): TestWorldEditorSidebarSection[] => {
+    if (!trigger) {
+        return [];
+    }
+    const onEnterCount = trigger.onEnter?.length ?? 0;
+    const onExitCount = trigger.onExit?.length ?? 0;
+    const onStayCount = trigger.onStay?.length ?? 0;
+    return [
+        {
+            title: 'Logic Editor / Triggers',
+            fields: [
+                { key: 'logic:trigger:id', label: 'Trigger Id', input: 'text', value: trigger.id },
+                { key: 'logic:trigger:activator', label: 'Activator', input: 'text', value: trigger.activator },
+                {
+                    key: 'logic:trigger:geometry',
+                    label: 'Geometry',
+                    input: 'text',
+                    value: `trigger(${Math.round(trigger.triggerX)}, ${Math.round(trigger.triggerY)}, ${Math.round(trigger.triggerWidth)}, ${Math.round(trigger.triggerHeight)})`
+                },
+                {
+                    key: 'logic:trigger:releaseGeometry',
+                    label: 'Release Geometry',
+                    input: 'text',
+                    value: `release(${Math.round(trigger.deactivateTriggerX ?? 0)}, ${Math.round(trigger.deactivateTriggerY ?? 0)}, ${Math.round(trigger.deactivateTriggerWidth ?? 0)}, ${Math.round(trigger.deactivateTriggerHeight ?? 0)})`
+                },
+                {
+                    key: 'logic:trigger:sourceIds',
+                    label: 'Source Ids',
+                    input: 'text',
+                    value: (trigger.sourceIds ?? []).join(', ')
+                },
+                {
+                    key: 'logic:trigger:eventCounts',
+                    label: 'Event Blocks',
+                    input: 'text',
+                    value: `onEnter=${onEnterCount}, onExit=${onExitCount}, onStay=${onStayCount}`
+                },
+                {
+                    key: 'logic:trigger:legacyEnter',
+                    label: 'Legacy enterCommand',
+                    input: 'text',
+                    value: summarizeTriggerCommand(trigger.enterCommand ?? null)
+                },
+                {
+                    key: 'logic:trigger:legacyExit',
+                    label: 'Legacy exitCommand',
+                    input: 'text',
+                    value: summarizeTriggerCommand(trigger.exitCommand ?? null)
+                }
+            ]
+        },
+        ...buildTriggerEventEditorSections(trigger, {
+            npcIds: config.npcs.map((npc) => npc.id),
+            cutsceneRefs: getTestCutsceneRefs()
+        })
+    ];
+};
+
+const collectWorldLogicObjectIds = (config: TestWorldConfig): string[] => {
+    return [
+        ...config.surfaces.map((entry) => entry.id),
+        ...config.hazards.map((entry) => entry.id),
+        ...config.checkpoints.map((entry) => entry.id),
+        ...config.movingPlatforms.map((entry) => entry.id),
+        ...config.triggerPlatforms.map((entry) => entry.id),
+        ...config.triggerVolumes.map((entry) => entry.id),
+        ...config.dragBoxes.map((entry) => entry.id),
+        ...config.windZones.map((entry) => entry.id),
+        ...config.triangleFlightBreakWalls.map((entry) => entry.id),
+        ...config.trianglePickups.map((entry) => entry.id),
+        ...(config.finish ? [config.finish.id] : [])
+    ];
+};
+
+const buildLogicRuleSections = (
+    config: TestWorldConfig,
+    rule: TestWorldLogicRule | null
+): TestWorldEditorSidebarSection[] => {
+    return buildWorldLogicRuleEditorSections(rule, {
+        npcIds: config.npcs.map((npc) => npc.id),
+        cutsceneRefs: getTestCutsceneRefs(),
+        objectIds: collectWorldLogicObjectIds(config)
+    });
+};
+
+const summarizeWorldLogicRule = (rule: TestWorldLogicRule): string => {
+    const whenSummary = rule.when.kind === 'trigger_event'
+        ? `trigger_event:${rule.when.eventId}`
+        : rule.when.kind;
+    return `WHEN ${whenSummary} -> DO ${rule.actions.length} actions`;
+};
+
+const buildLogicFlagsSections = (): TestWorldEditorSidebarSection[] => {
+    const snapshot = getWorldFlagsDebugSnapshot();
+    const lines = Object.entries(snapshot)
+        .sort(([left], [right]) => left.localeCompare(right))
+        .map(([flagId, value]) => `${flagId} = ${value ? 'true' : 'false'}`);
+    return [{
+        title: 'Runtime Flags Snapshot',
+        fields: [{
+            key: 'logic:flags:snapshot',
+            label: 'Flags',
+            input: 'textarea',
+            value: lines.length > 0 ? lines.join('\n') : 'No runtime flags set'
+        }]
+    }];
+};
+
 const buildInspectorSections = (
     config: TestWorldConfig,
     rootId: string | null,
@@ -3147,70 +3585,23 @@ const buildInspectorSections = (
         return resolved.canonicalEmotionId ?? 'none';
     };
     const npcSections = (entry: NonNullable<ReturnType<typeof findById<TestWorldConfig['npcs'][number]>>>): TestWorldEditorSidebarSection[] => {
-        const profile = getTestNpcProfile(entry.profileId);
         const resolved = resolveTestNpcConfig(entry);
-        const profileDefaultScriptedLoopRef = profile?.scriptedLoopRef ?? null;
-        const effectiveScriptedLoopRef = resolved?.scriptedLoopRef ?? null;
-        const profileInteraction = profile?.interaction ?? null;
-        const effectiveInteraction = resolved?.interaction ?? null;
-        const profileOnSpawnRef = profile?.sequenceHooks?.onSpawn?.sequenceRef ?? null;
-        const profileOnPlayerNearRef = profile?.sequenceHooks?.onPlayerNear?.sequenceRef ?? null;
-        const profileOnPlayerFarRef = profile?.sequenceHooks?.onPlayerFar?.sequenceRef ?? null;
-        const effectiveOnSpawnRef = resolved?.sequenceHooks.onSpawn?.sequenceRef ?? null;
-        const effectiveOnPlayerNearRef = resolved?.sequenceHooks.onPlayerNear?.sequenceRef ?? null;
-        const effectiveOnPlayerFarRef = resolved?.sequenceHooks.onPlayerFar?.sequenceRef ?? null;
         const profileOptions = getTestNpcProfiles().map((candidate) => ({
             value: candidate.id,
             label: `${candidate.id} - ${candidate.displayName}`
         }));
-        const scriptedLoopOptions = [
-            {
-                value: 'profile_default',
-                label: `Profile Default (${profileDefaultScriptedLoopRef ?? 'None'})`
-            },
-            { value: 'none', label: 'None' },
-            ...getTestNpcScriptedSequenceRefs().map((sequenceRef) => ({
-                value: sequenceRef,
-                label: sequenceRef
-            }))
-        ];
-        const hookSequenceOptions = (profileRef: string | null) => [
-            {
-                value: 'profile_default',
-                label: `Profile Default (${profileRef ?? 'None'})`
-            },
-            { value: 'none', label: 'None' },
-            ...getTestNpcScriptedSequenceRefs().map((sequenceRef) => ({
-                value: sequenceRef,
-                label: sequenceRef
-            }))
-        ];
-        const interactionOutcomeKind = entry.interactionOverride?.outcome === null
+        const behaviorPageCount = Array.isArray((entry.behavior as Record<string, unknown> | undefined)?.pages)
+            ? ((entry.behavior as Record<string, unknown>).pages as unknown[]).length
+            : 0;
+        const scriptedSequenceRef = entry.scriptedLoopRef === null
             ? 'none'
-            : (entry.interactionOverride?.outcome?.kind ?? 'profile_default');
-        const interactionOutcomeRefLabel = effectiveInteraction
-            ? (effectiveInteraction.outcome.kind === 'run_sequence_ref'
-                ? effectiveInteraction.outcome.sequenceRef
-                : (effectiveInteraction.outcome.kind === 'trigger_event'
-                    ? effectiveInteraction.outcome.eventId
-                    : effectiveInteraction.outcome.cutsceneRef))
-            : 'None';
-        const cutsceneRegistryRefs = getTestCutsceneRefs();
-        const cutsceneRefOptions = cutsceneRegistryRefs.map((cutsceneRef) => ({
-            value: cutsceneRef,
-            label: cutsceneRef
-        }));
-        const interactionCutsceneRefValue = entry.interactionOverride?.outcome?.kind === 'request_cutscene_ref'
-            ? entry.interactionOverride.outcome.cutsceneRef
-            : (effectiveInteraction?.outcome.kind === 'request_cutscene_ref'
-                ? effectiveInteraction.outcome.cutsceneRef
-                : (cutsceneRegistryRefs[0] ?? ''));
+            : (entry.scriptedLoopRef ?? (resolved?.scriptedLoopRef ?? 'none'));
         return [
             {
                 title: 'NPC',
                 fields: [
-                    { key: 'x', label: 'Author X', input: 'number', value: entry.x, step: 1 },
-                    { key: 'y', label: 'Author Y', input: 'number', value: entry.y, step: 1 },
+                    { key: 'x', label: 'X', input: 'number', value: entry.x, step: 1 },
+                    { key: 'y', label: 'Y', input: 'number', value: entry.y, step: 1 },
                     {
                         key: 'profileId',
                         label: 'Profile',
@@ -3220,7 +3611,7 @@ const buildInspectorSections = (
                     },
                     {
                         key: 'initialManpuEmotionId',
-                        label: 'Manpu Emotion',
+                        label: 'Initial Manpu',
                         input: 'select',
                         value: resolveInitialManpuValue(entry.initialManpuEmotionId),
                         options: NPC_INITIAL_MANPU_OPTIONS.map((option) => ({
@@ -3238,129 +3629,15 @@ const buildInspectorSections = (
                             { value: 'left', label: 'Left' }
                         ]
                     },
-                    {
-                        key: 'playerBodyContactMode',
-                        label: 'Player Body',
-                        input: 'select',
-                        value: entry.playerBodyContactMode ?? 'profile_default',
-                        options: [
-                            { value: 'profile_default', label: 'Profile Default' },
-                            { value: 'block', label: 'Block' },
-                            { value: 'overlap', label: 'Overlap' },
-                            { value: 'ignore', label: 'Ignore' }
-                        ]
-                    },
-                    {
-                        key: 'scriptedLoopRef',
-                        label: `Scripted Loop (Effective: ${effectiveScriptedLoopRef ?? 'None'})`,
-                        input: 'select',
-                        value: entry.scriptedLoopRef === null ? 'none' : (entry.scriptedLoopRef ?? 'profile_default'),
-                        options: scriptedLoopOptions
-                    },
-                    {
-                        key: 'onSpawnSequenceRef',
-                        label: `Hook Spawn (Effective: ${effectiveOnSpawnRef ?? 'None'})`,
-                        input: 'select',
-                        value: entry.sequenceHookOverrides?.onSpawnSequenceRef === null
-                            ? 'none'
-                            : (entry.sequenceHookOverrides?.onSpawnSequenceRef ?? 'profile_default'),
-                        options: hookSequenceOptions(profileOnSpawnRef)
-                    },
-                    {
-                        key: 'onPlayerNearSequenceRef',
-                        label: `Hook Near (Effective: ${effectiveOnPlayerNearRef ?? 'None'})`,
-                        input: 'select',
-                        value: entry.sequenceHookOverrides?.onPlayerNearSequenceRef === null
-                            ? 'none'
-                            : (entry.sequenceHookOverrides?.onPlayerNearSequenceRef ?? 'profile_default'),
-                        options: hookSequenceOptions(profileOnPlayerNearRef)
-                    },
-                    {
-                        key: 'onPlayerFarSequenceRef',
-                        label: `Hook Far (Effective: ${effectiveOnPlayerFarRef ?? 'None'})`,
-                        input: 'select',
-                        value: entry.sequenceHookOverrides?.onPlayerFarSequenceRef === null
-                            ? 'none'
-                            : (entry.sequenceHookOverrides?.onPlayerFarSequenceRef ?? 'profile_default'),
-                        options: hookSequenceOptions(profileOnPlayerFarRef)
-                    },
-                    {
-                        key: 'interactionDistancePx',
-                        label: `Interaction Radius (Effective: ${Math.round(effectiveInteraction?.distancePx ?? 0)})`,
-                        input: 'number',
-                        value: entry.interactionOverride?.distancePx ?? profileInteraction?.distancePx ?? 56,
-                        min: 0,
-                        step: 1
-                    },
-                    {
-                        key: 'interactionOutcomeKind',
-                        label: `Interaction Outcome (Effective: ${effectiveInteraction?.outcome.kind ?? 'None'})`,
-                        input: 'select',
-                        value: interactionOutcomeKind,
-                        options: [
-                            { value: 'profile_default', label: `Profile Default (${profileInteraction?.outcome.kind ?? 'None'})` },
-                            { value: 'none', label: 'None' },
-                            { value: 'run_sequence_ref', label: 'Run Sequence Ref' },
-                            { value: 'trigger_event', label: 'Trigger Event' },
-                            { value: 'request_cutscene_ref', label: 'Request Cutscene Ref' }
-                        ]
-                    },
-                    {
-                        key: 'interactionSequenceRef',
-                        label: `Interaction Sequence (Effective Ref: ${interactionOutcomeRefLabel})`,
-                        input: 'select',
-                        value: entry.interactionOverride?.outcome?.kind === 'run_sequence_ref'
-                            ? entry.interactionOverride.outcome.sequenceRef
-                            : 'profile_default',
-                        options: [
-                            { value: 'profile_default', label: `Profile Default (${profileInteraction?.outcome.kind === 'run_sequence_ref' ? profileInteraction.outcome.sequenceRef : 'None'})` },
-                            ...getTestNpcScriptedSequenceRefs().map((sequenceRef) => ({
-                                value: sequenceRef,
-                                label: sequenceRef
-                            }))
-                        ]
-                    },
-                    {
-                        key: 'interactionEventId',
-                        label: `Interaction Event Id (Effective Ref: ${interactionOutcomeRefLabel})`,
-                        input: 'text',
-                        value: entry.interactionOverride?.outcome?.kind === 'trigger_event'
-                            ? entry.interactionOverride.outcome.eventId
-                            : ''
-                    },
-                    {
-                        key: 'interactionCutsceneRef',
-                        label: `Interaction Cutscene Ref (Effective Ref: ${interactionOutcomeRefLabel})`,
-                        input: 'select',
-                        value: interactionCutsceneRefValue,
-                        options: cutsceneRefOptions
-                    }
+                    { key: 'logic:npc:scriptedLoopRef', label: 'Scripted Sequence Ref', input: 'text', value: scriptedSequenceRef },
+                    { key: 'logic:npc:behaviorPages', label: 'Behavior Pages Count', input: 'number', value: behaviorPageCount }
                 ]
             },
             {
-                title: 'Behavior',
-                fields: [
-                    {
-                        key: 'passiveMode',
-                        label: 'Passive Mode',
-                        input: 'select',
-                        value: entry.behavior?.passiveMode ?? 'idle',
-                        options: [
-                            { value: 'idle', label: 'Idle' },
-                            { value: 'idle_patrol', label: 'Idle Patrol' }
-                        ]
-                    },
-                    { key: 'patrolDistance', label: 'Patrol Distance', input: 'number', value: entry.behavior?.patrolDistance ?? 64, min: 0, step: 1 },
-                    { key: 'moveSpeed', label: 'Move Speed', input: 'number', value: entry.behavior?.moveSpeed ?? 28, min: 0, step: 1 },
-                    { key: 'patrolSpeed', label: 'Patrol Speed', input: 'number', value: entry.behavior?.patrolSpeed ?? 34, min: 0, step: 1 },
-                    { key: 'idleDurationMs', label: 'Idle Ms', input: 'number', value: entry.behavior?.idleDurationMs ?? 900, min: 0, step: 1 },
-                    { key: 'patrolPauseMs', label: 'Patrol Pause Ms', input: 'number', value: entry.behavior?.patrolPauseMs ?? 700, min: 0, step: 1 },
-                    { key: 'alertDurationMs', label: 'Alert Ms', input: 'number', value: entry.behavior?.alertDurationMs ?? 450, min: 0, step: 1 },
-                    { key: 'senseRadius', label: 'Sense Radius', input: 'number', value: entry.behavior?.senseRadius ?? 150, min: 0, step: 1 },
-                    { key: 'chaseSpeed', label: 'Chase Speed', input: 'number', value: entry.behavior?.chaseSpeed ?? 82, min: 0, step: 1 },
-                    { key: 'chaseReleaseRadius', label: 'Release Radius', input: 'number', value: entry.behavior?.chaseReleaseRadius ?? 210, min: 0, step: 1 },
-                    { key: 'returnSpeed', label: 'Return Speed', input: 'number', value: entry.behavior?.returnSpeed ?? 40, min: 0, step: 1 },
-                    { key: 'postTolerance', label: 'Post Tolerance', input: 'number', value: entry.behavior?.postTolerance ?? 4, min: 1, step: 1 }
+                title: 'Logic',
+                fields: [],
+                actions: [
+                    { id: 'open_logic_npc_behavior', label: 'Open in Logic / NPC Behavior' }
                 ]
             },
             buildVisualOrderSection('npc', entry)
@@ -3523,98 +3800,6 @@ const buildInspectorSections = (
     }
     if (type === 'triggerVolume') {
         const entry = findById(config.triggerVolumes);
-        const enterCommand = entry?.enterCommand ?? null;
-        const exitCommand = entry?.exitCommand ?? null;
-        const triggerTargetTypeOptions = [
-            { value: 'trigger_platform', label: 'Trigger Platform' },
-            { value: 'moving_platform', label: 'Moving Platform' },
-            { value: 'npc', label: 'NPC' }
-        ];
-        const triggerBooleanValueOptions = [
-            { value: 'true', label: 'True / Activate' },
-            { value: 'false', label: 'False / Deactivate' }
-        ];
-        const triggerMotionValueOptions = [
-            { value: 'running_loop', label: 'Running Loop' },
-            { value: 'stopped', label: 'Stopped' },
-            { value: 'run_once', label: 'Run Once' }
-        ];
-        const triggerEmotionValueOptions = NPC_SET_EMOTION_OPTIONS.map((option) => ({
-            value: option.value,
-            label: option.label
-        }));
-
-        const getCommandTargetOptions = (
-            targetType: 'trigger_platform' | 'moving_platform' | 'npc'
-        ): Array<{ value: string; label: string }> => {
-            if (targetType === 'trigger_platform') {
-                return config.triggerPlatforms.map((triggerPlatform) => ({
-                    value: triggerPlatform.id,
-                    label: triggerPlatform.id
-                }));
-            }
-            if (targetType === 'moving_platform') {
-                return config.movingPlatforms.map((movingPlatform) => ({
-                    value: movingPlatform.id,
-                    label: movingPlatform.id
-                }));
-            }
-            return config.npcs.map((npc) => ({
-                value: npc.id,
-                label: npc.id
-            }));
-        };
-
-        const resolveOperationOptions = (
-            targetType: 'trigger_platform' | 'moving_platform' | 'npc'
-        ): Array<{ value: string; label: string }> => {
-            if (targetType === 'trigger_platform') {
-                return [{ value: 'set_active', label: 'Set Active' }];
-            }
-            if (targetType === 'moving_platform') {
-                return [{ value: 'set_motion_state', label: 'Set Motion State' }];
-            }
-            return [{ value: 'set_emotion', label: 'Set Emotion' }];
-        };
-
-        const resolveCommandFieldModel = (
-            command: typeof enterCommand
-        ) => {
-            const targetType = (command?.targetType ?? 'trigger_platform');
-            const targetOptions = getCommandTargetOptions(targetType);
-            const selectedTargetId = command?.targetId ?? '';
-            const operation = targetType === 'npc'
-                ? 'set_emotion'
-                : (targetType === 'moving_platform' ? 'set_motion_state' : 'set_active');
-            const valueOptions = operation === 'set_active'
-                ? triggerBooleanValueOptions
-                : (operation === 'set_motion_state' ? triggerMotionValueOptions : triggerEmotionValueOptions);
-            const fallbackValue = valueOptions[0]?.value ?? '';
-            const value = operation === 'set_active'
-                ? (typeof command?.value === 'boolean' ? String(command.value) : fallbackValue)
-                : (typeof command?.value === 'string' ? command.value : fallbackValue);
-            const normalizedValueOptions = valueOptions.some((option) => option.value === value)
-                ? valueOptions
-                : [{ value, label: `${value} (legacy)` }, ...valueOptions];
-            const normalizedTargetOptions = targetOptions.some((option) => option.value === selectedTargetId)
-                ? targetOptions
-                : (selectedTargetId.length > 0
-                    ? [{ value: selectedTargetId, label: `${selectedTargetId} (missing)` }, ...targetOptions]
-                    : targetOptions);
-            return {
-                targetType,
-                targetOptions: normalizedTargetOptions.length > 0
-                    ? normalizedTargetOptions
-                    : [{ value: '', label: 'No targets' }],
-                operation,
-                operationOptions: resolveOperationOptions(targetType),
-                value,
-                valueOptions: normalizedValueOptions
-            };
-        };
-
-        const enterFieldModel = resolveCommandFieldModel(enterCommand);
-        const exitFieldModel = resolveCommandFieldModel(exitCommand);
         return entry ? [
             {
                 title: 'Trigger Zone',
@@ -3639,20 +3824,38 @@ const buildInspectorSections = (
                 ]
             },
             {
-                title: 'Trigger Logic',
+                title: 'Trigger',
                 fields: [
                     { key: 'activator', label: 'Activator', input: 'select', value: entry.activator, options: [{ value: 'player', label: 'Player' }, { value: 'drag_box', label: 'Drag Box' }] },
-                    { key: 'sourceIdsCsv', label: 'Source Ids CSV', input: 'text', value: (entry.sourceIds ?? []).join(', ') },
-                    { key: 'enterCommandEnabled', label: 'Enter Command', input: 'checkbox', value: enterCommand !== null },
-                    { key: 'enterTargetType', label: 'Enter Target Type', input: 'select', value: enterFieldModel.targetType, options: triggerTargetTypeOptions },
-                    { key: 'enterTargetId', label: 'Enter Target Id', input: 'select', value: enterCommand?.targetId ?? '', options: enterFieldModel.targetOptions },
-                    { key: 'enterOperation', label: 'Enter Operation', input: 'select', value: enterFieldModel.operation, options: enterFieldModel.operationOptions },
-                    { key: 'enterValue', label: 'Enter Value', input: 'select', value: enterFieldModel.value, options: enterFieldModel.valueOptions },
-                    { key: 'exitCommandEnabled', label: 'Exit Command', input: 'checkbox', value: exitCommand !== null },
-                    { key: 'exitTargetType', label: 'Exit Target Type', input: 'select', value: exitFieldModel.targetType, options: triggerTargetTypeOptions },
-                    { key: 'exitTargetId', label: 'Exit Target Id', input: 'select', value: exitCommand?.targetId ?? '', options: exitFieldModel.targetOptions },
-                    { key: 'exitOperation', label: 'Exit Operation', input: 'select', value: exitFieldModel.operation, options: exitFieldModel.operationOptions },
-                    { key: 'exitValue', label: 'Exit Value', input: 'select', value: exitFieldModel.value, options: exitFieldModel.valueOptions }
+                    { key: 'sourceIdsCsv', label: 'Source Ids', input: 'text', value: (entry.sourceIds ?? []).join(', ') },
+                    { key: 'logic:summary:enterCommandPresence', label: 'Legacy enterCommand', input: 'text', value: summarizeTriggerCommandPresence(entry.enterCommand ?? null) },
+                    { key: 'logic:summary:exitCommandPresence', label: 'Legacy exitCommand', input: 'text', value: summarizeTriggerCommandPresence(entry.exitCommand ?? null) }
+                ]
+            },
+            {
+                title: 'Event Blocks Summary',
+                fields: [
+                    {
+                        key: 'logic:summary:onEnterCount',
+                        label: 'On Enter Blocks',
+                        input: 'number',
+                        value: entry.onEnter?.length ?? 0
+                    },
+                    {
+                        key: 'logic:summary:onExitCount',
+                        label: 'On Exit Blocks',
+                        input: 'number',
+                        value: entry.onExit?.length ?? 0
+                    },
+                    {
+                        key: 'logic:summary:onStayCount',
+                        label: 'On Stay Blocks',
+                        input: 'number',
+                        value: entry.onStay?.length ?? 0
+                    }
+                ],
+                actions: [
+                    { id: 'open_logic_trigger', label: 'Open in Logic' }
                 ]
             },
             buildVisualOrderSection(type, entry)

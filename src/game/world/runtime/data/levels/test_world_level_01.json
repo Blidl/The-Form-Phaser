@@ -19,6 +19,32 @@
       "scale": 1
     }
   },
+  "worldFlags": {
+    "demo_guard_triggered": false
+  },
+  "worldLogicRules": [
+    {
+      "id": "triangle_wall_break_cutscene_once",
+      "enabled": true,
+      "when": {
+        "kind": "object_state_changed",
+        "objectId": "triangle_flight_break_wall_main",
+        "toState": "broken"
+      },
+      "conditions": [
+        {
+          "kind": "once",
+          "key": "triangle_wall_break_cutscene_once"
+        }
+      ],
+      "actions": [
+        {
+          "kind": "start_cutscene",
+          "cutsceneRef": "observer_smoke_cutscene_v1"
+        }
+      ]
+    }
+  ],
   "playerSpawn": {
     "x": 96,
     "y": 112,
@@ -576,6 +602,74 @@
         "operation": "set_emotion",
         "value": "calm"
       },
+      "onEnter": [
+        {
+          "id": "show_guard_anger_once_or_basic",
+          "conditions": [],
+          "actions": [
+            {
+              "kind": "actor_action",
+              "actorId": "npc_passive_lookout",
+              "action": {
+                "kind": "set_emotion",
+                "emotionId": "anger"
+              }
+            }
+          ]
+        },
+        {
+          "id": "set_guard_flag_once_ball",
+          "conditions": [
+            {
+              "kind": "player_form",
+              "form": "ball"
+            },
+            {
+              "kind": "once",
+              "key": "demo_guard_trigger_once"
+            }
+          ],
+          "actions": [
+            {
+              "kind": "set_flag",
+              "flagId": "demo_guard_triggered",
+              "value": true
+            }
+          ]
+        }
+      ],
+      "onExit": [
+        {
+          "id": "clear_guard_manpu",
+          "conditions": [],
+          "actions": [
+            {
+              "kind": "actor_action",
+              "actorId": "npc_passive_lookout",
+              "action": {
+                "kind": "set_emotion",
+                "emotionId": "calm"
+              }
+            }
+          ]
+        },
+        {
+          "id": "emit_alarm_ping_if_guard_flag",
+          "conditions": [
+            {
+              "kind": "flag",
+              "flagId": "demo_guard_triggered",
+              "equals": true
+            }
+          ],
+          "actions": [
+            {
+              "kind": "trigger_event",
+              "eventId": "observer_alarm_ping"
+            }
+          ]
+        }
+      ],
       "triggerFillColor": 11724284,
       "triggerStrokeColor": 1616738,
       "deactivateTriggerFillColor": 16764092,
