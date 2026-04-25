@@ -1,5 +1,14 @@
 ﻿# The Form — Mini Spec: Editor Authoring Workspace
 
+**SUPERSEDED: This document is historical/reference only. The current source of truth is docs/canon/authoring/...**
+
+Заменено документами:
+- `docs/canon/authoring/the_form_authoring_toolkit_overview_ru.md`
+- `docs/canon/authoring/the_form_level_editor_v2_ru.md`
+- `docs/canon/authoring/the_form_debug_validation_ru.md`
+- `docs/canon/authoring/the_form_storage_migration_ru.md`
+
+
 ## 1. Проблема
 
 `F2` / object inspector не должен становиться местом, где авторится вся логика игры.

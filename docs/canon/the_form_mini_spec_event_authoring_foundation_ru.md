@@ -1,61 +1,70 @@
-# The Form — Mini Spec: Event Authoring Foundation
+﻿# The Form вЂ” Mini Spec: Event Authoring Foundation
 
-## 1. Цель
+**SUPERSEDED: This document is historical/reference only. The current source of truth is docs/canon/authoring/...**
 
-Зафиксировать единую authoring foundation для:
+Заменено документами:
+- `docs/canon/authoring/the_form_action_catalog_ru.md`
+- `docs/canon/authoring/the_form_event_system_ru.md`
+- `docs/canon/authoring/the_form_debug_validation_ru.md`
+- `docs/canon/authoring/the_form_storage_migration_ru.md`
+
+
+## 1. Р¦РµР»СЊ
+
+Р—Р°С„РёРєСЃРёСЂРѕРІР°С‚СЊ РµРґРёРЅСѓСЋ authoring foundation РґР»СЏ:
 - NPC behavior;
 - triggers;
 - cutscenes;
 - conditions;
 - event actions.
 
-Это не новая архитектура игры, не universal scripting language, не node graph editor и не full visual scripting.
+Р­С‚Рѕ РЅРµ РЅРѕРІР°СЏ Р°СЂС…РёС‚РµРєС‚СѓСЂР° РёРіСЂС‹, РЅРµ universal scripting language, РЅРµ node graph editor Рё РЅРµ full visual scripting.
 
-## 2. Основные понятия
+## 2. РћСЃРЅРѕРІРЅС‹Рµ РїРѕРЅСЏС‚РёСЏ
 
 ### `TestEventCondition`
-Небольшая проверка, возвращающая `true/false`.
+РќРµР±РѕР»СЊС€Р°СЏ РїСЂРѕРІРµСЂРєР°, РІРѕР·РІСЂР°С‰Р°СЋС‰Р°СЏ `true/false`.
 
 ### `TestEventAction`
-Одна authorable команда, исполняемая runtime-слоями через явные адаптеры.
+РћРґРЅР° authorable РєРѕРјР°РЅРґР°, РёСЃРїРѕР»РЅСЏРµРјР°СЏ runtime-СЃР»РѕСЏРјРё С‡РµСЂРµР· СЏРІРЅС‹Рµ Р°РґР°РїС‚РµСЂС‹.
 
 ### `TestEventBlock`
-Пара:
-- список `conditions`;
-- список `actions`.
+РџР°СЂР°:
+- СЃРїРёСЃРѕРє `conditions`;
+- СЃРїРёСЃРѕРє `actions`.
 
-Блок выполняется так: если все условия истинны, выполняются actions по порядку.
+Р‘Р»РѕРє РІС‹РїРѕР»РЅСЏРµС‚СЃСЏ С‚Р°Рє: РµСЃР»Рё РІСЃРµ СѓСЃР»РѕРІРёСЏ РёСЃС‚РёРЅРЅС‹, РІС‹РїРѕР»РЅСЏСЋС‚СЃСЏ actions РїРѕ РїРѕСЂСЏРґРєСѓ.
 
 ### `NPC Behavior Page`
-Страница поведения NPC с `priority`, `conditions`, режимом и hooks-блоками.
+РЎС‚СЂР°РЅРёС†Р° РїРѕРІРµРґРµРЅРёСЏ NPC СЃ `priority`, `conditions`, СЂРµР¶РёРјРѕРј Рё hooks-Р±Р»РѕРєР°РјРё.
 
 ### `Trigger Event Blocks`
-Списки блоков для `onEnter/onExit/onStay` у trigger volume.
+РЎРїРёСЃРєРё Р±Р»РѕРєРѕРІ РґР»СЏ `onEnter/onExit/onStay` Сѓ trigger volume.
 
 ### `Cutscene Timeline Step`
-Один шаг timeline в cutscene, который либо orchestration-only, либо проксирует shared event/action runtime.
+РћРґРёРЅ С€Р°Рі timeline РІ cutscene, РєРѕС‚РѕСЂС‹Р№ Р»РёР±Рѕ orchestration-only, Р»РёР±Рѕ РїСЂРѕРєСЃРёСЂСѓРµС‚ shared event/action runtime.
 
-## 3. Разделение ответственности
+## 3. Р Р°Р·РґРµР»РµРЅРёРµ РѕС‚РІРµС‚СЃС‚РІРµРЅРЅРѕСЃС‚Рё
 
-- `Actor Action Layer` остается owner actor-local actions:
+- `Actor Action Layer` РѕСЃС‚Р°РµС‚СЃСЏ owner actor-local actions:
   - `move_to` / `walk_to_x`
   - `stop`
   - `face`
   - `play_animation`
   - `set_emotion`
-- `Event Action Layer` только маршрутизирует authorable commands и не владеет actor physics/behavior.
-- `Cutscene Runtime` оркестрирует timeline, но не владеет NPC behavior.
-- `Trigger Runtime` только оценивает conditions и исполняет action blocks.
-- `NPC Runtime` выбирает behavior page и вызывает event blocks/hooks.
+- `Event Action Layer` С‚РѕР»СЊРєРѕ РјР°СЂС€СЂСѓС‚РёР·РёСЂСѓРµС‚ authorable commands Рё РЅРµ РІР»Р°РґРµРµС‚ actor physics/behavior.
+- `Cutscene Runtime` РѕСЂРєРµСЃС‚СЂРёСЂСѓРµС‚ timeline, РЅРѕ РЅРµ РІР»Р°РґРµРµС‚ NPC behavior.
+- `Trigger Runtime` С‚РѕР»СЊРєРѕ РѕС†РµРЅРёРІР°РµС‚ conditions Рё РёСЃРїРѕР»РЅСЏРµС‚ action blocks.
+- `NPC Runtime` РІС‹Р±РёСЂР°РµС‚ behavior page Рё РІС‹Р·С‹РІР°РµС‚ event blocks/hooks.
 
 ## 4. MVP Conditions
 
-Разрешены только:
+Р Р°Р·СЂРµС€РµРЅС‹ С‚РѕР»СЊРєРѕ:
 - `flag == boolean`
 - `once`
 - `player_form`
 
-Отложены:
+РћС‚Р»РѕР¶РµРЅС‹:
 - inventory;
 - dialogue tree state;
 - quest system;
@@ -65,7 +74,7 @@
 
 ## 5. MVP Event Actions
 
-Разрешены:
+Р Р°Р·СЂРµС€РµРЅС‹:
 - `actor_action`
 - `start_cutscene`
 - `set_flag`
@@ -75,26 +84,26 @@
 
 ## 6. Trigger Evolution
 
-Текущий формат:
+РўРµРєСѓС‰РёР№ С„РѕСЂРјР°С‚:
 - `enterCommand`
 - `exitCommand`
 
-Сохраняется как legacy-compatible.
+РЎРѕС…СЂР°РЅСЏРµС‚СЃСЏ РєР°Рє legacy-compatible.
 
-Новый формат:
+РќРѕРІС‹Р№ С„РѕСЂРјР°С‚:
 - `onEnter: TestEventBlock[]`
 - `onExit: TestEventBlock[]`
 - `onStay?: TestEventBlock[]`
 
-Правило совместимости:
-- если есть legacy-поля, они продолжают исполняться;
-- если есть новые блоки, они исполняются через Event Action Layer;
-- оба режима могут сосуществовать в переходный период.
+РџСЂР°РІРёР»Рѕ СЃРѕРІРјРµСЃС‚РёРјРѕСЃС‚Рё:
+- РµСЃР»Рё РµСЃС‚СЊ legacy-РїРѕР»СЏ, РѕРЅРё РїСЂРѕРґРѕР»Р¶Р°СЋС‚ РёСЃРїРѕР»РЅСЏС‚СЊСЃСЏ;
+- РµСЃР»Рё РµСЃС‚СЊ РЅРѕРІС‹Рµ Р±Р»РѕРєРё, РѕРЅРё РёСЃРїРѕР»РЅСЏСЋС‚СЃСЏ С‡РµСЂРµР· Event Action Layer;
+- РѕР±Р° СЂРµР¶РёРјР° РјРѕРіСѓС‚ СЃРѕСЃСѓС‰РµСЃС‚РІРѕРІР°С‚СЊ РІ РїРµСЂРµС…РѕРґРЅС‹Р№ РїРµСЂРёРѕРґ.
 
 ## 7. NPC Behavior Pages
 
-Добавляется слой поверх существующих profile/instance/hooks:
-- `pages[]` с `priority`;
+Р”РѕР±Р°РІР»СЏРµС‚СЃСЏ СЃР»РѕР№ РїРѕРІРµСЂС… СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёС… profile/instance/hooks:
+- `pages[]` СЃ `priority`;
 - `conditions`;
 - `behaviorMode`;
 - `initialActions`;
@@ -103,11 +112,11 @@
 - `onInteract`;
 - `onTriggerEvent`.
 
-Это не behavior tree и не универсальная AI система.
+Р­С‚Рѕ РЅРµ behavior tree Рё РЅРµ СѓРЅРёРІРµСЂСЃР°Р»СЊРЅР°СЏ AI СЃРёСЃС‚РµРјР°.
 
 ## 8. Cutscene 2.0
 
-Cutscene step может быть:
+Cutscene step РјРѕР¶РµС‚ Р±С‹С‚СЊ:
 - `lock_input`
 - `unlock_input`
 - `wait`
@@ -118,53 +127,53 @@ Cutscene step может быть:
 - `actor_action` shortcut
 - `set_flag` shortcut
 
-Правило:
-- cutscene runtime вызывает shared event/action runtime;
-- логика действий не дублируется отдельным cutscene-only execution path.
+РџСЂР°РІРёР»Рѕ:
+- cutscene runtime РІС‹Р·С‹РІР°РµС‚ shared event/action runtime;
+- Р»РѕРіРёРєР° РґРµР№СЃС‚РІРёР№ РЅРµ РґСѓР±Р»РёСЂСѓРµС‚СЃСЏ РѕС‚РґРµР»СЊРЅС‹Рј cutscene-only execution path.
 
 ## 9. Editor UX
 
-Фиксируются reusable компоненты:
+Р¤РёРєСЃРёСЂСѓСЋС‚СЃСЏ reusable РєРѕРјРїРѕРЅРµРЅС‚С‹:
 - `Condition List Editor`
 - `Action List Editor`
 - `Event Block Editor`
 
-Они переиспользуются в:
+РћРЅРё РїРµСЂРµРёСЃРїРѕР»СЊР·СѓСЋС‚СЃСЏ РІ:
 - Trigger Volume inspector;
 - NPC inspector;
 - Cutscene editor;
-- Sequence editor (где применимо).
+- Sequence editor (РіРґРµ РїСЂРёРјРµРЅРёРјРѕ).
 
 ## 10. Migration
 
-- existing trigger commands продолжают работать;
-- existing NPC scripted sequences продолжают работать;
-- existing cutscenes продолжают работать;
+- existing trigger commands РїСЂРѕРґРѕР»Р¶Р°СЋС‚ СЂР°Р±РѕС‚Р°С‚СЊ;
+- existing NPC scripted sequences РїСЂРѕРґРѕР»Р¶Р°СЋС‚ СЂР°Р±РѕС‚Р°С‚СЊ;
+- existing cutscenes РїСЂРѕРґРѕР»Р¶Р°СЋС‚ СЂР°Р±РѕС‚Р°С‚СЊ;
 - old Manpu trigger demo continues to work;
-- new model coexists с legacy полями, legacy помечается как deprecated.
+- new model coexists СЃ legacy РїРѕР»СЏРјРё, legacy РїРѕРјРµС‡Р°РµС‚СЃСЏ РєР°Рє deprecated.
 
 ## 11. Acceptance
 
-- Author может настраивать Manpu, старт cutscene, flags и NPC reactions из editor.
-- Для common cases не нужен ручной JSON-edit.
-- Не появляется новый giant controller.
-- Нет broad rewrite текущего runtime/editor.
+- Author РјРѕР¶РµС‚ РЅР°СЃС‚СЂР°РёРІР°С‚СЊ Manpu, СЃС‚Р°СЂС‚ cutscene, flags Рё NPC reactions РёР· editor.
+- Р”Р»СЏ common cases РЅРµ РЅСѓР¶РµРЅ СЂСѓС‡РЅРѕР№ JSON-edit.
+- РќРµ РїРѕСЏРІР»СЏРµС‚СЃСЏ РЅРѕРІС‹Р№ giant controller.
+- РќРµС‚ broad rewrite С‚РµРєСѓС‰РµРіРѕ runtime/editor.
 
 ## Canon Guardrails
 
-- Phaser остается целевым движком до завершения demo.
-- Runtime editor остается существующим источником authoring и не ломается.
-- `enterCommand/exitCommand`, scripted sequences, cutscene registry и actor action layer не удаляются.
+- Phaser РѕСЃС‚Р°РµС‚СЃСЏ С†РµР»РµРІС‹Рј РґРІРёР¶РєРѕРј РґРѕ Р·Р°РІРµСЂС€РµРЅРёСЏ demo.
+- Runtime editor РѕСЃС‚Р°РµС‚СЃСЏ СЃСѓС‰РµСЃС‚РІСѓСЋС‰РёРј РёСЃС‚РѕС‡РЅРёРєРѕРј authoring Рё РЅРµ Р»РѕРјР°РµС‚СЃСЏ.
+- `enterCommand/exitCommand`, scripted sequences, cutscene registry Рё actor action layer РЅРµ СѓРґР°Р»СЏСЋС‚СЃСЏ.
 
 ## 12. Editor Authoring First Pass
 
-����������� ������ ������� ������� editor authoring:
-- Trigger Volume inspector ����������� Event Blocks (`onEnter` / `onExit` / `onStay`).
-- Condition editor ������������ `flag`, `once`, `player_form`.
-- Action editor ������������: `actor_action` (� ������� �� `set_emotion`, `trigger_event`), `start_cutscene`, `set_flag`, `trigger_event`.
-- `play_sfx` � `spawn_vfx` ������������ ��� TEMPORARY stub actions.
-- Legacy `enterCommand/exitCommand` UI �������� ��� legacy-compatible ����.
-- �������������� actor actions (`walk_to_x`, `face`, `play_animation`, `wait`, `move_to`) ��������� �� ������������� � Event Blocks editor �� ���������� runtime ���������.
+Фактический статус первого прохода editor authoring:
+- Trigger Volume inspector редактирует Event Blocks (`onEnter` / `onExit` / `onStay`).
+- Condition editor поддерживает `flag`, `once`, `player_form`.
+- Action editor поддерживает: `actor_action` (с фокусом на `set_emotion`, `trigger_event`), `start_cutscene`, `set_flag`, `trigger_event`.
+- `play_sfx` и `spawn_vfx` отображаются как TEMPORARY stub actions.
+- Legacy `enterCommand/exitCommand` UI сохранён как legacy-compatible путь.
+- Неподдержанные actor actions (`walk_to_x`, `face`, `play_animation`, `wait`, `move_to`) намеренно не экспонируются в Event Blocks editor до расширения runtime поддержки.
 
 ## 13. World Logic Rules Extension (2026-04-24)
 
