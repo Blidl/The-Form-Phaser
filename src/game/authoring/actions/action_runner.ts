@@ -10,6 +10,7 @@ export interface ActionRunnerDebugSnapshot {
 export interface ActionRunnerContext {
     readonly source?: string;
     readonly actorId?: string;
+    readonly services?: Readonly<Record<string, unknown>>;
 }
 
 export interface ActionRunner {
