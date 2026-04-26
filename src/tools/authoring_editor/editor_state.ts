@@ -22,7 +22,9 @@ export interface AuthoringEditorState {
   readonly activeTab: AuthoringEditorTab;
   readonly storageStatus: AuthoringEditorStorageStatus;
   readonly selectedReferenceId?: string;
+  readonly selectedLevelObjectId?: string;
   readonly validationIssueCount?: number;
+  readonly lastRefreshAtMs?: number;
 }
 
 export function createInitialAuthoringEditorState(): AuthoringEditorState {
@@ -55,5 +57,45 @@ export function setAuthoringEditorStorageStatus(
   return {
     ...state,
     storageStatus,
+  };
+}
+
+export function setSelectedLevelObjectId(
+  state: AuthoringEditorState,
+  selectedLevelObjectId: string | undefined,
+): AuthoringEditorState {
+  return {
+    ...state,
+    selectedLevelObjectId,
+  };
+}
+
+export function setSelectedReferenceId(
+  state: AuthoringEditorState,
+  selectedReferenceId: string | undefined,
+): AuthoringEditorState {
+  return {
+    ...state,
+    selectedReferenceId,
+  };
+}
+
+export function setValidationIssueCount(
+  state: AuthoringEditorState,
+  validationIssueCount: number | undefined,
+): AuthoringEditorState {
+  return {
+    ...state,
+    validationIssueCount,
+  };
+}
+
+export function setLastRefreshAtMs(
+  state: AuthoringEditorState,
+  lastRefreshAtMs: number | undefined,
+): AuthoringEditorState {
+  return {
+    ...state,
+    lastRefreshAtMs,
   };
 }

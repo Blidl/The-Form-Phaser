@@ -1,3 +1,4 @@
+import type { AuthoringEditorRuntimeBridge } from './authoring_editor_runtime_bridge';
 import type { AuthoringEditorStorage } from './editor_storage';
 import { createAuthoringEditorStorage } from './editor_storage';
 import {
@@ -13,6 +14,10 @@ import { createDirectorWorkspace } from './workspaces/director_workspace';
 import { createEventsWorkspace } from './workspaces/events_workspace';
 import { createLevelWorkspace } from './workspaces/level_workspace';
 import { createNpcWorkspace } from './workspaces/npc_workspace';
+import type {
+  AuthoringWorkspace,
+  AuthoringWorkspaceRenderContext,
+} from './workspaces/authoring_workspace';
 
 export interface AuthoringEditorApp {
   mount(container: HTMLElement): void;
@@ -23,16 +28,10 @@ export interface AuthoringEditorApp {
   refreshStorageStatus(): void;
 }
 
-interface AuthoringWorkspace {
-  readonly id: AuthoringEditorTab;
-  readonly title: string;
-  render(container: HTMLElement, state: AuthoringEditorState): void;
-  destroy(): void;
-}
-
 interface CreateAuthoringEditorAppOptions {
   readonly storage?: AuthoringEditorStorage;
   readonly initialState?: AuthoringEditorState;
+  readonly runtimeBridge?: AuthoringEditorRuntimeBridge;
 }
 
 const TAB_LABELS: Record<AuthoringEditorTab, string> = {
@@ -106,6 +105,18 @@ export function createAuthoringEditorApp(
     statusElement.textContent = lines.join(' | ');
   };
 
+  const workspaceContext: AuthoringWorkspaceRenderContext = {
+    runtimeBridge: options?.runtimeBridge,
+    getState: (): AuthoringEditorState => state,
+    setState: (nextState: AuthoringEditorState): void => {
+      state = nextState;
+      render();
+    },
+    requestRender: (): void => {
+      renderWorkspace();
+    },
+  };
+
   const renderWorkspace = (): void => {
     if (!workspaceContainer) {
       return;
@@ -117,7 +128,7 @@ export function createAuthoringEditorApp(
     }
 
     activeWorkspace = nextWorkspace;
-    nextWorkspace.render(workspaceContainer, state);
+    nextWorkspace.render(workspaceContainer, state, workspaceContext);
   };
 
   const renderTabs = (tabsContainer: HTMLElement): void => {

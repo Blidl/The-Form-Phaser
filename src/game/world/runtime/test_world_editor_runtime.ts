@@ -50,11 +50,18 @@ import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runti
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
 import { createAuthoringEditorDevLauncher } from '../../../tools/authoring_editor/editor_dev_launcher';
+import type {
+    AuthoringEditorObjectSummary,
+    AuthoringEditorRuntimeBridge
+} from '../../../tools/authoring_editor/authoring_editor_runtime_bridge';
 import {
     resolveTestHudAnchorPosition,
     TEST_EDITOR_BACKGROUND_BADGE_LAYOUT,
     TEST_EDITOR_HELP_OVERLAY_LAYOUT
 } from '../../../ui/runtime/test_hud_layout';
+import { buildReferenceIndexFromTestAuthoringContent } from '../../authoring/registry/reference_index';
+import { validateLevelAsset } from '../../level_authoring/level_asset_validation';
+import { adaptTestWorldConfigToLevelAsset } from '../../level_authoring/test_world_to_level_asset_adapter';
 import {
     getTestNpcProfiles,
     resolveTestNpcConfig
@@ -844,7 +851,68 @@ export const createTestWorldEditorRuntime = (
     eventDebugPanelRoot.appendChild(eventDebugPanelToolbar);
     eventDebugPanelRoot.appendChild(eventDebugPanelTimelineContainer);
     appRoot.appendChild(eventDebugPanelRoot);
-    const authoringEditorDevLauncher = createAuthoringEditorDevLauncher();
+    const buildAuthoringReferenceIndex = () => {
+        return buildReferenceIndexFromTestAuthoringContent({
+            levels: [worldRuntime.getConfig()],
+            npcProfiles: getTestNpcProfiles(),
+            npcScriptedSequences: getTestNpcScriptedSequenceDefinitions(),
+            cutscenes: getTestCutsceneDefinitions()
+        });
+    };
+
+    const authoringEditorRuntimeBridge: AuthoringEditorRuntimeBridge = {
+        getCurrentWorldConfig: (): unknown => worldRuntime.getConfig(),
+        getEditorObjects: (): readonly AuthoringEditorObjectSummary[] => {
+            return worldRuntime.getEditorObjects().map((entry) => ({
+                id: entry.id,
+                type: entry.type,
+                label: entry.label,
+                raw: entry
+            }));
+        },
+        getLevelId: (): string => worldRuntime.getLevelId(),
+        getWorldBounds: () => {
+            const bounds = worldRuntime.getWorldBounds();
+            return {
+                x: 0,
+                y: 0,
+                width: bounds.width,
+                height: bounds.height
+            };
+        },
+        focusObject: (id: string): boolean => {
+            const point = worldRuntime.focusObjectPoint(id);
+            if (!point) {
+                return false;
+            }
+            scene.cameras.main.centerOn(point.x, point.y);
+            return true;
+        },
+        buildLevelAsset: () => {
+            const result = adaptTestWorldConfigToLevelAsset(worldRuntime.getConfig());
+            return {
+                levelAsset: result.asset,
+                adapterIssues: result.issues
+            };
+        },
+        buildReferenceIndex: () => {
+            return buildAuthoringReferenceIndex();
+        },
+        validateCurrentLevel: () => {
+            const levelAssetResult = adaptTestWorldConfigToLevelAsset(worldRuntime.getConfig());
+            const referenceIndex = buildAuthoringReferenceIndex();
+            const issues = validateLevelAsset(levelAssetResult.asset, {
+                authoringContext: {
+                    referenceIndex,
+                    source: `level:${worldRuntime.getLevelId()}`
+                }
+            });
+            return { issues };
+        }
+    };
+    const authoringEditorDevLauncher = createAuthoringEditorDevLauncher({
+        runtimeBridge: authoringEditorRuntimeBridge
+    });
     const rulerCanvas = document.createElement('canvas');
     rulerCanvas.width = Math.max(1, scene.scale.width);
     rulerCanvas.height = Math.max(1, scene.scale.height);

@@ -1,11 +1,5 @@
-import type { AuthoringEditorState, AuthoringEditorTab } from '../editor_state';
-
-export interface AuthoringWorkspace {
-  readonly id: AuthoringEditorTab;
-  readonly title: string;
-  render(container: HTMLElement, state: AuthoringEditorState): void;
-  destroy(): void;
-}
+import type { AuthoringEditorTab } from '../editor_state';
+import type { AuthoringWorkspace } from './authoring_workspace';
 
 function createPlaceholderWorkspace(
   id: AuthoringEditorTab,
@@ -15,7 +9,7 @@ function createPlaceholderWorkspace(
   return {
     id,
     title,
-    render(container: HTMLElement, state: AuthoringEditorState): void {
+    render(container, state, _context): void {
       container.innerHTML = '';
 
       const titleElement = document.createElement('h2');

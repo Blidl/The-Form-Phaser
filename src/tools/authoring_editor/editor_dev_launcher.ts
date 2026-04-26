@@ -1,3 +1,4 @@
+import type { AuthoringEditorRuntimeBridge } from './authoring_editor_runtime_bridge';
 import { createAuthoringEditorApp, type AuthoringEditorApp } from './editor_app';
 
 const AUTHORING_EDITOR_V2_DEV_SHELL_ID = 'authoring-editor-v2-dev-shell';
@@ -12,6 +13,10 @@ export interface AuthoringEditorDevLauncher {
     destroy(): void;
 }
 
+interface CreateAuthoringEditorDevLauncherOptions {
+    readonly runtimeBridge?: AuthoringEditorRuntimeBridge;
+}
+
 const createNoopLauncher = (): AuthoringEditorDevLauncher => ({
     isEnabled: () => false,
     isOpen: () => false,
@@ -21,7 +26,9 @@ const createNoopLauncher = (): AuthoringEditorDevLauncher => ({
     destroy: () => undefined
 });
 
-export const createAuthoringEditorDevLauncher = (): AuthoringEditorDevLauncher => {
+export const createAuthoringEditorDevLauncher = (
+    options?: CreateAuthoringEditorDevLauncherOptions
+): AuthoringEditorDevLauncher => {
     if (!ENABLE_AUTHORING_EDITOR_V2_DEV_SHELL || typeof window === 'undefined' || typeof document === 'undefined') {
         return createNoopLauncher();
     }
@@ -86,7 +93,7 @@ export const createAuthoringEditorDevLauncher = (): AuthoringEditorDevLauncher =
         }
 
         const mount = ensureShellElements();
-        app = app ?? createAuthoringEditorApp();
+        app = app ?? createAuthoringEditorApp({ runtimeBridge: options?.runtimeBridge });
         app.mount(mount);
     };
 
