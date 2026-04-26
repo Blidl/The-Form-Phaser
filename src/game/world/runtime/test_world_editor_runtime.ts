@@ -114,11 +114,14 @@ import type {
     TestCutsceneWaitStep
 } from '../../cutscene/cutscene_types';
 import { getWorldFlagsDebugSnapshot } from '../../events/test_world_flags';
+import { createEventDebugRecorder } from '../../debug/event_debug_recorder';
+import type { EventDebugRecordInput } from '../../debug/event_debug_types';
 import {
     TEST_WORLD_VISUAL_LAYER_OPTIONS,
     resolveTestWorldRenderOrder,
     resolveTestWorldVisualLayer
 } from './test_world_visual_order';
+import { createEventTimelinePanel } from '../../../tools/authoring_editor/panels/event_timeline_panel';
 
 export interface TestWorldEditorRuntime {
     update: (deltaMs: number) => void;
@@ -779,6 +782,68 @@ export const createTestWorldEditorRuntime = (
     if (!appRoot) {
         throw new Error('#app was not found.');
     }
+    const eventDebugRecorder = createEventDebugRecorder({
+        capacity: 500,
+        defaultSource: 'test_world'
+    });
+    const eventDebugSink = (entry: EventDebugRecordInput): void => {
+        try {
+            eventDebugRecorder.record(entry);
+        } catch {
+            // Keep debug recording errors isolated from gameplay/editor logic.
+        }
+    };
+    worldRuntime.setEventDebugSink?.(eventDebugSink);
+    const eventTimelinePanel = createEventTimelinePanel();
+    let eventDebugPanelRoot: HTMLDivElement | null = document.createElement('div');
+    eventDebugPanelRoot.style.position = 'absolute';
+    eventDebugPanelRoot.style.right = '12px';
+    eventDebugPanelRoot.style.bottom = '12px';
+    eventDebugPanelRoot.style.width = '420px';
+    eventDebugPanelRoot.style.maxHeight = '260px';
+    eventDebugPanelRoot.style.display = 'none';
+    eventDebugPanelRoot.style.zIndex = '35';
+    eventDebugPanelRoot.style.background = 'rgba(8, 16, 24, 0.92)';
+    eventDebugPanelRoot.style.border = '1px solid rgba(140, 255, 209, 0.55)';
+    eventDebugPanelRoot.style.borderRadius = '6px';
+    eventDebugPanelRoot.style.color = '#d7fdf2';
+    eventDebugPanelRoot.style.fontFamily = 'monospace';
+    eventDebugPanelRoot.style.fontSize = '12px';
+    eventDebugPanelRoot.style.pointerEvents = 'auto';
+    let eventDebugPanelToolbar: HTMLDivElement | null = document.createElement('div');
+    eventDebugPanelToolbar.style.display = 'flex';
+    eventDebugPanelToolbar.style.alignItems = 'center';
+    eventDebugPanelToolbar.style.justifyContent = 'space-between';
+    eventDebugPanelToolbar.style.padding = '6px 8px';
+    eventDebugPanelToolbar.style.borderBottom = '1px solid rgba(140, 255, 209, 0.4)';
+    const eventDebugPanelTitle = document.createElement('div');
+    eventDebugPanelTitle.textContent = 'Event Debug Timeline';
+    eventDebugPanelTitle.style.fontWeight = '600';
+    let eventDebugPanelButtons: HTMLDivElement | null = document.createElement('div');
+    eventDebugPanelButtons.style.display = 'flex';
+    eventDebugPanelButtons.style.gap = '6px';
+    let refreshDebugEventsButton: HTMLButtonElement | null = document.createElement('button');
+    refreshDebugEventsButton.type = 'button';
+    refreshDebugEventsButton.textContent = 'Refresh debug events';
+    refreshDebugEventsButton.style.fontFamily = 'monospace';
+    refreshDebugEventsButton.style.fontSize = '11px';
+    let clearDebugEventsButton: HTMLButtonElement | null = document.createElement('button');
+    clearDebugEventsButton.type = 'button';
+    clearDebugEventsButton.textContent = 'Clear debug events';
+    clearDebugEventsButton.style.fontFamily = 'monospace';
+    clearDebugEventsButton.style.fontSize = '11px';
+    eventDebugPanelButtons.appendChild(refreshDebugEventsButton);
+    eventDebugPanelButtons.appendChild(clearDebugEventsButton);
+    eventDebugPanelToolbar.appendChild(eventDebugPanelTitle);
+    eventDebugPanelToolbar.appendChild(eventDebugPanelButtons);
+    let eventDebugPanelTimelineContainer: HTMLDivElement | null = document.createElement('div');
+    eventDebugPanelTimelineContainer.style.maxHeight = '212px';
+    eventDebugPanelTimelineContainer.style.overflowY = 'auto';
+    eventDebugPanelTimelineContainer.style.background = 'rgba(255, 255, 255, 0.9)';
+    eventDebugPanelTimelineContainer.style.color = '#1d1d1d';
+    eventDebugPanelRoot.appendChild(eventDebugPanelToolbar);
+    eventDebugPanelRoot.appendChild(eventDebugPanelTimelineContainer);
+    appRoot.appendChild(eventDebugPanelRoot);
     const authoringEditorDevLauncher = createAuthoringEditorDevLauncher();
     const rulerCanvas = document.createElement('canvas');
     rulerCanvas.width = Math.max(1, scene.scale.width);
@@ -819,6 +884,35 @@ export const createTestWorldEditorRuntime = (
     let suppressCutsceneDraftPersistUntilNextTick = false;
     let selectedCutsceneId: string | null = getTestCutsceneDefinitions()[0]?.id ?? null;
     let selectedCutsceneStepIndex = 0;
+    const syncEventDebugPanelVisibility = (): void => {
+        if (!eventDebugPanelRoot) {
+            return;
+        }
+        eventDebugPanelRoot.style.display = active ? 'block' : 'none';
+    };
+    const renderEventDebugEntries = (): void => {
+        if (!eventDebugPanelTimelineContainer) {
+            return;
+        }
+        eventTimelinePanel.render(
+            eventDebugPanelTimelineContainer,
+            eventDebugRecorder.getEntries()
+        );
+    };
+    const handleRefreshDebugEvents = (): void => {
+        if (!active) {
+            return;
+        }
+        renderEventDebugEntries();
+    };
+    const handleClearDebugEvents = (): void => {
+        eventDebugRecorder.clear();
+        if (active) {
+            renderEventDebugEntries();
+        }
+    };
+    refreshDebugEventsButton?.addEventListener('click', handleRefreshDebugEvents);
+    clearDebugEventsButton?.addEventListener('click', handleClearDebugEvents);
     const bundledDefaultConfig = createDefaultTestWorldConfig(sourceContext?.bundledDefaultConfig ?? defaultConfig);
     const campaignDefaultConfig = createDefaultTestWorldConfig(sourceContext?.campaignDefaultConfig ?? defaultConfig);
     const undoStack: TestWorldConfig[] = [];
@@ -2854,7 +2948,9 @@ export const createTestWorldEditorRuntime = (
         overlayText.setVisible(active);
         rulerGraphics.setVisible(active);
         rulerCanvas.style.display = active ? 'block' : 'none';
+        syncEventDebugPanelVisibility();
         if (active) {
+            renderEventDebugEntries();
             gameplayCameraSnapshot = captureGameplayCameraSnapshot();
             scene.cameras.main.stopFollow();
             syncEditorPreviewCameraBasis();
@@ -2971,6 +3067,7 @@ export const createTestWorldEditorRuntime = (
         scene.input.off('wheel', handleWheel);
         scene.game.canvas.removeEventListener('pointerdown', handleCanvasPointerDown);
         window.removeEventListener('pointerup', handlePointerUp);
+        worldRuntime.setEventDebugSink?.(undefined);
         selectionGraphics.destroy();
         placementGraphics.destroy();
         gridGraphics.destroy();
@@ -2981,12 +3078,23 @@ export const createTestWorldEditorRuntime = (
         rulerCanvas.remove();
         sidebar.destroy();
         authoringEditorDevLauncher.destroy();
+        refreshDebugEventsButton?.removeEventListener('click', handleRefreshDebugEvents);
+        clearDebugEventsButton?.removeEventListener('click', handleClearDebugEvents);
+        eventTimelinePanel.destroy();
+        eventDebugPanelRoot?.remove();
+        eventDebugPanelTimelineContainer = null;
+        refreshDebugEventsButton = null;
+        clearDebugEventsButton = null;
+        eventDebugPanelButtons = null;
+        eventDebugPanelToolbar = null;
+        eventDebugPanelRoot = null;
     };
 
     scene.events.once('shutdown', destroy);
     scene.events.once('destroy', destroy);
 
     syncSidebar();
+    syncEventDebugPanelVisibility();
 
     return {
         update: (deltaMs: number): void => {

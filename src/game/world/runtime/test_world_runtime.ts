@@ -149,6 +149,7 @@ export interface TestWorldRuntime {
     removeObject: (rootId: string) => boolean;
     focusObjectPoint: (targetId: string) => { x: number; y: number } | null;
     rebuildFromCurrentConfig: () => void;
+    setEventDebugSink?: (sink: ((entry: EventDebugRecordInput) => void) | undefined) => void;
     destroy: () => void;
 }
 
@@ -296,6 +297,10 @@ export const createTestWorldRuntime = (
         onCheckpointActivated,
         eventDebugSink
     } = params;
+    let currentEventDebugSink = eventDebugSink;
+    const forwardedEventDebugSink: TestWorldDebugEventSink = (entry) => {
+        currentEventDebugSink?.(entry);
+    };
     let currentConfig = normalizeTestWorldConfig(params.initialConfig, {
         fallbackConfig: params.initialConfig
     });
@@ -306,7 +311,7 @@ export const createTestWorldRuntime = (
         onCheckpointActivated,
         currentConfig,
         useArcadePlatformCollisions,
-        eventDebugSink
+        forwardedEventDebugSink
     );
 
     const rebuildFromCurrentConfig = (): void => {
@@ -317,7 +322,7 @@ export const createTestWorldRuntime = (
             onCheckpointActivated,
             currentConfig,
             useArcadePlatformCollisions,
-            eventDebugSink
+            forwardedEventDebugSink
         );
     };
 
@@ -614,6 +619,9 @@ export const createTestWorldRuntime = (
             return instance.focusObjectPoint(targetId);
         },
         rebuildFromCurrentConfig,
+        setEventDebugSink: (sink): void => {
+            currentEventDebugSink = sink;
+        },
         destroy: (): void => {
             instance.destroy();
         }
