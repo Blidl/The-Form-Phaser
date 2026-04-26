@@ -85,7 +85,6 @@ import {
     getTestCutsceneRegistryAuditSnapshot,
     parseTestCutsceneDefinitionsJson,
     setTestCutsceneDefinitions,
-    type TestCutsceneDefinition,
     validateTestCutsceneId
 } from '../../cutscene/test_cutscene_registry';
 import {
@@ -103,6 +102,7 @@ import {
 import type { ActorAction } from '../../actor_actions/actor_action_types';
 import type { TestWorldLogicRule } from '../../events/test_world_logic_rules';
 import type {
+    TestCutsceneDefinition,
     TestCutsceneActorSequenceRefStep,
     TestCutsceneCameraFocusActorStep,
     TestCutsceneCameraPanToStep,

@@ -2,9 +2,9 @@ import {
     getDefaultTestCutsceneDefinitions,
     normalizeTestCutsceneDefinitions,
     parseTestCutsceneDefinitionsJson,
-    type ParseTestCutsceneDefinitionsResult,
-    type TestCutsceneDefinition
+    type ParseTestCutsceneDefinitionsResult
 } from './test_cutscene_registry';
+import type { TestCutsceneDefinition } from './cutscene_types';
 
 export const TEST_CUTSCENE_DRAFT_STORAGE_KEY = 'the-form:cutscenes:editor-draft:v1';
 
