@@ -14,8 +14,11 @@ import type {
     TestCutsceneStep,
     TestCutsceneSubtitleStep
 } from '../../game/cutscene/cutscene_types';
+import type { EventDebugRecordInput } from '../../game/debug/event_debug_types';
 import type { TestWorldRuntime } from '../../game/world/runtime/test_world_runtime';
 import type { TestWorldLogicEvent } from '../../game/events/test_world_logic_rules';
+
+type CutsceneDebugEventSink = (entry: EventDebugRecordInput) => void;
 
 interface ActiveCutsceneRun {
     definition: TestCutsceneDefinition;
@@ -65,6 +68,7 @@ interface CreateTestCutsceneRuntimeParams {
         | 'getCutsceneActorSequenceSnapshot'
         | 'getNpcCameraFocusObject'
     >;
+    eventDebugSink?: CutsceneDebugEventSink;
 }
 
 const clampDeltaMs = (deltaMs: number): number => {
@@ -139,7 +143,7 @@ const isActorSequenceTerminalStatus = (
 export const createTestCutsceneRuntime = (
     params: CreateTestCutsceneRuntimeParams
 ): TestCutsceneRuntime => {
-    const { scene, player, worldRuntime } = params;
+    const { scene, player, worldRuntime, eventDebugSink } = params;
     let activeRun: ActiveCutsceneRun | null = null;
     let inputLocked = false;
     let status: TestCutsceneRunStatus | null = null;
@@ -189,6 +193,10 @@ export const createTestCutsceneRuntime = (
         });
     };
 
+    const recordCutsceneDebug = (entry: EventDebugRecordInput): void => {
+        eventDebugSink?.(entry);
+    };
+
     const restorePlayerCameraFollow = (): void => {
         const camera = scene.cameras.main;
         camera.panEffect.reset();
@@ -201,6 +209,7 @@ export const createTestCutsceneRuntime = (
 
     const finishRun = (nextStatus: TestCutsceneRunStatus, nextDetail: string | null): void => {
         const completedCutsceneRef = activeRun?.definition.id ?? null;
+        const completedStepIndex = activeRun?.stepIndex ?? null;
         activeRun = null;
         status = nextStatus;
         detail = nextDetail;
@@ -208,6 +217,18 @@ export const createTestCutsceneRuntime = (
             ? (nextDetail ?? 'cutscene failed without explicit reason')
             : null;
         if (nextStatus === 'completed') {
+            recordCutsceneDebug({
+                type: 'cutscene.finished',
+                source: 'test_cutscene_runtime',
+                cutsceneId: completedCutsceneRef ?? undefined,
+                eventId: completedCutsceneRef ? `cutscene_finished:${completedCutsceneRef}` : 'cutscene_finished',
+                message: 'cutscene finished',
+                payload: {
+                    status: nextStatus,
+                    detail: nextDetail ?? null,
+                    stepIndex: completedStepIndex
+                }
+            });
             lastCutsceneRequestResult = 'completed';
             emitCutsceneDebugFeedback('completed', completedCutsceneRef, nextDetail, null);
             if (completedCutsceneRef) {
@@ -218,6 +239,19 @@ export const createTestCutsceneRuntime = (
                 worldRuntime.dispatchWorldLogicEvent(event);
             }
         } else if (nextStatus === 'failed') {
+            recordCutsceneDebug({
+                type: 'cutscene.failed',
+                source: 'test_cutscene_runtime',
+                cutsceneId: completedCutsceneRef ?? undefined,
+                eventId: completedCutsceneRef ? `cutscene_failed:${completedCutsceneRef}` : 'cutscene_failed',
+                severity: 'error',
+                message: 'cutscene failed',
+                payload: {
+                    status: nextStatus,
+                    detail: nextDetail ?? null,
+                    stepIndex: completedStepIndex
+                }
+            });
             lastCutsceneRequestResult = 'failed';
             emitCutsceneDebugFeedback('failed', completedCutsceneRef, nextDetail, failureReason);
         }
@@ -512,7 +546,8 @@ export const createTestCutsceneRuntime = (
         if (step.kind === 'set_emotion') {
             return runSetEmotionStep(step) ? 'advanced' : 'blocked';
         }
-        finishRun('failed', `unsupported cutscene step kind "${step.kind}"`);
+        const unsupportedStepKind = (step as { kind: string }).kind;
+        finishRun('failed', `unsupported cutscene step kind "${unsupportedStepKind}"`);
         return 'blocked';
     };
 
@@ -615,6 +650,17 @@ export const createTestCutsceneRuntime = (
         detail = sourceDetail;
         failureReason = null;
         clearBlockReason();
+        recordCutsceneDebug({
+            type: 'cutscene.started',
+            source: 'test_cutscene_runtime',
+            cutsceneId: definition.id,
+            eventId: `cutscene_started:${definition.id}`,
+            message: 'cutscene started',
+            payload: {
+                cutsceneRef: definition.id,
+                sourceDetail
+            }
+        });
         lastCutsceneRequestResult = 'accepted';
         emitCutsceneDebugFeedback('accepted', cutsceneRef, sourceDetail, null);
         return true;
