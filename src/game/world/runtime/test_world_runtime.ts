@@ -1282,7 +1282,8 @@ const buildWorldInstance = (
     const movingPlatformRuntime = createTestWorldMovingPlatformRuntimeController({
         scene,
         platformConfigs: config.movingPlatforms,
-        getPlatform: (id) => movingPlatformsById.get(id) ?? null
+        getPlatform: (id) => movingPlatformsById.get(id) ?? null,
+        eventDebugSink
     });
 
     const rebuildDragBoxObject = (dragBoxConfig: TestWorldDragBoxConfig): void => {

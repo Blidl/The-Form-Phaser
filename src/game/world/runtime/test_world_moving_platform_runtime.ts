@@ -1,6 +1,8 @@
 import { Physics, type Scene } from 'phaser';
 import type { MovingPlatformObject } from '../moving_platform';
 import type { TestWorldMovingPlatformConfig, TestWorldMovingPlatformMotionState } from './test_world_config';
+import type { TestWorldDebugEventSink } from '../../events/test_event_actions';
+import type { EventDebugRecordInput } from '../../debug/event_debug_types';
 
 interface MovingPlatformRuntimeState {
     mode: TestWorldMovingPlatformMotionState;
@@ -17,6 +19,7 @@ interface CreateTestWorldMovingPlatformRuntimeControllerParams {
     scene: Scene;
     platformConfigs: readonly TestWorldMovingPlatformConfig[];
     getPlatform: (id: string) => MovingPlatformObject | null;
+    eventDebugSink?: TestWorldDebugEventSink;
 }
 
 const ORIGIN_EPSILON = 1;
@@ -37,6 +40,33 @@ export const createTestWorldMovingPlatformRuntimeController = (
             y: platformConfig.y
         });
     });
+
+    const emitMotionStateChanged = (
+        platformId: string,
+        previousMode: TestWorldMovingPlatformMotionState,
+        nextMode: TestWorldMovingPlatformMotionState,
+        reason: 'external_set' | 'run_once_complete',
+        previousRunOnceHasDepartedOrigin: boolean,
+        nextRunOnceHasDepartedOrigin: boolean
+    ): void => {
+        if (!params.eventDebugSink || previousMode === nextMode) {
+            return;
+        }
+        const entry: EventDebugRecordInput = {
+            type: 'platform.motion_state_changed',
+            source: 'test_world_moving_platform_runtime',
+            platformId,
+            message: 'platform motion state changed',
+            payload: {
+                previousMode,
+                nextMode,
+                reason,
+                previousRunOnceHasDepartedOrigin,
+                nextRunOnceHasDepartedOrigin
+            }
+        };
+        params.eventDebugSink(entry);
+    };
 
     return {
         update: (): void => {
@@ -66,9 +96,19 @@ export const createTestWorldMovingPlatformRuntimeController = (
                 }
 
                 if (isAtOrigin) {
+                    const previousMode = runtimeState.mode;
+                    const previousRunOnceHasDepartedOrigin = runtimeState.runOnceHasDepartedOrigin;
                     runtimeState.mode = 'stopped';
                     runtimeState.runOnceHasDepartedOrigin = false;
                     stopPlatform(platform);
+                    emitMotionStateChanged(
+                        platformConfig.id,
+                        previousMode,
+                        runtimeState.mode,
+                        'run_once_complete',
+                        previousRunOnceHasDepartedOrigin,
+                        runtimeState.runOnceHasDepartedOrigin
+                    );
                 }
             });
         },
@@ -77,8 +117,18 @@ export const createTestWorldMovingPlatformRuntimeController = (
             if (!runtimeState) {
                 return;
             }
+            const previousMode = runtimeState.mode;
+            const previousRunOnceHasDepartedOrigin = runtimeState.runOnceHasDepartedOrigin;
             runtimeState.mode = mode;
             runtimeState.runOnceHasDepartedOrigin = false;
+            emitMotionStateChanged(
+                platformId,
+                previousMode,
+                runtimeState.mode,
+                'external_set',
+                previousRunOnceHasDepartedOrigin,
+                runtimeState.runOnceHasDepartedOrigin
+            );
             const platform = params.getPlatform(platformId);
             if (platform && mode === 'stopped') {
                 stopPlatform(platform);
