@@ -59,7 +59,10 @@ import {
 import { createTestNpcInteractionRuntime, type TestNpcInteractionRuntime } from '../../npc/npc_interaction_runtime';
 import type { TestNpcDebugEntry, TestNpcInteractionDebugState } from '../../npc/npc_types';
 import type { ActorActionSequence } from '../../actor_actions/actor_action_types';
-import type { TestEventRuntimeContext } from '../../events/test_event_actions';
+import type {
+    TestEventRuntimeContext,
+    TestWorldDebugEventSink
+} from '../../events/test_event_actions';
 import {
     cloneTestNpcScriptedSequenceAction,
     getTestNpcScriptedSequenceDefinition
@@ -70,6 +73,10 @@ import {
     executeMatchingWorldLogicRules,
     type TestWorldLogicEvent
 } from '../../events/test_world_logic_rules';
+import type {
+    DebugEventType,
+    EventDebugRecordInput
+} from '../../debug/event_debug_types';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -150,6 +157,7 @@ interface CreateTestWorldRuntimeParams {
     player: PlayerWorldActor;
     initialConfig: TestWorldConfig;
     onCheckpointActivated: (point: RespawnPoint) => void;
+    eventDebugSink?: TestWorldDebugEventSink;
 }
 
 interface PlayerSpawnMarkerObject {
@@ -282,16 +290,35 @@ const createCutsceneActorSequenceFromRef = (
 export const createTestWorldRuntime = (
     params: CreateTestWorldRuntimeParams
 ): TestWorldRuntime => {
-    const { scene, player, onCheckpointActivated } = params;
+    const {
+        scene,
+        player,
+        onCheckpointActivated,
+        eventDebugSink
+    } = params;
     let currentConfig = normalizeTestWorldConfig(params.initialConfig, {
         fallbackConfig: params.initialConfig
     });
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
-    let instance = buildWorldInstance(scene, player, onCheckpointActivated, currentConfig, useArcadePlatformCollisions);
+    let instance = buildWorldInstance(
+        scene,
+        player,
+        onCheckpointActivated,
+        currentConfig,
+        useArcadePlatformCollisions,
+        eventDebugSink
+    );
 
     const rebuildFromCurrentConfig = (): void => {
         instance.destroy();
-        instance = buildWorldInstance(scene, player, onCheckpointActivated, currentConfig, useArcadePlatformCollisions);
+        instance = buildWorldInstance(
+            scene,
+            player,
+            onCheckpointActivated,
+            currentConfig,
+            useArcadePlatformCollisions,
+            eventDebugSink
+        );
     };
 
     const removeByRootId = (rootId: string): boolean => {
@@ -598,7 +625,8 @@ const buildWorldInstance = (
     player: PlayerWorldActor,
     onCheckpointActivated: (point: RespawnPoint) => void,
     config: TestWorldConfig,
-    useArcadePlatformCollisions: boolean
+    useArcadePlatformCollisions: boolean,
+    eventDebugSink?: TestWorldDebugEventSink
 ): BuiltWorldInstance => {
     applyWorldBounds(scene, config.worldBounds);
     const cleanup: Array<() => void> = [];
@@ -710,7 +738,8 @@ const buildWorldInstance = (
 
         worldLogicDispatchDepth += 1;
         try {
-            executeMatchingWorldLogicRules(eventRuntimeContext, config.worldLogicRules, event);
+            emitWorldEventDebug(eventDebugSink, event);
+            executeMatchingWorldLogicRules(eventRuntimeContext, config.worldLogicRules, event, eventDebugSink);
         } finally {
             worldLogicDispatchDepth = Math.max(0, worldLogicDispatchDepth - 1);
         }
@@ -1938,6 +1967,55 @@ const buildWorldInstance = (
             cleanup.forEach((cleanupFn) => cleanupFn());
         }
     };
+};
+
+const resolveWorldLogicEventId = (event: TestWorldLogicEvent): string => {
+    if (event.kind === 'object_state_changed') {
+        return `object_state_changed:${event.objectId}:${event.toState}`;
+    }
+    if (event.kind === 'trigger_event') {
+        return `trigger_event:${event.eventId}`;
+    }
+    if (event.kind === 'npc_event') {
+        return `npc_event:${event.actorId}:${event.eventId}`;
+    }
+    return `cutscene_finished:${event.cutsceneRef}`;
+};
+
+const emitWorldEventDebug = (
+    eventDebugSink: TestWorldDebugEventSink | undefined,
+    event: TestWorldLogicEvent
+): void => {
+    if (!eventDebugSink) {
+        return;
+    }
+
+    const payload: Record<string, unknown> = {
+        kind: event.kind
+    };
+    if (event.kind === 'object_state_changed') {
+        payload.objectId = event.objectId;
+        payload.fromState = event.fromState ?? null;
+        payload.toState = event.toState;
+    } else if (event.kind === 'trigger_event') {
+        payload.triggerEventId = event.eventId;
+        payload.sourceId = event.sourceId ?? null;
+    } else if (event.kind === 'npc_event') {
+        payload.actorId = event.actorId;
+        payload.npcEventId = event.eventId;
+    } else {
+        payload.cutsceneRef = event.cutsceneRef;
+    }
+
+    const debugType: DebugEventType = 'world.event';
+    const entry: EventDebugRecordInput = {
+        type: debugType,
+        source: 'test_world_runtime',
+        eventId: resolveWorldLogicEventId(event),
+        message: `world logic event: ${event.kind}`,
+        payload
+    };
+    eventDebugSink(entry);
 };
 
 const refreshRectangleGameObject = (

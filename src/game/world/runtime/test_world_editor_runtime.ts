@@ -49,6 +49,7 @@ import {
 import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runtime';
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
+import { createAuthoringEditorDevLauncher } from '../../../tools/authoring_editor/editor_dev_launcher';
 import {
     resolveTestHudAnchorPosition,
     TEST_EDITOR_BACKGROUND_BADGE_LAYOUT,
@@ -708,6 +709,7 @@ export const createTestWorldEditorRuntime = (
     const focusSpawnKey = keyboard.addKey(Input.Keyboard.KeyCodes.P);
     const spaceKey = keyboard.addKey(Input.Keyboard.KeyCodes.SPACE);
     const ctrlKey = keyboard.addKey(Input.Keyboard.KeyCodes.CTRL);
+    const shiftKey = keyboard.addKey(Input.Keyboard.KeyCodes.SHIFT);
     const leftKey = keyboard.addKey(Input.Keyboard.KeyCodes.LEFT);
     const rightKey = keyboard.addKey(Input.Keyboard.KeyCodes.RIGHT);
     const upKey = keyboard.addKey(Input.Keyboard.KeyCodes.UP);
@@ -777,6 +779,7 @@ export const createTestWorldEditorRuntime = (
     if (!appRoot) {
         throw new Error('#app was not found.');
     }
+    const authoringEditorDevLauncher = createAuthoringEditorDevLauncher();
     const rulerCanvas = document.createElement('canvas');
     rulerCanvas.width = Math.max(1, scene.scale.width);
     rulerCanvas.height = Math.max(1, scene.scale.height);
@@ -2977,6 +2980,7 @@ export const createTestWorldEditorRuntime = (
         backgroundSelectionText.destroy();
         rulerCanvas.remove();
         sidebar.destroy();
+        authoringEditorDevLauncher.destroy();
     };
 
     scene.events.once('shutdown', destroy);
@@ -2986,7 +2990,10 @@ export const createTestWorldEditorRuntime = (
 
     return {
         update: (deltaMs: number): void => {
-            if (Input.Keyboard.JustDown(toggleKey)) {
+            const f2Pressed = Input.Keyboard.JustDown(toggleKey);
+            if (f2Pressed && shiftKey.isDown && authoringEditorDevLauncher.isEnabled()) {
+                authoringEditorDevLauncher.toggle();
+            } else if (f2Pressed) {
                 toggleEditor();
             }
             if (!active) {

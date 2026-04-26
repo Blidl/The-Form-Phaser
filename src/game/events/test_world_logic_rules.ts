@@ -4,10 +4,17 @@ import {
 } from './test_event_conditions';
 import {
     executeTestEventActions,
+    type TestEventActionDebugContext,
     type TestEventAction,
     type TestEventActionExecutionResult,
+    type TestWorldDebugEventSink,
     type TestEventRuntimeContext
 } from './test_event_actions';
+import type {
+    DebugActionResult,
+    DebugConditionResult,
+    EventDebugRecordInput
+} from '../debug/event_debug_types';
 
 export interface TestWorldLogicRule {
     id: string;
@@ -139,7 +146,8 @@ export const matchTestWorldLogicRuleEvent = (
 export const executeMatchingWorldLogicRules = (
     context: TestEventRuntimeContext,
     rules: readonly TestWorldLogicRule[] | null | undefined,
-    event: TestWorldLogicEvent
+    event: TestWorldLogicEvent,
+    debugSink?: TestWorldDebugEventSink
 ): TestWorldLogicRuleExecutionResult => {
     if (!Array.isArray(rules) || rules.length <= 0) {
         return {
@@ -153,6 +161,7 @@ export const executeMatchingWorldLogicRules = (
     const entries: TestWorldLogicRuleExecutionEntry[] = [];
     let matchedCount = 0;
     let executedCount = 0;
+    const eventId = resolveWorldLogicEventId(event);
 
     rules.forEach((rule, index) => {
         const normalizedRuleId = normalizeText(rule?.id) ?? `rule_${index + 1}`;
@@ -188,6 +197,34 @@ export const executeMatchingWorldLogicRules = (
         const ownerKey = `worldRule:${normalizedRuleId}`;
         const conditionResult = evaluateTestEventConditionsDetailed(context, rule.conditions, ownerKey);
         if (!conditionResult.passed) {
+            emitRuleDebugEvent(debugSink, {
+                type: 'world.rule_matched',
+                source: 'test_world_logic_rules',
+                eventId,
+                message: `rule ${normalizedRuleId} skipped: conditions failed`,
+                matchedRules: [{ ruleId: normalizedRuleId, source: 'test_world_logic_rules' }],
+                conditionResults: [
+                    {
+                        conditionType: 'world_rule_conditions',
+                        passed: false,
+                        detail: 'conditions failed'
+                    }
+                ]
+            });
+            emitRuleDebugEvent(debugSink, {
+                type: 'condition.evaluated',
+                source: 'test_world_logic_rules',
+                eventId,
+                message: 'conditions failed',
+                matchedRules: [{ ruleId: normalizedRuleId, source: 'test_world_logic_rules' }],
+                conditionResults: [
+                    {
+                        conditionType: 'world_rule_conditions',
+                        passed: false,
+                        detail: 'conditions failed'
+                    }
+                ]
+            });
             entries.push({
                 ruleId: normalizedRuleId,
                 status: 'skipped',
@@ -202,8 +239,27 @@ export const executeMatchingWorldLogicRules = (
                 context.consumeOnceKey?.(onceKey);
             });
         }
-        const actionResult = executeTestEventActions(context, rule.actions);
+        const actionDebugContext: TestEventActionDebugContext = {
+            source: 'test_event_actions',
+            eventId
+        };
+        const actionResult = executeTestEventActions(context, rule.actions, debugSink, actionDebugContext);
         executedCount += 1;
+        emitRuleDebugEvent(debugSink, {
+            type: 'world.rule_matched',
+            source: 'test_world_logic_rules',
+            eventId,
+            message: `rule ${normalizedRuleId} executed`,
+            matchedRules: [{ ruleId: normalizedRuleId, source: 'test_world_logic_rules' }],
+            conditionResults: [
+                {
+                    conditionType: 'world_rule_conditions',
+                    passed: true,
+                    detail: 'conditions passed'
+                }
+            ],
+            actionResults: mapActionResults(actionResult)
+        });
         entries.push({
             ruleId: normalizedRuleId,
             status: 'executed',
@@ -218,4 +274,37 @@ export const executeMatchingWorldLogicRules = (
         executedCount,
         entries
     };
+};
+
+const resolveWorldLogicEventId = (event: TestWorldLogicEvent): string => {
+    if (event.kind === 'object_state_changed') {
+        return `object_state_changed:${event.objectId}:${event.toState}`;
+    }
+    if (event.kind === 'trigger_event') {
+        return `trigger_event:${event.eventId}`;
+    }
+    if (event.kind === 'npc_event') {
+        return `npc_event:${event.actorId}:${event.eventId}`;
+    }
+    return `cutscene_finished:${event.cutsceneRef}`;
+};
+
+const mapActionResults = (actionResult: TestEventActionExecutionResult): DebugActionResult[] => {
+    return actionResult.entries.map((entry) => ({
+        actionType: entry.kind,
+        status: entry.status,
+        detail: entry.detail ?? undefined,
+        actorId: entry.kind === 'actor_action' ? normalizeText(entry.detail) ?? undefined : undefined
+    }));
+};
+
+const emitRuleDebugEvent = (
+    debugSink: TestWorldDebugEventSink | undefined,
+    entry: EventDebugRecordInput & {
+        matchedRules?: { ruleId: string; source?: string }[];
+        conditionResults?: DebugConditionResult[];
+        actionResults?: DebugActionResult[];
+    }
+): void => {
+    debugSink?.(entry);
 };
