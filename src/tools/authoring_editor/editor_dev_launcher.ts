@@ -36,6 +36,23 @@ export const createAuthoringEditorDevLauncher = (
     let app: AuthoringEditorApp | null = null;
     let shellElement: HTMLDivElement | null = null;
     let mountElement: HTMLDivElement | null = null;
+    let cameraModeActive = false;
+
+    const enterCameraMode = (): void => {
+        if (cameraModeActive) {
+            return;
+        }
+        options?.runtimeBridge?.enterAuthoringEditorCameraMode();
+        cameraModeActive = true;
+    };
+
+    const exitCameraMode = (): void => {
+        if (!cameraModeActive) {
+            return;
+        }
+        options?.runtimeBridge?.exitAuthoringEditorCameraMode();
+        cameraModeActive = false;
+    };
 
     const ensureShellElements = (): HTMLDivElement => {
         const shell = document.createElement('div');
@@ -92,6 +109,7 @@ export const createAuthoringEditorDevLauncher = (
             return;
         }
 
+        enterCameraMode();
         const mount = ensureShellElements();
         app = app ?? createAuthoringEditorApp({ runtimeBridge: options?.runtimeBridge });
         app.mount(mount);
@@ -109,6 +127,7 @@ export const createAuthoringEditorDevLauncher = (
         shellElement.remove();
         shellElement = null;
         mountElement = null;
+        exitCameraMode();
     };
 
     return {

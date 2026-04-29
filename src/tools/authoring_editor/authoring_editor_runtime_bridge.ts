@@ -31,6 +31,8 @@ export interface AuthoringEditorValidationSnapshot {
 }
 
 export interface AuthoringEditorRuntimeBridge {
+  enterAuthoringEditorCameraMode(): void;
+  exitAuthoringEditorCameraMode(): void;
   getCurrentWorldConfig(): unknown;
   getEditorObjects(): readonly AuthoringEditorObjectSummary[];
   getLevelId(): string;

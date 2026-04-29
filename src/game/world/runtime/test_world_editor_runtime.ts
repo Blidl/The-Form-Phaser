@@ -860,7 +860,33 @@ export const createTestWorldEditorRuntime = (
         });
     };
 
+    const enterAuthoringEditorCameraMode = (): void => {
+        scene.cameras.main.stopFollow();
+    };
+
+    const tryRestoreGameplayCameraFollow = (source: string): boolean => {
+        const restoreCameraSource = source.trim().length > 0 ? source.trim() : 'authoring_editor_v2:close';
+        const canRestoreNormalCamera = requestNormalCameraOwnership
+            ? requestNormalCameraOwnership(restoreCameraSource)
+            : true;
+        if (!canRestoreNormalCamera) {
+            return false;
+        }
+        const worldBounds = worldRuntime.getWorldBounds();
+        setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
+            width: worldBounds.width,
+            height: worldBounds.height
+        });
+        return true;
+    };
+
     const authoringEditorRuntimeBridge: AuthoringEditorRuntimeBridge = {
+        enterAuthoringEditorCameraMode: (): void => {
+            enterAuthoringEditorCameraMode();
+        },
+        exitAuthoringEditorCameraMode: (): void => {
+            tryRestoreGameplayCameraFollow('authoring_editor_v2:close');
+        },
         getCurrentWorldConfig: (): unknown => worldRuntime.getConfig(),
         getEditorObjects: (): readonly AuthoringEditorObjectSummary[] => {
             return worldRuntime.getEditorObjects().map((entry) => ({
@@ -3020,26 +3046,20 @@ export const createTestWorldEditorRuntime = (
         if (active) {
             renderEventDebugEntries();
             gameplayCameraSnapshot = captureGameplayCameraSnapshot();
-            scene.cameras.main.stopFollow();
+            enterAuthoringEditorCameraMode();
             syncEditorPreviewCameraBasis();
             setStatus('editor mode on');
         } else {
             pointerDragState = null;
             pendingPlacementType = null;
-            const worldBounds = worldRuntime.getWorldBounds();
             const camera = scene.cameras.main;
             if (gameplayCameraSnapshot) {
                 camera.setZoom(gameplayCameraSnapshot.zoom);
             }
-            const restoreCameraSource = 'editor_runtime:toggle_off';
-            const canRestoreNormalCamera = requestNormalCameraOwnership
-                ? requestNormalCameraOwnership(restoreCameraSource)
-                : true;
-            if (canRestoreNormalCamera) {
-                setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
-                    width: worldBounds.width,
-                    height: worldBounds.height
-                });
+            const v2OwnsCamera = authoringEditorDevLauncher.isOpen();
+            if (v2OwnsCamera) {
+                setStatus('editor mode off | camera restore skipped (authoring editor v2 open)');
+            } else if (tryRestoreGameplayCameraFollow('editor_runtime:toggle_off')) {
                 setStatus('editor mode off');
             } else {
                 setStatus('editor mode off | camera restore skipped (cutscene running)');
@@ -3168,7 +3188,14 @@ export const createTestWorldEditorRuntime = (
         update: (deltaMs: number): void => {
             const f2Pressed = Input.Keyboard.JustDown(toggleKey);
             if (f2Pressed && shiftKey.isDown && authoringEditorDevLauncher.isEnabled()) {
-                authoringEditorDevLauncher.toggle();
+                const shouldOpenAuthoringEditorV2 = !authoringEditorDevLauncher.isOpen();
+                if (active && shouldOpenAuthoringEditorV2) {
+                    const warning = 'Authoring Editor V2 cannot open while F2 editor is active. Close F2 editor first.';
+                    setStatus(warning);
+                    console.warn(`[AuthoringEditorV2] ${warning}`);
+                } else {
+                    authoringEditorDevLauncher.toggle();
+                }
             } else if (f2Pressed) {
                 toggleEditor();
             }
