@@ -1,0 +1,20 @@
+{
+  "openStats": {
+    "editorRoots": 0,
+    "canvases": 1,
+    "toolbar": 0,
+    "left": 0,
+    "right": 0,
+    "tabContent": 0,
+    "editorDisplay": "missing"
+  },
+  "closedStats": {
+    "editorRoots": 0,
+    "canvases": 1,
+    "editorDisplay": "missing"
+  },
+  "shiftStats": {
+    "editorRoots": 0,
+    "canvases": 1
+  }
+}

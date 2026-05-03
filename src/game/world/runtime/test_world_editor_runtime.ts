@@ -3207,17 +3207,6 @@ export const createTestWorldEditorRuntime = (
                     authoringEditorDevLauncher.close();
                 }
                 toggleEditor();
-            } else if (f2Pressed) {
-                if (!authoringEditorDevLauncher.isEnabled()) {
-                    toggleEditor();
-                } else {
-                    const shouldOpenAuthoringEditorV2 = !authoringEditorDevLauncher.isOpen();
-                    if (active && shouldOpenAuthoringEditorV2) {
-                        // Migration ownership: F2 is now for V2, so close legacy first.
-                        toggleEditor();
-                    }
-                    authoringEditorDevLauncher.toggle();
-                }
             }
             const camera = scene.cameras.main;
             const worldBounds = worldRuntime.getWorldBounds();
@@ -3248,7 +3237,7 @@ export const createTestWorldEditorRuntime = (
                 : getSelectedHandle();
             const selectedBounds = selectedHandle?.getBounds() ?? null;
             overlayText.setText([
-                'Shift+F2 legacy toggle  F2 authoring v2 toggle  Del delete  Ctrl+D duplicate  Ctrl+Z/Y undo redo',
+                'Shift+F2 legacy toggle  Del delete  Ctrl+D duplicate  Ctrl+Z/Y undo redo',
                 pendingPlacementType
                     ? `Placement ${pendingPlacementType}: LMB place  Esc/RMB cancel  wheel zoom`
                     : 'LMB select/move  drag corners resize  wheel zoom  middle or Space+drag pan',

@@ -16,6 +16,7 @@ import type { PlayerTuningPanelRuntime } from '../../ui/runtime/player_tuning_pa
 import { openEndScreen, openPauseMenu, startLevelScene } from '../demo_flow';
 import { relaxKeyboardCapture } from '../../shared/dom_input_focus';
 import type { TestCutsceneRuntime } from './test_cutscene_runtime';
+import type { EditorPlugin } from '../../editor/EditorPlugin';
 
 export interface TestSceneFrameRuntime {
     update: (deltaMs: number) => void;
@@ -31,6 +32,7 @@ interface CreateTestSceneFrameRuntimeParams {
     debugRuntime: TestDebugRuntime;
     cutsceneRuntime: TestCutsceneRuntime;
     editorRuntime: TestWorldEditorRuntime;
+    editorPlugin: EditorPlugin;
     devHelperRuntime: TestDevHelperRuntime;
     tuningRuntime: PlayerTuningRuntime;
     tuningPanelRuntime: PlayerTuningPanelRuntime;
@@ -39,7 +41,7 @@ interface CreateTestSceneFrameRuntimeParams {
 export const createTestSceneFrameRuntime = (
     params: CreateTestSceneFrameRuntimeParams
 ): TestSceneFrameRuntime => {
-    const { scene, player, playerInputKeys, worldRuntime, respawnRuntime, hudRuntime, debugRuntime, cutsceneRuntime, editorRuntime, devHelperRuntime, tuningPanelRuntime } = params;
+    const { scene, player, playerInputKeys, worldRuntime, respawnRuntime, hudRuntime, debugRuntime, cutsceneRuntime, editorRuntime, editorPlugin, devHelperRuntime, tuningPanelRuntime } = params;
     const pauseKey = scene.input.keyboard?.addKey(Input.Keyboard.KeyCodes.ESC);
     const temporaryInteractionKey = scene.input.keyboard?.addKey(Input.Keyboard.KeyCodes.I);
     if (scene.input.keyboard) {
@@ -52,9 +54,10 @@ export const createTestSceneFrameRuntime = (
                 return;
             }
             cutsceneRuntime.update(deltaMs);
+            editorPlugin.update(deltaMs);
             editorRuntime.update(deltaMs);
             tuningPanelRuntime.update(deltaMs);
-            if (editorRuntime.isActive() && tuningPanelRuntime.isActive()) {
+            if ((editorRuntime.isActive() || editorPlugin.isOpen()) && tuningPanelRuntime.isActive()) {
                 tuningPanelRuntime.close();
             }
             if (editorRuntime.isActive()) {

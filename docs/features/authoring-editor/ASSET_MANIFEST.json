@@ -1,0 +1,112 @@
+[
+  {
+    "path": "assets/mockups/editor_shell_blank_inspectors.png",
+    "bytes": 108766,
+    "sha256_16": "31d31b41e1210cb7"
+  },
+  {
+    "path": "assets/mockups/level_window_settings.png",
+    "bytes": 136081,
+    "sha256_16": "73257f64d6d76216"
+  },
+  {
+    "path": "assets/mockups/level_sequence_window.png",
+    "bytes": 153286,
+    "sha256_16": "7455090a43104179"
+  },
+  {
+    "path": "assets/mockups/player_window.png",
+    "bytes": 161217,
+    "sha256_16": "62f5172287143d15"
+  },
+  {
+    "path": "assets/mockups/objects_window.png",
+    "bytes": 372127,
+    "sha256_16": "978bd898a6cb54bd"
+  },
+  {
+    "path": "assets/mockups/background_window.png",
+    "bytes": 379924,
+    "sha256_16": "00cbcd8e96665ce1"
+  },
+  {
+    "path": "assets/mockups/npc_window.png",
+    "bytes": 356461,
+    "sha256_16": "a27c6c96051ebb7a"
+  },
+  {
+    "path": "assets/mockups/cutscenes_window_timeline_corrected.png",
+    "bytes": 334510,
+    "sha256_16": "9b95760a4b57108d"
+  },
+  {
+    "path": "assets/mockups/cutscenes_window_original.png",
+    "bytes": 327398,
+    "sha256_16": "6735b6d5ad364d1e"
+  },
+  {
+    "path": "assets/mockups/logic_window.png",
+    "bytes": 363498,
+    "sha256_16": "c47b6c64896080f2"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 1 (4).png",
+    "bytes": 108766,
+    "sha256_16": "31d31b41e1210cb7"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 2 (2).png",
+    "bytes": 136081,
+    "sha256_16": "73257f64d6d76216"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 3 (1).png",
+    "bytes": 153286,
+    "sha256_16": "7455090a43104179"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 4 (3).png",
+    "bytes": 161217,
+    "sha256_16": "62f5172287143d15"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 5 (5).png",
+    "bytes": 372127,
+    "sha256_16": "978bd898a6cb54bd"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 6 (2).png",
+    "bytes": 379924,
+    "sha256_16": "00cbcd8e96665ce1"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 7 (4).png",
+    "bytes": 356461,
+    "sha256_16": "a27c6c96051ebb7a"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 8 (1).png",
+    "bytes": 327398,
+    "sha256_16": "6735b6d5ad364d1e"
+  },
+  {
+    "path": "assets/mockups_raw/Frame 9 (2).png",
+    "bytes": 363498,
+    "sha256_16": "c47b6c64896080f2"
+  },
+  {
+    "path": "assets/mockups_raw/78d457bf-0371-4fcc-afa8-7ecd05d534c4.png",
+    "bytes": 124394,
+    "sha256_16": "db7a9a2a26b64d1a"
+  },
+  {
+    "path": "assets/source_spec/the_form_authoring_tools_original_spec.pdf",
+    "bytes": 1569569,
+    "sha256_16": "253cf5c38f737974"
+  },
+  {
+    "path": "assets/current_state/bad_v2_viewport_placeholder.png",
+    "bytes": 59774,
+    "sha256_16": "b978076c7fd5e9f7"
+  }
+]

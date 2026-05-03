@@ -32,6 +32,7 @@ export const createTestSceneRuntime = (
         bootstrapRuntime.cutsceneRuntime.destroy();
         bootstrapRuntime.devHelperRuntime.destroy();
         bootstrapRuntime.tuningPanelRuntime.destroy();
+        bootstrapRuntime.editorPlugin.destroy();
     };
 
     scene.events.once('shutdown', destroy);

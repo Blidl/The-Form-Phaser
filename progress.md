@@ -157,3 +157,27 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
 - Verification:
   - `npm run build-nolog` passed.
   - `npm run build` passed.
+- 2026-05-03: Implemented new MVP Step 1 EditorShell scaffold under `src/editor/` (F2 overlay shell only, modular modes, grid/coords/camera controls), and integrated it into scene runtime.
+  - Added files:
+    - `src/editor/EditorPlugin.ts`
+    - `src/editor/EditorState.ts`
+    - `src/editor/core/EditorShell.ts`
+    - `src/editor/core/EditorMode.ts`
+    - `src/editor/core/EditorCameraController.ts`
+    - `src/editor/core/EditorGrid.ts`
+    - `src/editor/core/EditorMouseWorldInfo.ts`
+    - `src/editor/ui/EditorTopTabs.ts`
+    - `src/editor/ui/EditorPanel.ts`
+    - placeholder mode files for Level/Player/Objects/Background/NPC/Cutscenes/Logic.
+  - Integration changes:
+    - `test_scene_bootstrap.ts`: create/destroy editor plugin and expose in bootstrap runtime.
+    - `test_scene_frame_runtime.ts`: update editor plugin each frame without pausing gameplay.
+    - `test_scene_runtime.ts`: plugin destroy wiring.
+    - `test_world_editor_runtime.ts`: plain `F2` handling removed from legacy runtime; legacy toggle remains on `Shift+F2` to avoid key collision.
+  - Scope guard: no object/NPC/cutscene/logic/save/undo implementations were added in the new editor shell beyond placeholders.
+  - Verification:
+    - `npm run build-nolog` passes.
+    - `npx tsc --noEmit` still fails on existing baseline repo errors unrelated to this step (pre-existing in many world/player files).
+  - TODO for next step:
+    - Add real mode content + shared selection/gizmo systems per roadmap Phase 2+.
+    - Add end-to-end interactive smoke (Playwright) for F2 open/close + tab switching + camera controls.

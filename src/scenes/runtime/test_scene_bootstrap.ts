@@ -62,6 +62,7 @@ import {
     createTestCutsceneRuntime,
     type TestCutsceneRuntime
 } from './test_cutscene_runtime';
+import { createEditorPlugin, type EditorPlugin } from '../../editor/EditorPlugin';
 
 export interface TestSceneBootstrapRuntime {
     player: PfPlayer;
@@ -75,6 +76,7 @@ export interface TestSceneBootstrapRuntime {
     devHelperRuntime: TestDevHelperRuntime;
     tuningRuntime: PlayerTuningRuntime;
     tuningPanelRuntime: PlayerTuningPanelRuntime;
+    editorPlugin: EditorPlugin;
 }
 
 export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, editorOpen: boolean = false): TestSceneBootstrapRuntime => {
@@ -213,12 +215,16 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         },
         (source) => cutsceneRuntime.requestNormalCameraOwnership(source)
     );
+    const editorPlugin = createEditorPlugin({
+        scene,
+        followTarget: player.arcadeBodyObject
+    });
     const devHelperRuntime = createTestDevHelperRuntime({
         scene,
         player: worldActor,
         worldRuntime,
         respawnRuntime,
-        isEditorActive: () => editorRuntime.isActive()
+        isEditorActive: () => editorRuntime.isActive() || editorPlugin.isOpen()
     });
     const tuningRuntime = createPlayerTuningRuntime();
     tuningRuntime.subscribe(() => {
@@ -282,6 +288,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         editorRuntime,
         devHelperRuntime,
         tuningRuntime,
-        tuningPanelRuntime
+        tuningPanelRuntime,
+        editorPlugin
     };
 };

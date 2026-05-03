@@ -16,6 +16,14 @@ export type AuthoringEditorTimeMode = 'Live' | 'Paused';
 
 export type AuthoringEditorGridSize = 8 | 16 | 32;
 
+export interface AuthoringEditorLayoutInsets {
+  readonly toolbarHeight: number;
+  readonly topRulerBandHeight: number;
+  readonly leftPanelWidth: number;
+  readonly rightPanelWidth: number;
+  readonly bottomStatusBarHeight: number;
+}
+
 export interface AuthoringEditorState {
   readonly openState: AuthoringEditorOpenState;
   readonly activeTab: AuthoringEditorTab;
