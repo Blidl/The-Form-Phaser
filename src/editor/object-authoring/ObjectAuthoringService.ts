@@ -1,5 +1,5 @@
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
-import type { EditorObjectData } from '../data/EditorObjectData';
+import type { EditorObjectBoundsData, EditorObjectData } from '../data/EditorObjectData';
 import type { ObjectTypeRegistry } from '../data/ObjectTypeRegistry';
 import type { ProjectStore } from '../data/ProjectStore';
 import { objectDiag } from '../debug/ObjectEditorDiagnostics';
@@ -33,6 +33,11 @@ export interface ObjectAuthoringServiceOptions {
     projectStore: ProjectStore;
     objectTypeRegistry: ObjectTypeRegistry;
     legacyObjectAdapter: LegacyObjectAdapter | null;
+}
+
+export interface UpdateObjectBoundsResult {
+    success: boolean;
+    reason?: string;
 }
 
 export class ObjectAuthoringService {
@@ -244,6 +249,87 @@ export class ObjectAuthoringService {
                 errorStack: asError.stack ?? null
             });
             return { success: false, reason: `exception: ${asError.message}` };
+        }
+    }
+
+    public updateObjectBounds(
+        objectId: string,
+        boundsPatch: Partial<EditorObjectBoundsData>
+    ): UpdateObjectBoundsResult {
+        try {
+            this.syncProjectStoreMirror();
+            const beforeList = this.listObjects();
+            const activeLevel = this.projectStore.getActiveLevel();
+            const current = this.projectStore.getObject(activeLevel.id, objectId);
+            if (!current) {
+                const reason = 'Object is not present in active runtime level.';
+                objectDiag('[ObjectAuthoringService:updateBounds]', {
+                    objectId,
+                    patch: boundsPatch,
+                    success: false,
+                    reason
+                });
+                return { success: false, reason };
+            }
+
+            const nextBounds: EditorObjectBoundsData = {
+                ...current.bounds,
+                ...boundsPatch
+            };
+            const hasRuntimeLink = this.legacyObjectAdapter?.hasRuntimeLink(objectId) ?? false;
+            if (hasRuntimeLink) {
+                const moved = this.legacyObjectAdapter?.moveRuntimeObject(objectId, nextBounds) ?? false;
+                if (!moved) {
+                    const reason = `Runtime refused bounds update for type "${current.settings.type}".`;
+                    objectDiag('[ObjectAuthoringService:updateBounds]', {
+                        objectId,
+                        patch: boundsPatch,
+                        success: false,
+                        reason
+                    });
+                    return { success: false, reason };
+                }
+                this.syncProjectStoreMirror();
+                objectDiag('[ObjectAuthoringService:updateBounds]', {
+                    objectId,
+                    patch: boundsPatch,
+                    success: true,
+                    reason: null,
+                    serviceListCountBefore: beforeList.length,
+                    serviceListCountAfter: this.listObjects().length
+                });
+                return { success: true };
+            }
+
+            if (this.isKnownRuntimeType(current.settings.type)) {
+                const reason = 'Object has no live runtime link.';
+                objectDiag('[ObjectAuthoringService:updateBounds]', {
+                    objectId,
+                    patch: boundsPatch,
+                    success: false,
+                    reason
+                });
+                return { success: false, reason };
+            }
+
+            this.projectStore.updateObject(activeLevel.id, objectId, { bounds: boundsPatch });
+            objectDiag('[ObjectAuthoringService:updateBounds]', {
+                objectId,
+                patch: boundsPatch,
+                success: true,
+                reason: null
+            });
+            return { success: true };
+        } catch (error) {
+            const asError = error instanceof Error ? error : new Error(String(error));
+            const reason = `exception: ${asError.message}`;
+            objectDiag('[ObjectAuthoringService:updateBounds]', {
+                objectId,
+                patch: boundsPatch,
+                success: false,
+                reason
+            });
+            return { success: false, reason };
         }
     }
 

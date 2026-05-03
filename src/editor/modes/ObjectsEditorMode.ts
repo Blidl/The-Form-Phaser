@@ -178,6 +178,7 @@ export class ObjectsEditorMode implements EditorMode {
             const created = this.createObjectAt(event.worldX, event.worldY);
             if (created) {
                 this.selectedObjectId = created.id;
+                this.selectedTypeId = null;
                 this.draggingObjectId = null;
                 this.syncSelectionOutline();
             }
@@ -236,21 +237,24 @@ export class ObjectsEditorMode implements EditorMode {
         if (!this.draggingObjectId) {
             return;
         }
-        const activeLevel = this.projectStore.getActiveLevel();
-        const current = this.projectStore.getObject(activeLevel.id, this.draggingObjectId);
+        const current = this.getActiveObjects().find((item) => item.id === this.draggingObjectId) ?? null;
         if (!current) {
             this.draggingObjectId = null;
             return;
         }
         const snappedX = this.snap(event.worldX - this.dragOffsetX, context.grid.size);
         const snappedY = this.snap(event.worldY - this.dragOffsetY, context.grid.size);
-        const nextObject = this.projectStore.updateObject(activeLevel.id, current.id, {
-            bounds: {
-                x: snappedX,
-                y: snappedY
-            }
+        const updateResult = this.objectAuthoringService.updateObjectBounds(current.id, {
+            x: snappedX,
+            y: snappedY
         });
-        this.legacyObjectAdapter?.moveRuntimeObject(nextObject.id, nextObject.bounds);
+        if (!updateResult.success) {
+            if (updateResult.reason) {
+                console.warn(`[ObjectsEditorMode] Drag move failed for "${current.id}": ${updateResult.reason}`);
+            }
+            return;
+        }
+        this.refreshLiveObjects('drag-move');
         this.syncViewsFromStore();
         this.syncSelectionOutline();
         this.onUiChanged();
@@ -824,8 +828,7 @@ export class ObjectsEditorMode implements EditorMode {
             return false;
         }
 
-        const activeLevel = this.projectStore.getActiveLevel();
-        const current = this.projectStore.getObject(activeLevel.id, selectedId);
+        const current = this.getActiveObjects().find((item) => item.id === selectedId) ?? null;
         if (!current) {
             return false;
         }
@@ -857,13 +860,19 @@ export class ObjectsEditorMode implements EditorMode {
             return false;
         }
 
-        const nextObject = this.projectStore.updateObject(activeLevel.id, selectedId, {
-            bounds: {
-                [field]: nextValue
-            } as Partial<EditorObjectBoundsData>
-        });
-        this.legacyObjectAdapter?.moveRuntimeObject(nextObject.id, nextObject.bounds);
-        this.syncFromLegacyBridge('bounds-edit');
+        const updateResult = this.objectAuthoringService.updateObjectBounds(selectedId, {
+            [field]: nextValue
+        } as Partial<EditorObjectBoundsData>);
+        if (!updateResult.success) {
+            if (updateResult.reason) {
+                console.warn(`[ObjectsEditorMode] Bounds update failed for "${selectedId}": ${updateResult.reason}`);
+            }
+            this.refreshLiveObjects('bounds-edit-failed');
+            this.syncViewsFromStore();
+            this.syncSelectionOutline();
+            return false;
+        }
+        this.refreshLiveObjects('bounds-edit');
         this.syncViewsFromStore();
         this.syncSelectionOutline();
         return true;
