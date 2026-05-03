@@ -70,6 +70,12 @@ export class EditorPanel {
         this.content.appendChild(list);
     }
 
+    public setCustomContent(title: string, render: (container: HTMLDivElement) => void): void {
+        this.title.textContent = title;
+        this.content.replaceChildren();
+        render(this.content);
+    }
+
     public destroy(): void {
         this.root.remove();
     }

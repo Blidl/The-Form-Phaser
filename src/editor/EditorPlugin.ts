@@ -1,6 +1,7 @@
 import { Input, type Scene } from 'phaser';
 import { relaxKeyboardCapture, isDomTextInputFocused } from '../shared/dom_input_focus';
 import { EditorShell } from './core/EditorShell';
+import type { LegacyObjectSource } from './bridge/LegacyObjectAdapter';
 
 export interface EditorPlugin {
     update(deltaMs: number): void;
@@ -13,6 +14,7 @@ export interface EditorPlugin {
 interface CreateEditorPluginOptions {
     scene: Scene;
     followTarget: Phaser.GameObjects.GameObject;
+    legacyObjectSource?: LegacyObjectSource;
 }
 
 export const createEditorPlugin = (options: CreateEditorPluginOptions): EditorPlugin => {
@@ -29,7 +31,8 @@ export const createEditorPlugin = (options: CreateEditorPluginOptions): EditorPl
     const shell = new EditorShell({
         scene,
         camera: scene.cameras.main,
-        followTarget
+        followTarget,
+        legacyObjectSource: options.legacyObjectSource
     });
 
     let destroyed = false;

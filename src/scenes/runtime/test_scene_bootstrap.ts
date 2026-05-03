@@ -63,6 +63,7 @@ import {
     type TestCutsceneRuntime
 } from './test_cutscene_runtime';
 import { createEditorPlugin, type EditorPlugin } from '../../editor/EditorPlugin';
+import { createAuthoringObjectBridgeSource } from '../../editor/bridge/AuthoringObjectBridge';
 
 export interface TestSceneBootstrapRuntime {
     player: PfPlayer;
@@ -217,7 +218,8 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
     );
     const editorPlugin = createEditorPlugin({
         scene,
-        followTarget: player.arcadeBodyObject
+        followTarget: player.arcadeBodyObject,
+        legacyObjectSource: createAuthoringObjectBridgeSource(worldRuntime)
     });
     const devHelperRuntime = createTestDevHelperRuntime({
         scene,

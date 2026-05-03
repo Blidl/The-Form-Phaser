@@ -181,3 +181,124 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
   - TODO for next step:
     - Add real mode content + shared selection/gizmo systems per roadmap Phase 2+.
     - Add end-to-end interactive smoke (Playwright) for F2 open/close + tab switching + camera controls.
+- 2026-05-03: Step 3.1 bridge implementation (legacy/runtime objects -> new ObjectsEditorMode) completed.
+  - Added bridge layer:
+    - `src/editor/bridge/LegacyObjectAdapter.ts`
+    - `src/editor/bridge/AuthoringObjectBridge.ts`
+  - New editor now syncs existing runtime world objects into `ProjectStore` on Objects mode enter/update, with stable ID preservation (fallback stable generation when missing IDs).
+  - Runtime-linked objects are selectable from viewport and list via legacy handle hit-testing; yellow outline + right inspector now use synced bounds/settings.
+  - Dragging selected runtime-linked objects updates both `ProjectStore` bounds and legacy runtime/config through `patchObjectBounds(...)` with grid snapping.
+  - New object creation attempts legacy factory path first (`worldRuntime.createObject(...)` through bridge); fallback rectangle creation is isolated behind a dedicated method + TODO.
+  - Rendering updated to avoid duplicate fake rectangles for runtime-linked objects; fallback rectangles are used only for objects without runtime links.
+  - `ObjectTypeRegistry` expanded with legacy-aligned types/aliases (camelCase + snake_case mapping), keeping required IDs (`platform_default`, `checkpoint`, `player_spawn`, `finish`, `wind_zone`, `trigger_volume`, `triangle_pickup`, `drag_box`).
+  - Wiring:
+    - `test_scene_bootstrap.ts` passes a legacy object source into `EditorPlugin`.
+    - `EditorPlugin`/`EditorShell`/`ObjectsEditorMode` consume the bridge.
+  - Build verification: `npm run build-nolog` passes.
+- 2026-05-03: Step 3.2 Objects UI polish and input/delete behavior.
+  - `ObjectsEditorMode` left inspector updated:
+    - removed duplicated mouse coordinate line;
+    - added real category subtabs (`Platforms`, `Special`, `Objects`) with single active green state;
+    - catalog now shows only active category entries;
+    - selected catalog type is cleared when switching to a category it does not belong to.
+  - Grid controls added in Objects left inspector:
+    - `Grid On` checkbox;
+    - grid size selector (8/16/32/64);
+    - wired to `ProjectStore` grid settings.
+  - Search input fixed to behave like normal text input:
+    - no per-keystroke panel rerender;
+    - list filtering is handled in-place inside the same DOM input lifecycle;
+    - supports continuous typing, selection, backspace/delete, caret navigation.
+  - Search filtering expanded to match object `name`, `id`, and `type` (case-insensitive).
+  - Delete key support in Objects mode:
+    - `Del` deletes currently selected object when no DOM text input is focused;
+    - runtime-linked objects are removed through bridge (`worldRuntime.removeObject`) and re-synced;
+    - fallback-only objects are deleted from `ProjectStore` directly;
+    - selection/overlay/list/count update paths are unified.
+  - Bridge delete path added:
+    - `LegacyObjectSource.removeObject?` + `LegacyObjectAdapter.removeRuntimeObject(...)`;
+    - `AuthoringObjectBridge` now forwards remove to `worldRuntime.removeObject(...)`.
+  - `ProjectStore` gained grid mutators (`setGridEnabled`, `setGridSnapEnabled`, `setGridSize`).
+  - `EditorShell` now applies grid visibility/size from `ProjectStore` on open/update.
+  - Verification: `npm run build-nolog` passes.
+- 2026-05-03: Step 3.2.1 bugfix pass (Objects input/delete/list).
+  - Input routing fix:
+    - Added `isEditorTextInputFocused()` helper in `src/shared/dom_input_focus.ts`.
+    - In `src/scenes/runtime/test_scene_frame_runtime.ts`, gameplay/pause/interaction key handling now respects text-input focus and mutes gameplay input when any DOM text input is focused.
+    - In `ObjectsEditorMode` search input key events now call `stopPropagation()` + `stopImmediatePropagation()` for keydown/keypress/keyup to avoid editor/game shortcut interception while typing.
+  - Delete one-press fix:
+    - Updated `ObjectsEditorMode.deleteSelectedObject()` order so runtime-linked delete runs first, then `ProjectStore` delete, view cleanup, selection clear, and sync.
+    - Added tombstone guard in `LegacyObjectAdapter` (`ignoredLegacyIds`) so deleted runtime ids are not re-imported by sync.
+  - Category/list/search behavior fix:
+    - Objects list now filtered by active category tab (`platforms/special/objects`) before search.
+    - Search now applies only within active category and matches `name/id/type`.
+    - Objects list title now shows `filtered / category-total` count and updates on search.
+  - Scroll retention fix:
+    - Preserved Objects list `scrollTop` across list refresh and panel rerenders via mode-level `objectsListScrollTop` state.
+    - Row selection keeps scroll position instead of jumping to top.
+  - Verification: `npm run build-nolog` passes.
+- 2026-05-03: Step 4.1 (Objects right inspector Bounds editable fields) implemented in legacy F2 editor path.
+  - Added editable Bounds inputs in `src/editor/modes/ObjectsEditorMode.ts` for X/Y/Width/Height/Rotation.
+  - Commit policy: commit on Enter or blur; invalid values revert to stored value.
+  - Validation: X/Y/Rotation require finite number; Width/Height must be > 0.
+  - Manual X/Y commits apply grid snapping only on commit when snap is enabled; typing is unsnapped.
+  - Commit updates ProjectStore, syncs runtime via `LegacyObjectAdapter.moveRuntimeObject(...)`, refreshes fallback views and selection outline, and rerenders inspector.
+  - Input key handling now keeps normal text-edit behavior and stops key propagation so editor/game shortcuts don’t consume field keystrokes.
+  - Delete shortcut behavior preserved via `isEditorTextInputFocused()` guard (Delete edits input text when focused; otherwise deletes selected object).
+- 2026-05-03: Rotation sync safety patch for runtime-linked objects.
+  - `src/editor/bridge/AuthoringObjectBridge.ts`: stopped forcing `rotation: 0` from runtime handles (leave undefined; runtime handle API has no rotation yet).
+  - `src/editor/bridge/LegacyObjectAdapter.ts`: when runtime handle rotation is missing, preserve current ProjectStore rotation during sync instead of clobbering.
+  - Added TODO note documenting runtime rotation gap.
+- Verification:
+  - `npm run build-nolog` PASS.
+- 2026-05-03: Step 4.2 (Objects right inspector Visual editable fields) implemented in new F2 editor Objects mode.
+  - `src/editor/modes/ObjectsEditorMode.ts`:
+    - Replaced Visual read-only labels with editable controls: Shader, Texture, Fill, Stroke, Alpha, Layer, Only debug view.
+    - Commit policy implemented on Enter/blur for text/number fields; checkbox applies immediately.
+    - Validation/normalization:
+      - Shader/Texture empty -> `null`.
+      - Fill/Stroke accept hex-like CSS input (`#RGB/#RGBA/#RRGGBB/#RRGGBBAA`, optional `#`), invalid values revert.
+      - Alpha parses finite number and clamps to `[0..1]`.
+      - Layer parses finite number and stores rounded integer; datalist includes default 1..5 plus current value.
+    - Input key handling guards added for all Visual inputs so typing/editing keys are not consumed by editor/game shortcuts.
+    - Visual commits now update ProjectStore and refresh fallback view + selection overlay.
+    - Fallback rectangles now immediately apply stored Fill/Stroke/Alpha (`strokeColor` now used instead of fixed stroke).
+    - Runtime sync path for runtime-linked objects:
+      - Fill/Stroke -> legacy `patchObjectColors` (if supported).
+      - Alpha/Layer -> legacy `patchObjectFields` (`layer` mapped to `layer_1..layer_5` when possible).
+      - Added TODOs for unsupported runtime sync fields (`shader`, `texture`, `onlyDebugView`) and out-of-range runtime layer mapping.
+  - Bridge/runtime wiring:
+    - `src/editor/bridge/LegacyObjectAdapter.ts`: added optional runtime visual patch methods (`patchRuntimeObjectFields`, `patchRuntimeObjectColors`) and source interface hooks.
+    - `src/editor/bridge/AuthoringObjectBridge.ts`: wired bridge hooks to `worldRuntime.patchObjectFields(...)` / `worldRuntime.patchObjectColors(...)`.
+- Verification:
+  - `npm run build-nolog` PASS.
+- 2026-05-03: Step 4.2 follow-up fix.
+  - `ObjectsEditorMode` Visual input key guard adjusted to avoid blocking same-element Enter handlers (commit on Enter now works as intended while still stopping propagation to game/editor shortcuts).
+  - Re-verified `npm run build-nolog` PASS.
+- 2026-05-03: Step 4.2.1 (Visual tools bugfix + color picker + eyedropper + onlyDebugView runtime behavior).
+  - Objects inspector Visual Fill/Stroke rows now include:
+    - native color swatch (`input[type=color]`),
+    - text hex input,
+    - eyedropper buttons (`Pick Fill` / `Pick Stroke`).
+  - Color behavior:
+    - swatch edits commit immediately to ProjectStore/runtime/fallback visuals;
+    - text edits remain Enter/blur commit;
+    - valid hex-like input normalizes to `#rrggbb`;
+    - invalid text reverts.
+  - Eyedropper MVP:
+    - click Pick Fill/Pick Stroke to arm mode;
+    - next viewport click samples color from object under cursor via authoring object data (`fillColor`/`strokeColor` fallback path);
+    - ESC cancels eyedropper mode;
+    - empty-area click safely no-op (no errors).
+  - Only debug view fix:
+    - runtime config model extended with `onlyDebugView?: boolean` in visual-order config.
+    - world runtime now applies visibility rule: `visible = !onlyDebugView || editorDebugViewActive` for runtime visuals.
+    - added runtime APIs: `patchObjectDebugVisibility(rootId, onlyDebugView)` and `setEditorDebugViewActive(active)`.
+    - editor bridge wiring added for both APIs.
+    - EditorShell now toggles runtime debug-view-active flag on open/close.
+    - Legacy sync imports `onlyDebugView` into ProjectStore and Objects mode reapplies debug visibility for runtime-linked objects during enter/update sync.
+  - Visual note text added under shader/texture fields:
+    - `Texture preview requires loaded texture key`
+    - `Shader preview TODO`
+- Verification:
+  - `npm run build-nolog` PASS.

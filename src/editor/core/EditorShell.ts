@@ -17,20 +17,35 @@ import { BackgroundEditorMode } from '../modes/BackgroundEditorMode';
 import { NpcEditorMode } from '../modes/NpcEditorMode';
 import { CutscenesEditorMode } from '../modes/CutscenesEditorMode';
 import { LogicEditorMode } from '../modes/LogicEditorMode';
+import { ProjectStore } from '../data/ProjectStore';
+import type { LegacyObjectSource } from '../bridge/LegacyObjectAdapter';
+import { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 
 interface EditorShellOptions {
     scene: Scene;
     camera: Phaser.Cameras.Scene2D.Camera;
     followTarget: Phaser.GameObjects.GameObject;
     hostElement?: HTMLElement;
+    legacyObjectSource?: LegacyObjectSource;
 }
 
 const TOP_BAR_HEIGHT = 36;
 
-const createModes = (): Record<EditorModeId, EditorMode> => {
-    const level = new LevelEditorMode();
+const createModes = (
+    scene: Scene,
+    projectStore: ProjectStore,
+    onUiChanged: () => void,
+    legacyObjectAdapter: LegacyObjectAdapter | null
+): Record<EditorModeId, EditorMode> => {
+    const level = new LevelEditorMode(projectStore);
     const player = new PlayerEditorMode();
-    const objects = new ObjectsEditorMode();
+    const objects = new ObjectsEditorMode({
+        scene,
+        projectStore,
+        objectTypeRegistry: projectStore.getObjectTypeRegistry(),
+        onUiChanged,
+        legacyObjectAdapter
+    });
     const background = new BackgroundEditorMode();
     const npc = new NpcEditorMode();
     const cutscenes = new CutscenesEditorMode();
@@ -67,12 +82,21 @@ export class EditorShell {
     private readonly cameraController: EditorCameraController;
     private readonly grid: EditorGrid;
     private readonly mouseWorldInfo: EditorMouseWorldInfo;
+    private readonly projectStore: ProjectStore;
+    private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
 
     public constructor(options: EditorShellOptions) {
         this.scene = options.scene;
         this.camera = options.camera;
         this.state = createInitialEditorState();
-        this.modes = createModes();
+        this.projectStore = new ProjectStore();
+        const legacyObjectAdapter = options.legacyObjectSource
+            ? new LegacyObjectAdapter(options.legacyObjectSource, this.projectStore.getObjectTypeRegistry())
+            : null;
+        this.legacyObjectAdapter = legacyObjectAdapter;
+        this.modes = createModes(this.scene, this.projectStore, () => {
+            this.renderActiveModeInspectors();
+        }, legacyObjectAdapter);
 
         this.rootElement = document.createElement('div');
         this.rootElement.setAttribute('data-editor-shell', 'true');
@@ -115,6 +139,11 @@ export class EditorShell {
         this.grid = new EditorGrid(this.scene);
         this.grid.setGridSize(32);
         this.mouseWorldInfo = new EditorMouseWorldInfo(this.scene, this.camera);
+        this.scene.input.on('pointerdown', this.handlePointerDown, this);
+        this.scene.input.on('pointermove', this.handlePointerMove, this);
+        this.scene.input.on('pointerup', this.handlePointerUp, this);
+        this.scene.game.canvas.addEventListener('contextmenu', this.handleCanvasContextMenu);
+        this.legacyObjectAdapter?.setEditorDebugViewActive(false);
 
         this.topTabs.setActiveTab(this.state.activeModeId);
         this.renderActiveModeInspectors();
@@ -122,6 +151,10 @@ export class EditorShell {
 
     public isOpen(): boolean {
         return this.state.isOpen;
+    }
+
+    public getProjectStore(): ProjectStore {
+        return this.projectStore;
     }
 
     public toggle(): void {
@@ -142,8 +175,11 @@ export class EditorShell {
         this.topTabs.setVisible(true);
         this.leftPanel.setVisible(true);
         this.rightPanel.setVisible(true);
-        this.grid.setVisible(true);
+        const gridSettings = this.projectStore.getGridSettings();
+        this.grid.setGridSize(gridSettings.size);
+        this.grid.setVisible(gridSettings.enabled);
         this.cameraController.open();
+        this.legacyObjectAdapter?.setEditorDebugViewActive(true);
         this.renderActiveModeInspectors();
     }
 
@@ -159,6 +195,7 @@ export class EditorShell {
         this.topTabs.setMouseWorldPosition(null, null);
         this.grid.setVisible(false);
         this.cameraController.close();
+        this.legacyObjectAdapter?.setEditorDebugViewActive(false);
 
         this.leftPanel.setVisible(false);
         this.rightPanel.setVisible(false);
@@ -184,6 +221,9 @@ export class EditorShell {
             return;
         }
 
+        const gridSettings = this.projectStore.getGridSettings();
+        this.grid.setGridSize(gridSettings.size);
+        this.grid.setVisible(gridSettings.enabled);
         this.grid.update(this.camera);
 
         const mouseWorld = this.mouseWorldInfo.read();
@@ -197,12 +237,17 @@ export class EditorShell {
         this.state.mouseWorldX = mouseWorld.x;
         this.state.mouseWorldY = mouseWorld.y;
         this.topTabs.setMouseWorldPosition(mouseWorld.x, mouseWorld.y);
+        this.modes[this.state.activeModeId].update?.(this.createModeContext());
     }
 
     public destroy(): void {
         this.close();
         this.cameraController.destroy();
         this.grid.destroy();
+        this.scene.input.off('pointerdown', this.handlePointerDown, this);
+        this.scene.input.off('pointermove', this.handlePointerMove, this);
+        this.scene.input.off('pointerup', this.handlePointerUp, this);
+        this.scene.game.canvas.removeEventListener('contextmenu', this.handleCanvasContextMenu);
         this.topTabs.destroy();
         this.leftPanel.destroy();
         this.rightPanel.destroy();
@@ -214,4 +259,64 @@ export class EditorShell {
         mode.renderLeftInspector(this.leftPanel);
         mode.renderRightInspector(this.rightPanel);
     }
+
+    private createModeContext() {
+        return {
+            mouseWorldX: this.state.mouseWorldX,
+            mouseWorldY: this.state.mouseWorldY,
+            grid: this.projectStore.getGridSettings()
+        };
+    }
+
+    private handlePointerDown(pointer: Phaser.Input.Pointer): void {
+        if (!this.state.isOpen) {
+            return;
+        }
+        this.modes[this.state.activeModeId].onPointerDown?.(
+            {
+                button: pointer.button,
+                worldX: pointer.worldX,
+                worldY: pointer.worldY,
+                shiftKey: pointer.event.shiftKey
+            },
+            this.createModeContext()
+        );
+    }
+
+    private handlePointerMove(pointer: Phaser.Input.Pointer): void {
+        if (!this.state.isOpen) {
+            return;
+        }
+        this.modes[this.state.activeModeId].onPointerMove?.(
+            {
+                button: pointer.button,
+                worldX: pointer.worldX,
+                worldY: pointer.worldY,
+                shiftKey: pointer.event.shiftKey
+            },
+            this.createModeContext()
+        );
+    }
+
+    private handlePointerUp(pointer: Phaser.Input.Pointer): void {
+        if (!this.state.isOpen) {
+            return;
+        }
+        this.modes[this.state.activeModeId].onPointerUp?.(
+            {
+                button: pointer.button,
+                worldX: pointer.worldX,
+                worldY: pointer.worldY,
+                shiftKey: pointer.event.shiftKey
+            },
+            this.createModeContext()
+        );
+    }
+
+    private readonly handleCanvasContextMenu = (event: Event): void => {
+        if (!this.state.isOpen) {
+            return;
+        }
+        event.preventDefault();
+    };
 }

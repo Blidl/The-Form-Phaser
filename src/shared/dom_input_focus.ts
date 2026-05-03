@@ -11,6 +11,10 @@ export const isDomTextInputFocused = (): boolean => {
     return activeElement.isContentEditable || DOM_TEXT_INPUT_TAGS.has(activeElement.tagName);
 };
 
+export const isEditorTextInputFocused = (): boolean => {
+    return isDomTextInputFocused();
+};
+
 export const relaxKeyboardCapture = (
     keyboard: Input.Keyboard.KeyboardPlugin,
     keyCodes: number[]

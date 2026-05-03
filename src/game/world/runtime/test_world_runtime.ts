@@ -94,6 +94,7 @@ export interface TestWorldEditorObjectSummary {
     label: string;
     type: TestWorldEditorObjectType;
     locked: boolean;
+    onlyDebugView?: boolean;
 }
 
 export interface TestWorldRuntime {
@@ -143,6 +144,8 @@ export interface TestWorldRuntime {
     patchObjectBounds: (handleId: string, bounds: TestWorldEditorBounds) => boolean;
     patchObjectFields: (rootId: string, patch: Record<string, unknown>) => boolean;
     patchObjectColors: (rootId: string, patch: Record<string, unknown>) => boolean;
+    patchObjectDebugVisibility: (rootId: string, onlyDebugView: boolean) => boolean;
+    setEditorDebugViewActive: (active: boolean) => void;
     setObjectLocked: (rootId: string, locked: boolean) => boolean;
     createObject: (type: TestWorldEditorObjectType, worldX: number, worldY: number) => string | null;
     duplicateObject: (rootId: string) => string | null;
@@ -223,6 +226,8 @@ interface BuiltWorldInstance {
     patchObjectBounds: (handleId: string, bounds: TestWorldEditorBounds) => boolean;
     patchObjectFields: (rootId: string, patch: Record<string, unknown>) => boolean;
     patchObjectColors: (rootId: string, patch: Record<string, unknown>) => boolean;
+    patchObjectDebugVisibility: (rootId: string, onlyDebugView: boolean) => boolean;
+    setEditorDebugViewActive: (active: boolean) => void;
     setObjectLocked: (rootId: string, locked: boolean) => boolean;
     focusObjectPoint: (targetId: string) => { x: number; y: number } | null;
     destroy: () => void;
@@ -305,6 +310,7 @@ export const createTestWorldRuntime = (
         fallbackConfig: params.initialConfig
     });
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
+    let editorDebugViewActive = false;
     let instance = buildWorldInstance(
         scene,
         player,
@@ -324,6 +330,7 @@ export const createTestWorldRuntime = (
             useArcadePlatformCollisions,
             forwardedEventDebugSink
         );
+        instance.setEditorDebugViewActive(editorDebugViewActive);
     };
 
     const removeByRootId = (rootId: string): boolean => {
@@ -470,6 +477,13 @@ export const createTestWorldRuntime = (
         },
         patchObjectColors: (rootId: string, patch: Record<string, unknown>): boolean => {
             return instance.patchObjectColors(rootId, patch);
+        },
+        patchObjectDebugVisibility: (rootId: string, onlyDebugView: boolean): boolean => {
+            return instance.patchObjectDebugVisibility(rootId, onlyDebugView);
+        },
+        setEditorDebugViewActive: (active: boolean): void => {
+            editorDebugViewActive = active;
+            instance.setEditorDebugViewActive(active);
         },
         setObjectLocked: (rootId: string, locked: boolean): boolean => {
             return instance.setObjectLocked(rootId, locked);
@@ -636,6 +650,7 @@ const buildWorldInstance = (
     useArcadePlatformCollisions: boolean,
     eventDebugSink?: TestWorldDebugEventSink
 ): BuiltWorldInstance => {
+    let editorDebugViewActive = false;
     applyWorldBounds(scene, config.worldBounds);
     const cleanup: Array<() => void> = [];
     const hazards: HazardObject[] = [];
@@ -840,12 +855,22 @@ const buildWorldInstance = (
 
     const refreshVisualDepths = (): void => {
         const entries: TestWorldVisualDepthEntry[] = [];
+        const applyDebugOnlyVisibility = (
+            visualConfig: { onlyDebugView?: boolean },
+            gameObject: Phaser.GameObjects.GameObject | null | undefined
+        ): void => {
+            if (!gameObject) {
+                return;
+            }
+            gameObject.setVisible(!(visualConfig.onlyDebugView ?? false) || editorDebugViewActive);
+        };
         const pushEntry = (
             objectType: TestWorldEditorObjectType,
             visualConfig: {
                 id: string;
                 visualLayer?: TestWorldSurfaceConfig['visualLayer'];
                 renderOrder?: TestWorldSurfaceConfig['renderOrder'];
+                onlyDebugView?: boolean;
             },
             partKey: string,
             gameObject: Phaser.GameObjects.GameObject | null | undefined,
@@ -854,6 +879,7 @@ const buildWorldInstance = (
             if (!gameObject) {
                 return;
             }
+            applyDebugOnlyVisibility(visualConfig, gameObject);
             entries.push({
                 gameObject,
                 objectType,
@@ -1896,7 +1922,9 @@ const buildWorldInstance = (
         getEditorObjects: (): readonly TestWorldEditorObjectSummary[] => {
             return objectSummaries.map((entry) => ({
                 ...entry,
-                locked: bindings.get(entry.id)?.isLocked() ?? entry.locked
+                locked: bindings.get(entry.id)?.isLocked() ?? entry.locked,
+                onlyDebugView: (getConfigReference(config, entry.type, entry.id) as TestWorldVisualOrderConfig | null)
+                    ?.onlyDebugView
             }));
         },
         getEditorHandle: (id: string): TestWorldEditorHandle | null => handleMap.get(id) ?? null,
@@ -1941,6 +1969,19 @@ const buildWorldInstance = (
             binding.patchColors(patch);
             refreshVisualDepths();
             return true;
+        },
+        patchObjectDebugVisibility: (rootId: string, onlyDebugView: boolean): boolean => {
+            const binding = bindings.get(rootId);
+            if (!binding || binding.isLocked()) {
+                return false;
+            }
+            binding.patchFields({ onlyDebugView });
+            refreshVisualDepths();
+            return true;
+        },
+        setEditorDebugViewActive: (active: boolean): void => {
+            editorDebugViewActive = active;
+            refreshVisualDepths();
         },
         setObjectLocked: (rootId: string, locked: boolean): boolean => {
             const binding = bindings.get(rootId);

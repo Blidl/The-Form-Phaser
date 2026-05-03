@@ -1,4 +1,18 @@
 import type { EditorPanel } from '../ui/EditorPanel';
+import type { EditorGridSettings } from '../data/ProjectData';
+
+export interface EditorPointerEvent {
+    button: number;
+    worldX: number;
+    worldY: number;
+    shiftKey: boolean;
+}
+
+export interface EditorModeRuntimeContext {
+    mouseWorldX: number | null;
+    mouseWorldY: number | null;
+    grid: EditorGridSettings;
+}
 
 export type EditorModeId =
     | 'level'
@@ -14,6 +28,10 @@ export interface EditorMode {
     readonly label: string;
     enter?(): void;
     exit?(): void;
+    update?(context: EditorModeRuntimeContext): void;
+    onPointerDown?(event: EditorPointerEvent, context: EditorModeRuntimeContext): void;
+    onPointerMove?(event: EditorPointerEvent, context: EditorModeRuntimeContext): void;
+    onPointerUp?(event: EditorPointerEvent, context: EditorModeRuntimeContext): void;
     renderLeftInspector(panel: EditorPanel): void;
     renderRightInspector(panel: EditorPanel): void;
 }

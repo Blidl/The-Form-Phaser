@@ -130,6 +130,10 @@ const patchVisualOrderFields = (
     if (typeof patch.renderOrder === 'number' && Number.isFinite(patch.renderOrder)) {
         target.renderOrder = Math.max(-9999, Math.min(9999, Math.round(patch.renderOrder)));
     }
+
+    if ('onlyDebugView' in patch && typeof patch.onlyDebugView === 'boolean') {
+        (target as TestWorldVisualOrderConfig).onlyDebugView = patch.onlyDebugView;
+    }
 };
 
 const createRectHandle = <TConfig>(

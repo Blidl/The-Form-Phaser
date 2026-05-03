@@ -14,7 +14,7 @@ import type { TestDevHelperRuntime } from '../../ui/runtime/test_dev_helper_runt
 import type { TestHudRuntime } from '../../ui/runtime/test_hud_runtime';
 import type { PlayerTuningPanelRuntime } from '../../ui/runtime/player_tuning_panel_runtime';
 import { openEndScreen, openPauseMenu, startLevelScene } from '../demo_flow';
-import { relaxKeyboardCapture } from '../../shared/dom_input_focus';
+import { isEditorTextInputFocused, relaxKeyboardCapture } from '../../shared/dom_input_focus';
 import type { TestCutsceneRuntime } from './test_cutscene_runtime';
 import type { EditorPlugin } from '../../editor/EditorPlugin';
 
@@ -50,6 +50,7 @@ export const createTestSceneFrameRuntime = (
 
     return {
         update: (deltaMs: number): void => {
+            const textInputFocused = isEditorTextInputFocused();
             if (devHelperRuntime.update()) {
                 return;
             }
@@ -67,7 +68,7 @@ export const createTestSceneFrameRuntime = (
                 hudRuntime.update();
                 return;
             }
-            if (!cutsceneRuntime.isInputLocked() && pauseKey && Input.Keyboard.JustDown(pauseKey)) {
+            if (!textInputFocused && !cutsceneRuntime.isInputLocked() && pauseKey && Input.Keyboard.JustDown(pauseKey)) {
                 openPauseMenu(scene, {
                     levelId: worldRuntime.getLevelId()
                 });
@@ -79,7 +80,9 @@ export const createTestSceneFrameRuntime = (
             worldRuntime.syncNpcTriangleSupportSurfaces();
             worldRuntime.syncPlayerCollisionMode();
 
-            const input = tuningPanelRuntime.shouldMuteGameplayInput() || cutsceneRuntime.isInputLocked()
+            const input = tuningPanelRuntime.shouldMuteGameplayInput()
+                || cutsceneRuntime.isInputLocked()
+                || textInputFocused
                 ? EMPTY_PLAYER_INPUT_SNAPSHOT
                 : pollPlayerInputSnapshot(playerInputKeys);
             const windInfluenceX = worldRuntime.resolveWindInfluenceX(player.arcadeBodyObject);
@@ -88,7 +91,7 @@ export const createTestSceneFrameRuntime = (
             worldRuntime.postPlayerTickUpdate();
             worldRuntime.syncPlayerCollisionMode();
             worldRuntime.updateNpcInteractionTarget();
-            if (!cutsceneRuntime.isInputLocked() && temporaryInteractionKey && Input.Keyboard.JustDown(temporaryInteractionKey)) {
+            if (!textInputFocused && !cutsceneRuntime.isInputLocked() && temporaryInteractionKey && Input.Keyboard.JustDown(temporaryInteractionKey)) {
                 worldRuntime.tryTriggerNpcInteraction();
             }
             if (worldRuntime.consumeFinishReached()) {

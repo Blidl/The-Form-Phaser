@@ -13,6 +13,7 @@ export interface TestWorldVisualOrderConfig {
     id: string;
     visualLayer?: TestWorldVisualLayer;
     renderOrder?: number;
+    onlyDebugView?: boolean;
 }
 
 export interface TestWorldMetaConfig {
