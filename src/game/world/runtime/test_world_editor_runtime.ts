@@ -49,7 +49,7 @@ import {
 import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runtime';
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
-import { createAuthoringEditorDevLauncher } from '../../../tools/authoring_editor/editor_dev_launcher';
+import { createAuthoringEditorV2Entrypoint } from '../../authoring/editor_v2/AuthoringEditorV2Entrypoint';
 import { createAuthoringEditorPhaserOverlay } from '../../../tools/authoring_editor/authoring_editor_phaser_overlay';
 import type {
     AuthoringEditorObjectSummary,
@@ -948,7 +948,7 @@ export const createTestWorldEditorRuntime = (
             return { issues };
         }
     };
-    const authoringEditorDevLauncher = createAuthoringEditorDevLauncher({
+    const authoringEditorDevLauncher = createAuthoringEditorV2Entrypoint({
         runtimeBridge: authoringEditorRuntimeBridge
     });
     const rulerCanvas = document.createElement('canvas');
@@ -3200,23 +3200,23 @@ export const createTestWorldEditorRuntime = (
     return {
         update: (deltaMs: number): void => {
             const f2Pressed = Input.Keyboard.JustDown(toggleKey);
-            if (f2Pressed && shiftKey.isDown && authoringEditorDevLauncher.isEnabled()) {
-                const shouldOpenAuthoringEditorV2 = !authoringEditorDevLauncher.isOpen();
-                if (active && shouldOpenAuthoringEditorV2) {
-                    const warning = 'Authoring Editor V2 cannot open while F2 editor is active. Close F2 editor first.';
-                    setStatus(warning);
-                    console.warn(`[AuthoringEditorV2] ${warning}`);
-                } else {
-                    authoringEditorDevLauncher.toggle();
-                }
-            } else if (f2Pressed) {
+            if (f2Pressed && shiftKey.isDown) {
                 const shouldOpenLegacyEditor = !active;
                 if (shouldOpenLegacyEditor && authoringEditorDevLauncher.isOpen()) {
-                    const warning = 'Close Authoring Editor V2 before opening the old F2 editor.';
-                    setStatus(warning);
-                    console.warn(`[TestWorldEditor] ${warning}`);
-                } else {
+                    // Migration ownership: Shift+F2 keeps legacy fallback, so close V2 before opening legacy.
+                    authoringEditorDevLauncher.close();
+                }
+                toggleEditor();
+            } else if (f2Pressed) {
+                if (!authoringEditorDevLauncher.isEnabled()) {
                     toggleEditor();
+                } else {
+                    const shouldOpenAuthoringEditorV2 = !authoringEditorDevLauncher.isOpen();
+                    if (active && shouldOpenAuthoringEditorV2) {
+                        // Migration ownership: F2 is now for V2, so close legacy first.
+                        toggleEditor();
+                    }
+                    authoringEditorDevLauncher.toggle();
                 }
             }
             const camera = scene.cameras.main;
@@ -3227,6 +3227,7 @@ export const createTestWorldEditorRuntime = (
                 width: worldBounds.width,
                 height: worldBounds.height
             });
+            authoringEditorDevLauncher.update(deltaMs);
             if (!active) {
                 selectionGraphics.clear();
                 placementGraphics.clear();
@@ -3247,7 +3248,7 @@ export const createTestWorldEditorRuntime = (
                 : getSelectedHandle();
             const selectedBounds = selectedHandle?.getBounds() ?? null;
             overlayText.setText([
-                'F2 toggle  Del delete  Ctrl+D duplicate  Ctrl+Z/Y undo redo',
+                'Shift+F2 legacy toggle  F2 authoring v2 toggle  Del delete  Ctrl+D duplicate  Ctrl+Z/Y undo redo',
                 pendingPlacementType
                     ? `Placement ${pendingPlacementType}: LMB place  Esc/RMB cancel  wheel zoom`
                     : 'LMB select/move  drag corners resize  wheel zoom  middle or Space+drag pan',
