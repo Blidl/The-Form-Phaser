@@ -20,6 +20,15 @@ import { LogicEditorMode } from '../modes/LogicEditorMode';
 import { ProjectStore } from '../data/ProjectStore';
 import type { LegacyObjectSource } from '../bridge/LegacyObjectAdapter';
 import { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
+import {
+    clearObjectDiagBuffer,
+    copyObjectDiagBufferToClipboard,
+    getLatestObjectDiagSummary,
+    isObjectEditorDiagnosticsEnabled,
+    objectDiag,
+    toggleObjectEditorDiagnostics
+} from '../debug/ObjectEditorDiagnostics';
+import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
 
 interface EditorShellOptions {
     scene: Scene;
@@ -84,6 +93,14 @@ export class EditorShell {
     private readonly mouseWorldInfo: EditorMouseWorldInfo;
     private readonly projectStore: ProjectStore;
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
+    private readonly diagToggleKey: Phaser.Input.Keyboard.Key | null;
+    private readonly diagPanelRoot: HTMLDivElement;
+    private readonly diagPanelStatus: HTMLDivElement;
+    private readonly diagPanelCounts: HTMLDivElement;
+    private readonly diagPanelSelected: HTMLDivElement;
+    private readonly diagPanelLastEvent: HTMLDivElement;
+    private diagPanelClosedTemporarily = false;
+    private lastDiagEvent = '-';
 
     public constructor(options: EditorShellOptions) {
         this.scene = options.scene;
@@ -116,8 +133,15 @@ export class EditorShell {
             })),
             onTabSelected: (modeId) => {
                 this.setMode(modeId);
+            },
+            onDiagnosticsToggle: () => {
+                const enabled = toggleObjectEditorDiagnostics();
+                this.lastDiagEvent = enabled ? 'Diagnostics enabled from UI' : 'Diagnostics disabled from UI';
+                this.diagPanelClosedTemporarily = false;
+                this.refreshDiagnosticsUi();
             }
         });
+        this.topTabs.setDiagnosticsEnabled(isObjectEditorDiagnosticsEnabled());
 
         this.leftPanel = new EditorPanel({
             parent: this.rootElement,
@@ -144,6 +168,89 @@ export class EditorShell {
         this.scene.input.on('pointerup', this.handlePointerUp, this);
         this.scene.game.canvas.addEventListener('contextmenu', this.handleCanvasContextMenu);
         this.legacyObjectAdapter?.setEditorDebugViewActive(false);
+        this.diagToggleKey = this.scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.D) ?? null;
+        this.diagPanelRoot = document.createElement('div');
+        this.diagPanelRoot.style.position = 'fixed';
+        this.diagPanelRoot.style.right = '10px';
+        this.diagPanelRoot.style.bottom = '10px';
+        this.diagPanelRoot.style.width = '320px';
+        this.diagPanelRoot.style.background = 'rgba(20, 20, 20, 0.92)';
+        this.diagPanelRoot.style.border = '1px solid #5f5f5f';
+        this.diagPanelRoot.style.color = '#f2f2f2';
+        this.diagPanelRoot.style.fontFamily = 'Tahoma, Verdana, sans-serif';
+        this.diagPanelRoot.style.fontSize = '12px';
+        this.diagPanelRoot.style.pointerEvents = 'auto';
+        this.diagPanelRoot.style.padding = '8px';
+        this.diagPanelRoot.style.zIndex = '4300';
+
+        const title = document.createElement('div');
+        title.textContent = 'Object Diagnostics';
+        title.style.fontWeight = 'bold';
+        title.style.marginBottom = '6px';
+        this.diagPanelStatus = document.createElement('div');
+        this.diagPanelCounts = document.createElement('div');
+        this.diagPanelSelected = document.createElement('div');
+        this.diagPanelLastEvent = document.createElement('div');
+        this.diagPanelLastEvent.style.wordBreak = 'break-word';
+        const instructions = document.createElement('div');
+        instructions.textContent = 'Run scenario, then click Copy and paste logs into chat.';
+        instructions.style.marginTop = '6px';
+        const consoleHint = document.createElement('div');
+        consoleHint.textContent = 'Open browser console with F12 to see live logs.';
+        consoleHint.style.marginBottom = '8px';
+
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.gap = '6px';
+        const makeBtn = (label: string): HTMLButtonElement => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = label;
+            button.style.border = '1px solid #6f6f6f';
+            button.style.background = '#d9d9d9';
+            button.style.padding = '2px 8px';
+            button.style.cursor = 'pointer';
+            return button;
+        };
+        const clearButton = makeBtn('Clear');
+        clearButton.addEventListener('click', () => {
+            clearObjectDiagBuffer();
+            this.lastDiagEvent = 'Diagnostics buffer cleared';
+            this.refreshDiagnosticsUi();
+        });
+        const copyButton = makeBtn('Copy');
+        copyButton.addEventListener('click', async () => {
+            this.emitDiagnosticsSnapshot('copy_button');
+            const result = await copyObjectDiagBufferToClipboard();
+            this.lastDiagEvent = result.message;
+            this.refreshDiagnosticsUi();
+        });
+        const snapshotButton = makeBtn('Snapshot');
+        snapshotButton.addEventListener('click', () => {
+            this.emitDiagnosticsSnapshot('manual_snapshot_button');
+            this.lastDiagEvent = 'Diagnostics snapshot captured';
+            this.refreshDiagnosticsUi();
+        });
+        const closeButton = makeBtn('Close');
+        closeButton.title = 'Hide panel (Diag remains ON)';
+        closeButton.addEventListener('click', () => {
+            this.diagPanelClosedTemporarily = true;
+            this.lastDiagEvent = 'Diagnostics panel hidden';
+            this.refreshDiagnosticsUi();
+        });
+        buttons.append(clearButton, copyButton, snapshotButton, closeButton);
+        this.diagPanelRoot.append(
+            title,
+            this.diagPanelStatus,
+            this.diagPanelCounts,
+            this.diagPanelSelected,
+            this.diagPanelLastEvent,
+            instructions,
+            consoleHint,
+            buttons
+        );
+        this.rootElement.appendChild(this.diagPanelRoot);
+        this.refreshDiagnosticsUi();
 
         this.topTabs.setActiveTab(this.state.activeModeId);
         this.renderActiveModeInspectors();
@@ -180,7 +287,15 @@ export class EditorShell {
         this.grid.setVisible(gridSettings.enabled);
         this.cameraController.open();
         this.legacyObjectAdapter?.setEditorDebugViewActive(true);
+        objectDiag('[EditorActive]', {
+            layer: 'src/editor EditorShell',
+            editorOpen: true,
+            activeMode: this.state.activeModeId,
+            hasProjectStore: true,
+            hasObjectAuthoringService: true
+        });
         this.renderActiveModeInspectors();
+        this.refreshDiagnosticsUi();
     }
 
     public close(): void {
@@ -201,6 +316,7 @@ export class EditorShell {
         this.rightPanel.setVisible(false);
         this.topTabs.setVisible(false);
         this.rootElement.style.display = 'none';
+        this.refreshDiagnosticsUi();
     }
 
     public setMode(modeId: EditorModeId): void {
@@ -220,6 +336,7 @@ export class EditorShell {
         if (!this.state.isOpen) {
             return;
         }
+        this.handleDiagnosticsToggleShortcut();
 
         const gridSettings = this.projectStore.getGridSettings();
         this.grid.setGridSize(gridSettings.size);
@@ -238,6 +355,7 @@ export class EditorShell {
         this.state.mouseWorldY = mouseWorld.y;
         this.topTabs.setMouseWorldPosition(mouseWorld.x, mouseWorld.y);
         this.modes[this.state.activeModeId].update?.(this.createModeContext());
+        this.refreshDiagnosticsUi();
     }
 
     public destroy(): void {
@@ -251,6 +369,7 @@ export class EditorShell {
         this.topTabs.destroy();
         this.leftPanel.destroy();
         this.rightPanel.destroy();
+        this.diagPanelRoot.remove();
         this.rootElement.remove();
     }
 
@@ -319,4 +438,104 @@ export class EditorShell {
         }
         event.preventDefault();
     };
+
+    private handleDiagnosticsToggleShortcut(): void {
+        if (!this.diagToggleKey) {
+            return;
+        }
+        const keyboard = this.scene.input.keyboard;
+        if (!keyboard) {
+            return;
+        }
+        if (!Phaser.Input.Keyboard.JustDown(this.diagToggleKey)) {
+            return;
+        }
+        if (!keyboard.ctrlKey || !keyboard.shiftKey) {
+            return;
+        }
+        if (isEditorTextInputFocused()) {
+            return;
+        }
+        const enabled = toggleObjectEditorDiagnostics();
+        this.lastDiagEvent = enabled ? 'Diagnostics enabled from Ctrl+Shift+D' : 'Diagnostics disabled from Ctrl+Shift+D';
+        this.diagPanelClosedTemporarily = false;
+        this.refreshDiagnosticsUi();
+    }
+
+    private refreshDiagnosticsUi(): void {
+        const enabled = isObjectEditorDiagnosticsEnabled();
+        this.topTabs.setDiagnosticsEnabled(enabled);
+        const showPanel = this.state.isOpen && enabled && !this.diagPanelClosedTemporarily;
+        this.diagPanelRoot.style.display = showPanel ? 'block' : 'none';
+        if (!showPanel) {
+            return;
+        }
+        const activeLevel = this.projectStore.getActiveLevel();
+        let serviceCount = 0;
+        let storeCount = this.projectStore.listObjects(activeLevel.id).length;
+        let selected: string | null = null;
+        if (this.state.activeModeId === 'objects') {
+            const objectsMode = this.modes.objects as unknown as {
+                getDiagnosticsSnapshot?: () => {
+                    serviceObjects: number;
+                    projectStoreObjects: number;
+                    selectedObjectId: string | null;
+                };
+            };
+            const snapshot = objectsMode.getDiagnosticsSnapshot?.();
+            if (snapshot) {
+                serviceCount = snapshot.serviceObjects;
+                storeCount = snapshot.projectStoreObjects;
+                selected = snapshot.selectedObjectId;
+            }
+        }
+        this.diagPanelStatus.textContent = `- Active editor: src/editor EditorShell`;
+        this.diagPanelCounts.textContent = `- Active mode: ${this.state.activeModeId} | Service objects: ${serviceCount} | ProjectStore objects: ${storeCount}`;
+        this.diagPanelSelected.textContent = `- Selected: ${selected ?? 'none'}`;
+        this.diagPanelLastEvent.textContent = `- Last event: ${getLatestObjectDiagSummary() || this.lastDiagEvent}`;
+    }
+
+    private emitDiagnosticsSnapshot(reason: string): void {
+        const activeLevel = this.projectStore.getActiveLevel();
+        const snapshotBase = {
+            activeEditor: 'src/editor EditorShell',
+            activeMode: this.state.activeModeId,
+            projectStoreObjectCount: this.projectStore.listObjects(activeLevel.id).length
+        };
+        if (this.state.activeModeId !== 'objects') {
+            objectDiag('[DiagSnapshot]', {
+                ...snapshotBase,
+                serviceObjectCount: 0,
+                displayedObjectCount: 0,
+                selectedObject: null,
+                breakWallSummary: null,
+                reason
+            });
+            return;
+        }
+        const objectsMode = this.modes.objects as unknown as {
+            getDiagnosticsSnapshot?: () => {
+                serviceObjects: number;
+                projectStoreObjects: number;
+                selectedObjectId: string | null;
+                displayedObjects: number;
+                breakWallSummary: {
+                    service: number;
+                    projectStore: number;
+                    displayed: number;
+                };
+            };
+            emitDiagnosticsSnapshot?: (source: string) => void;
+        };
+        const snapshot = objectsMode.getDiagnosticsSnapshot?.();
+        objectsMode.emitDiagnosticsSnapshot?.('snapshot');
+        objectDiag('[DiagSnapshot]', {
+            ...snapshotBase,
+            serviceObjectCount: snapshot?.serviceObjects ?? 0,
+            displayedObjectCount: snapshot?.displayedObjects ?? 0,
+            selectedObject: snapshot?.selectedObjectId ?? null,
+            breakWallSummary: snapshot?.breakWallSummary ?? null,
+            reason
+        });
+    }
 }

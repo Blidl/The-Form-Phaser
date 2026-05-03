@@ -15,6 +15,8 @@ import type { ProjectStore } from '../data/ProjectStore';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
+import { ObjectAuthoringService } from '../object-authoring/ObjectAuthoringService';
+import { objectDiag } from '../debug/ObjectEditorDiagnostics';
 
 interface ObjectsEditorModeOptions {
     scene: Phaser.Scene;
@@ -33,7 +35,6 @@ const CATEGORY_LABELS: Record<EditorObjectCategory, string> = {
 const CATEGORY_ORDER: readonly EditorObjectCategory[] = ['platforms', 'special', 'objects'];
 const GRID_SIZE_OPTIONS = [8, 16, 32, 64];
 const LAYER_OPTIONS = [1, 2, 3, 4, 5] as const;
-const DEFAULT_SIZE = 64;
 const EDITABLE_BOUNDS_FIELDS = ['x', 'y', 'width', 'height', 'rotation'] as const;
 type EditableBoundsField = (typeof EDITABLE_BOUNDS_FIELDS)[number];
 const EDITABLE_VISUAL_TEXT_FIELDS = ['shaderKey', 'textureKey'] as const;
@@ -41,7 +42,8 @@ type EditableVisualTextField = (typeof EDITABLE_VISUAL_TEXT_FIELDS)[number];
 const EDITABLE_VISUAL_COLOR_FIELDS = ['fillColor', 'strokeColor'] as const;
 type EditableVisualColorField = (typeof EDITABLE_VISUAL_COLOR_FIELDS)[number];
 const HEX_COLOR_LIKE_PATTERN = /^#?([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
-const REQUIRED_RUNTIME_CREATION_TYPES = new Set<string>([
+const DEBUG_OBJECT_BRIDGE = false;
+const KNOWN_RUNTIME_OBJECT_TYPES = new Set<string>([
     'platform_default',
     'drag_box',
     'wind_zone',
@@ -49,7 +51,9 @@ const REQUIRED_RUNTIME_CREATION_TYPES = new Set<string>([
     'player_spawn',
     'finish',
     'trigger_volume',
-    'triangle_pickup'
+    'triangle_pickup',
+    'break_wall',
+    'breakable_wall'
 ]);
 type EyedropperTarget = EditableVisualColorField | null;
 
@@ -62,6 +66,7 @@ export class ObjectsEditorMode implements EditorMode {
     private readonly objectTypeRegistry: ObjectTypeRegistry;
     private readonly onUiChanged: () => void;
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
+    private readonly objectAuthoringService: ObjectAuthoringService;
     private readonly objectViews = new Map<string, Phaser.GameObjects.Rectangle>();
     private readonly selectionOutline: Phaser.GameObjects.Graphics;
     private readonly deleteKey: Phaser.Input.Keyboard.Key | null;
@@ -76,6 +81,13 @@ export class ObjectsEditorMode implements EditorMode {
     private searchValue = '';
     private objectsListScrollTop = 0;
     private eyedropperTarget: EyedropperTarget = null;
+    private syncInProgress = false;
+    private syncQueued = false;
+    private syncScheduled = false;
+    private activePointerButton: number | null = null;
+    private liveObjects: EditorObjectData[] = [];
+    private lastObjectsListDiagKey: string | null = null;
+    private lastBreakWallSummaryDiagKey: string | null = null;
     private context: EditorModeRuntimeContext = {
         mouseWorldX: null,
         mouseWorldY: null,
@@ -88,6 +100,11 @@ export class ObjectsEditorMode implements EditorMode {
         this.objectTypeRegistry = options.objectTypeRegistry;
         this.onUiChanged = options.onUiChanged;
         this.legacyObjectAdapter = options.legacyObjectAdapter;
+        this.objectAuthoringService = new ObjectAuthoringService({
+            projectStore: this.projectStore,
+            objectTypeRegistry: this.objectTypeRegistry,
+            legacyObjectAdapter: this.legacyObjectAdapter
+        });
 
         this.selectionOutline = this.scene.add.graphics();
         this.selectionOutline.setDepth(5101);
@@ -97,7 +114,21 @@ export class ObjectsEditorMode implements EditorMode {
     }
 
     public enter(): void {
-        this.syncFromLegacyBridge();
+        this.refreshLiveObjects('enter');
+        const activeLevel = this.projectStore.getActiveLevel();
+        objectDiag('[ObjectsMode:enter]', {
+            fileLayer: 'src/editor/modes/ObjectsEditorMode',
+            hasObjectAuthoringService: true,
+            hasLegacyObjectAdapter: !!this.legacyObjectAdapter,
+            hasAuthoringObjectBridge: !!this.legacyObjectAdapter,
+            activeLevelId: activeLevel.id,
+            activeLevelName: activeLevel.name,
+            selectedObjectId: this.selectedObjectId,
+            projectStoreObjectCount: this.projectStore.listObjects(activeLevel.id).length,
+            serviceObjectCount: this.liveObjects.length,
+            activeCategoryTab: this.activeCatalogCategory,
+            searchValue: this.searchValue
+        });
         this.applyDebugVisibilityToRuntimeLinks();
         this.ensureSelectedTypeMatchesActiveCategory();
         this.syncViewsFromStore();
@@ -112,7 +143,8 @@ export class ObjectsEditorMode implements EditorMode {
 
     public update(context: EditorModeRuntimeContext): void {
         this.context = context;
-        this.syncFromLegacyBridge();
+        this.refreshLiveObjects(this.syncScheduled ? 'scheduled' : 'update');
+        this.syncScheduled = false;
         this.applyDebugVisibilityToRuntimeLinks();
         this.handleDeleteShortcut();
         this.handleEyedropperCancelShortcut();
@@ -126,8 +158,23 @@ export class ObjectsEditorMode implements EditorMode {
         if (event.button !== 0) {
             return;
         }
+        this.activePointerButton = event.button;
 
         if (this.selectedTypeId) {
+            const snappedX = this.snap(event.worldX, context.grid.size);
+            const snappedY = this.snap(event.worldY, context.grid.size);
+            objectDiag('[ObjectCreate:ui]', {
+                selectedCatalogId: this.selectedTypeId,
+                activeCategory: this.activeCatalogCategory,
+                clickWorldX: event.worldX,
+                clickWorldY: event.worldY,
+                snappedX,
+                snappedY,
+                createBranchReached: true,
+                willCallObjectAuthoringServiceCreate: true,
+                willCallLegacyAdapterCreate: false,
+                willFallbackCreate: false
+            });
             const created = this.createObjectAt(event.worldX, event.worldY);
             if (created) {
                 this.selectedObjectId = created.id;
@@ -154,9 +201,29 @@ export class ObjectsEditorMode implements EditorMode {
                 this.dragOffsetY = event.worldY - object.bounds.y;
             }
             this.syncSelectionOutline();
+            objectDiag('[ObjectSelect:mouse]', {
+                pointerX: null,
+                pointerY: null,
+                worldX: event.worldX,
+                worldY: event.worldY,
+                hitObjectId,
+                hitSource: this.legacyObjectAdapter?.hasRuntimeLink(hitObjectId) ? 'runtime' : 'fallback',
+                selectedObjectId: this.selectedObjectId,
+                hasRuntimeLink: this.legacyObjectAdapter?.hasRuntimeLink(hitObjectId) ?? false
+            });
             this.onUiChanged();
             return;
         }
+        objectDiag('[ObjectSelect:mouse]', {
+            pointerX: null,
+            pointerY: null,
+            worldX: event.worldX,
+            worldY: event.worldY,
+            hitObjectId: null,
+            hitSource: 'none',
+            selectedObjectId: null,
+            hasRuntimeLink: false
+        });
 
         this.selectedObjectId = null;
         this.draggingObjectId = null;
@@ -192,7 +259,52 @@ export class ObjectsEditorMode implements EditorMode {
     public onPointerUp(event: EditorPointerEvent): void {
         if (event.button === 0) {
             this.draggingObjectId = null;
+            this.activePointerButton = null;
         }
+    }
+
+    public getSelectedObjectId(): string | null {
+        return this.selectedObjectId;
+    }
+
+    public getDiagnosticsSnapshot(): {
+        serviceObjects: number;
+        projectStoreObjects: number;
+        selectedObjectId: string | null;
+        displayedObjects: number;
+        breakWallSummary: {
+            service: number;
+            projectStore: number;
+            displayed: number;
+        };
+    } {
+        const activeLevel = this.projectStore.getActiveLevel();
+        const displayed = this.getObjectsInActiveCategory(this.liveObjects)
+            .filter((obj) => this.matchesSearch(obj, this.searchValue)).length;
+        const serviceBreakWallCount = this.countBreakWalls(this.liveObjects);
+        const projectStoreObjects = this.projectStore.listObjects(activeLevel.id);
+        const storeBreakWallCount = this.countBreakWalls(projectStoreObjects);
+        return {
+            serviceObjects: this.liveObjects.length,
+            projectStoreObjects: projectStoreObjects.length,
+            selectedObjectId: this.selectedObjectId,
+            displayedObjects: displayed,
+            breakWallSummary: {
+                service: serviceBreakWallCount,
+                projectStore: storeBreakWallCount,
+                displayed: serviceBreakWallCount
+            }
+        };
+    }
+
+    public emitDiagnosticsSnapshot(reason: string): void {
+        const snapshot = this.getDiagnosticsSnapshot();
+        objectDiag('[BreakWall:summary]', {
+            reason,
+            totalBreakWallObjectsInServiceList: snapshot.breakWallSummary.service,
+            totalBreakWallObjectsInProjectStore: snapshot.breakWallSummary.projectStore,
+            totalDisplayedBreakWallObjects: snapshot.breakWallSummary.displayed
+        });
     }
 
     public renderLeftInspector(panel: EditorPanel): void {
@@ -350,6 +462,30 @@ export class ObjectsEditorMode implements EditorMode {
                     : this.objectsListScrollTop;
                 listContainer.replaceChildren();
                 const rows = objects.filter((obj) => this.matchesSearch(obj, this.searchValue));
+                const displayedItems = rows.slice(0, 50).map((obj) => ({
+                    id: obj.id,
+                    type: obj.settings.type,
+                    category: obj.settings.category,
+                    hasRuntimeLink: this.legacyObjectAdapter?.hasRuntimeLink(obj.id) ?? false,
+                    source: this.legacyObjectAdapter?.hasRuntimeLink(obj.id)
+                        ? 'runtime'
+                        : (this.isKnownRuntimeType(obj.settings.type) ? 'unknown' : 'projectStore')
+                }));
+                const objectsListPayload = {
+                    usingObjectAuthoringServiceListObjects: true,
+                    activeCategory: this.activeCatalogCategory,
+                    searchValue: this.searchValue,
+                    totalServiceObjectCount: this.liveObjects.length,
+                    totalProjectStoreObjectCount: this.projectStore.listObjects(activeLevel.id).length,
+                    displayedItemCount: rows.length,
+                    displayedItems,
+                    displayedItemsTruncated: rows.length > displayedItems.length
+                };
+                const nextObjectsListDiagKey = JSON.stringify(objectsListPayload);
+                if (this.lastObjectsListDiagKey !== nextObjectsListDiagKey) {
+                    this.lastObjectsListDiagKey = nextObjectsListDiagKey;
+                    objectDiag('[ObjectsList:source]', objectsListPayload);
+                }
                 objectsListTitle.textContent = `Objects list (${activeLevel.name}) ${rows.length} / ${totalInCategory}`;
                 rows.forEach((obj) => {
                     const row = document.createElement('div');
@@ -370,6 +506,13 @@ export class ObjectsEditorMode implements EditorMode {
                         this.selectedObjectId = obj.id;
                         this.selectedTypeId = null;
                         this.syncSelectionOutline();
+                        objectDiag('[ObjectSelect:list]', {
+                            clickedRowId: obj.id,
+                            clickedType: obj.settings.type,
+                            clickedCategory: obj.settings.category,
+                            selectedObjectId: this.selectedObjectId,
+                            hasRuntimeLink: this.legacyObjectAdapter?.hasRuntimeLink(obj.id) ?? false
+                        });
                         this.onUiChanged();
                     });
 
@@ -468,12 +611,29 @@ export class ObjectsEditorMode implements EditorMode {
         if (!this.deleteKey) {
             return;
         }
-        if (!Phaser.Input.Keyboard.JustDown(this.deleteKey)) {
+        const justDown = Phaser.Input.Keyboard.JustDown(this.deleteKey);
+        if (!justDown) {
             return;
         }
-        if (isEditorTextInputFocused()) {
+        const textInputFocused = isEditorTextInputFocused();
+        if (textInputFocused) {
             return;
         }
+        const selectedId = this.selectedObjectId;
+        const activeLevel = this.projectStore.getActiveLevel();
+        const selected = selectedId ? this.projectStore.getObject(activeLevel.id, selectedId) : undefined;
+        const hasRuntimeLink = selectedId ? (this.legacyObjectAdapter?.hasRuntimeLink(selectedId) ?? false) : false;
+        objectDiag('[ObjectDelete:key]', {
+            isTextInputFocused: textInputFocused,
+            activeEditorMode: this.id,
+            selectedObjectId: selectedId ?? null,
+            selectedObjectType: selected?.settings.type ?? null,
+            selectedObjectCategory: selected?.settings.category ?? null,
+            hasRuntimeLink,
+            willCallObjectAuthoringServiceDelete: !!selectedId,
+            willCallLegacyAdapterDelete: hasRuntimeLink,
+            willFallbackDelete: false
+        });
         this.deleteSelectedObject();
     }
 
@@ -525,122 +685,65 @@ export class ObjectsEditorMode implements EditorMode {
         if (!selectedId) {
             return false;
         }
+        const pointerButtonBeforeDelete = this.activePointerButton;
+        this.debugLog(`delete:start id=${selectedId} pointer=${pointerButtonBeforeDelete ?? -1}`);
 
-        const activeLevel = this.projectStore.getActiveLevel();
-        if (!this.projectStore.getObject(activeLevel.id, selectedId)) {
+        try {
+            const deleteResult = this.objectAuthoringService.deleteObject(selectedId);
+            this.debugLog(`delete:runtime-remove id=${selectedId} result=${deleteResult.success ? 'ok' : 'failed'}`);
+            if (!deleteResult.success) {
+                if (deleteResult.reason) {
+                    console.warn(`[ObjectsEditorMode] Delete failed for "${selectedId}": ${deleteResult.reason}`);
+                }
+                this.refreshLiveObjects('delete:failed');
+                this.syncViewsFromStore();
+                this.syncSelectionOutline();
+                this.onUiChanged();
+                return false;
+            }
+
+            this.objectViews.get(selectedId)?.destroy();
+            this.objectViews.delete(selectedId);
             this.selectedObjectId = null;
+            this.refreshLiveObjects('delete:success');
+            this.syncViewsFromStore();
+            this.syncSelectionOutline();
+            this.onUiChanged();
+            return true;
+        } catch (error) {
+            const asError = error instanceof Error ? error : new Error(String(error));
+            const message = asError.message;
+            objectDiag('[ObjectDelete:key]', {
+                phase: 'exception',
+                selectedObjectId: selectedId,
+                errorName: asError.name,
+                errorMessage: asError.message,
+                errorStack: asError.stack ?? null
+            });
+            console.warn(`[ObjectsEditorMode] Delete failed for "${selectedId}": ${message}`);
+            this.refreshLiveObjects('delete:exception');
             this.syncSelectionOutline();
             this.onUiChanged();
             return false;
+        } finally {
+            this.draggingObjectId = null;
+            this.activePointerButton = null;
         }
-
-        const isRuntimeLinked = this.legacyObjectAdapter?.hasRuntimeLink(selectedId) ?? false;
-        if (isRuntimeLinked) {
-            const runtimeRemoved = this.legacyObjectAdapter?.removeRuntimeObject(selectedId) ?? false;
-            if (!runtimeRemoved) {
-                return false;
-            }
-        }
-
-        if (this.projectStore.getObject(activeLevel.id, selectedId)) {
-            this.projectStore.deleteObject(activeLevel.id, selectedId);
-        }
-        this.objectViews.get(selectedId)?.destroy();
-        this.objectViews.delete(selectedId);
-        this.selectedObjectId = null;
-        this.draggingObjectId = null;
-        this.syncFromLegacyBridge();
-        this.syncViewsFromStore();
-        this.syncSelectionOutline();
-        this.onUiChanged();
-        return true;
     }
 
     private createObjectAt(worldX: number, worldY: number): EditorObjectData | null {
-        const activeLevel = this.projectStore.getActiveLevel();
         const typeId = this.selectedTypeId ?? 'platform_default';
-        const definition = this.resolveObjectType(typeId);
-        const resolvedTypeId = definition?.id ?? typeId;
-        const requiresRuntimeCreation = REQUIRED_RUNTIME_CREATION_TYPES.has(resolvedTypeId);
         const x = this.snap(worldX, this.context.grid.size);
         const y = this.snap(worldY, this.context.grid.size);
-
-        if (this.legacyObjectAdapter) {
-            this.syncFromLegacyBridge();
-            const beforeActiveLevel = this.projectStore.getActiveLevel();
-            const beforeRuntimeObjectIds = new Set(
-                this.projectStore
-                    .listObjects(beforeActiveLevel.id)
-                    .filter((item) => this.legacyObjectAdapter?.hasRuntimeLink(item.id))
-                    .map((item) => item.id)
+        const creation = this.objectAuthoringService.createObject(typeId, x, y);
+        if (!creation.success || !creation.objectId) {
+            console.warn(
+                `[ObjectsEditorMode] Runtime creation failed for "${typeId}": ${creation.reason ?? 'unknown error'}`
             );
-
-            const creation = this.legacyObjectAdapter.createRuntimeObjectFromCatalog(typeId, x, y);
-            this.syncFromLegacyBridge();
-            const syncedActiveLevel = this.projectStore.getActiveLevel();
-
-            const byExactId = creation.legacyId
-                ? this.projectStore.getObject(syncedActiveLevel.id, creation.legacyId)
-                : undefined;
-            if (byExactId && this.legacyObjectAdapter.hasRuntimeLink(byExactId.id)) {
-                return byExactId;
-            }
-
-            const createdRuntimeObject = this.findNewRuntimeCreatedObject(
-                syncedActiveLevel.id,
-                resolvedTypeId,
-                x,
-                y,
-                beforeRuntimeObjectIds
-            );
-            if (createdRuntimeObject) {
-                return createdRuntimeObject;
-            }
-
-            if (requiresRuntimeCreation) {
-                const reason = creation.error ?? 'runtime bridge sync did not surface created object';
-                console.warn(`[ObjectsEditorMode] Runtime creation failed for required type "${resolvedTypeId}": ${reason}`);
-                return null;
-            }
-
-            const levelIdForFallback = this.projectStore.getActiveLevel().id || activeLevel.id;
-            return this.createFallbackAuthoringRectangle(levelIdForFallback, resolvedTypeId, x, y, creation.legacyId ?? undefined);
-        }
-
-        if (requiresRuntimeCreation) {
-            console.warn(`[ObjectsEditorMode] Runtime bridge unavailable for required type "${resolvedTypeId}".`);
             return null;
         }
-
-        const currentLevelId = this.projectStore.getActiveLevel().id || activeLevel.id;
-        return this.createFallbackAuthoringRectangle(currentLevelId, resolvedTypeId, x, y);
-    }
-
-    private findNewRuntimeCreatedObject(
-        levelId: string,
-        resolvedTypeId: string,
-        worldX: number,
-        worldY: number,
-        beforeRuntimeObjectIds: ReadonlySet<string>
-    ): EditorObjectData | null {
-        const candidates = this.projectStore
-            .listObjects(levelId)
-            .filter((item) => this.legacyObjectAdapter?.hasRuntimeLink(item.id))
-            .filter((item) => !beforeRuntimeObjectIds.has(item.id))
-            .filter((item) => item.settings.type === resolvedTypeId);
-        if (candidates.length <= 0) {
-            return null;
-        }
-        candidates.sort((left, right) => {
-            const leftDx = (left.bounds.x + (left.bounds.width * 0.5)) - worldX;
-            const leftDy = (left.bounds.y + (left.bounds.height * 0.5)) - worldY;
-            const rightDx = (right.bounds.x + (right.bounds.width * 0.5)) - worldX;
-            const rightDy = (right.bounds.y + (right.bounds.height * 0.5)) - worldY;
-            const leftDistance = (leftDx * leftDx) + (leftDy * leftDy);
-            const rightDistance = (rightDx * rightDx) + (rightDy * rightDy);
-            return leftDistance - rightDistance;
-        });
-        return candidates[0] ?? null;
+        this.refreshLiveObjects('create:service');
+        return this.getActiveObjects().find((item) => item.id === creation.objectId) ?? null;
     }
 
     private makeBoundsInputRow(
@@ -760,7 +863,7 @@ export class ObjectsEditorMode implements EditorMode {
             } as Partial<EditorObjectBoundsData>
         });
         this.legacyObjectAdapter?.moveRuntimeObject(nextObject.id, nextObject.bounds);
-        this.syncFromLegacyBridge();
+        this.syncFromLegacyBridge('bounds-edit');
         this.syncViewsFromStore();
         this.syncSelectionOutline();
         return true;
@@ -1270,8 +1373,7 @@ export class ObjectsEditorMode implements EditorMode {
     }
 
     private getActiveObjects(): EditorObjectData[] {
-        const activeLevel = this.projectStore.getActiveLevel();
-        return this.projectStore.listObjects(activeLevel.id);
+        return this.liveObjects;
     }
 
     private getObjectsInActiveCategory(objects: readonly EditorObjectData[]): EditorObjectData[] {
@@ -1283,6 +1385,7 @@ export class ObjectsEditorMode implements EditorMode {
         const activeIds = new Set(
             objects
                 .filter((item) => !this.legacyObjectAdapter?.hasRuntimeLink(item.id))
+                .filter((item) => !this.isKnownRuntimeType(item.settings.type))
                 .map((item) => item.id)
         );
 
@@ -1295,6 +1398,9 @@ export class ObjectsEditorMode implements EditorMode {
 
         objects.forEach((objectData) => {
             if (this.legacyObjectAdapter?.hasRuntimeLink(objectData.id)) {
+                return;
+            }
+            if (this.isKnownRuntimeType(objectData.settings.type)) {
                 return;
             }
             let view = this.objectViews.get(objectData.id);
@@ -1345,6 +1451,9 @@ export class ObjectsEditorMode implements EditorMode {
         const objects = this.getActiveObjects();
         for (let i = objects.length - 1; i >= 0; i -= 1) {
             const object = objects[i];
+            if (this.isKnownRuntimeType(object.settings.type)) {
+                continue;
+            }
             const withinX = worldX >= object.bounds.x && worldX <= object.bounds.x + object.bounds.width;
             const withinY = worldY >= object.bounds.y && worldY <= object.bounds.y + object.bounds.height;
             if (withinX && withinY) {
@@ -1354,8 +1463,50 @@ export class ObjectsEditorMode implements EditorMode {
         return null;
     }
 
-    private syncFromLegacyBridge(): void {
-        this.legacyObjectAdapter?.syncIntoProjectStore(this.projectStore);
+    private syncFromLegacyBridge(reason: string): void {
+        this.refreshLiveObjects(reason);
+    }
+
+    private refreshLiveObjects(reason: string): void {
+        if (this.syncInProgress) {
+            this.syncQueued = true;
+            return;
+        }
+        this.syncInProgress = true;
+        try {
+            const beforeIds = new Set(this.liveObjects.map((item) => item.id));
+            const nextObjects = this.objectAuthoringService.listObjects();
+            const imported = nextObjects.filter((item) => !beforeIds.has(item.id));
+            this.liveObjects = nextObjects;
+            const activeLevelId = this.projectStore.getActiveLevel().id;
+            const projectStoreObjects = this.projectStore.listObjects(activeLevelId);
+            const serviceBreakWallCount = this.countBreakWalls(nextObjects);
+            const storeBreakWallCount = this.countBreakWalls(projectStoreObjects);
+            const breakWallSummaryPayload = {
+                reason,
+                totalBreakWallObjectsInServiceList: serviceBreakWallCount,
+                totalBreakWallObjectsInProjectStore: storeBreakWallCount,
+                totalDisplayedBreakWallObjects: serviceBreakWallCount
+            };
+            const nextBreakWallSummaryDiagKey = JSON.stringify(breakWallSummaryPayload);
+            if (this.lastBreakWallSummaryDiagKey !== nextBreakWallSummaryDiagKey) {
+                this.lastBreakWallSummaryDiagKey = nextBreakWallSummaryDiagKey;
+                objectDiag('[BreakWall:summary]', breakWallSummaryPayload);
+            }
+            if (this.selectedObjectId && !nextObjects.some((item) => item.id === this.selectedObjectId)) {
+                this.selectedObjectId = null;
+                this.draggingObjectId = null;
+            }
+            this.debugLog(
+                `sync:end reason=${reason} live=${nextObjects.length} imported=[${imported.map((item) => `${item.id}:${item.settings.type}`).join(', ')}]`
+            );
+        } finally {
+            this.syncInProgress = false;
+            if (this.syncQueued) {
+                this.syncQueued = false;
+                this.refreshLiveObjects('queued');
+            }
+        }
     }
 
     private applyDebugVisibilityToRuntimeLinks(): void {
@@ -1390,40 +1541,23 @@ export class ObjectsEditorMode implements EditorMode {
         }
     }
 
-    private createFallbackAuthoringRectangle(
-        levelId: string,
-        typeId: string,
-        x: number,
-        y: number,
-        objectId?: string
-    ): EditorObjectData {
-        const definition = this.resolveObjectType(typeId);
-        const width = DEFAULT_SIZE;
-        const height = DEFAULT_SIZE;
+    private isKnownRuntimeType(typeId: string): boolean {
+        const resolved = this.objectTypeRegistry.resolveId(typeId) ?? typeId;
+        return KNOWN_RUNTIME_OBJECT_TYPES.has(resolved);
+    }
 
-        if (objectId && this.projectStore.hasObject(levelId, objectId)) {
-            const existing = this.projectStore.getObject(levelId, objectId);
-            if (existing) {
-                return existing;
-            }
+    private countBreakWalls(objects: readonly EditorObjectData[]): number {
+        return objects.filter((item) => {
+            const typeId = this.objectTypeRegistry.resolveId(item.settings.type) ?? item.settings.type;
+            return typeId === 'break_wall' || typeId === 'breakable_wall';
+        }).length;
+    }
+
+    private debugLog(message: string): void {
+        if (!DEBUG_OBJECT_BRIDGE) {
+            return;
         }
-
-        // TODO(authoring-step-3.1): fallback is for unknown/dev types only.
-        // Required production catalog types must be created through runtime factory/bridge.
-        return this.projectStore.addObject(levelId, {
-            id: objectId,
-            bounds: { x, y, width, height, rotation: 0 },
-            visual: {
-                fillColor: '#ffffff',
-                strokeColor: '#000000',
-                alpha: 1,
-                onlyDebugView: false
-            },
-            settings: {
-                type: definition?.id ?? typeId,
-                category: definition?.category ?? 'objects'
-            }
-        });
+        console.info(`[ObjectsEditorMode] ${message}`);
     }
 
     private matchesSearch(objectData: EditorObjectData, searchValue: string): boolean {

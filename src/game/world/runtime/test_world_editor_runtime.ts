@@ -130,6 +130,7 @@ import {
     resolveTestWorldVisualLayer
 } from './test_world_visual_order';
 import { createEventTimelinePanel } from '../../../tools/authoring_editor/panels/event_timeline_panel';
+import { objectDiag } from '../../../editor/debug/ObjectEditorDiagnostics';
 
 export interface TestWorldEditorRuntime {
     update: (deltaMs: number) => void;
@@ -3202,8 +3203,16 @@ export const createTestWorldEditorRuntime = (
             const f2Pressed = Input.Keyboard.JustDown(toggleKey);
             if (f2Pressed && shiftKey.isDown) {
                 const shouldOpenLegacyEditor = !active;
+                objectDiag('[EditorActive]', {
+                    layer: 'legacy world editor',
+                    editorOpen: shouldOpenLegacyEditor
+                });
                 if (shouldOpenLegacyEditor && authoringEditorDevLauncher.isOpen()) {
                     // Migration ownership: Shift+F2 keeps legacy fallback, so close V2 before opening legacy.
+                    objectDiag('[EditorActive]', {
+                        layer: 'authoring/editor_v2',
+                        editorOpen: false
+                    });
                     authoringEditorDevLauncher.close();
                 }
                 toggleEditor();

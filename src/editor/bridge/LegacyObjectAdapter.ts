@@ -1,6 +1,7 @@
 import type { EditorObjectBoundsData, EditorObjectCategory } from '../data/EditorObjectData';
 import type { ObjectTypeRegistry } from '../data/ObjectTypeRegistry';
 import type { ProjectStore } from '../data/ProjectStore';
+import { objectDiag } from '../debug/ObjectEditorDiagnostics';
 
 export interface LegacyObjectBounds {
     x: number;
@@ -367,13 +368,33 @@ export class LegacyObjectAdapter {
     public removeRuntimeObject(editorObjectId: string): boolean {
         const link = this.linksByEditorObjectId.get(editorObjectId);
         if (!link || !this.source.removeObject) {
+            objectDiag('[LegacyAdapter:delete]', {
+                editorObjectId,
+                linkExists: !!link,
+                legacyId: link?.legacyId ?? null,
+                legacyType: link?.legacyType ?? null,
+                primaryHandleId: link?.primaryHandleId ?? null,
+                removeResult: false,
+                ignoredLegacyIdsUpdated: false
+            });
             return false;
         }
         const removed = this.source.removeObject(link.legacyId);
+        let ignoredLegacyIdsUpdated = false;
         if (removed) {
             this.ignoredLegacyIds.add(link.legacyId);
             this.linksByEditorObjectId.delete(editorObjectId);
+            ignoredLegacyIdsUpdated = true;
         }
+        objectDiag('[LegacyAdapter:delete]', {
+            editorObjectId,
+            linkExists: true,
+            legacyId: link.legacyId,
+            legacyType: link.legacyType,
+            primaryHandleId: link.primaryHandleId,
+            removeResult: removed,
+            ignoredLegacyIdsUpdated
+        });
         return removed;
     }
 

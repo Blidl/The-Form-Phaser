@@ -28,13 +28,22 @@ export const createAuthoringObjectBridgeSource = (worldRuntime: TestWorldRuntime
             };
         },
         listObjects: () => {
-            return worldRuntime.getEditorObjects().map((entry) => ({
+            const liveRootIds = new Set(worldRuntime.getEditorHandles().map((handle) => handle.rootId));
+            return worldRuntime.getEditorObjects()
+                .filter((entry) => {
+                    // Treat runtime handle presence as liveness for runtime-backed editor objects.
+                    if (entry.id === 'player_spawn') {
+                        return true;
+                    }
+                    return liveRootIds.has(entry.id);
+                })
+                .map((entry) => ({
                 id: entry.id,
                 type: entry.type,
                 label: entry.label,
                 locked: entry.locked,
                 onlyDebugView: entry.onlyDebugView
-            }));
+                }));
         },
         listHandles: () => {
             return worldRuntime.getEditorHandles().map((entry) => ({

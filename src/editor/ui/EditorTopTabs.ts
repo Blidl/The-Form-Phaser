@@ -4,6 +4,7 @@ interface EditorTopTabsOptions {
     parent: HTMLElement;
     tabs: ReadonlyArray<{ id: EditorModeId; label: string }>;
     onTabSelected: (modeId: EditorModeId) => void;
+    onDiagnosticsToggle?: () => void;
     zIndex?: number;
 }
 
@@ -11,6 +12,7 @@ export class EditorTopTabs {
     private readonly root: HTMLDivElement;
     private readonly tabButtons: Map<EditorModeId, HTMLButtonElement>;
     private readonly mouseCoordsLabel: HTMLDivElement;
+    private readonly diagnosticsToggleButton: HTMLButtonElement;
 
     public constructor(options: EditorTopTabsOptions) {
         this.root = document.createElement('div');
@@ -86,8 +88,20 @@ export class EditorTopTabs {
         this.mouseCoordsLabel.style.marginLeft = '8px';
         this.mouseCoordsLabel.style.minWidth = '130px';
         this.mouseCoordsLabel.textContent = 'x: -, y: -';
+        this.diagnosticsToggleButton = document.createElement('button');
+        this.diagnosticsToggleButton.type = 'button';
+        this.diagnosticsToggleButton.style.height = '24px';
+        this.diagnosticsToggleButton.style.border = '1px solid #707070';
+        this.diagnosticsToggleButton.style.background = '#dcdcdc';
+        this.diagnosticsToggleButton.style.cursor = 'pointer';
+        this.diagnosticsToggleButton.style.padding = '0 8px';
+        this.diagnosticsToggleButton.style.fontSize = '12px';
+        this.diagnosticsToggleButton.addEventListener('click', () => {
+            options.onDiagnosticsToggle?.();
+        });
+        this.setDiagnosticsEnabled(false);
 
-        controls.append(stopLabel, speedInput, speedLabel, this.mouseCoordsLabel);
+        controls.append(stopLabel, speedInput, speedLabel, this.mouseCoordsLabel, this.diagnosticsToggleButton);
 
         this.root.append(tabsContainer, controls);
         options.parent.appendChild(this.root);
@@ -110,6 +124,11 @@ export class EditorTopTabs {
             return;
         }
         this.mouseCoordsLabel.textContent = `x: ${Math.round(x)}, y: ${Math.round(y)}`;
+    }
+
+    public setDiagnosticsEnabled(enabled: boolean): void {
+        this.diagnosticsToggleButton.textContent = enabled ? 'Diag ON' : 'Diag OFF';
+        this.diagnosticsToggleButton.style.background = enabled ? '#70de63' : '#dcdcdc';
     }
 
     public destroy(): void {

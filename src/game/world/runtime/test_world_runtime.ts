@@ -793,7 +793,26 @@ const buildWorldInstance = (
     };
 
     const destroyColliderList = (colliders: Physics.Arcade.Collider[]): void => {
-        colliders.splice(0, colliders.length).forEach((collider) => collider.destroy());
+        const seen = new Set<Physics.Arcade.Collider>();
+        for (const collider of colliders) {
+            if (!collider) {
+                continue;
+            }
+            if (seen.has(collider)) {
+                continue;
+            }
+            seen.add(collider);
+            try {
+                const maybeCollider = collider as Physics.Arcade.Collider & { world?: unknown };
+                if (!maybeCollider.world) {
+                    continue;
+                }
+                collider.destroy();
+            } catch (error) {
+                console.warn('[test_world_runtime] Failed to destroy collider during rebuild', error);
+            }
+        }
+        colliders.length = 0;
     };
 
     const actorContactRuntime = createTestWorldActorContactRuntime({
@@ -969,9 +988,10 @@ const buildWorldInstance = (
 
         config.triangleFlightBreakWalls.forEach((wallConfig) => {
             const wall = triangleFlightBreakWallsById.get(wallConfig.id);
-            if (wall) {
-                pushEntry('triangleFlightBreakWall', wallConfig, 'body', wall.bodyObject, 0);
+            if (!wall || wall.isBroken()) {
+                return;
             }
+            pushEntry('triangleFlightBreakWall', wallConfig, 'body', wall.bodyObject, 0);
         });
 
         config.trianglePickups.forEach((pickupConfig) => {
@@ -1918,14 +1938,30 @@ const buildWorldInstance = (
         getNpcCameraFocusObject: (actorId: string): GameObjects.Container | null => {
             return npcRuntime.getVisualObject(actorId);
         },
-        getEditorHandles: (): readonly TestWorldEditorHandle[] => [...handleMap.values()],
+        getEditorHandles: (): readonly TestWorldEditorHandle[] => {
+            return [...handleMap.values()].filter((handle) => {
+                if (handle.type !== 'triangleFlightBreakWall') {
+                    return true;
+                }
+                const wall = triangleFlightBreakWallsById.get(handle.rootId);
+                return !!wall && !wall.isBroken();
+            });
+        },
         getEditorObjects: (): readonly TestWorldEditorObjectSummary[] => {
-            return objectSummaries.map((entry) => ({
-                ...entry,
-                locked: bindings.get(entry.id)?.isLocked() ?? entry.locked,
-                onlyDebugView: (getConfigReference(config, entry.type, entry.id) as TestWorldVisualOrderConfig | null)
-                    ?.onlyDebugView
-            }));
+            return objectSummaries
+                .filter((entry) => {
+                    if (entry.type !== 'triangleFlightBreakWall') {
+                        return true;
+                    }
+                    const wall = triangleFlightBreakWallsById.get(entry.id);
+                    return !!wall && !wall.isBroken();
+                })
+                .map((entry) => ({
+                    ...entry,
+                    locked: bindings.get(entry.id)?.isLocked() ?? entry.locked,
+                    onlyDebugView: (getConfigReference(config, entry.type, entry.id) as TestWorldVisualOrderConfig | null)
+                        ?.onlyDebugView
+                }));
         },
         getEditorHandle: (id: string): TestWorldEditorHandle | null => handleMap.get(id) ?? null,
         patchObjectBounds: (handleId: string, bounds: TestWorldEditorBounds): boolean => {
