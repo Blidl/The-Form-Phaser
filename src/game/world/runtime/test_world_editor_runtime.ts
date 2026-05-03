@@ -50,6 +50,7 @@ import type { TestWorldEditorHandle, TestWorldRuntime } from './test_world_runti
 import { TestScene } from '../../../scenes/TestScene';
 import { isDomTextInputFocused, relaxKeyboardCapture } from '../../../shared/dom_input_focus';
 import { createAuthoringEditorDevLauncher } from '../../../tools/authoring_editor/editor_dev_launcher';
+import { createAuthoringEditorPhaserOverlay } from '../../../tools/authoring_editor/authoring_editor_phaser_overlay';
 import type {
     AuthoringEditorObjectSummary,
     AuthoringEditorRuntimeBridge
@@ -859,6 +860,11 @@ export const createTestWorldEditorRuntime = (
             cutscenes: getTestCutsceneDefinitions()
         });
     };
+    const authoringEditorV2Overlay = createAuthoringEditorPhaserOverlay({
+        scene,
+        gridSize: GRID_SIZES[2] ?? 16,
+        rulerThicknessPx: RULER_THICKNESS_PX
+    });
 
     const enterAuthoringEditorCameraMode = (): void => {
         scene.cameras.main.stopFollow();
@@ -886,6 +892,12 @@ export const createTestWorldEditorRuntime = (
         },
         exitAuthoringEditorCameraMode: (): void => {
             tryRestoreGameplayCameraFollow('authoring_editor_v2:close');
+        },
+        enterAuthoringEditorOverlayMode: (): void => {
+            authoringEditorV2Overlay.setEnabled(true);
+        },
+        exitAuthoringEditorOverlayMode: (): void => {
+            authoringEditorV2Overlay.setEnabled(false);
         },
         getCurrentWorldConfig: (): unknown => worldRuntime.getConfig(),
         getEditorObjects: (): readonly AuthoringEditorObjectSummary[] => {
@@ -3161,6 +3173,7 @@ export const createTestWorldEditorRuntime = (
         gridGraphics.destroy();
         rulerGraphics.destroy();
         boundsGraphics.destroy();
+        authoringEditorV2Overlay.destroy();
         overlayText.destroy();
         backgroundSelectionText.destroy();
         rulerCanvas.remove();
@@ -3197,8 +3210,23 @@ export const createTestWorldEditorRuntime = (
                     authoringEditorDevLauncher.toggle();
                 }
             } else if (f2Pressed) {
-                toggleEditor();
+                const shouldOpenLegacyEditor = !active;
+                if (shouldOpenLegacyEditor && authoringEditorDevLauncher.isOpen()) {
+                    const warning = 'Close Authoring Editor V2 before opening the old F2 editor.';
+                    setStatus(warning);
+                    console.warn(`[TestWorldEditor] ${warning}`);
+                } else {
+                    toggleEditor();
+                }
             }
+            const camera = scene.cameras.main;
+            const worldBounds = worldRuntime.getWorldBounds();
+            authoringEditorV2Overlay.update(camera, {
+                x: 0,
+                y: 0,
+                width: worldBounds.width,
+                height: worldBounds.height
+            });
             if (!active) {
                 selectionGraphics.clear();
                 placementGraphics.clear();
@@ -3293,7 +3321,6 @@ export const createTestWorldEditorRuntime = (
                 }
             }
 
-            const camera = scene.cameras.main;
             const panStep = (CAMERA_PAN_SPEED * deltaMs) / 1000;
             if (!domTextInputFocused) {
                 if (leftKey.isDown) {
@@ -3311,7 +3338,6 @@ export const createTestWorldEditorRuntime = (
             }
 
             applyPointerDrag();
-            const worldBounds = worldRuntime.getWorldBounds();
             drawWorldBoundsOverlay(boundsGraphics, camera, worldBounds);
             drawGrid(gridGraphics, camera, worldBounds, gridEnabled ? gridSize : 0);
             drawCoordinateRulerCanvas(

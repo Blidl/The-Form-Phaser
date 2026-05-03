@@ -110,6 +110,7 @@ export const createAuthoringEditorDevLauncher = (
         }
 
         enterCameraMode();
+        options?.runtimeBridge?.enterAuthoringEditorOverlayMode?.();
         const mount = ensureShellElements();
         app = app ?? createAuthoringEditorApp({ runtimeBridge: options?.runtimeBridge });
         app.mount(mount);
@@ -127,6 +128,7 @@ export const createAuthoringEditorDevLauncher = (
         shellElement.remove();
         shellElement = null;
         mountElement = null;
+        options?.runtimeBridge?.exitAuthoringEditorOverlayMode?.();
         exitCameraMode();
     };
 
