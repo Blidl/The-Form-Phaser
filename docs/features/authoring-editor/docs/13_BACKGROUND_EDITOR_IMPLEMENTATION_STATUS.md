@@ -83,3 +83,31 @@
 - Renderer is still legacy (`background.staticImage` + `background.layers` path).
 - Temporary legacy slot editor in F2 Background tab remains active.
 - Next intended step: object list UI MVP for object-based background authoring.
+
+## 9. B3.2 object list UI MVP implemented
+- F2 Background tab now wires object-based authoring through `BackgroundObjectAuthoringService` in `BackgroundEditorMode`.
+- Object-based layer tabs are active:
+  - `Static` -> `static`
+  - `Parallax 1` -> `parallax1`
+  - `Parallax 2` -> `parallax2`
+- Left panel now provides:
+  - per-layer `Background Objects` list from `background.backgroundObjects`
+  - `Add Solid` create action
+  - `Add Demo Texture` create action
+- Selecting an object opens right inspector editing for:
+  - meta (`name`, `layer`, `locked`, `hidden`)
+  - bounds (`x`, `y`, `width`, `height`, `rotation`)
+  - visual (`shaderKey`, `textureKey`, `textureAsset`, `fillColor`, `strokeColor`, `alpha`, tile repeat flags)
+- Object actions implemented:
+  - duplicate
+  - delete with confirm prompt
+- Per-layer settings UI implemented for object layers:
+  - `Static`: informational note only
+  - `Parallax 1` and `Parallax 2`: `scrollFactorX/Y` via object service
+- Legacy renderer-backed preview controls remain available under:
+  - `Legacy Preview Background`
+  - with explicit temporary note
+- Deferred remains unchanged:
+  - object-based renderer migration
+  - canvas selection/drag/resize tools
+  - full asset picker/preview
