@@ -169,3 +169,9 @@
 - Deferred status remains unchanged:
   - canvas selection/move/resize tools are still not implemented.
   - full migration/removal of legacy background schema is still deferred.
+
+## 13. B3.5.1 global background color control restored (object-based UI)
+- Added `Global Background` section in active F2 Background inspector with `Color` field.
+- Field edits `runtimeConfig.background.color` through `BackgroundObjectAuthoringService` runtime clone-import flow.
+- Legacy `staticImage`/`layers` UI remains retired.
+- Legacy runtime fallback behavior from B3.5 remains unchanged.

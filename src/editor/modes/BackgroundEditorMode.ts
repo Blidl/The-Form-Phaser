@@ -201,10 +201,36 @@ export class BackgroundEditorMode implements EditorMode {
                 container.appendChild(this.makeSpacer(6));
             }
 
+            this.renderGlobalBackground(container, objectSnapshot);
+            container.appendChild(this.makeSpacer(8));
             this.renderLayerSettings(container, objectSnapshot);
             container.appendChild(this.makeSpacer(8));
             this.renderSelectedObjectInspector(container, selectedObject);
         });
+    }
+
+    private renderGlobalBackground(container: HTMLDivElement, snapshot: BackgroundObjectSnapshot | null): void {
+        container.appendChild(this.makeSectionTitle('Global Background'));
+        if (!snapshot) {
+            container.appendChild(this.makeInfoLine('Runtime config unavailable.'));
+            return;
+        }
+
+        container.appendChild(this.makeTextField({
+            label: 'Color',
+            value: colorToText(snapshot.backgroundColor ?? this.backgroundObjectAuthoringService.getBackgroundColor()),
+            fieldKey: 'global.background.color',
+            onCommit: (value) => {
+                const parsed = parseColorInput(value);
+                if (parsed.error) {
+                    return { success: false, error: parsed.error };
+                }
+                if (parsed.value === null) {
+                    return { success: false, error: 'Color cannot be empty.' };
+                }
+                return this.commitObject(() => this.backgroundObjectAuthoringService.updateBackgroundColor(parsed.value));
+            }
+        }));
     }
 
     private renderLayerSettings(container: HTMLDivElement, snapshot: BackgroundObjectSnapshot | null): void {
@@ -837,6 +863,7 @@ export class BackgroundEditorMode implements EditorMode {
         }
         try {
             return JSON.stringify({
+                backgroundColor: snapshot.backgroundColor,
                 objects: snapshot.objects,
                 layerSettings: snapshot.layerSettings
             });

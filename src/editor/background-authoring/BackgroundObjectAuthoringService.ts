@@ -15,6 +15,7 @@ export type BackgroundObjectLayerId = 'static' | 'parallax1' | 'parallax2';
 export interface BackgroundObjectSnapshot {
     levelId: string;
     levelName: string;
+    backgroundColor?: number;
     objects: TestWorldBackgroundObjectConfig[];
     layerSettings: RequiredBackgroundLayerSettings;
 }
@@ -210,6 +211,7 @@ export class BackgroundObjectAuthoringService {
         return {
             levelId: config.meta.id,
             levelName: config.meta.displayName,
+            backgroundColor: sanitizeColor(config.background?.color),
             objects: cloneBackgroundObjects(config.background?.backgroundObjects),
             layerSettings: cloneLayerSettings(
                 normalizeLayerSettings(config.background?.backgroundLayerSettings)
@@ -245,6 +247,26 @@ export class BackgroundObjectAuthoringService {
         return cloneLayerSettings(
             normalizeLayerSettings(config.background?.backgroundLayerSettings)
         );
+    }
+
+    public getBackgroundColor(): number | undefined {
+        const config = this.getRuntimeConfig();
+        return sanitizeColor(config?.background?.color);
+    }
+
+    public updateBackgroundColor(color: number): BackgroundObjectMutationResult {
+        const nextColor = sanitizeColor(color);
+        if (nextColor === undefined) {
+            return {
+                success: false,
+                reason: 'Invalid background color.'
+            };
+        }
+        return this.applyConfigEdit((nextConfig) => {
+            const background = this.ensureBackground(nextConfig);
+            background.color = nextColor;
+            return { success: true };
+        });
     }
 
     public createObject(input: CreateBackgroundObjectInput): BackgroundObjectMutationResult {
@@ -604,6 +626,7 @@ export class BackgroundObjectAuthoringService {
         return {
             levelId: config.meta.id,
             levelName: config.meta.displayName,
+            backgroundColor: sanitizeColor(config.background?.color),
             objects: cloneBackgroundObjects(config.background?.backgroundObjects),
             layerSettings: cloneLayerSettings(
                 normalizeLayerSettings(config.background?.backgroundLayerSettings)
