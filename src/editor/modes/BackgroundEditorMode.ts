@@ -8,7 +8,8 @@ import {
     BackgroundObjectAuthoringService,
     type BackgroundObjectLayerId,
     type BackgroundObjectMutationResult,
-    type BackgroundObjectSnapshot
+    type BackgroundObjectSnapshot,
+    type UpdateBackgroundObjectVisualPatch
 } from '../background-authoring/BackgroundObjectAuthoringService';
 import type {
     TestWorldBackgroundObjectConfig
@@ -53,10 +54,25 @@ interface BackgroundShortcutDeleteOptions {
     requireConfirm: boolean;
 }
 
+interface BackgroundAssetPreset {
+    id: string;
+    label: string;
+    textureKey?: string;
+    textureAsset?: string;
+    fillColor?: number;
+    defaultWidth?: number;
+    defaultHeight?: number;
+    tileHorizontalRepeat?: boolean;
+    tileVerticalRepeat?: boolean;
+}
+
 const COLOR_HEX_PATTERN = /^#?([0-9a-fA-F]{6})$/;
 const COLOR_NUMBER_PATTERN = /^(0x)?([0-9a-fA-F]{1,6})$/;
 const DEFAULT_SOLID_FILL_COLOR = 0x1f2a30;
-const DEFAULT_DEMO_TEXTURE_ASSET = 'assets/bg.png';
+const TREES_BUSHES_TEXTURE_ASSET = 'assets/_02_trees%20and%20bushes.png';
+const HUGE_CLOUDS_TEXTURE_ASSET = 'assets/_07_huge_clouds.png';
+const GENIE_PICTURE_TEXTURE_ASSET = 'assets/%D1%80%D0%B8%D1%81%D1%83%D0%BD%D0%BE%D0%BA%20%D0%B4%D0%B6%D0%B8%D0%BD%D0%B0.jpg';
+const DEFAULT_BACKGROUND_ASSET_PRESET_ID = 'solid';
 const BACKGROUND_SELECTION_OUTLINE_DEPTH = 5102;
 const BACKGROUND_SELECTION_OUTLINE_COLOR = 0x79d7ff;
 const BACKGROUND_SELECTION_OUTLINE_LOCKED_COLOR = 0xff5555;
@@ -78,14 +94,46 @@ const layerToLabel = (layer: BackgroundObjectLayerId): string => {
     return 'Static';
 };
 
-const layerToDemoTextureKey = (layer: BackgroundObjectLayerId): string => {
-    if (layer === 'parallax1') {
-        return 'demo_bg_layer_far';
+const BACKGROUND_ASSET_PRESETS: readonly BackgroundAssetPreset[] = [
+    {
+        id: 'solid',
+        label: 'Solid',
+        fillColor: DEFAULT_SOLID_FILL_COLOR,
+        tileHorizontalRepeat: false,
+        tileVerticalRepeat: false
+    },
+    {
+        id: 'trees_bushes',
+        label: 'Trees and Bushes',
+        textureKey: 'bg_trees_bushes',
+        textureAsset: TREES_BUSHES_TEXTURE_ASSET,
+        fillColor: DEFAULT_SOLID_FILL_COLOR,
+        tileHorizontalRepeat: false,
+        tileVerticalRepeat: false
+    },
+    {
+        id: 'huge_clouds',
+        label: 'Huge Clouds',
+        textureKey: 'bg_huge_clouds',
+        textureAsset: HUGE_CLOUDS_TEXTURE_ASSET,
+        fillColor: DEFAULT_SOLID_FILL_COLOR,
+        tileHorizontalRepeat: false,
+        tileVerticalRepeat: false
+    },
+    {
+        id: 'genie_picture',
+        label: 'Genie Picture',
+        textureKey: 'bg_genie_picture',
+        textureAsset: GENIE_PICTURE_TEXTURE_ASSET,
+        fillColor: DEFAULT_SOLID_FILL_COLOR,
+        tileHorizontalRepeat: false,
+        tileVerticalRepeat: false
     }
-    if (layer === 'parallax2') {
-        return 'demo_bg_layer_near';
-    }
-    return 'demo_bg_static';
+];
+
+const findBackgroundAssetPresetById = (presetId: string): BackgroundAssetPreset => {
+    return BACKGROUND_ASSET_PRESETS.find((preset) => preset.id === presetId)
+        ?? BACKGROUND_ASSET_PRESETS[0];
 };
 
 const normalizeLayer = (value: unknown): BackgroundObjectLayerId => {
@@ -145,6 +193,7 @@ export class BackgroundEditorMode implements EditorMode {
     private dragState: BackgroundObjectDragState | null = null;
     private resizeState: BackgroundObjectResizeState | null = null;
     private backgroundObjectClipboard: TestWorldBackgroundObjectConfig | null = null;
+    private selectedAssetPresetId = DEFAULT_BACKGROUND_ASSET_PRESET_ID;
     private readonly handleShortcutKeyDown: (event: KeyboardEvent) => void;
     private shortcutsAttached = false;
 
@@ -369,16 +418,13 @@ export class BackgroundEditorMode implements EditorMode {
 
             if (layerObjects.length === 0) {
                 list.appendChild(this.makeInfoLine('No background objects in this layer.'));
-                list.appendChild(this.makeCreateButtonsRow());
             } else {
                 layerObjects.forEach((entry) => {
                     list.appendChild(this.makeObjectRow(entry));
                 });
             }
             container.appendChild(list);
-
-            container.appendChild(this.makeSectionTitle('Create'));
-            container.appendChild(this.makeCreateButtonsRow());
+            container.appendChild(this.makeAssetPresetsSection());
         });
     }
 
@@ -754,29 +800,45 @@ export class BackgroundEditorMode implements EditorMode {
         return row;
     }
 
-    private makeCreateButtonsRow(): HTMLDivElement {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.gap = '4px';
-        row.style.flexWrap = 'wrap';
+    private makeAssetPresetsSection(): HTMLDivElement {
+        const container = document.createElement('div');
+        container.style.display = 'flex';
+        container.style.flexDirection = 'column';
+        container.style.gap = '4px';
 
-        row.appendChild(this.makeActionButton('Add Solid', () => {
-            const result = this.backgroundObjectAuthoringService.createObject({
-                layer: this.selectedObjectLayer,
-                fillColor: DEFAULT_SOLID_FILL_COLOR
-            });
-            this.handleObjectMutationResult(result, result.object?.id ?? null);
-        }));
-        row.appendChild(this.makeActionButton('Add Demo Texture', () => {
-            const result = this.backgroundObjectAuthoringService.createObject({
-                layer: this.selectedObjectLayer,
-                textureKey: layerToDemoTextureKey(this.selectedObjectLayer),
-                textureAsset: DEFAULT_DEMO_TEXTURE_ASSET
-            });
-            this.handleObjectMutationResult(result, result.object?.id ?? null);
-        }));
+        container.appendChild(this.makeSectionTitle('Asset Presets'));
+        const select = document.createElement('select');
+        select.style.width = '100%';
+        select.style.boxSizing = 'border-box';
+        select.style.border = '1px solid #777';
+        select.style.padding = '2px 4px';
+        BACKGROUND_ASSET_PRESETS.forEach((preset) => {
+            const option = document.createElement('option');
+            option.value = preset.id;
+            option.textContent = preset.label;
+            select.appendChild(option);
+        });
+        select.value = findBackgroundAssetPresetById(this.selectedAssetPresetId).id;
+        select.addEventListener('change', () => {
+            this.selectedAssetPresetId = findBackgroundAssetPresetById(select.value).id;
+            this.statusMessage = null;
+            this.onUiChanged();
+        });
+        container.appendChild(select);
 
-        return row;
+        const buttons = document.createElement('div');
+        buttons.style.display = 'flex';
+        buttons.style.gap = '4px';
+        buttons.style.flexWrap = 'wrap';
+        buttons.appendChild(this.makeActionButton('Add Selected Asset', () => {
+            this.addSelectedAssetPreset();
+        }));
+        buttons.appendChild(this.makeActionButton('Apply To Selected', () => {
+            this.applySelectedAssetPresetToSelectedObject();
+        }));
+        container.appendChild(buttons);
+
+        return container;
     }
 
     private makeActionButton(label: string, onClick: () => void): HTMLButtonElement {
@@ -1165,6 +1227,73 @@ export class BackgroundEditorMode implements EditorMode {
         this.syncSelectedObject();
         this.syncSelectionOutline(true);
         this.onUiChanged();
+    }
+
+    private getSelectedAssetPreset(): BackgroundAssetPreset {
+        const preset = findBackgroundAssetPresetById(this.selectedAssetPresetId);
+        this.selectedAssetPresetId = preset.id;
+        return preset;
+    }
+
+    private toVisualPatchFromAssetPreset(
+        preset: BackgroundAssetPreset
+    ): UpdateBackgroundObjectVisualPatch {
+        return {
+            textureKey: preset.textureKey,
+            textureAsset: preset.textureAsset,
+            fillColor: preset.fillColor,
+            tileHorizontalRepeat: preset.tileHorizontalRepeat ?? false,
+            tileVerticalRepeat: preset.tileVerticalRepeat ?? false
+        };
+    }
+
+    private addSelectedAssetPreset(): boolean {
+        const preset = this.getSelectedAssetPreset();
+        const result = this.backgroundObjectAuthoringService.createObject({
+            layer: this.selectedObjectLayer,
+            textureKey: preset.textureKey,
+            textureAsset: preset.textureAsset,
+            fillColor: preset.fillColor,
+            bounds: {
+                width: preset.defaultWidth,
+                height: preset.defaultHeight
+            }
+        });
+        const commitResult = this.handleObjectMutationResult(result, result.object?.id ?? null);
+        if (!commitResult.success) {
+            return false;
+        }
+        this.statusMessage = 'Added asset';
+        this.onUiChanged();
+        return true;
+    }
+
+    private applySelectedAssetPresetToSelectedObject(): boolean {
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
+        const selectedObject = this.getSelectedObject(snapshot);
+        if (!selectedObject) {
+            this.statusMessage = 'Select an object first';
+            this.onUiChanged();
+            return false;
+        }
+        if (selectedObject.editor?.locked) {
+            this.statusMessage = 'Object is locked';
+            this.onUiChanged();
+            return false;
+        }
+
+        const preset = this.getSelectedAssetPreset();
+        const result = this.backgroundObjectAuthoringService.updateObjectVisual(
+            selectedObject.id,
+            this.toVisualPatchFromAssetPreset(preset)
+        );
+        const commitResult = this.handleObjectMutationResult(result, selectedObject.id);
+        if (!commitResult.success) {
+            return false;
+        }
+        this.statusMessage = 'Applied asset';
+        this.onUiChanged();
+        return true;
     }
 
     private commitObject(action: () => BackgroundObjectMutationResult): CommitResult {

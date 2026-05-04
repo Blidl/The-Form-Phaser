@@ -391,3 +391,31 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
     - no change required; hit-test is layer-scoped by selected tab and still resolves topmost by reverse array scan within that layer.
   - Updated docs:
     - `docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md` section `10` ordering note + new section `19`.
+- 2026-05-04: Implemented B3.9 Background asset presets MVP in active editor path (`src/editor/*`, no `editor_v2` changes).
+  - `src/editor/modes/BackgroundEditorMode.ts`:
+    - added compact `Asset Presets` UI section near Create controls (`select` + `Add Selected Asset` + `Apply To Selected`);
+    - preset list uses known assets only: `Solid`, `Demo Static`, `Demo Far`, `Demo Near`;
+    - demo presets map to existing keys/assets: `demo_bg_static|demo_bg_layer_far|demo_bg_layer_near` + `assets/bg.png`;
+    - `Add Selected Asset` creates one object in active layer through `BackgroundObjectAuthoringService.createObject(...)` and selects it;
+    - `Apply To Selected` updates only visual fields through `BackgroundObjectAuthoringService.updateObjectVisual(...)`, preserving object id/layer/bounds;
+    - apply guardrails: blocked when no selection (`Select an object first`) or locked object (`Object is locked`);
+    - success status messages added: `Added asset`, `Applied asset`.
+  - Existing `Add Solid` / `Add Demo Texture` buttons kept unchanged.
+  - Deferred by design: full asset manager, external upload/file browser, shader picker, undo/redo.
+- 2026-05-04: Updated background implementation status doc with new section `20. B3.9 ...` and deferred notes.
+- 2026-05-04: Implemented B3.9.1 Background asset presets cleanup (real project assets) in active `src/editor/*` path.
+  - Replaced demo presets in `src/editor/modes/BackgroundEditorMode.ts` with real asset presets:
+    - `Solid`
+    - `Trees and Bushes` -> textureKey `bg_trees_bushes`, textureAsset `assets/_02_trees%20and%20bushes.png`
+    - `Huge Clouds` -> textureKey `bg_huge_clouds`, textureAsset `assets/_07_huge_clouds.png`
+    - `Genie Picture` -> textureKey `bg_genie_picture`, textureAsset `assets/%D1%80%D0%B8%D1%81%D1%83%D0%BD%D0%BE%D0%BA%20%D0%B4%D0%B6%D0%B8%D0%BD%D0%B0.jpg`
+  - Kept ASCII texture keys and URL-encoded textureAsset paths for space/Cyrillic safety.
+  - Removed duplicate quick-create buttons from Background left inspector:
+    - removed `Add Solid`
+    - removed `Add Demo Texture`
+    - creation now goes through `Asset Presets` + `Add Selected Asset` only.
+  - Added required asset files to public runtime-serving path (copied, not moved/renamed):
+    - `public/assets/_02_trees and bushes.png`
+    - `public/assets/_07_huge_clouds.png`
+    - `public/assets/рисунок джина.jpg`
+- 2026-05-04: Updated Background implementation status doc section 20 for B3.9.1 real-asset presets and duplicate-button cleanup.

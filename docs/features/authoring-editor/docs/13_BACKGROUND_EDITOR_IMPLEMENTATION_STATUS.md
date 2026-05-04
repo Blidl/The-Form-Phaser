@@ -304,3 +304,34 @@
 - Legacy runtime fallback behavior remains unchanged:
   - object-based background is primary when `background.backgroundObjects` has entries
   - legacy `background.staticImage` + `background.layers` render only when object-based entries are absent
+
+## 20. B3.9 background object asset presets MVP implemented (no upload)
+- Active `src/editor/modes/BackgroundEditorMode.ts` now includes a compact `Asset Presets` section in F2 Background tab near create controls.
+- Presets are currently hardcoded to known project assets/fallbacks:
+  - `Solid`
+  - `Trees and Bushes` (`bg_trees_bushes`, `assets/_02_trees%20and%20bushes.png`)
+  - `Huge Clouds` (`bg_huge_clouds`, `assets/_07_huge_clouds.png`)
+  - `Genie Picture` (`bg_genie_picture`, `assets/%D1%80%D0%B8%D1%81%D1%83%D0%BD%D0%BE%D0%BA%20%D0%B4%D0%B6%D0%B8%D0%BD%D0%B0.jpg`)
+- Added actions in the same section:
+  - `Add Selected Asset`:
+    - creates exactly one background object in active layer via `BackgroundObjectAuthoringService.createObject(...)`
+    - uses selected preset visual fields
+    - newly created object becomes selected
+  - `Apply To Selected`:
+    - updates selected object visual via `BackgroundObjectAuthoringService.updateObjectVisual(...)`
+    - preserves object id, layer, and current bounds
+    - blocks locked object (`Object is locked`)
+    - requires selection (`Select an object first`)
+- Status feedback uses existing inline status area:
+  - `Added asset`
+  - `Applied asset`
+  - `Object is locked`
+  - `Select an object first`
+- In B3.9.1 cleanup:
+  - removed duplicate quick buttons from F2 Background left inspector (`Add Solid`, `Add Demo Texture`)
+  - preset creation is now only through `Asset Presets` + `Add Selected Asset`
+- Deferred remains:
+  - external asset upload / file browser
+  - full asset manager (thumbnails/library tooling)
+  - shader picker
+  - undo/redo
