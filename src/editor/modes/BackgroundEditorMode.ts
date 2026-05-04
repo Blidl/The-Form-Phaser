@@ -1,4 +1,5 @@
 
+import Phaser from 'phaser';
 import type { EditorMode, EditorModeRuntimeContext, EditorPointerEvent } from '../core/EditorMode';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
@@ -13,6 +14,7 @@ import type {
 } from '../../game/world/runtime/test_world_config';
 
 interface BackgroundEditorModeOptions {
+    scene: Phaser.Scene;
     legacyObjectAdapter: LegacyObjectAdapter | null;
     onUiChanged: () => void;
 }
@@ -32,6 +34,9 @@ const COLOR_HEX_PATTERN = /^#?([0-9a-fA-F]{6})$/;
 const COLOR_NUMBER_PATTERN = /^(0x)?([0-9a-fA-F]{1,6})$/;
 const DEFAULT_SOLID_FILL_COLOR = 0x1f2a30;
 const DEFAULT_DEMO_TEXTURE_ASSET = 'assets/bg.png';
+const BACKGROUND_SELECTION_OUTLINE_DEPTH = 5102;
+const BACKGROUND_SELECTION_OUTLINE_COLOR = 0x79d7ff;
+const BACKGROUND_SELECTION_OUTLINE_LOCKED_COLOR = 0xff5555;
 
 const clamp = (value: number, min: number, max: number): number => {
     return Math.max(min, Math.min(max, value));
@@ -101,28 +106,37 @@ export class BackgroundEditorMode implements EditorMode {
     public readonly id = 'background';
     public readonly label = 'Background';
 
+    private readonly scene: Phaser.Scene;
     private readonly onUiChanged: () => void;
     private readonly backgroundObjectAuthoringService: BackgroundObjectAuthoringService;
+    private readonly selectionOutline: Phaser.GameObjects.Graphics;
     private selectedObjectLayer: BackgroundObjectLayerId = 'static';
     private selectedObjectId: string | null = null;
     private fieldErrors = new Map<string, string>();
     private statusMessage: string | null = null;
     private lastBackgroundSignature: string | null = null;
+    private lastSelectionOutlineSignature: string | null = null;
     private dragState: BackgroundObjectDragState | null = null;
 
     public constructor(options: BackgroundEditorModeOptions) {
+        this.scene = options.scene;
         this.onUiChanged = options.onUiChanged;
         this.backgroundObjectAuthoringService = new BackgroundObjectAuthoringService(options.legacyObjectAdapter);
+        this.selectionOutline = this.scene.add.graphics();
+        this.selectionOutline.setDepth(BACKGROUND_SELECTION_OUTLINE_DEPTH);
+        this.selectionOutline.setVisible(false);
     }
 
     public enter(): void {
         this.clearDragState();
         this.captureSignature();
         this.syncSelectedObject();
+        this.syncSelectionOutline(true);
     }
 
     public exit(): void {
         this.clearDragState();
+        this.clearSelectionOutline();
     }
 
     public update(_context: EditorModeRuntimeContext): void {
@@ -130,8 +144,11 @@ export class BackgroundEditorMode implements EditorMode {
         if (nextSignature !== this.lastBackgroundSignature) {
             this.lastBackgroundSignature = nextSignature;
             this.syncSelectedObject();
+            this.syncSelectionOutline(true);
             this.onUiChanged();
+            return;
         }
+        this.syncSelectionOutline();
     }
 
     public onRuntimeConfigImported(): void {
@@ -140,6 +157,7 @@ export class BackgroundEditorMode implements EditorMode {
         this.fieldErrors.clear();
         this.statusMessage = null;
         this.syncSelectedObject();
+        this.syncSelectionOutline(true);
         this.onUiChanged();
     }
 
@@ -151,6 +169,7 @@ export class BackgroundEditorMode implements EditorMode {
         if (!snapshot) {
             this.selectedObjectId = null;
             this.clearDragState();
+            this.syncSelectionOutline(true);
             this.onUiChanged();
             return;
         }
@@ -159,6 +178,7 @@ export class BackgroundEditorMode implements EditorMode {
         if (!hitObject) {
             this.selectedObjectId = null;
             this.clearDragState();
+            this.syncSelectionOutline(true);
             this.onUiChanged();
             return;
         }
@@ -174,6 +194,7 @@ export class BackgroundEditorMode implements EditorMode {
             };
         }
         this.statusMessage = null;
+        this.syncSelectionOutline(true);
         this.onUiChanged();
     }
 
@@ -641,6 +662,7 @@ export class BackgroundEditorMode implements EditorMode {
             this.selectedObjectId = entry.id;
             this.clearDragState(entry.id);
             this.statusMessage = null;
+            this.syncSelectionOutline(true);
             this.onUiChanged();
         });
         return row;
@@ -916,6 +938,7 @@ export class BackgroundEditorMode implements EditorMode {
         this.clearDragState();
         this.statusMessage = null;
         this.syncSelectedObject();
+        this.syncSelectionOutline(true);
         this.onUiChanged();
     }
 
@@ -939,6 +962,7 @@ export class BackgroundEditorMode implements EditorMode {
         this.statusMessage = null;
         this.captureSignature();
         this.syncSelectedObject(result.snapshot ?? null, preferredObjectId);
+        this.syncSelectionOutline(true);
         this.onUiChanged();
         return { success: true };
     }
@@ -1027,6 +1051,92 @@ export class BackgroundEditorMode implements EditorMode {
         const localX = (dx * cos) + (dy * sin);
         const localY = (-dx * sin) + (dy * cos);
         return Math.abs(localX) <= (width * 0.5) && Math.abs(localY) <= (height * 0.5);
+    }
+
+    private clearSelectionOutline(): void {
+        this.lastSelectionOutlineSignature = null;
+        this.selectionOutline.clear();
+        this.selectionOutline.setVisible(false);
+    }
+
+    private syncSelectionOutline(forceRedraw = false): void {
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
+        const selectedObject = this.getSelectedObject(snapshot);
+        const nextSignature = this.buildSelectionOutlineSignature(selectedObject);
+        if (!forceRedraw && this.lastSelectionOutlineSignature === nextSignature) {
+            return;
+        }
+        this.lastSelectionOutlineSignature = nextSignature;
+
+        this.selectionOutline.clear();
+        if (!selectedObject) {
+            this.selectionOutline.setVisible(false);
+            return;
+        }
+        if (normalizeLayer(selectedObject.layer) !== this.selectedObjectLayer) {
+            this.selectionOutline.setVisible(false);
+            return;
+        }
+        if (selectedObject.editor?.hidden) {
+            this.selectionOutline.setVisible(false);
+            return;
+        }
+
+        const width = Number.isFinite(selectedObject.bounds.width) ? Math.max(0, selectedObject.bounds.width) : 0;
+        const height = Number.isFinite(selectedObject.bounds.height) ? Math.max(0, selectedObject.bounds.height) : 0;
+        const centerX = Number.isFinite(selectedObject.bounds.x) ? selectedObject.bounds.x : 0;
+        const centerY = Number.isFinite(selectedObject.bounds.y) ? selectedObject.bounds.y : 0;
+        if (width <= 0 || height <= 0) {
+            this.selectionOutline.setVisible(false);
+            return;
+        }
+
+        const rotationDeg = Number.isFinite(selectedObject.bounds.rotation) ? selectedObject.bounds.rotation ?? 0 : 0;
+        const rotationRad = (rotationDeg * Math.PI) / 180;
+        const halfWidth = width * 0.5;
+        const halfHeight = height * 0.5;
+        const cos = Math.cos(rotationRad);
+        const sin = Math.sin(rotationRad);
+        const toWorld = (localX: number, localY: number): { x: number; y: number } => ({
+            x: centerX + (localX * cos) - (localY * sin),
+            y: centerY + (localX * sin) + (localY * cos)
+        });
+
+        const topLeft = toWorld(-halfWidth, -halfHeight);
+        const topRight = toWorld(halfWidth, -halfHeight);
+        const bottomRight = toWorld(halfWidth, halfHeight);
+        const bottomLeft = toWorld(-halfWidth, halfHeight);
+        this.selectionOutline.setVisible(true);
+        this.selectionOutline.lineStyle(
+            2,
+            selectedObject.editor?.locked ? BACKGROUND_SELECTION_OUTLINE_LOCKED_COLOR : BACKGROUND_SELECTION_OUTLINE_COLOR,
+            1
+        );
+        this.selectionOutline.beginPath();
+        this.selectionOutline.moveTo(topLeft.x, topLeft.y);
+        this.selectionOutline.lineTo(topRight.x, topRight.y);
+        this.selectionOutline.lineTo(bottomRight.x, bottomRight.y);
+        this.selectionOutline.lineTo(bottomLeft.x, bottomLeft.y);
+        this.selectionOutline.closePath();
+        this.selectionOutline.strokePath();
+    }
+
+    private buildSelectionOutlineSignature(selectedObject: TestWorldBackgroundObjectConfig | null): string {
+        if (!selectedObject) {
+            return `none|${this.selectedObjectLayer}`;
+        }
+        return [
+            this.selectedObjectLayer,
+            normalizeLayer(selectedObject.layer),
+            selectedObject.id,
+            selectedObject.editor?.hidden ? 'hidden' : 'visible',
+            selectedObject.editor?.locked ? 'locked' : 'unlocked',
+            Number.isFinite(selectedObject.bounds.x) ? selectedObject.bounds.x : 0,
+            Number.isFinite(selectedObject.bounds.y) ? selectedObject.bounds.y : 0,
+            Number.isFinite(selectedObject.bounds.width) ? selectedObject.bounds.width : 0,
+            Number.isFinite(selectedObject.bounds.height) ? selectedObject.bounds.height : 0,
+            Number.isFinite(selectedObject.bounds.rotation) ? selectedObject.bounds.rotation ?? 0 : 0
+        ].join('|');
     }
 
     private clearDragState(keepObjectId?: string): void {

@@ -320,3 +320,8 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
     - deleting/invalidating selected object clears drag state.
 - 2026-05-04: Docs updated for B3.6 status in docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md.
 - Verification: npm run build-nolog (PASS).
+- 2026-05-04: B3.6.1 Background selection outline MVP implemented in active editor path.
+  - `src/editor/modes/BackgroundEditorMode.ts`: added mode-owned Phaser `Graphics` outline synced to selected object `x/y/width/height/rotation`; hidden selected objects keep selection but suppress canvas outline; locked selected objects still show outline.
+  - `src/editor/core/EditorShell.ts`: editor close/open now calls active mode `exit()/enter()` so editor-only overlays are cleared on close and restored on reopen.
+  - Docs updated: `docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md` with B3.6.1 status.
+  - Verification: `npm run build-nolog` PASS.

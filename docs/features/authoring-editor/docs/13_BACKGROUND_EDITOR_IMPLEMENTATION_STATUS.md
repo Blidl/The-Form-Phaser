@@ -197,3 +197,34 @@
 - Deferred remains:
   - resize handles (and rotation handle) are not implemented yet.
 - Legacy runtime fallback behavior from B3.5 remains unchanged for legacy-only levels.
+
+## 15. B3.6.1 background selection outline MVP implemented (no resize handles)
+- Active `src/editor/modes/BackgroundEditorMode.ts` now renders an editor-only canvas outline for the selected object-based background object.
+- Outline tracks selected object bounds and transform:
+  - `x`
+  - `y`
+  - `width`
+  - `height`
+  - `rotation`
+- Outline updates/refreshes on:
+  - canvas selection
+  - list selection
+  - drag move updates
+  - inspector bounds edits
+  - layer selection changes
+  - delete/missing-object refresh
+  - full Import JSON runtime refresh
+- Hidden behavior:
+  - hidden objects remain excluded from hit-test;
+  - hidden selected object keeps list/inspector selection but does not render canvas outline.
+- Locked behavior:
+  - locked selected object still renders outline;
+  - locked object drag remains disabled (unchanged from B3.6).
+- Lifecycle/editor-only guarantees:
+  - outline is a mode-owned Phaser `Graphics` overlay only;
+  - no config persistence/export/runtime gameplay data changes;
+  - outline clears on mode exit and editor close, and when selection becomes invalid for active layer/object visibility.
+- Deferred remains unchanged:
+  - resize handles still deferred;
+  - rotation handle still deferred.
+- Legacy runtime fallback behavior from B3.5 remains unchanged for legacy-only levels.

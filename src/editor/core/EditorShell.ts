@@ -61,6 +61,7 @@ const createModes = (
         legacyObjectAdapter
     });
     const background = new BackgroundEditorMode({
+        scene,
         legacyObjectAdapter,
         onUiChanged
     });
@@ -338,6 +339,7 @@ export class EditorShell {
             }
         }
         this.refreshSaveUi();
+        this.modes[this.state.activeModeId].enter?.();
         this.renderActiveModeInspectors();
         this.refreshDiagnosticsUi();
     }
@@ -347,6 +349,7 @@ export class EditorShell {
             return;
         }
 
+        this.modes[this.state.activeModeId].exit?.();
         this.state.isOpen = false;
         this.state.mouseWorldX = null;
         this.state.mouseWorldY = null;
