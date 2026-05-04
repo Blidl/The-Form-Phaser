@@ -1,49 +1,63 @@
 # 12. Objects Editor Implementation Status
 
-## 1. Active Editor Layer
-- Active implementation layer: `src/editor/*`.
-- Editor entrypoint for this layer: `F2`.
-- `editor_v2` (`src/game/authoring/editor_v2/*`) is frozen and not the active development target.
-- Legacy reference path remains available on `Shift+F2` (`src/game/world/runtime/test_world_editor_runtime.ts`) for comparison/debug only.
+## 1. Active editor layer
+- Active implementation: `src/editor/*`.
+- Opened by `F2`.
+- Legacy/reference editor: `src/game/world/runtime/test_world_editor_runtime.ts` via `Shift+F2`.
+- Frozen/placeholder editor: `src/game/authoring/editor_v2/*`.
+- Future work should target `src/editor/*` unless explicitly migrating.
 
-## 2. Objects Source of Truth
-- Object CRUD and object visual/bounds update flow is centralized in `ObjectAuthoringService` (`src/editor/object-authoring/ObjectAuthoringService.ts`).
-- Runtime object data in runtime config/current config is canonical for Objects persistence.
-- `ProjectStore` (`src/editor/data/ProjectStore.ts`) is the editor/UI mirror used by inspectors and lists.
+## 2. Objects source of truth
+- `ObjectAuthoringService` is the object gateway.
+- Runtime/currentConfig is canonical for Objects.
+- `ProjectStore` is UI mirror only.
+- Known runtime-backed objects must not use fake fallback rectangles.
 
-## 3. Implemented Objects Features
-- Runtime-backed object listing in Objects mode.
-- Create/Delete object flow.
-- Drag/Move object flow.
-- Resize handles and resize interactions.
-- Bounds inspector editing.
-- Visual inspector editing.
-- Fill/Stroke/Alpha/Layer editing.
-- `No Fill` / `No Stroke` (`transparent`) visual states.
-- Gradient-style color picker UI workflow in Objects inspector.
-- Copy/Paste object flow (including visual/bounds carryover).
-- Lock/Unlock object flow.
-- Save/Export/Import integration paths.
+## 3. Implemented Objects features
+- runtime object list.
+- create/delete.
+- select by mouse/list.
+- drag/move.
+- resize handles.
+- Bounds inspector.
+- Visual inspector.
+- Fill/Stroke/Alpha/Layer.
+- No Fill / No Stroke.
+- gradient color picker.
+- Copy/Paste.
+- Lock.
+- Save draft.
+- Clear Draft.
+- Export JSON.
+- Import JSON.
 
 ## 4. Persistence
-- Save to localStorage draft is supported.
-- Export JSON is supported.
-- Import JSON is supported.
-- Clear Draft is supported.
-- Visual persistence fields currently include object visual color/alpha/layer and debug visibility through runtime config paths (with editor-side mirror sync in `ProjectStore`).
-- Limitation: direct file write from browser runtime is unavailable; persistence is via runtime config + localStorage + explicit JSON export/import.
+- Save writes localStorage draft.
+- Export JSON downloads runtime config.
+- Import JSON applies config to runtime but does not auto-save.
+- Clear Draft removes browser draft; reload is needed to use source level.
+- Visual values persist through runtime config fields.
+- Direct file write is not available from browser.
 
-## 5. Known Limitations
-- `shaderKey` / `textureKey` are not yet fully persisted/runtime-previewed end-to-end for Objects.
-- True pixel eyedropper sampling is not fully implemented/reliable yet.
-- `editor_v2` remains frozen.
-- NPC/Cutscenes/Logic authoring modes are not implemented in the active Objects workflow.
-- Undo/Redo is not implemented yet.
+## 5. Deferred Objects sections
+- Settings remains placeholder.
+- Actions remains placeholder.
+- Settings and Actions should be implemented together with Logic tab because actions need logic/event bindings.
+- Do not build temporary standalone Actions behavior before Logic architecture exists.
 
-## 6. Rules for Future Codex Work
-- Target `src/editor/*` for editor implementation changes.
-- Do not edit `editor_v2` unless explicitly requested.
-- Object CRUD and core object mutation paths must go through `ObjectAuthoringService`.
-- Runtime/currentConfig remains the source of truth for Objects.
-- `ProjectStore` remains a mirror for editor UI/state.
-- Do not introduce fallback rectangle rendering/placeholder-object paths for known runtime object types.
+## 6. Known limitations
+- `shaderKey`/`textureKey` not fully persisted/runtime-previewed yet.
+- true pixel-perfect eyedropper is not reliable/complete.
+- Undo/Redo not implemented.
+- Background/NPC/Cutscenes/Logic not implemented.
+- `editor_v2` is frozen.
+
+## 7. Rules for future Codex work
+- Target `src/editor/*`.
+- Do not edit `editor_v2` unless explicitly asked.
+- Object CRUD must go through `ObjectAuthoringService`.
+- Bounds changes must go through `ObjectAuthoringService.updateObjectBounds`.
+- Visual changes must go through `ObjectAuthoringService.updateObjectVisual`.
+- Save/Export/Import must use runtime config, not stale `ProjectStore`.
+- `ProjectStore` is mirror, not source of truth for Objects.
+- No fallback rectangles for known runtime object types.
