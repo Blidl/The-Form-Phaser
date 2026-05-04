@@ -95,6 +95,10 @@ export interface TestWorldEditorObjectSummary {
     type: TestWorldEditorObjectType;
     locked: boolean;
     onlyDebugView?: boolean;
+    runtimeVisual?: {
+        fillColor?: string;
+        strokeColor?: string;
+    };
 }
 
 export interface TestWorldRuntime {
@@ -1959,6 +1963,7 @@ const buildWorldInstance = (
                 .map((entry) => ({
                     ...entry,
                     locked: bindings.get(entry.id)?.isLocked() ?? entry.locked,
+                    runtimeVisual: resolveRuntimeVisualSummary(config, entry.type, entry.id),
                     onlyDebugView: (getConfigReference(config, entry.type, entry.id) as TestWorldVisualOrderConfig | null)
                         ?.onlyDebugView
                 }));
@@ -2404,6 +2409,38 @@ const getConfigReference = (config: TestWorldConfig, type: TestWorldEditorObject
         return config.triangleFlightBreakWalls.find((entry) => entry.id === rootId) ?? null;
     }
     return config.trianglePickups.find((entry) => entry.id === rootId) ?? null;
+};
+
+const rgbIntToHex = (value: number | undefined): string | undefined => {
+    if (!Number.isFinite(value)) {
+        return undefined;
+    }
+    const clamped = Math.max(0, Math.min(0xffffff, Math.floor(value as number)));
+    return `#${clamped.toString(16).padStart(6, '0')}`;
+};
+
+const resolveRuntimeVisualSummary = (
+    config: TestWorldConfig,
+    type: TestWorldEditorObjectType,
+    rootId: string
+): { fillColor?: string; strokeColor?: string } | undefined => {
+    const ref = getConfigReference(config, type, rootId) as Record<string, unknown> | null;
+    if (!ref) {
+        return undefined;
+    }
+    if (type === 'triggerPlatform') {
+        const fillColor = rgbIntToHex(ref.platformFillColor as number | undefined);
+        const strokeColor = rgbIntToHex(ref.platformStrokeColor as number | undefined);
+        return fillColor || strokeColor ? { fillColor, strokeColor } : undefined;
+    }
+    if (type === 'triggerVolume') {
+        const fillColor = rgbIntToHex(ref.triggerFillColor as number | undefined);
+        const strokeColor = rgbIntToHex(ref.triggerStrokeColor as number | undefined);
+        return fillColor || strokeColor ? { fillColor, strokeColor } : undefined;
+    }
+    const fillColor = rgbIntToHex(ref.fillColor as number | undefined);
+    const strokeColor = rgbIntToHex(ref.strokeColor as number | undefined);
+    return fillColor || strokeColor ? { fillColor, strokeColor } : undefined;
 };
 
 const applyActiveCheckpointState = (

@@ -17,6 +17,10 @@ export interface LegacyObjectSummary {
     label?: string;
     locked?: boolean;
     onlyDebugView?: boolean;
+    runtimeVisual?: {
+        fillColor?: string;
+        strokeColor?: string;
+    };
 }
 
 export interface LegacyObjectHandle {
@@ -179,6 +183,7 @@ export class LegacyObjectAdapter {
     private readonly linksByEditorObjectId = new Map<string, LegacyObjectLink>();
     private readonly generatedLegacyIdsByKey = new Map<string, string>();
     private readonly ignoredLegacyIds = new Set<string>();
+    private readonly runtimeVisualByEditorObjectId = new Map<string, { fillColor?: string; strokeColor?: string }>();
     private nextGeneratedLegacyId = 1;
 
     public constructor(source: LegacyObjectSource, objectTypeRegistry: ObjectTypeRegistry) {
@@ -277,6 +282,11 @@ export class LegacyObjectAdapter {
                 legacyType: summary.type,
                 primaryHandleId: primaryHandle?.id ?? null
             });
+            if (summary.runtimeVisual) {
+                this.runtimeVisualByEditorObjectId.set(editorObjectId, { ...summary.runtimeVisual });
+            } else {
+                this.runtimeVisualByEditorObjectId.delete(editorObjectId);
+            }
             activeEditorIds.add(editorObjectId);
         });
 
@@ -288,7 +298,13 @@ export class LegacyObjectAdapter {
                 projectStore.deleteObject(levelId, editorObjectId);
             }
             this.linksByEditorObjectId.delete(editorObjectId);
+            this.runtimeVisualByEditorObjectId.delete(editorObjectId);
         });
+    }
+
+    public getRuntimeVisual(editorObjectId: string): { fillColor?: string; strokeColor?: string } | null {
+        const visual = this.runtimeVisualByEditorObjectId.get(editorObjectId);
+        return visual ? { ...visual } : null;
     }
 
     public hasRuntimeLink(editorObjectId: string): boolean {

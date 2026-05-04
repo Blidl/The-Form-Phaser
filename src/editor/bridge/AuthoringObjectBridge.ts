@@ -42,7 +42,8 @@ export const createAuthoringObjectBridgeSource = (worldRuntime: TestWorldRuntime
                 type: entry.type,
                 label: entry.label,
                 locked: entry.locked,
-                onlyDebugView: entry.onlyDebugView
+                onlyDebugView: entry.onlyDebugView,
+                runtimeVisual: entry.runtimeVisual
                 }));
         },
         listHandles: () => {

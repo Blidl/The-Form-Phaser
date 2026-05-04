@@ -41,8 +41,22 @@ const EDITABLE_VISUAL_TEXT_FIELDS = ['shaderKey', 'textureKey'] as const;
 type EditableVisualTextField = (typeof EDITABLE_VISUAL_TEXT_FIELDS)[number];
 const EDITABLE_VISUAL_COLOR_FIELDS = ['fillColor', 'strokeColor'] as const;
 type EditableVisualColorField = (typeof EDITABLE_VISUAL_COLOR_FIELDS)[number];
+type ColorPickSampleSource = 'renderedPixel' | 'objectVisualFallback' | 'unavailable';
+interface ObjectColorPickSample {
+    source: ColorPickSampleSource;
+    colorSource: 'runtimeVisual' | 'projectStoreEditedVisual' | 'renderedPixel' | 'unavailable';
+    sourceObjectId: string | null;
+    sourceValue: string | null;
+    runtimeValue: string | null;
+    projectStoreValue: string | null;
+    isProjectStoreDefault: boolean;
+    success: boolean;
+    reason?: string;
+}
 const HEX_COLOR_LIKE_PATTERN = /^#?([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 const TRANSPARENT_COLOR_VALUE = 'transparent';
+const DEFAULT_AUTHORING_FILL_COLOR = '#ffffff';
+const DEFAULT_AUTHORING_STROKE_COLOR = '#000000';
 const DEBUG_OBJECT_BRIDGE = false;
 const KNOWN_RUNTIME_OBJECT_TYPES = new Set<string>([
     'platform_default',
@@ -56,7 +70,6 @@ const KNOWN_RUNTIME_OBJECT_TYPES = new Set<string>([
     'break_wall',
     'breakable_wall'
 ]);
-type EyedropperTarget = EditableVisualColorField | null;
 
 export class ObjectsEditorMode implements EditorMode {
     public readonly id = 'objects';
@@ -81,12 +94,15 @@ export class ObjectsEditorMode implements EditorMode {
     private dragOffsetY = 0;
     private searchValue = '';
     private objectsListScrollTop = 0;
-    private eyedropperTarget: EyedropperTarget = null;
     private activeColorPaletteField: EditableVisualColorField | null = null;
     private colorPaletteObjectId: string | null = null;
     private colorPaletteRoot: HTMLDivElement | null = null;
     private colorPaletteAnchor: HTMLElement | null = null;
     private colorPaletteAnchorRect: { left: number; top: number; width: number; height: number; bottom: number } | null = null;
+    private colorPickPreviewRoot: HTMLDivElement | null = null;
+    private colorPickPreviewSwatch: HTMLDivElement | null = null;
+    private colorPickPreviewHex: HTMLDivElement | null = null;
+    private latestColorPickSample: ObjectColorPickSample | null = null;
     private colorPickerHue = 0;
     private colorPickerSaturation = 1;
     private colorPickerValue = 1;
@@ -146,7 +162,6 @@ export class ObjectsEditorMode implements EditorMode {
 
     public exit(): void {
         this.draggingObjectId = null;
-        this.eyedropperTarget = null;
         this.closeColorPalette();
         this.selectionOutline.setVisible(false);
     }
@@ -158,7 +173,6 @@ export class ObjectsEditorMode implements EditorMode {
         this.applyDebugVisibilityToRuntimeLinks();
         this.handleDeleteShortcut();
         this.handleColorPaletteCancelShortcut();
-        this.handleEyedropperCancelShortcut();
         if (this.activeColorPaletteField && (!this.getSelectedObjectData() || this.colorPaletteObjectId !== this.selectedObjectId)) {
             this.closeColorPalette();
         }
@@ -173,6 +187,10 @@ export class ObjectsEditorMode implements EditorMode {
             return;
         }
         this.activePointerButton = event.button;
+
+        if (this.activeColorPaletteField) {
+            return;
+        }
 
         if (this.selectedTypeId) {
             const snappedX = this.snap(event.worldX, context.grid.size);
@@ -222,11 +240,6 @@ export class ObjectsEditorMode implements EditorMode {
             return;
         }
 
-        if (this.eyedropperTarget) {
-            this.handleEyedropperSample(event.worldX, event.worldY);
-            return;
-        }
-
         const hitObjectId = this.findObjectIdAtPoint(event.worldX, event.worldY);
         if (hitObjectId) {
             this.selectedObjectId = hitObjectId;
@@ -271,6 +284,9 @@ export class ObjectsEditorMode implements EditorMode {
 
     public onPointerMove(event: EditorPointerEvent, context: EditorModeRuntimeContext): void {
         this.context = context;
+        if (this.activeColorPaletteField) {
+            return;
+        }
         if (!this.draggingObjectId) {
             return;
         }
@@ -444,7 +460,6 @@ export class ObjectsEditorMode implements EditorMode {
                 button.addEventListener('click', () => {
                     this.selectedTypeId = definition.id;
                     this.selectedObjectId = null;
-                    this.eyedropperTarget = null;
                     this.onUiChanged();
                 });
                 container.appendChild(button);
@@ -678,20 +693,6 @@ export class ObjectsEditorMode implements EditorMode {
         this.deleteSelectedObject();
     }
 
-    private handleEyedropperCancelShortcut(): void {
-        if (!this.eyedropperTarget || !this.escapeKey) {
-            return;
-        }
-        if (!Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
-            return;
-        }
-        if (isEditorTextInputFocused()) {
-            return;
-        }
-        this.eyedropperTarget = null;
-        this.onUiChanged();
-    }
-
     private handleColorPaletteCancelShortcut(): void {
         if (!this.activeColorPaletteField || !this.escapeKey) {
             return;
@@ -700,35 +701,6 @@ export class ObjectsEditorMode implements EditorMode {
             return;
         }
         this.closeColorPalette();
-    }
-
-    private handleEyedropperSample(worldX: number, worldY: number): void {
-        const targetField = this.eyedropperTarget;
-        this.eyedropperTarget = null;
-        if (!targetField) {
-            this.onUiChanged();
-            return;
-        }
-
-        const sampledObjectId = this.findObjectIdAtPoint(worldX, worldY);
-        if (!sampledObjectId) {
-            this.onUiChanged();
-            return;
-        }
-        const activeLevel = this.projectStore.getActiveLevel();
-        const sampledObject = this.projectStore.getObject(activeLevel.id, sampledObjectId);
-        if (!sampledObject) {
-            this.onUiChanged();
-            return;
-        }
-        const sampledColor = targetField === 'fillColor'
-            ? sampledObject.visual.fillColor
-            : sampledObject.visual.strokeColor;
-        const normalized = this.normalizeHexLikeColor(sampledColor);
-        if (normalized) {
-            this.commitSelectedObjectVisualColorField(targetField, normalized);
-        }
-        this.onUiChanged();
     }
 
     private deleteSelectedObject(): boolean {
@@ -1002,6 +974,7 @@ export class ObjectsEditorMode implements EditorMode {
         controlsRow.style.display = 'flex';
         controlsRow.style.alignItems = 'center';
         controlsRow.style.gap = '6px';
+        controlsRow.style.flexWrap = 'wrap';
 
         const swatch = document.createElement('button');
         swatch.type = 'button';
@@ -1014,6 +987,7 @@ export class ObjectsEditorMode implements EditorMode {
         swatch.style.position = 'relative';
         swatch.style.cursor = 'pointer';
         swatch.style.boxSizing = 'border-box';
+        swatch.style.flexShrink = '0';
         if (this.isTransparentColorValue(selectedObject.visual[field])) {
             const transparentMark = document.createElement('span');
             transparentMark.textContent = '/';
@@ -1042,22 +1016,12 @@ export class ObjectsEditorMode implements EditorMode {
         input.value = selectedObject.visual[field];
         input.autocomplete = 'off';
         input.spellcheck = false;
-        input.style.flex = '1';
+        input.style.flex = '1 1 96px';
+        input.style.minWidth = '72px';
         input.style.padding = '2px 4px';
         input.style.border = '1px solid #5f5f5f';
         input.style.boxSizing = 'border-box';
         this.bindEditorInputKeyboardGuards(input);
-
-        const pickButton = document.createElement('button');
-        pickButton.type = 'button';
-        pickButton.textContent = field === 'fillColor' ? 'Pick Fill' : 'Pick Stroke';
-        pickButton.style.padding = '3px 6px';
-        pickButton.style.border = '1px solid #5f5f5f';
-        pickButton.style.background = this.eyedropperTarget === field ? '#70de63' : '#d9d9d9';
-        pickButton.addEventListener('click', () => {
-            this.eyedropperTarget = this.eyedropperTarget === field ? null : field;
-            this.onUiChanged();
-        });
 
         const noneButton = document.createElement('button');
         noneButton.type = 'button';
@@ -1065,6 +1029,8 @@ export class ObjectsEditorMode implements EditorMode {
         noneButton.style.padding = '3px 6px';
         noneButton.style.border = '1px solid #5f5f5f';
         noneButton.style.background = '#d9d9d9';
+        noneButton.style.flexShrink = '0';
+        noneButton.style.whiteSpace = 'nowrap';
         noneButton.addEventListener('click', () => {
             const committed = this.commitSelectedObjectBasicVisualPatch({
                 [field]: TRANSPARENT_COLOR_VALUE
@@ -1094,7 +1060,6 @@ export class ObjectsEditorMode implements EditorMode {
         controlsRow.appendChild(swatch);
         controlsRow.appendChild(input);
         controlsRow.appendChild(noneButton);
-        controlsRow.appendChild(pickButton);
         fieldWrap.appendChild(fieldLabel);
         fieldWrap.appendChild(controlsRow);
         row.appendChild(fieldWrap);
@@ -1381,7 +1346,10 @@ export class ObjectsEditorMode implements EditorMode {
         document.body.appendChild(palette);
         this.colorPaletteRoot = palette;
         this.positionColorPalette();
+        this.ensureColorPickPreview();
         document.addEventListener('pointerdown', this.handleDocumentPointerDownForPalette, true);
+        this.scene.game.canvas.addEventListener('pointermove', this.handleCanvasPointerMoveForPalette, true);
+        this.scene.game.canvas.addEventListener('pointerdown', this.handleCanvasPointerDownForPalette, true);
 
         let draggingSv = false;
         let draggingHue = false;
@@ -1484,11 +1452,15 @@ export class ObjectsEditorMode implements EditorMode {
         this.colorPaletteAnchorRect = null;
         this.colorPaletteObjectId = null;
         this.activeColorPaletteField = null;
+        this.destroyColorPickPreview();
         document.removeEventListener('pointerdown', this.handleDocumentPointerDownForPalette, true);
+        this.scene.game.canvas.removeEventListener('pointermove', this.handleCanvasPointerMoveForPalette, true);
+        this.scene.game.canvas.removeEventListener('pointerdown', this.handleCanvasPointerDownForPalette, true);
         document.removeEventListener('pointermove', this.handleColorPickerPointerMove, true);
         document.removeEventListener('pointerup', this.handleColorPickerPointerUp, true);
         this.onColorPickerPointerMove = null;
         this.onColorPickerPointerUp = null;
+        this.latestColorPickSample = null;
     }
 
     private readonly handleDocumentPointerDownForPalette = (event: PointerEvent): void => {
@@ -1506,7 +1478,91 @@ export class ObjectsEditorMode implements EditorMode {
         if (this.colorPaletteAnchor && this.colorPaletteAnchor.contains(target)) {
             return;
         }
+        if (target === this.scene.game.canvas) {
+            return;
+        }
         this.closeColorPalette();
+    };
+
+    private readonly handleCanvasPointerDownForPalette = (event: PointerEvent): void => {
+        if (!this.activeColorPaletteField) {
+            return;
+        }
+        if (event.button !== 0) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        if ('stopImmediatePropagation' in event) {
+            event.stopImmediatePropagation();
+        }
+        const sampled = this.sampleColorAtClientPointForPalette(event.clientX, event.clientY);
+        this.latestColorPickSample = sampled.sample;
+        this.updateColorPickPreviewAtClientPoint(event.clientX, event.clientY, sampled.sample);
+        const mode = this.activeColorPaletteField;
+        const targetObjectId = this.colorPaletteObjectId;
+        if (!targetObjectId || this.selectedObjectId !== targetObjectId) {
+            objectDiag('[ObjectColorPick:apply]', {
+                mode,
+                targetObjectId,
+                sourceObjectId: sampled.sample.sourceObjectId,
+                pickedValue: sampled.sample.sourceValue,
+                success: false,
+                reason: 'Palette target object is unavailable.'
+            });
+            return;
+        }
+        if (!sampled.sample.success || !sampled.sample.sourceValue) {
+            objectDiag('[ObjectColorPick:apply]', {
+                mode,
+                targetObjectId,
+                sourceObjectId: sampled.sample.sourceObjectId,
+                pickedValue: sampled.sample.sourceValue,
+                success: false,
+                reason: sampled.sample.reason ?? 'No color under cursor.'
+            });
+            return;
+        }
+        const committed = this.commitObjectBasicVisualPatch(targetObjectId, {
+            [mode]: sampled.sample.sourceValue
+        } as UpdateObjectVisualPatch);
+        objectDiag('[ObjectColorPick:apply]', {
+            mode,
+            targetObjectId,
+            sourceObjectId: sampled.sample.sourceObjectId,
+            pickedValue: sampled.sample.sourceValue,
+            colorSource: sampled.sample.colorSource,
+            success: committed,
+            reason: committed ? null : 'Failed to apply via updateObjectVisual.'
+        });
+        if (committed) {
+            this.onUiChanged();
+        }
+    };
+
+    private readonly handleCanvasPointerMoveForPalette = (event: PointerEvent): void => {
+        if (!this.activeColorPaletteField) {
+            return;
+        }
+        const sampled = this.sampleColorAtClientPointForPalette(event.clientX, event.clientY);
+        this.latestColorPickSample = sampled.sample;
+        this.updateColorPickPreviewAtClientPoint(event.clientX, event.clientY, sampled.sample);
+        objectDiag('[ObjectColorPick:hover]', {
+            mode: this.activeColorPaletteField,
+            targetObjectId: this.colorPaletteObjectId,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            worldX: sampled.worldX,
+            worldY: sampled.worldY,
+            sourceObjectId: sampled.sample.sourceObjectId,
+            colorSource: sampled.sample.colorSource,
+            sourceValue: sampled.sample.sourceValue,
+            projectStoreValue: sampled.sample.projectStoreValue,
+            runtimeValue: sampled.sample.runtimeValue,
+            isProjectStoreDefault: sampled.sample.isProjectStoreDefault,
+            success: sampled.sample.success,
+            reason: sampled.sample.reason ?? null
+        });
     };
 
     private applyPaletteColor(field: EditableVisualColorField, rawColor: string): void {
@@ -1536,6 +1592,7 @@ export class ObjectsEditorMode implements EditorMode {
         this.colorPaletteRoot.style.top = `${top}px`;
     }
 
+
     private isTransparentColorValue(rawValue: string): boolean {
         return rawValue.trim().toLowerCase() === TRANSPARENT_COLOR_VALUE;
     }
@@ -1559,6 +1616,260 @@ export class ObjectsEditorMode implements EditorMode {
     private readAnchorRect(anchor: HTMLElement): { left: number; top: number; width: number; height: number; bottom: number } {
         const rect = anchor.getBoundingClientRect();
         return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, bottom: rect.bottom };
+    }
+
+    private ensureColorPickPreview(): void {
+        if (this.colorPickPreviewRoot) {
+            return;
+        }
+        const root = document.createElement('div');
+        root.style.position = 'fixed';
+        root.style.zIndex = '21000';
+        root.style.pointerEvents = 'none';
+        root.style.display = 'none';
+        root.style.alignItems = 'center';
+        root.style.gap = '6px';
+        root.style.padding = '4px 6px';
+        root.style.border = '1px solid rgba(0,0,0,0.45)';
+        root.style.background = 'rgba(245,245,245,0.96)';
+        root.style.borderRadius = '12px';
+
+        const swatch = document.createElement('div');
+        swatch.style.width = '18px';
+        swatch.style.height = '18px';
+        swatch.style.borderRadius = '50%';
+        swatch.style.border = '1px solid rgba(0,0,0,0.5)';
+        swatch.style.boxSizing = 'border-box';
+
+        const hex = document.createElement('div');
+        hex.style.fontSize = '11px';
+        hex.style.fontFamily = 'monospace';
+        hex.style.color = '#111';
+
+        root.appendChild(swatch);
+        root.appendChild(hex);
+        document.body.appendChild(root);
+        this.colorPickPreviewRoot = root;
+        this.colorPickPreviewSwatch = swatch;
+        this.colorPickPreviewHex = hex;
+    }
+
+    private destroyColorPickPreview(): void {
+        if (this.colorPickPreviewRoot?.parentElement) {
+            this.colorPickPreviewRoot.parentElement.removeChild(this.colorPickPreviewRoot);
+        }
+        this.colorPickPreviewRoot = null;
+        this.colorPickPreviewSwatch = null;
+        this.colorPickPreviewHex = null;
+    }
+
+    private updateColorPickPreview(worldX: number, worldY: number): void {
+        if (!this.activeColorPaletteField) {
+            this.destroyColorPickPreview();
+            return;
+        }
+        this.ensureColorPickPreview();
+        const pointer = this.scene.input.activePointer;
+        const canvasRect = this.scene.game.canvas.getBoundingClientRect();
+        const canvasX = pointer.x;
+        const canvasY = pointer.y;
+        const isOverCanvas = canvasX >= 0
+            && canvasY >= 0
+            && canvasX <= this.scene.scale.width
+            && canvasY <= this.scene.scale.height;
+        if (!this.colorPickPreviewRoot || !this.colorPickPreviewSwatch || !this.colorPickPreviewHex || !isOverCanvas) {
+            if (this.colorPickPreviewRoot) {
+                this.colorPickPreviewRoot.style.display = 'none';
+            }
+            return;
+        }
+        const sample = this.sampleColorForPaletteField(this.activeColorPaletteField, worldX, worldY);
+        this.updateColorPickPreviewAtClientPoint(
+            Math.round(canvasRect.left + canvasX),
+            Math.round(canvasRect.top + canvasY),
+            sample
+        );
+    }
+
+    private sampleColorForPaletteField(
+        field: EditableVisualColorField,
+        worldX: number,
+        worldY: number
+    ): ObjectColorPickSample {
+        const sampledObjectId = this.findObjectIdAtPoint(worldX, worldY);
+        if (!sampledObjectId) {
+            return {
+                source: 'unavailable',
+                colorSource: 'unavailable',
+                sourceObjectId: null,
+                sourceValue: null,
+                runtimeValue: null,
+                projectStoreValue: null,
+                isProjectStoreDefault: false,
+                success: false,
+                reason: 'No object under cursor.'
+            };
+        }
+        const activeLevel = this.projectStore.getActiveLevel();
+        const sampledObject = this.projectStore.getObject(activeLevel.id, sampledObjectId);
+        if (!sampledObject) {
+            return {
+                source: 'unavailable',
+                colorSource: 'unavailable',
+                sourceObjectId: sampledObjectId,
+                sourceValue: null,
+                runtimeValue: null,
+                projectStoreValue: null,
+                isProjectStoreDefault: false,
+                success: false,
+                reason: 'Sampled object not found.'
+            };
+        }
+        const projectStoreColor = field === 'fillColor'
+            ? sampledObject.visual.fillColor
+            : sampledObject.visual.strokeColor;
+        const runtimeVisual = this.legacyObjectAdapter?.getRuntimeVisual(sampledObjectId) ?? null;
+        const runtimeColorRaw = field === 'fillColor' ? runtimeVisual?.fillColor : runtimeVisual?.strokeColor;
+        const runtimeColor = this.normalizePickerColorValue(runtimeColorRaw);
+        const projectStoreNormalized = this.normalizePickerColorValue(projectStoreColor);
+        const isProjectStoreDefault = this.isDefaultAuthoringColor(field, projectStoreNormalized);
+
+        if (runtimeColor) {
+            return {
+                source: 'objectVisualFallback',
+                colorSource: 'runtimeVisual',
+                sourceObjectId: sampledObjectId,
+                sourceValue: runtimeColor,
+                runtimeValue: runtimeColor,
+                projectStoreValue: projectStoreNormalized,
+                isProjectStoreDefault,
+                success: true
+            };
+        }
+        if (projectStoreNormalized && !isProjectStoreDefault) {
+            return {
+                source: 'objectVisualFallback',
+                colorSource: 'projectStoreEditedVisual',
+                sourceObjectId: sampledObjectId,
+                sourceValue: projectStoreNormalized,
+                runtimeValue: null,
+                projectStoreValue: projectStoreNormalized,
+                isProjectStoreDefault,
+                success: true
+            };
+        }
+        return {
+            source: 'unavailable',
+            colorSource: 'unavailable',
+            sourceObjectId: sampledObjectId,
+            sourceValue: null,
+            runtimeValue: null,
+            projectStoreValue: projectStoreNormalized,
+            isProjectStoreDefault,
+            success: false,
+            reason: runtimeVisual ? `No runtime color @${sampledObjectId}` : `No color @${sampledObjectId}`
+        };
+    }
+
+    private sampleColorAtClientPointForPalette(clientX: number, clientY: number): { sample: ObjectColorPickSample; worldX: number | null; worldY: number | null } {
+        if (!this.activeColorPaletteField) {
+            return {
+                sample: {
+                    source: 'unavailable',
+                    colorSource: 'unavailable',
+                    sourceObjectId: null,
+                    sourceValue: null,
+                    runtimeValue: null,
+                    projectStoreValue: null,
+                    isProjectStoreDefault: false,
+                    success: false,
+                    reason: 'Palette is closed.'
+                },
+                worldX: null,
+                worldY: null
+            };
+        }
+        const canvas = this.scene.game.canvas;
+        const rect = canvas.getBoundingClientRect();
+        if (rect.width <= 0 || rect.height <= 0) {
+            return {
+                sample: {
+                    source: 'unavailable',
+                    colorSource: 'unavailable',
+                    sourceObjectId: null,
+                    sourceValue: null,
+                    runtimeValue: null,
+                    projectStoreValue: null,
+                    isProjectStoreDefault: false,
+                    success: false,
+                    reason: 'Canvas has invalid bounds.'
+                },
+                worldX: null,
+                worldY: null
+            };
+        }
+        const isInside = clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+        if (!isInside) {
+            return {
+                sample: {
+                    source: 'unavailable',
+                    colorSource: 'unavailable',
+                    sourceObjectId: null,
+                    sourceValue: null,
+                    runtimeValue: null,
+                    projectStoreValue: null,
+                    isProjectStoreDefault: false,
+                    success: false,
+                    reason: 'Pointer is outside canvas.'
+                },
+                worldX: null,
+                worldY: null
+            };
+        }
+        const canvasX = (clientX - rect.left) * (canvas.width / rect.width);
+        const canvasY = (clientY - rect.top) * (canvas.height / rect.height);
+        const worldPoint = this.scene.cameras.main.getWorldPoint(canvasX, canvasY);
+        const sample = this.sampleColorForPaletteField(this.activeColorPaletteField, worldPoint.x, worldPoint.y);
+        return { sample, worldX: worldPoint.x, worldY: worldPoint.y };
+    }
+
+    private updateColorPickPreviewAtClientPoint(clientX: number, clientY: number, sample: ObjectColorPickSample): void {
+        if (!this.colorPickPreviewRoot || !this.colorPickPreviewSwatch || !this.colorPickPreviewHex) {
+            return;
+        }
+        this.colorPickPreviewRoot.style.display = 'inline-flex';
+        this.colorPickPreviewRoot.style.left = `${Math.round(clientX + 16)}px`;
+        this.colorPickPreviewRoot.style.top = `${Math.round(clientY + 16)}px`;
+        if (sample.success && sample.sourceValue) {
+            this.colorPickPreviewSwatch.style.background = this.resolveSwatchBackground(sample.sourceValue);
+            const sourceIdSuffix = sample.sourceObjectId ? ` @${sample.sourceObjectId}` : '';
+            this.colorPickPreviewHex.textContent = `${sample.sourceValue}${sourceIdSuffix}`;
+            return;
+        }
+        this.colorPickPreviewSwatch.style.background = 'repeating-linear-gradient(45deg, #d8d8d8 0px, #d8d8d8 4px, #f4f4f4 4px, #f4f4f4 8px)';
+        this.colorPickPreviewHex.textContent = sample.reason ?? 'No color';
+    }
+
+    private normalizePickerColorValue(rawValue: string | undefined | null): string | null {
+        if (!rawValue) {
+            return null;
+        }
+        const trimmed = rawValue.trim().toLowerCase();
+        if (trimmed === TRANSPARENT_COLOR_VALUE) {
+            return TRANSPARENT_COLOR_VALUE;
+        }
+        return this.normalizeHexLikeColor(rawValue);
+    }
+
+    private isDefaultAuthoringColor(field: EditableVisualColorField, value: string | null): boolean {
+        if (!value) {
+            return false;
+        }
+        const normalized = value.trim().toLowerCase();
+        if (field === 'fillColor') {
+            return normalized === DEFAULT_AUTHORING_FILL_COLOR;
+        }
+        return normalized === DEFAULT_AUTHORING_STROKE_COLOR;
     }
 
     private hsvToHex(hsv: { h: number; s: number; v: number }): string {
@@ -1661,7 +1972,11 @@ export class ObjectsEditorMode implements EditorMode {
         if (!selectedId) {
             return false;
         }
-        const updateResult = this.objectAuthoringService.updateObjectVisual(selectedId, patch);
+        return this.commitObjectBasicVisualPatch(selectedId, patch);
+    }
+
+    private commitObjectBasicVisualPatch(objectId: string, patch: UpdateObjectVisualPatch): boolean {
+        const updateResult = this.objectAuthoringService.updateObjectVisual(objectId, patch);
         if (!updateResult.success) {
             return false;
         }
