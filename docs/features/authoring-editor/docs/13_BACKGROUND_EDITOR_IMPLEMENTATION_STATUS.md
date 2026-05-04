@@ -68,3 +68,18 @@
 - No object-based Background UI is implemented yet.
 - No renderer migration to object-based background is implemented yet.
 - Save/Import/Export pipelines now preserve object-based background fields through runtime config normalization.
+
+## 8. B3.1 service foundation implemented
+- Added `BackgroundObjectAuthoringService`:
+  - `src/editor/background-authoring/BackgroundObjectAuthoringService.ts`
+- Service provides object-based background CRUD foundation:
+  - snapshot/list/get
+  - create/update/delete/duplicate object APIs
+  - layer settings update API
+- Service uses runtime config (`legacyObjectAdapter.getRuntimeConfig()`) as source of truth.
+- Service applies edits via runtime import (`legacyObjectAdapter.importRuntimeConfig(...)`).
+- Service does not auto-save.
+- Object-based Background UI is still not wired yet.
+- Renderer is still legacy (`background.staticImage` + `background.layers` path).
+- Temporary legacy slot editor in F2 Background tab remains active.
+- Next intended step: object list UI MVP for object-based background authoring.
