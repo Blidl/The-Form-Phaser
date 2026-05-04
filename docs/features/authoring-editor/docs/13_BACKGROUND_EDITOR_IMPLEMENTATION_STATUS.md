@@ -175,3 +175,25 @@
 - Field edits `runtimeConfig.background.color` through `BackgroundObjectAuthoringService` runtime clone-import flow.
 - Legacy `staticImage`/`layers` UI remains retired.
 - Legacy runtime fallback behavior from B3.5 remains unchanged.
+
+## 14. B3.6 canvas select/move MVP implemented (no resize handles)
+- Added canvas pointer interactions in active `src/editor/modes/BackgroundEditorMode.ts` for object-based background objects.
+- Pointer down now:
+  - hit-tests only `background.backgroundObjects`;
+  - scopes hit-test to the currently selected layer tab (`static`, `parallax1`, `parallax2`);
+  - skips hidden objects;
+  - picks topmost object by array order within layer (later entry wins);
+  - selects locked objects but starts drag only for unlocked objects.
+- Pointer move now drags the selected unlocked object by updating `bounds.x` / `bounds.y` through `BackgroundObjectAuthoringService.updateObjectBounds(...)`.
+- Drag updates are quantized to 1px movement threshold to reduce import/apply churn.
+- Pointer up ends drag state.
+- Selection/list/inspector sync updates:
+  - canvas click selects row + inspector target;
+  - layer tab change clears selection when selected object is not in the active layer;
+  - runtime/import refresh clears stale selection when the selected object no longer exists.
+- Hit-test uses bounds with rotation-aware point-in-rotated-rect math (centered bounds), not pixel-perfect texture sampling.
+- B3.6 limitation:
+  - parallax editing uses stored config/world coordinates directly; when editor preview parallax offsets are active, click alignment can be imperfect.
+- Deferred remains:
+  - resize handles (and rotation handle) are not implemented yet.
+- Legacy runtime fallback behavior from B3.5 remains unchanged for legacy-only levels.

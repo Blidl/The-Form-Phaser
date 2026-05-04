@@ -304,3 +304,19 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
   - `npm run build-nolog` PASS.
 
 - Step H2 implemented: Objects mode utility actions added in right inspector (Focus/Delete/Duplicate/Copy/Paste/Lock-Unlock); in-memory object clipboard; Ctrl+C/Ctrl+V/Ctrl+D shortcuts with text-input guard; lock enforcement for drag/resize/delete/bounds edit; locked selection visual indicator; runtime mirror lock persistence adjusted in LegacyObjectAdapter. Build check: npm run build-nolog (pass, 2026-05-04).
+- 2026-05-04: B3.6 Background canvas interaction MVP implemented in active editor path.
+  - File: src/editor/modes/BackgroundEditorMode.ts
+  - Added pointer handlers for object-based background canvas interaction:
+    - pointer down hit-tests only `background.backgroundObjects` in selected layer;
+    - hidden objects are excluded from hit-test;
+    - topmost overlap resolution uses reverse array scan (later object wins);
+    - locked objects select but do not start drag.
+  - Added drag/move for unlocked objects via `BackgroundObjectAuthoringService.updateObjectBounds(...)`.
+  - Drag updates quantized to 1px delta (`Math.round`) to reduce import/apply churn.
+  - Added rotation-aware bounds hit-test (point-in-rotated-rect around bounds center).
+  - Selection sync behavior updated:
+    - layer change clears selection when selected object is outside active layer;
+    - runtime/import refresh clears stale selection when selected object no longer exists;
+    - deleting/invalidating selected object clears drag state.
+- 2026-05-04: Docs updated for B3.6 status in docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md.
+- Verification: npm run build-nolog (PASS).

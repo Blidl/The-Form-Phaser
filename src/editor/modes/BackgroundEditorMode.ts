@@ -1,5 +1,5 @@
 
-import type { EditorMode, EditorModeRuntimeContext } from '../core/EditorMode';
+import type { EditorMode, EditorModeRuntimeContext, EditorPointerEvent } from '../core/EditorMode';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 import {
@@ -20,6 +20,12 @@ interface BackgroundEditorModeOptions {
 interface CommitResult {
     success: boolean;
     error?: string;
+}
+
+interface BackgroundObjectDragState {
+    objectId: string;
+    pointerOffsetX: number;
+    pointerOffsetY: number;
 }
 
 const COLOR_HEX_PATTERN = /^#?([0-9a-fA-F]{6})$/;
@@ -102,6 +108,7 @@ export class BackgroundEditorMode implements EditorMode {
     private fieldErrors = new Map<string, string>();
     private statusMessage: string | null = null;
     private lastBackgroundSignature: string | null = null;
+    private dragState: BackgroundObjectDragState | null = null;
 
     public constructor(options: BackgroundEditorModeOptions) {
         this.onUiChanged = options.onUiChanged;
@@ -109,8 +116,13 @@ export class BackgroundEditorMode implements EditorMode {
     }
 
     public enter(): void {
+        this.clearDragState();
         this.captureSignature();
         this.syncSelectedObject();
+    }
+
+    public exit(): void {
+        this.clearDragState();
     }
 
     public update(_context: EditorModeRuntimeContext): void {
@@ -123,11 +135,92 @@ export class BackgroundEditorMode implements EditorMode {
     }
 
     public onRuntimeConfigImported(): void {
+        this.clearDragState();
         this.captureSignature();
         this.fieldErrors.clear();
         this.statusMessage = null;
         this.syncSelectedObject();
         this.onUiChanged();
+    }
+
+    public onPointerDown(event: EditorPointerEvent): void {
+        if (event.button !== 0) {
+            return;
+        }
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
+        if (!snapshot) {
+            this.selectedObjectId = null;
+            this.clearDragState();
+            this.onUiChanged();
+            return;
+        }
+
+        const hitObject = this.findTopmostObjectAtPoint(snapshot, event.worldX, event.worldY);
+        if (!hitObject) {
+            this.selectedObjectId = null;
+            this.clearDragState();
+            this.onUiChanged();
+            return;
+        }
+
+        this.selectedObjectId = hitObject.id;
+        if (hitObject.editor?.locked) {
+            this.clearDragState();
+        } else {
+            this.dragState = {
+                objectId: hitObject.id,
+                pointerOffsetX: event.worldX - hitObject.bounds.x,
+                pointerOffsetY: event.worldY - hitObject.bounds.y
+            };
+        }
+        this.statusMessage = null;
+        this.onUiChanged();
+    }
+
+    public onPointerMove(event: EditorPointerEvent): void {
+        const dragState = this.dragState;
+        if (!dragState) {
+            return;
+        }
+
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
+        if (!snapshot) {
+            this.clearDragState();
+            return;
+        }
+        const draggedObject = snapshot.objects.find((entry) => entry.id === dragState.objectId);
+        if (!draggedObject) {
+            this.clearDragState();
+            return;
+        }
+        if (normalizeLayer(draggedObject.layer) !== this.selectedObjectLayer || draggedObject.editor?.hidden || draggedObject.editor?.locked) {
+            this.clearDragState();
+            return;
+        }
+
+        const nextX = Math.round(event.worldX - dragState.pointerOffsetX);
+        const nextY = Math.round(event.worldY - dragState.pointerOffsetY);
+        const changedX = Math.abs(nextX - draggedObject.bounds.x) >= 1;
+        const changedY = Math.abs(nextY - draggedObject.bounds.y) >= 1;
+        if (!changedX && !changedY) {
+            return;
+        }
+
+        const result = this.backgroundObjectAuthoringService.updateObjectBounds(draggedObject.id, {
+            x: nextX,
+            y: nextY
+        });
+        const handled = this.handleObjectMutationResult(result, draggedObject.id);
+        if (!handled.success) {
+            this.clearDragState();
+        }
+    }
+
+    public onPointerUp(event: EditorPointerEvent): void {
+        if (event.button !== 0) {
+            return;
+        }
+        this.clearDragState();
     }
 
     public renderLeftInspector(panel: EditorPanel): void {
@@ -546,6 +639,7 @@ export class BackgroundEditorMode implements EditorMode {
 
         row.addEventListener('click', () => {
             this.selectedObjectId = entry.id;
+            this.clearDragState(entry.id);
             this.statusMessage = null;
             this.onUiChanged();
         });
@@ -819,6 +913,7 @@ export class BackgroundEditorMode implements EditorMode {
             return;
         }
         this.selectedObjectLayer = layer;
+        this.clearDragState();
         this.statusMessage = null;
         this.syncSelectedObject();
         this.onUiChanged();
@@ -890,6 +985,80 @@ export class BackgroundEditorMode implements EditorMode {
         return snapshot.objects.find((entry) => entry.id === this.selectedObjectId) ?? null;
     }
 
+    private findTopmostObjectAtPoint(
+        snapshot: BackgroundObjectSnapshot,
+        worldX: number,
+        worldY: number
+    ): TestWorldBackgroundObjectConfig | null {
+        for (let index = snapshot.objects.length - 1; index >= 0; index -= 1) {
+            const entry = snapshot.objects[index];
+            if (normalizeLayer(entry.layer) !== this.selectedObjectLayer) {
+                continue;
+            }
+            if (entry.editor?.hidden) {
+                continue;
+            }
+            if (this.isPointInsideObjectBounds(entry, worldX, worldY)) {
+                return entry;
+            }
+        }
+        return null;
+    }
+
+    private isPointInsideObjectBounds(
+        entry: TestWorldBackgroundObjectConfig,
+        worldX: number,
+        worldY: number
+    ): boolean {
+        const width = Number.isFinite(entry.bounds.width) ? Math.max(0, entry.bounds.width) : 0;
+        const height = Number.isFinite(entry.bounds.height) ? Math.max(0, entry.bounds.height) : 0;
+        const centerX = Number.isFinite(entry.bounds.x) ? entry.bounds.x : 0;
+        const centerY = Number.isFinite(entry.bounds.y) ? entry.bounds.y : 0;
+        if (width <= 0 || height <= 0) {
+            return false;
+        }
+
+        const rotationDeg = Number.isFinite(entry.bounds.rotation) ? entry.bounds.rotation ?? 0 : 0;
+        const rotationRad = (rotationDeg * Math.PI) / 180;
+        const cos = Math.cos(rotationRad);
+        const sin = Math.sin(rotationRad);
+        const dx = worldX - centerX;
+        const dy = worldY - centerY;
+        const localX = (dx * cos) + (dy * sin);
+        const localY = (-dx * sin) + (dy * cos);
+        return Math.abs(localX) <= (width * 0.5) && Math.abs(localY) <= (height * 0.5);
+    }
+
+    private clearDragState(keepObjectId?: string): void {
+        if (!this.dragState) {
+            return;
+        }
+        if (keepObjectId && this.dragState.objectId === keepObjectId) {
+            return;
+        }
+        this.dragState = null;
+    }
+
+    private syncDragState(snapshot: BackgroundObjectSnapshot | null): void {
+        const dragState = this.dragState;
+        if (!dragState || !snapshot) {
+            this.dragState = null;
+            return;
+        }
+        if (this.selectedObjectId !== dragState.objectId) {
+            this.dragState = null;
+            return;
+        }
+        const selected = snapshot.objects.find((entry) => entry.id === dragState.objectId);
+        if (!selected) {
+            this.dragState = null;
+            return;
+        }
+        if (normalizeLayer(selected.layer) !== this.selectedObjectLayer || selected.editor?.hidden || selected.editor?.locked) {
+            this.dragState = null;
+        }
+    }
+
     private syncSelectedObject(
         snapshotInput?: BackgroundObjectSnapshot | null,
         preferredObjectId?: string | null
@@ -897,30 +1066,26 @@ export class BackgroundEditorMode implements EditorMode {
         const snapshot = snapshotInput ?? this.backgroundObjectAuthoringService.getSnapshot();
         if (!snapshot) {
             this.selectedObjectId = null;
+            this.syncDragState(snapshot);
             return;
         }
 
+        let nextSelectedObjectId = this.selectedObjectId;
         if (preferredObjectId) {
             const preferred = snapshot.objects.find((entry) => entry.id === preferredObjectId);
             if (preferred && normalizeLayer(preferred.layer) === this.selectedObjectLayer) {
-                this.selectedObjectId = preferred.id;
-                return;
+                nextSelectedObjectId = preferred.id;
+            } else {
+                nextSelectedObjectId = null;
+            }
+        } else if (nextSelectedObjectId) {
+            const selected = snapshot.objects.find((entry) => entry.id === nextSelectedObjectId);
+            if (!selected || normalizeLayer(selected.layer) !== this.selectedObjectLayer) {
+                nextSelectedObjectId = null;
             }
         }
 
-        const selected = this.selectedObjectId
-            ? snapshot.objects.find((entry) => entry.id === this.selectedObjectId)
-            : null;
-        if (selected) {
-            if (normalizeLayer(selected.layer) === this.selectedObjectLayer) {
-                return;
-            }
-            const inLayer = snapshot.objects.find((entry) => normalizeLayer(entry.layer) === this.selectedObjectLayer);
-            this.selectedObjectId = inLayer?.id ?? null;
-            return;
-        }
-
-        const fallback = snapshot.objects.find((entry) => normalizeLayer(entry.layer) === this.selectedObjectLayer);
-        this.selectedObjectId = fallback?.id ?? null;
+        this.selectedObjectId = nextSelectedObjectId;
+        this.syncDragState(snapshot);
     }
 }
