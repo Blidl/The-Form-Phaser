@@ -47,6 +47,7 @@ export interface LegacyObjectSource {
     patchObjectFields?: (rootId: string, patch: Record<string, unknown>) => boolean;
     patchObjectColors?: (rootId: string, patch: Record<string, unknown>) => boolean;
     patchObjectDebugVisibility?: (rootId: string, onlyDebugView: boolean) => boolean;
+    setObjectLocked?: (rootId: string, locked: boolean) => boolean;
     setEditorDebugViewActive?: (active: boolean) => void;
     createObject: (type: string, worldX: number, worldY: number) => string | null;
     removeObject?: (id: string) => boolean;
@@ -235,6 +236,7 @@ export class LegacyObjectAdapter {
             const typeDefinition = this.objectTypeRegistry.getDefinition(resolvedTypeId);
             const category = typeDefinition?.category ?? createLegacyTypeCategory(summary.type);
             const name = summary.label?.trim() || legacyId;
+            const nextLocked = summary.locked ?? current?.editor?.locked ?? false;
             if (!current) {
                 projectStore.addObject(levelId, {
                     id: editorObjectId,
@@ -245,7 +247,7 @@ export class LegacyObjectAdapter {
                         category
                     },
                     editor: {
-                        locked: summary.locked ?? false
+                        locked: nextLocked
                     },
                     visual: {
                         onlyDebugView: summary.onlyDebugView ?? false
@@ -255,7 +257,7 @@ export class LegacyObjectAdapter {
                 const needsSync = current.name !== name
                     || current.settings.type !== resolvedTypeId
                     || current.settings.category !== category
-                    || current.editor?.locked !== (summary.locked ?? false)
+                    || current.editor?.locked !== nextLocked
                     || current.visual.onlyDebugView !== (summary.onlyDebugView ?? false)
                     || !areBoundsEqual(current.bounds, bounds);
 
@@ -268,7 +270,7 @@ export class LegacyObjectAdapter {
                             category
                         },
                         editor: {
-                            locked: summary.locked ?? false
+                            locked: nextLocked
                         },
                         visual: {
                             onlyDebugView: summary.onlyDebugView ?? false
@@ -436,6 +438,14 @@ export class LegacyObjectAdapter {
             return false;
         }
         return this.source.patchObjectDebugVisibility(link.legacyId, onlyDebugView);
+    }
+
+    public setRuntimeObjectLocked(editorObjectId: string, locked: boolean): boolean {
+        const link = this.linksByEditorObjectId.get(editorObjectId);
+        if (!link || !this.source.setObjectLocked) {
+            return false;
+        }
+        return this.source.setObjectLocked(link.legacyId, locked);
     }
 
     public setEditorDebugViewActive(active: boolean): void {

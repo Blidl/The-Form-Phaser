@@ -302,3 +302,5 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
     - `Shader preview TODO`
 - Verification:
   - `npm run build-nolog` PASS.
+
+- Step H2 implemented: Objects mode utility actions added in right inspector (Focus/Delete/Duplicate/Copy/Paste/Lock-Unlock); in-memory object clipboard; Ctrl+C/Ctrl+V/Ctrl+D shortcuts with text-input guard; lock enforcement for drag/resize/delete/bounds edit; locked selection visual indicator; runtime mirror lock persistence adjusted in LegacyObjectAdapter. Build check: npm run build-nolog (pass, 2026-05-04).

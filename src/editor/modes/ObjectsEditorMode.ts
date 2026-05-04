@@ -65,6 +65,33 @@ const TRANSPARENT_COLOR_VALUE = 'transparent';
 const DEFAULT_AUTHORING_FILL_COLOR = '#ffffff';
 const DEFAULT_AUTHORING_STROKE_COLOR = '#000000';
 const DEBUG_OBJECT_BRIDGE = false;
+const RESIZE_HANDLE_SIZE = 8;
+const RESIZE_HANDLE_HIT_RADIUS = 6;
+const MIN_RESIZE_SIZE = 8;
+type ResizeHandle =
+    | 'top-left'
+    | 'top'
+    | 'top-right'
+    | 'right'
+    | 'bottom-right'
+    | 'bottom'
+    | 'bottom-left'
+    | 'left';
+interface ResizeDragState {
+    objectId: string;
+    handle: ResizeHandle;
+    startBounds: EditorObjectBoundsData;
+    startPointerWorld: { x: number; y: number };
+}
+interface ObjectClipboardData {
+    type: string;
+    category: EditorObjectCategory;
+    bounds: EditorObjectBoundsData;
+    visual: EditorObjectVisualData;
+    settings: EditorObjectData['settings'];
+    actions: EditorObjectData['actions'];
+    editor?: EditorObjectData['editor'];
+}
 const KNOWN_RUNTIME_OBJECT_TYPES = new Set<string>([
     'platform_default',
     'drag_box',
@@ -92,11 +119,16 @@ export class ObjectsEditorMode implements EditorMode {
     private readonly selectionOutline: Phaser.GameObjects.Graphics;
     private readonly deleteKey: Phaser.Input.Keyboard.Key | null;
     private readonly escapeKey: Phaser.Input.Keyboard.Key | null;
+    private readonly copyKey: Phaser.Input.Keyboard.Key | null;
+    private readonly pasteKey: Phaser.Input.Keyboard.Key | null;
+    private readonly duplicateKey: Phaser.Input.Keyboard.Key | null;
+    private readonly ctrlKey: Phaser.Input.Keyboard.Key | null;
 
     private activeCatalogCategory: EditorObjectCategory = 'platforms';
     private selectedTypeId: string | null = null;
     private selectedObjectId: string | null = null;
     private draggingObjectId: string | null = null;
+    private resizeDragState: ResizeDragState | null = null;
     private dragOffsetX = 0;
     private dragOffsetY = 0;
     private searchValue = '';
@@ -118,6 +150,7 @@ export class ObjectsEditorMode implements EditorMode {
     private syncScheduled = false;
     private activePointerButton: number | null = null;
     private liveObjects: EditorObjectData[] = [];
+    private objectClipboard: ObjectClipboardData | null = null;
     private lastObjectsListDiagKey: string | null = null;
     private lastBreakWallSummaryDiagKey: string | null = null;
     private context: EditorModeRuntimeContext = {
@@ -143,6 +176,10 @@ export class ObjectsEditorMode implements EditorMode {
         this.selectionOutline.setVisible(false);
         this.deleteKey = this.scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.DELETE) ?? null;
         this.escapeKey = this.scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC) ?? null;
+        this.copyKey = this.scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.C) ?? null;
+        this.pasteKey = this.scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.V) ?? null;
+        this.duplicateKey = this.scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.D) ?? null;
+        this.ctrlKey = this.scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.CTRL) ?? null;
     }
 
     public enter(): void {
@@ -169,8 +206,10 @@ export class ObjectsEditorMode implements EditorMode {
 
     public exit(): void {
         this.draggingObjectId = null;
+        this.resizeDragState = null;
         this.closeColorPalette();
         this.selectionOutline.setVisible(false);
+        this.setSceneCursor('default');
     }
 
     public update(context: EditorModeRuntimeContext): void {
@@ -179,6 +218,7 @@ export class ObjectsEditorMode implements EditorMode {
         this.syncScheduled = false;
         this.applyDebugVisibilityToRuntimeLinks();
         this.handleDeleteShortcut();
+        this.handleObjectUtilityShortcuts();
         this.handleColorPaletteCancelShortcut();
         if (this.activeColorPaletteField && (!this.getSelectedObjectData() || this.colorPaletteObjectId !== this.selectedObjectId)) {
             this.closeColorPalette();
@@ -199,6 +239,39 @@ export class ObjectsEditorMode implements EditorMode {
             return;
         }
 
+        const resizeHit = this.findResizeHandleAtPoint(event.worldX, event.worldY);
+        if (resizeHit) {
+            const selected = this.getActiveObjects().find((item) => item.id === resizeHit.objectId);
+            if (selected) {
+                this.selectedObjectId = selected.id;
+                this.selectedTypeId = null;
+                if (this.isObjectLocked(selected)) {
+                    this.resizeDragState = null;
+                    this.draggingObjectId = null;
+                    this.syncSelectionOutline();
+                    this.onUiChanged();
+                    return;
+                }
+                this.draggingObjectId = null;
+                this.resizeDragState = {
+                    objectId: selected.id,
+                    handle: resizeHit.handle,
+                    startBounds: { ...selected.bounds },
+                    startPointerWorld: { x: event.worldX, y: event.worldY }
+                };
+                this.setSceneCursor(this.getHandleCursor(resizeHit.handle));
+                objectDiag('[ObjectResize:start]', {
+                    objectId: selected.id,
+                    handle: resizeHit.handle,
+                    startBounds: { ...selected.bounds },
+                    pointerWorld: { x: event.worldX, y: event.worldY }
+                });
+                this.syncSelectionOutline();
+                this.onUiChanged();
+            }
+            return;
+        }
+
         if (this.selectedTypeId) {
             const snappedX = this.snap(event.worldX, context.grid.size);
             const snappedY = this.snap(event.worldY, context.grid.size);
@@ -216,29 +289,10 @@ export class ObjectsEditorMode implements EditorMode {
             });
             const created = this.createObjectAt(event.worldX, event.worldY);
             if (created) {
-                this.selectedObjectId = created.id;
-                this.selectedTypeId = null;
-                this.draggingObjectId = null;
-                this.syncSelectionOutline();
                 const isInActiveCategory = created.settings.category === this.activeCatalogCategory;
                 const isDisplayed = isInActiveCategory && this.matchesSearch(created, this.searchValue);
-                objectDiag('[ObjectCreate:postSelect]', {
+                objectDiag('[ObjectCreate:list]', {
                     objectId: created.id,
-                    selectedObjectId: this.selectedObjectId,
-                    foundInServiceList: this.getActiveObjects().some((item) => item.id === created.id),
-                    foundInProjectStore: !!this.projectStore.getObject(this.projectStore.getActiveLevel().id, created.id),
-                    hasRuntimeLink: this.legacyObjectAdapter?.hasRuntimeLink(created.id) ?? false,
-                    hasSelectableHitTestBounds: Number.isFinite(created.bounds.width)
-                        && Number.isFinite(created.bounds.height)
-                        && created.bounds.width > 0
-                        && created.bounds.height > 0,
-                    boundsUsedForHitTest: {
-                        x: created.bounds.x,
-                        y: created.bounds.y,
-                        width: created.bounds.width,
-                        height: created.bounds.height,
-                        rotation: created.bounds.rotation
-                    },
                     activeCategory: this.activeCatalogCategory,
                     displayedInObjectsList: isDisplayed
                 });
@@ -252,7 +306,7 @@ export class ObjectsEditorMode implements EditorMode {
             this.selectedObjectId = hitObjectId;
             this.selectedTypeId = null;
             const object = this.getActiveObjects().find((item) => item.id === hitObjectId);
-            if (object) {
+            if (object && !this.isObjectLocked(object)) {
                 this.draggingObjectId = hitObjectId;
                 this.dragOffsetX = event.worldX - object.bounds.x;
                 this.dragOffsetY = event.worldY - object.bounds.y;
@@ -294,11 +348,21 @@ export class ObjectsEditorMode implements EditorMode {
         if (this.activeColorPaletteField) {
             return;
         }
+        if (this.resizeDragState) {
+            this.setSceneCursor(this.getHandleCursor(this.resizeDragState.handle));
+            this.applyResizeFromPointer(event.worldX, event.worldY, context);
+            return;
+        }
         if (!this.draggingObjectId) {
+            this.updateResizeCursor(event.worldX, event.worldY);
             return;
         }
         const current = this.getActiveObjects().find((item) => item.id === this.draggingObjectId) ?? null;
         if (!current) {
+            this.draggingObjectId = null;
+            return;
+        }
+        if (this.isObjectLocked(current)) {
             this.draggingObjectId = null;
             return;
         }
@@ -322,8 +386,17 @@ export class ObjectsEditorMode implements EditorMode {
 
     public onPointerUp(event: EditorPointerEvent): void {
         if (event.button === 0) {
+            if (this.resizeDragState) {
+                const finalObject = this.getActiveObjects().find((item) => item.id === this.resizeDragState?.objectId) ?? null;
+                objectDiag('[ObjectResize:end]', {
+                    objectId: this.resizeDragState.objectId,
+                    finalBounds: finalObject ? { ...finalObject.bounds } : null
+                });
+            }
+            this.resizeDragState = null;
             this.draggingObjectId = null;
             this.activePointerButton = null;
+            this.setSceneCursor('default');
         }
     }
 
@@ -621,6 +694,9 @@ export class ObjectsEditorMode implements EditorMode {
             }
 
             container.appendChild(this.makeSectionTitle('Bounds'));
+            if (this.isObjectLocked(selectedObject)) {
+                container.appendChild(this.makeLabel('Locked'));
+            }
             container.appendChild(this.makeBoundsInputRow(
                 selectedObject,
                 [
@@ -641,6 +717,9 @@ export class ObjectsEditorMode implements EditorMode {
                     { label: 'Rotation', field: 'rotation' }
                 ]
             ));
+            container.appendChild(this.makeSpacer());
+            container.appendChild(this.makeSectionTitle('Object Actions'));
+            container.appendChild(this.makeObjectUtilityActionsRow(selectedObject));
             container.appendChild(this.makeSpacer());
 
             container.appendChild(this.makeSectionTitle('Visual'));
@@ -710,9 +789,33 @@ export class ObjectsEditorMode implements EditorMode {
         this.closeColorPalette();
     }
 
+    private handleObjectUtilityShortcuts(): void {
+        if (!this.ctrlKey || !this.ctrlKey.isDown || isEditorTextInputFocused()) {
+            return;
+        }
+        if (this.copyKey && Phaser.Input.Keyboard.JustDown(this.copyKey)) {
+            this.copySelectedObject();
+            return;
+        }
+        if (this.pasteKey && Phaser.Input.Keyboard.JustDown(this.pasteKey)) {
+            if (this.pasteClipboardObject()) {
+                this.onUiChanged();
+            }
+            return;
+        }
+        if (this.duplicateKey && Phaser.Input.Keyboard.JustDown(this.duplicateKey)) {
+            objectDiag('[ObjectDuplicate:blocked]', { reason: 'disabled_for_stability_h2_1' });
+        }
+    }
+
     private deleteSelectedObject(): boolean {
         const selectedId = this.selectedObjectId;
         if (!selectedId) {
+            return false;
+        }
+        const selected = this.getSelectedObjectData();
+        if (selected && this.isObjectLocked(selected)) {
+            objectDiag('[ObjectDelete:blocked]', { selectedObjectId: selectedId, reason: 'locked' });
             return false;
         }
         const pointerButtonBeforeDelete = this.activePointerButton;
@@ -734,6 +837,7 @@ export class ObjectsEditorMode implements EditorMode {
 
             this.objectViews.get(selectedId)?.destroy();
             this.objectViews.delete(selectedId);
+            this.clearTransientStateForObject(selectedId);
             this.selectedObjectId = null;
             this.refreshLiveObjects('delete:success');
             this.syncViewsFromStore();
@@ -772,8 +876,7 @@ export class ObjectsEditorMode implements EditorMode {
             );
             return null;
         }
-        this.refreshLiveObjects('create:service');
-        return this.getActiveObjects().find((item) => item.id === creation.objectId) ?? null;
+        return this.trySelectCreatedObject(creation.objectId, 'create');
     }
 
     private makeBoundsInputRow(
@@ -856,6 +959,9 @@ export class ObjectsEditorMode implements EditorMode {
 
         const current = this.getActiveObjects().find((item) => item.id === selectedId) ?? null;
         if (!current) {
+            return false;
+        }
+        if (this.isObjectLocked(current)) {
             return false;
         }
 
@@ -1028,6 +1134,14 @@ export class ObjectsEditorMode implements EditorMode {
         input.style.padding = '2px 4px';
         input.style.border = '1px solid #5f5f5f';
         input.style.boxSizing = 'border-box';
+        if (this.isObjectLocked(selectedObject)) {
+            input.readOnly = true;
+            input.disabled = true;
+        }
+        if (this.isObjectLocked(selectedObject)) {
+            input.readOnly = true;
+            input.disabled = true;
+        }
         this.bindEditorInputKeyboardGuards(input);
 
         const noneButton = document.createElement('button');
@@ -2211,6 +2325,10 @@ export class ObjectsEditorMode implements EditorMode {
         return Math.round(value / size) * size;
     }
 
+    private snapEdge(value: number, gridSize: number): number {
+        return this.snap(value, gridSize);
+    }
+
     private getActiveObjects(): EditorObjectData[] {
         return this.liveObjects;
     }
@@ -2277,14 +2395,27 @@ export class ObjectsEditorMode implements EditorMode {
             this.selectionOutline.setVisible(false);
             return;
         }
+        const isLocked = this.isObjectLocked(selected);
         this.selectionOutline.setVisible(true);
-        this.selectionOutline.lineStyle(2, 0xffff00, 1);
+        this.selectionOutline.lineStyle(2, isLocked ? 0xff5555 : 0xffff00, 1);
         this.selectionOutline.strokeRect(
             selected.bounds.x,
             selected.bounds.y,
             selected.bounds.width,
             selected.bounds.height
         );
+        if (isLocked) {
+            return;
+        }
+        this.selectionOutline.fillStyle(0xffff00, 1);
+        for (const point of this.getResizeHandlePoints(selected.bounds)) {
+            this.selectionOutline.fillRect(
+                point.x - (RESIZE_HANDLE_SIZE * 0.5),
+                point.y - (RESIZE_HANDLE_SIZE * 0.5),
+                RESIZE_HANDLE_SIZE,
+                RESIZE_HANDLE_SIZE
+            );
+        }
     }
 
     private findObjectIdAtPoint(worldX: number, worldY: number): string | null {
@@ -2292,7 +2423,9 @@ export class ObjectsEditorMode implements EditorMode {
         const objects = this.getActiveObjects();
         const bridgedObjectId = this.legacyObjectAdapter?.findObjectIdAtPoint(worldX, worldY) ?? null;
         if (bridgedObjectId) {
-            return bridgedObjectId;
+            if (objects.some((item) => item.id === bridgedObjectId)) {
+                return bridgedObjectId;
+            }
         }
 
         for (let i = objects.length - 1; i >= 0; i -= 1) {
@@ -2337,9 +2470,16 @@ export class ObjectsEditorMode implements EditorMode {
                 objectDiag('[BreakWall:summary]', breakWallSummaryPayload);
             }
             if (this.selectedObjectId && !nextObjects.some((item) => item.id === this.selectedObjectId)) {
-                this.selectedObjectId = null;
-                this.draggingObjectId = null;
+                this.clearTransientStateForObject(this.selectedObjectId);
             }
+            const liveIds = new Set(nextObjects.map((item) => item.id));
+            this.objectViews.forEach((view, id) => {
+                if (liveIds.has(id)) {
+                    return;
+                }
+                view.destroy();
+                this.objectViews.delete(id);
+            });
             this.debugLog(
                 `sync:end reason=${reason} live=${nextObjects.length} imported=[${imported.map((item) => `${item.id}:${item.settings.type}`).join(', ')}]`
             );
@@ -2403,6 +2543,239 @@ export class ObjectsEditorMode implements EditorMode {
         console.info(`[ObjectsEditorMode] ${message}`);
     }
 
+    private clearTransientStateForObject(objectId: string | null): void {
+        if (!objectId) {
+            return;
+        }
+        if (this.selectedObjectId === objectId) {
+            this.selectedObjectId = null;
+        }
+        if (this.draggingObjectId === objectId) {
+            this.draggingObjectId = null;
+        }
+        if (this.resizeDragState?.objectId === objectId) {
+            this.resizeDragState = null;
+        }
+        if (this.colorPaletteObjectId === objectId) {
+            this.closeColorPalette();
+        }
+        this.activePointerButton = null;
+    }
+
+    private staleDeletedIdsCount(objects: readonly EditorObjectData[]): number {
+        const liveIds = new Set(objects.map((item) => item.id));
+        let staleCount = 0;
+        this.objectViews.forEach((_, id) => {
+            if (!liveIds.has(id)) {
+                staleCount += 1;
+            }
+        });
+        return staleCount;
+    }
+
+    private trySelectCreatedObject(createdObjectId: string, reason: 'create' | 'paste' | 'duplicate'): EditorObjectData | null {
+        this.refreshLiveObjects(`${reason}:post-create-select`);
+        const objects = this.getActiveObjects();
+        const selected = objects.find((item) => item.id === createdObjectId) ?? null;
+        if (!selected) {
+            this.clearTransientStateForObject(createdObjectId);
+            objectDiag('[ObjectCreate:postSelect]', {
+                createdObjectId,
+                selectedObjectId: null,
+                selectedExistsInServiceList: false,
+                hasRuntimeLink: false,
+                staleDeletedIdsCount: this.staleDeletedIdsCount(objects),
+                success: false,
+                reason: 'created_id_not_found_in_service_list'
+            });
+            console.warn(`[ObjectsEditorMode] Created object "${createdObjectId}" was not found after create; selection cleared.`);
+            return null;
+        }
+        const hasRuntimeLink = this.legacyObjectAdapter?.hasRuntimeLink(createdObjectId) ?? false;
+        this.selectedObjectId = selected.id;
+        this.selectedTypeId = null;
+        this.draggingObjectId = null;
+        this.resizeDragState = null;
+        this.syncSelectionOutline();
+        objectDiag('[ObjectCreate:postSelect]', {
+            createdObjectId,
+            selectedObjectId: this.selectedObjectId,
+            selectedExistsInServiceList: true,
+            hasRuntimeLink,
+            staleDeletedIdsCount: this.staleDeletedIdsCount(objects),
+            success: true,
+            reason: null
+        });
+        return selected;
+    }
+
+    private getResizeHandlePoints(bounds: EditorObjectBoundsData): Array<{ handle: ResizeHandle; x: number; y: number }> {
+        const left = bounds.x;
+        const right = bounds.x + bounds.width;
+        const top = bounds.y;
+        const bottom = bounds.y + bounds.height;
+        const centerX = bounds.x + (bounds.width * 0.5);
+        const centerY = bounds.y + (bounds.height * 0.5);
+        return [
+            { handle: 'top-left', x: left, y: top },
+            { handle: 'top', x: centerX, y: top },
+            { handle: 'top-right', x: right, y: top },
+            { handle: 'right', x: right, y: centerY },
+            { handle: 'bottom-right', x: right, y: bottom },
+            { handle: 'bottom', x: centerX, y: bottom },
+            { handle: 'bottom-left', x: left, y: bottom },
+            { handle: 'left', x: left, y: centerY }
+        ];
+    }
+
+    private findResizeHandleAtPoint(worldX: number, worldY: number): { objectId: string; handle: ResizeHandle } | null {
+        if (!this.selectedObjectId) {
+            return null;
+        }
+        const selected = this.getActiveObjects().find((item) => item.id === this.selectedObjectId);
+        if (!selected) {
+            return null;
+        }
+        if (this.isObjectLocked(selected)) {
+            return null;
+        }
+        const rotation = Number.isFinite(selected.bounds.rotation) ? selected.bounds.rotation : 0;
+        if (Math.abs(rotation) > 0.0001) {
+            return null;
+        }
+        const points = this.getResizeHandlePoints(selected.bounds);
+        for (const point of points) {
+            const withinX = Math.abs(worldX - point.x) <= RESIZE_HANDLE_HIT_RADIUS;
+            const withinY = Math.abs(worldY - point.y) <= RESIZE_HANDLE_HIT_RADIUS;
+            if (withinX && withinY) {
+                return { objectId: selected.id, handle: point.handle };
+            }
+        }
+        return null;
+    }
+
+    private applyResizeFromPointer(worldX: number, worldY: number, context: EditorModeRuntimeContext): void {
+        const drag = this.resizeDragState;
+        if (!drag) {
+            return;
+        }
+        const current = this.getActiveObjects().find((item) => item.id === drag.objectId);
+        if (!current) {
+            this.resizeDragState = null;
+            this.setSceneCursor('default');
+            return;
+        }
+        if (this.isObjectLocked(current)) {
+            this.resizeDragState = null;
+            this.setSceneCursor('default');
+            return;
+        }
+        const rotation = Number.isFinite(current.bounds.rotation) ? current.bounds.rotation : 0;
+        if (Math.abs(rotation) > 0.0001) {
+            objectDiag('[ObjectResize:update]', {
+                objectId: current.id,
+                handle: drag.handle,
+                nextBounds: { ...current.bounds },
+                success: false,
+                reason: 'Rotated resize not implemented yet.'
+            });
+            return;
+        }
+
+        const startLeft = drag.startBounds.x;
+        const startTop = drag.startBounds.y;
+        const startRight = drag.startBounds.x + drag.startBounds.width;
+        const startBottom = drag.startBounds.y + drag.startBounds.height;
+
+        let left = startLeft;
+        let right = startRight;
+        let top = startTop;
+        let bottom = startBottom;
+        const size = context.grid.size;
+
+        if (drag.handle.includes('left')) {
+            left = this.snapEdge(worldX, size);
+            if ((right - left) < MIN_RESIZE_SIZE) {
+                left = right - MIN_RESIZE_SIZE;
+            }
+        }
+        if (drag.handle.includes('right')) {
+            right = this.snapEdge(worldX, size);
+            if ((right - left) < MIN_RESIZE_SIZE) {
+                right = left + MIN_RESIZE_SIZE;
+            }
+        }
+        if (drag.handle.includes('top')) {
+            top = this.snapEdge(worldY, size);
+            if ((bottom - top) < MIN_RESIZE_SIZE) {
+                top = bottom - MIN_RESIZE_SIZE;
+            }
+        }
+        if (drag.handle.includes('bottom')) {
+            bottom = this.snapEdge(worldY, size);
+            if ((bottom - top) < MIN_RESIZE_SIZE) {
+                bottom = top + MIN_RESIZE_SIZE;
+            }
+        }
+
+        const nextBounds: EditorObjectBoundsData = {
+            x: left,
+            y: top,
+            width: Math.max(MIN_RESIZE_SIZE, right - left),
+            height: Math.max(MIN_RESIZE_SIZE, bottom - top),
+            rotation: drag.startBounds.rotation
+        };
+
+        const updateResult = this.objectAuthoringService.updateObjectBounds(current.id, nextBounds);
+        objectDiag('[ObjectResize:update]', {
+            objectId: current.id,
+            handle: drag.handle,
+            nextBounds,
+            success: updateResult.success,
+            reason: updateResult.reason ?? null
+        });
+        if (!updateResult.success) {
+            this.refreshLiveObjects('resize-failed');
+            this.syncViewsFromStore();
+            this.syncSelectionOutline();
+            this.onUiChanged();
+            return;
+        }
+        this.refreshLiveObjects('resize');
+        this.syncViewsFromStore();
+        this.syncSelectionOutline();
+        this.onUiChanged();
+    }
+
+    private updateResizeCursor(worldX: number, worldY: number): void {
+        const hit = this.findResizeHandleAtPoint(worldX, worldY);
+        if (!hit) {
+            this.setSceneCursor('default');
+            return;
+        }
+        this.setSceneCursor(this.getHandleCursor(hit.handle));
+    }
+
+    private getHandleCursor(handle: ResizeHandle): string {
+        if (handle === 'left' || handle === 'right') {
+            return 'ew-resize';
+        }
+        if (handle === 'top' || handle === 'bottom') {
+            return 'ns-resize';
+        }
+        if (handle === 'top-left' || handle === 'bottom-right') {
+            return 'nwse-resize';
+        }
+        return 'nesw-resize';
+    }
+
+    private setSceneCursor(cursor: string): void {
+        const canvas = this.scene.input.manager.canvas;
+        if (canvas.style.cursor !== cursor) {
+            canvas.style.cursor = cursor;
+        }
+    }
+
     private matchesSearch(objectData: EditorObjectData, searchValue: string): boolean {
         const query = searchValue.trim().toLowerCase();
         if (query.length === 0) {
@@ -2443,6 +2816,193 @@ export class ObjectsEditorMode implements EditorMode {
             })
             .sort((left, right) => left.distanceToBounds - right.distanceToBounds)
             .slice(0, Math.max(1, limit));
+    }
+
+    private makeObjectUtilityActionsRow(selectedObject: EditorObjectData): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'flex';
+        wrap.style.flexWrap = 'wrap';
+        wrap.style.gap = '6px';
+        wrap.style.marginBottom = '6px';
+
+        const makeButton = (label: string, onClick: () => void): HTMLButtonElement => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = label;
+            button.style.padding = '3px 6px';
+            button.style.border = '1px solid #5f5f5f';
+            button.style.background = '#d9d9d9';
+            button.addEventListener('click', onClick);
+            return button;
+        };
+
+        wrap.appendChild(makeButton('Focus', () => {
+            this.focusObject(selectedObject);
+            this.onUiChanged();
+        }));
+        wrap.appendChild(makeButton('Delete', () => {
+            if (this.deleteSelectedObject()) {
+                this.onUiChanged();
+            }
+        }));
+        wrap.appendChild(makeButton(this.isObjectLocked(selectedObject) ? 'Unlock' : 'Lock', () => {
+            if (this.toggleSelectedObjectLock()) {
+                this.onUiChanged();
+            }
+        }));
+
+        return wrap;
+    }
+
+    private isObjectLocked(objectData: EditorObjectData): boolean {
+        return objectData.editor?.locked ?? false;
+    }
+
+    private focusObject(objectData: EditorObjectData): void {
+        const centerX = objectData.bounds.x + (objectData.bounds.width * 0.5);
+        const centerY = objectData.bounds.y + (objectData.bounds.height * 0.5);
+        this.scene.cameras.main.centerOn(centerX, centerY);
+    }
+
+    private toggleSelectedObjectLock(): boolean {
+        const selected = this.getSelectedObjectData();
+        if (!selected) {
+            return false;
+        }
+        const nextLocked = !this.isObjectLocked(selected);
+        const activeLevelId = this.projectStore.getActiveLevel().id;
+        this.projectStore.updateObject(activeLevelId, selected.id, {
+            editor: {
+                locked: nextLocked
+            }
+        });
+        if (this.legacyObjectAdapter?.hasRuntimeLink(selected.id)) {
+            this.legacyObjectAdapter.setRuntimeObjectLocked(selected.id, nextLocked);
+        }
+        this.refreshLiveObjects('lock-toggle');
+        this.syncViewsFromStore();
+        this.syncSelectionOutline();
+        return true;
+    }
+
+    private copySelectedObject(): boolean {
+        const selected = this.getSelectedObjectData();
+        if (!selected) {
+            return false;
+        }
+        this.objectClipboard = {
+            type: selected.settings.type,
+            category: selected.settings.category,
+            bounds: { ...selected.bounds },
+            visual: { ...selected.visual },
+            settings: { ...selected.settings },
+            actions: { ...selected.actions, actionScriptIds: [...selected.actions.actionScriptIds] }
+        };
+        objectDiag('[ObjectClipboard:copy]', {
+            sourceObjectId: selected.id,
+            copiedType: selected.settings.type,
+            copiedVisual: { ...this.objectClipboard.visual },
+            copiedBounds: { ...this.objectClipboard.bounds }
+        });
+        return true;
+    }
+
+    private pasteClipboardObject(): boolean {
+        if (!this.objectClipboard) {
+            return false;
+        }
+        return this.createDuplicateFromSource(this.objectClipboard, 'paste');
+    }
+
+    private duplicateSelectedObject(): boolean {
+        const selected = this.getSelectedObjectData();
+        if (!selected) {
+            return false;
+        }
+        return this.createDuplicateFromSource({
+            type: selected.settings.type,
+            category: selected.settings.category,
+            bounds: { ...selected.bounds },
+            visual: { ...selected.visual },
+            settings: { ...selected.settings },
+            actions: { ...selected.actions, actionScriptIds: [...selected.actions.actionScriptIds] },
+            editor: selected.editor ? { ...selected.editor } : undefined
+        }, 'duplicate');
+    }
+
+    private createDuplicateFromSource(source: ObjectClipboardData, reason: 'duplicate' | 'paste'): boolean {
+        const creation = this.objectAuthoringService.createObject(source.type, source.bounds.x + 32, source.bounds.y + 32);
+        if (!creation.success || !creation.objectId) {
+            objectDiag('[ObjectClipboard:paste]', {
+                createdObjectId: null,
+                sourceType: source.type,
+                appliedBoundsSuccess: false,
+                appliedVisualSuccess: false,
+                finalVisual: null,
+                success: false,
+                reason: creation.reason ?? 'create_failed'
+            });
+            return false;
+        }
+        const created = this.trySelectCreatedObject(creation.objectId, reason);
+        if (!created) {
+            objectDiag('[ObjectClipboard:paste]', {
+                createdObjectId: creation.objectId,
+                sourceType: source.type,
+                appliedBoundsSuccess: false,
+                appliedVisualSuccess: false,
+                finalVisual: null,
+                success: false,
+                reason: 'created_object_not_selectable'
+            });
+            return false;
+        }
+
+        const boundsResult = this.objectAuthoringService.updateObjectBounds(created.id, {
+            x: source.bounds.x + 32,
+            y: source.bounds.y + 32,
+            width: source.bounds.width,
+            height: source.bounds.height,
+            rotation: source.bounds.rotation
+        });
+        const visualResult = this.objectAuthoringService.updateObjectVisual(created.id, {
+            fillColor: source.visual.fillColor,
+            strokeColor: source.visual.strokeColor,
+            alpha: source.visual.alpha,
+            layer: source.visual.layer
+        });
+        const activeLevelId = this.projectStore.getActiveLevel().id;
+        this.projectStore.updateObject(activeLevelId, created.id, {
+            visual: {
+                shaderKey: source.visual.shaderKey,
+                textureKey: source.visual.textureKey,
+                onlyDebugView: source.visual.onlyDebugView
+            },
+            settings: { ...source.settings, type: created.settings.type, category: source.category },
+            actions: { ...source.actions, actionScriptIds: [...source.actions.actionScriptIds] },
+            editor: {
+                locked: false
+            }
+        });
+
+        this.refreshLiveObjects(`${reason}:patched`);
+        const finalSelected = this.trySelectCreatedObject(created.id, reason);
+        objectDiag('[ObjectClipboard:paste]', {
+            createdObjectId: created.id,
+            sourceType: source.type,
+            appliedBoundsSuccess: boundsResult.success,
+            appliedVisualSuccess: visualResult.success,
+            finalVisual: finalSelected?.visual ?? null,
+            success: !!finalSelected && boundsResult.success && (visualResult.success || visualResult.reason === 'No visual changes.'),
+            reason: !boundsResult.success
+                ? (boundsResult.reason ?? 'bounds_update_failed')
+                : (!visualResult.success && visualResult.reason !== 'No visual changes.'
+                    ? (visualResult.reason ?? 'visual_update_failed')
+                    : null)
+        });
+        this.syncViewsFromStore();
+        this.syncSelectionOutline();
+        return !!finalSelected && boundsResult.success && (visualResult.success || visualResult.reason === 'No visual changes.');
     }
 
     private makeSectionTitle(text: string): HTMLDivElement {

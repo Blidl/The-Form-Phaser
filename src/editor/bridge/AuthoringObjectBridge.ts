@@ -83,6 +83,9 @@ export const createAuthoringObjectBridgeSource = (worldRuntime: TestWorldRuntime
         patchObjectDebugVisibility: (rootId, onlyDebugView) => {
             return worldRuntime.patchObjectDebugVisibility(rootId, onlyDebugView);
         },
+        setObjectLocked: (rootId, locked) => {
+            return worldRuntime.setObjectLocked(rootId, locked);
+        },
         setEditorDebugViewActive: (active) => {
             worldRuntime.setEditorDebugViewActive(active);
         },
