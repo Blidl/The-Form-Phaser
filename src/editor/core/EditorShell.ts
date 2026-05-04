@@ -67,7 +67,10 @@ const createModes = (
     });
     const npc = new NpcEditorMode();
     const cutscenes = new CutscenesEditorMode();
-    const logic = new LogicEditorMode();
+    const logic = new LogicEditorMode({
+        legacyObjectAdapter,
+        onUiChanged
+    });
 
     return {
         level,
@@ -898,3 +901,4 @@ export class EditorShell {
         });
     }
 }
+
