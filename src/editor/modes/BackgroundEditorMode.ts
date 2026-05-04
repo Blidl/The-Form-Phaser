@@ -123,42 +123,34 @@ export class BackgroundEditorMode implements EditorMode {
             );
             container.appendChild(targetRow);
 
-            container.appendChild(this.makeSectionTitle('Background List'));
+            container.appendChild(this.makeSectionTitle('Background Targets'));
             const list = document.createElement('div');
             list.style.marginBottom = '8px';
-            const staticRow = document.createElement('div');
-            staticRow.textContent = snapshot.staticImage
-                ? `Static: ${snapshot.staticImage.textureKey || '(fill only)'}`
-                : 'Static: (missing)';
-            list.appendChild(staticRow);
-            (snapshot.background?.layers ?? []).forEach((layer, index) => {
-                const row = document.createElement('div');
-                row.textContent = `Layer ${index + 1}: ${layer.id} (${layer.textureKey || 'fill only'})`;
-                list.appendChild(row);
-            });
-            if ((snapshot.background?.layers?.length ?? 0) <= 0) {
-                const none = document.createElement('div');
-                none.textContent = 'No parallax layers.';
-                list.appendChild(none);
-            }
+            list.appendChild(this.makeTargetListRow({
+                label: 'Static',
+                target: 'static',
+                present: !!snapshot.staticImage,
+                value: snapshot.staticImage
+                    ? `${snapshot.staticImage.textureKey || '(fill only)'}`
+                    : '(missing)'
+            }));
+            list.appendChild(this.makeTargetListRow({
+                label: 'Parallax 1',
+                target: 'parallax_1',
+                present: !!snapshot.parallax1,
+                value: snapshot.parallax1
+                    ? `${snapshot.parallax1.id} (${snapshot.parallax1.textureKey || 'fill only'})`
+                    : '(missing)'
+            }));
+            list.appendChild(this.makeTargetListRow({
+                label: 'Parallax 2',
+                target: 'parallax_2',
+                present: !!snapshot.parallax2,
+                value: snapshot.parallax2
+                    ? `${snapshot.parallax2.id} (${snapshot.parallax2.textureKey || 'fill only'})`
+                    : '(missing)'
+            }));
             container.appendChild(list);
-
-            const ensureRow = document.createElement('div');
-            ensureRow.style.display = 'flex';
-            ensureRow.style.flexDirection = 'column';
-            ensureRow.style.gap = '4px';
-            ensureRow.append(
-                this.makeActionButton('Ensure Static', () => {
-                    this.commit(() => this.backgroundAuthoringService.ensureStatic());
-                }),
-                this.makeActionButton('Ensure Parallax 1', () => {
-                    this.commit(() => this.backgroundAuthoringService.ensureParallax(1));
-                }),
-                this.makeActionButton('Ensure Parallax 2', () => {
-                    this.commit(() => this.backgroundAuthoringService.ensureParallax(2));
-                })
-            );
-            container.appendChild(ensureRow);
         });
     }
 
@@ -191,7 +183,13 @@ export class BackgroundEditorMode implements EditorMode {
             }));
 
             container.appendChild(this.makeSpacer(10));
-            container.appendChild(this.makeSectionTitle(this.selectedTarget === 'static' ? 'Static' : this.selectedTarget === 'parallax_1' ? 'Parallax 1' : 'Parallax 2'));
+            container.appendChild(this.makeSectionTitle(
+                this.selectedTarget === 'static'
+                    ? 'Editing: Static'
+                    : this.selectedTarget === 'parallax_1'
+                        ? 'Editing: Parallax 1'
+                        : 'Editing: Parallax 2'
+            ));
 
             if (this.selectedTarget === 'static') {
                 if (!snapshot.staticImage) {
@@ -202,6 +200,22 @@ export class BackgroundEditorMode implements EditorMode {
                     ));
                     return;
                 }
+                container.appendChild(this.makeLifecycleActionsRow([
+                    this.makeConfirmedActionButton(
+                        'Remove Static',
+                        'Remove Static background?',
+                        () => {
+                            this.commit(() => this.backgroundAuthoringService.removeStatic());
+                        }
+                    ),
+                    this.makeConfirmedActionButton(
+                        'Reset Static',
+                        'Reset Static background to defaults?',
+                        () => {
+                            this.commit(() => this.backgroundAuthoringService.resetStatic());
+                        }
+                    )
+                ]));
                 this.renderImageFields(container, snapshot.staticImage, 'static');
                 return;
             }
@@ -216,6 +230,22 @@ export class BackgroundEditorMode implements EditorMode {
                 ));
                 return;
             }
+            container.appendChild(this.makeLifecycleActionsRow([
+                this.makeConfirmedActionButton(
+                    `Remove Parallax ${slot}`,
+                    `Remove Parallax ${slot}?`,
+                    () => {
+                        this.commit(() => this.backgroundAuthoringService.removeParallaxSlot(slot));
+                    }
+                ),
+                this.makeConfirmedActionButton(
+                    `Reset Parallax ${slot}`,
+                    `Reset Parallax ${slot} to defaults?`,
+                    () => {
+                        this.commit(() => this.backgroundAuthoringService.resetParallaxSlot(slot));
+                    }
+                )
+            ]));
             this.renderParallaxFields(container, layer, slot);
         });
     }
@@ -387,8 +417,7 @@ export class BackgroundEditorMode implements EditorMode {
         button.style.cursor = 'pointer';
         button.style.background = this.selectedTarget === target ? '#8acb88' : '#d9d9d9';
         button.addEventListener('click', () => {
-            this.selectedTarget = target;
-            this.onUiChanged();
+            this.setSelectedTarget(target);
         });
         return button;
     }
@@ -403,6 +432,52 @@ export class BackgroundEditorMode implements EditorMode {
         button.style.cursor = 'pointer';
         button.addEventListener('click', onClick);
         return button;
+    }
+
+    private makeConfirmedActionButton(
+        label: string,
+        confirmMessage: string,
+        onConfirm: () => void
+    ): HTMLButtonElement {
+        return this.makeActionButton(label, () => {
+            if (!this.confirmAction(confirmMessage)) {
+                return;
+            }
+            onConfirm();
+        });
+    }
+
+    private makeLifecycleActionsRow(buttons: HTMLButtonElement[]): HTMLDivElement {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.flexWrap = 'wrap';
+        row.style.gap = '4px';
+        row.style.marginBottom = '8px';
+        buttons.forEach((button) => row.appendChild(button));
+        return row;
+    }
+
+    private makeTargetListRow(options: {
+        label: string;
+        target: BackgroundTarget;
+        present: boolean;
+        value: string;
+    }): HTMLDivElement {
+        const row = document.createElement('div');
+        row.style.padding = '4px 6px';
+        row.style.marginBottom = '4px';
+        row.style.border = '1px solid #7a7a7a';
+        row.style.cursor = 'pointer';
+        row.style.userSelect = 'none';
+        row.style.background = this.selectedTarget === options.target ? '#8acb88' : '#f2f2f2';
+        row.textContent = `${options.label}: ${options.value}`;
+        if (!options.present) {
+            row.style.color = '#6f6f6f';
+        }
+        row.addEventListener('click', () => {
+            this.setSelectedTarget(options.target);
+        });
+        return row;
     }
 
     private makeTextField(options: {
@@ -562,6 +637,21 @@ export class BackgroundEditorMode implements EditorMode {
         const spacer = document.createElement('div');
         spacer.style.height = `${height}px`;
         return spacer;
+    }
+
+    private confirmAction(message: string): boolean {
+        if (typeof window !== 'undefined' && typeof window.confirm === 'function') {
+            return window.confirm(message);
+        }
+        return true;
+    }
+
+    private setSelectedTarget(target: BackgroundTarget): void {
+        if (this.selectedTarget === target) {
+            return;
+        }
+        this.selectedTarget = target;
+        this.onUiChanged();
     }
 
     private commit(action: () => { success: boolean; reason?: string }): { success: boolean; error?: string } {

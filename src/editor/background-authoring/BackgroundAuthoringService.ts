@@ -14,6 +14,8 @@ const DEFAULT_STATIC_TEXTURE_KEY = 'demo_bg_static';
 const DEFAULT_PARALLAX_1_TEXTURE_KEY = 'demo_bg_layer_far';
 const DEFAULT_PARALLAX_2_TEXTURE_KEY = 'demo_bg_layer_near';
 const DEFAULT_TEXTURE_ASSET = 'assets/bg.png';
+const PARALLAX_1_ID = 'parallax_1';
+const PARALLAX_2_ID = 'parallax_2';
 
 const clamp = (value: number, min: number, max: number): number => {
     return Math.max(min, Math.min(max, value));
@@ -52,6 +54,9 @@ const clampScrollFactor = (value: number | undefined, fallback: number): number 
 };
 
 const cloneLayer = (layer: TestWorldParallaxLayerConfig): TestWorldParallaxLayerConfig => ({ ...layer });
+const cloneLayers = (layers: TestWorldParallaxLayerConfig[] | undefined): TestWorldParallaxLayerConfig[] => (
+    Array.isArray(layers) ? layers.map((layer) => cloneLayer(layer)) : []
+);
 
 export interface BackgroundSnapshot {
     levelId: string;
@@ -95,19 +100,85 @@ export class BackgroundAuthoringService {
     public ensureParallax(slot: 1 | 2): BackgroundWriteResult {
         return this.applyConfigEdit((config) => {
             const background = this.ensureBackground(config);
-            const layers = background.layers ?? [];
-            const layerIndex = this.findLayerIndex(layers, slot);
-            const normalized = this.normalizeParallaxLayer(
-                layerIndex >= 0 ? layers[layerIndex] : undefined,
-                slot,
-                config
-            );
+            background.layers = this.upsertParallaxLayer(background.layers, slot, config, false);
+        });
+    }
+
+    public removeStatic(): BackgroundWriteResult {
+        if (!this.legacyObjectAdapter) {
+            return {
+                success: false,
+                reason: 'Runtime adapter unavailable.'
+            };
+        }
+        const runtimeConfig = this.getRuntimeConfig();
+        if (!runtimeConfig) {
+            return {
+                success: false,
+                reason: 'Runtime config unavailable.'
+            };
+        }
+
+        const sourceBackground = runtimeConfig.background;
+        if (!sourceBackground) {
+            const snapshot = this.getSnapshot();
+            return {
+                success: true,
+                snapshot: snapshot ?? this.toSnapshot(runtimeConfig)
+            };
+        }
+
+        const preservedColor = isFiniteNumber(sourceBackground.color)
+            ? clamp(Math.round(sourceBackground.color), 0, 0xffffff)
+            : DEFAULT_BACKGROUND_COLOR;
+        const preservedLayers = cloneLayers(sourceBackground.layers);
+
+        const clearFallbackConfig = cloneTestWorldConfig(runtimeConfig);
+        clearFallbackConfig.background = null;
+        const clearResult = this.importConfig(clearFallbackConfig);
+        if (!clearResult.success) {
+            return clearResult;
+        }
+
+        const afterClear = this.getRuntimeConfig();
+        if (!afterClear) {
+            return {
+                success: false,
+                reason: 'Runtime config unavailable after static removal.'
+            };
+        }
+
+        const nextConfig = cloneTestWorldConfig(afterClear);
+        nextConfig.background = {
+            color: preservedColor,
+            layers: preservedLayers
+        };
+        return this.importConfig(nextConfig);
+    }
+
+    public resetStatic(): BackgroundWriteResult {
+        return this.applyConfigEdit((config) => {
+            const background = this.ensureBackground(config);
+            background.staticImage = this.createDefaultStaticImage(config);
+        });
+    }
+
+    public removeParallaxSlot(slot: 1 | 2): BackgroundWriteResult {
+        return this.applyConfigEdit((config) => {
+            const background = this.ensureBackground(config);
+            const layers = Array.isArray(background.layers) ? background.layers : [];
+            const layerIndex = this.findParallaxIndexBySlot(layers, slot);
             if (layerIndex >= 0) {
-                layers[layerIndex] = normalized;
-            } else {
-                layers.push(normalized);
+                layers.splice(layerIndex, 1);
             }
             background.layers = layers;
+        });
+    }
+
+    public resetParallaxSlot(slot: 1 | 2): BackgroundWriteResult {
+        return this.applyConfigEdit((config) => {
+            const background = this.ensureBackground(config);
+            background.layers = this.upsertParallaxLayer(background.layers, slot, config, true);
         });
     }
 
@@ -169,7 +240,7 @@ export class BackgroundAuthoringService {
         const candidateConfig = cloneTestWorldConfig(runtimeConfig);
         const background = this.ensureBackground(candidateConfig);
         const layers = Array.isArray(background.layers) ? background.layers : [];
-        const layerIndex = this.findLayerIndex(layers, slot);
+        const layerIndex = this.findParallaxIndexBySlot(layers, slot);
         const current = this.normalizeParallaxLayer(
             layerIndex >= 0 ? layers[layerIndex] : undefined,
             slot,
@@ -188,7 +259,7 @@ export class BackgroundAuthoringService {
         return this.applyConfigEdit((config) => {
             const background = this.ensureBackground(config);
             const layers = Array.isArray(background.layers) ? background.layers : [];
-            const layerIndex = this.findLayerIndex(layers, slot);
+            const layerIndex = this.findParallaxIndexBySlot(layers, slot);
             const next = this.normalizeParallaxLayer({
                 ...this.normalizeParallaxLayer(
                 layerIndex >= 0 ? layers[layerIndex] : undefined,
@@ -233,28 +304,14 @@ export class BackgroundAuthoringService {
                 reason: error instanceof Error ? error.message : 'Failed to apply background config.'
             };
         }
-        // Use runtime import path so Save/Export/Import stay aligned with one config pipeline.
-        const importResult = this.legacyObjectAdapter.importRuntimeConfig(nextConfig);
-        if (!importResult?.success) {
-            return {
-                success: false,
-                reason: importResult?.reason ?? 'Failed to apply background config.'
-            };
-        }
-
-        // Background edits update runtime preview only; save remains an explicit action.
-        const snapshot = this.getSnapshot();
-        return {
-            success: true,
-            snapshot: snapshot ?? this.toSnapshot(nextConfig)
-        };
+        return this.importConfig(nextConfig);
     }
 
     private toSnapshot(config: TestWorldConfig): BackgroundSnapshot {
         const background = config.background;
         const layers = Array.isArray(background?.layers) ? background.layers : [];
-        const parallax1Index = this.findLayerIndex(layers, 1);
-        const parallax2Index = this.findLayerIndex(layers, 2);
+        const parallax1Index = this.findParallaxIndexBySlot(layers, 1);
+        const parallax2Index = this.findParallaxIndexBySlot(layers, 2);
         return {
             levelId: config.meta.id,
             levelName: config.meta.displayName,
@@ -333,6 +390,10 @@ export class BackgroundAuthoringService {
         };
     }
 
+    private createDefaultStaticImage(config: TestWorldConfig): TestWorldBackgroundImageConfig {
+        return this.normalizeStaticImage(undefined, config);
+    }
+
     private normalizeParallaxLayer(
         current: TestWorldParallaxLayerConfig | undefined,
         slot: 1 | 2,
@@ -340,11 +401,11 @@ export class BackgroundAuthoringService {
     ): TestWorldParallaxLayerConfig {
         const width = config.worldBounds?.width ?? 1600;
         const height = config.worldBounds?.height ?? 900;
-        const targetId = slot === 1 ? 'parallax_1' : 'parallax_2';
+        const targetId = this.getParallaxId(slot);
         const centerX = width * 0.5;
         const defaultY = slot === 1 ? Math.round(height * 0.45) : Math.round(height * 0.58);
         return {
-            id: current?.id?.trim() || targetId,
+            id: targetId,
             textureKey: current?.textureKey?.trim() || (slot === 1 ? DEFAULT_PARALLAX_1_TEXTURE_KEY : DEFAULT_PARALLAX_2_TEXTURE_KEY),
             textureAsset: current?.textureAsset?.trim() || DEFAULT_TEXTURE_ASSET,
             fillColor: isFiniteNumber(current?.fillColor)
@@ -365,13 +426,91 @@ export class BackgroundAuthoringService {
         };
     }
 
-    private findLayerIndex(layers: TestWorldParallaxLayerConfig[], slot: 1 | 2): number {
-        const expectedId = slot === 1 ? 'parallax_1' : 'parallax_2';
-        const byIdIndex = layers.findIndex((layer) => layer.id === expectedId);
-        if (byIdIndex >= 0) {
-            return byIdIndex;
-        }
+    private createDefaultParallaxLayer(slot: 1 | 2, config: TestWorldConfig): TestWorldParallaxLayerConfig {
+        return this.normalizeParallaxLayer(undefined, slot, config);
+    }
+
+    private getParallaxId(slot: 1 | 2): 'parallax_1' | 'parallax_2' {
+        return slot === 1 ? PARALLAX_1_ID : PARALLAX_2_ID;
+    }
+
+    private getOppositeParallaxId(slot: 1 | 2): 'parallax_1' | 'parallax_2' {
+        return slot === 1 ? PARALLAX_2_ID : PARALLAX_1_ID;
+    }
+
+    private isCanonicalParallaxId(id: string | undefined): id is 'parallax_1' | 'parallax_2' {
+        return id === PARALLAX_1_ID || id === PARALLAX_2_ID;
+    }
+
+    private findCanonicalParallaxIndex(layers: TestWorldParallaxLayerConfig[], slot: 1 | 2): number {
+        const expectedId = this.getParallaxId(slot);
+        return layers.findIndex((layer) => layer.id === expectedId);
+    }
+
+    private findLegacyParallaxIndexBySlot(layers: TestWorldParallaxLayerConfig[], slot: 1 | 2): number {
         const byIndex = slot - 1;
-        return byIndex < layers.length ? byIndex : -1;
+        if (byIndex < 0 || byIndex >= layers.length) {
+            return -1;
+        }
+        const candidate = layers[byIndex];
+        const candidateId = candidate?.id?.trim();
+        if (candidateId === this.getOppositeParallaxId(slot)) {
+            return -1;
+        }
+        if (this.isCanonicalParallaxId(candidateId)) {
+            return candidateId === this.getParallaxId(slot) ? byIndex : -1;
+        }
+        return byIndex;
+    }
+
+    private findParallaxIndexBySlot(layers: TestWorldParallaxLayerConfig[], slot: 1 | 2): number {
+        const canonicalIndex = this.findCanonicalParallaxIndex(layers, slot);
+        if (canonicalIndex >= 0) {
+            return canonicalIndex;
+        }
+        return this.findLegacyParallaxIndexBySlot(layers, slot);
+    }
+
+    private upsertParallaxLayer(
+        layersInput: TestWorldParallaxLayerConfig[] | undefined,
+        slot: 1 | 2,
+        config: TestWorldConfig,
+        forceDefault: boolean
+    ): TestWorldParallaxLayerConfig[] {
+        const layers = Array.isArray(layersInput) ? layersInput : [];
+        const layerIndex = this.findParallaxIndexBySlot(layers, slot);
+        const nextLayer = forceDefault
+            ? this.createDefaultParallaxLayer(slot, config)
+            : this.normalizeParallaxLayer(layerIndex >= 0 ? layers[layerIndex] : undefined, slot, config);
+        if (layerIndex >= 0) {
+            layers[layerIndex] = nextLayer;
+        } else {
+            layers.push(nextLayer);
+        }
+        return layers;
+    }
+
+    private importConfig(nextConfig: TestWorldConfig): BackgroundWriteResult {
+        if (!this.legacyObjectAdapter) {
+            return {
+                success: false,
+                reason: 'Runtime adapter unavailable.'
+            };
+        }
+        // Use runtime import path so Save/Export/Import stay aligned with one config pipeline.
+        const importResult = this.legacyObjectAdapter.importRuntimeConfig(nextConfig);
+        if (!importResult?.success) {
+            return {
+                success: false,
+                reason: importResult?.reason ?? 'Failed to apply background config.'
+            };
+        }
+
+        // Background edits update runtime preview only; save remains an explicit action.
+        const snapshot = this.getSnapshot();
+        return {
+            success: true,
+            snapshot: snapshot ?? this.toSnapshot(nextConfig)
+        };
     }
 }

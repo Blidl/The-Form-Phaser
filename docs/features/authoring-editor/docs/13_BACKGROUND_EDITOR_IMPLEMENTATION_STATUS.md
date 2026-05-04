@@ -34,3 +34,26 @@
 - Undo/Redo.
 - Copy/Paste.
 - Full object-like background items.
+
+## 6. B2 lifecycle + B2.1 bugfixes implemented
+- Background list rows are selectable for:
+  - Static
+  - Parallax 1
+  - Parallax 2
+- Target buttons and list active state are synchronized through one selected target state.
+- Remove actions implemented:
+  - Remove Static removes only `background.staticImage` (keeps `background.color` and `background.layers`).
+  - Remove Parallax 1 removes only `parallax_1`.
+  - Remove Parallax 2 removes only `parallax_2`.
+- Reset actions implemented:
+  - Reset Static restores only static defaults (keeps global color/layers).
+  - Reset Parallax 1 resets only `parallax_1`.
+  - Reset Parallax 2 resets only `parallax_2`.
+- Parallax slots now resolve by canonical ids first (`parallax_1`, `parallax_2`) with safe legacy index fallback only for non-canonical legacy rows, so slot edits/removes/resets stay independent.
+- Right inspector explicitly shows `Editing: Static|Parallax 1|Parallax 2`, and lifecycle actions are scoped to the selected target panel.
+- Remove/Reset actions use lightweight `confirm()` prompts.
+- Runtime config remains canonical and all background edits apply via runtime import path without auto-save.
+- Still not implemented:
+  - Canvas tools (selection/drag/resize handles)
+  - Asset picker
+  - Undo/Redo
