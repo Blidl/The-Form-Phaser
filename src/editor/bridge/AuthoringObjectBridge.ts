@@ -22,6 +22,10 @@ interface CreateAuthoringObjectBridgeSourceOptions {
     onRuntimeConfigApplied?: (config: TestWorldConfig) => void;
 }
 
+interface ImportRuntimeConfigOptions {
+    mode?: 'runtime_patch' | 'full_import';
+}
+
 export const createAuthoringObjectBridgeSource = (
     worldRuntime: TestWorldRuntime,
     options?: CreateAuthoringObjectBridgeSourceOptions
@@ -65,7 +69,7 @@ export const createAuthoringObjectBridgeSource = (
                 };
             }
         },
-        importRuntimeConfig: (config) => {
+        importRuntimeConfig: (config, importOptions: ImportRuntimeConfigOptions | undefined) => {
             const levelId = worldRuntime.getLevelId();
             if (importInProgress) {
                 return {
@@ -78,7 +82,9 @@ export const createAuthoringObjectBridgeSource = (
             }
             importInProgress = true;
             try {
-                const result = worldRuntime.replaceConfig(config);
+                const result = worldRuntime.replaceConfig(config, {
+                    mode: importOptions?.mode ?? 'runtime_patch'
+                });
                 if (result.success) {
                     const appliedConfig = worldRuntime.getConfig();
                     try {
