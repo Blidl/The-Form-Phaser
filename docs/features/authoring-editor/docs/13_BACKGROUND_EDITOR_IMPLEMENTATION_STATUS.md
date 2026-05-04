@@ -57,3 +57,14 @@
   - Canvas tools (selection/drag/resize handles)
   - Asset picker
   - Undo/Redo
+
+## 7. B3.0 schema/validation foundation implemented
+- Added object-based background config foundation in runtime schema:
+  - `background.backgroundObjects?: TestWorldBackgroundObjectConfig[]`
+  - `background.backgroundLayerSettings?: TestWorldBackgroundLayerSettingsConfig`
+- Legacy slot model remains active and unchanged for editing:
+  - `background.staticImage`
+  - `background.layers`
+- No object-based Background UI is implemented yet.
+- No renderer migration to object-based background is implemented yet.
+- Save/Import/Export pipelines now preserve object-based background fields through runtime config normalization.

@@ -47,10 +47,58 @@ export interface TestWorldParallaxLayerConfig extends TestWorldBackgroundImageCo
     scrollFactorY?: number;
 }
 
+export type TestWorldBackgroundObjectLayerId = 'static' | 'parallax1' | 'parallax2';
+
+export interface TestWorldBackgroundObjectBoundsConfig {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    rotation?: number;
+}
+
+export interface TestWorldBackgroundObjectVisualConfig {
+    shaderKey?: string;
+    textureKey?: string;
+    textureAsset?: string;
+    fillColor?: number;
+    strokeColor?: number;
+    alpha?: number;
+    tileHorizontalRepeat?: boolean;
+    tileVerticalRepeat?: boolean;
+}
+
+export interface TestWorldBackgroundObjectEditorConfig {
+    locked?: boolean;
+    hidden?: boolean;
+}
+
+export interface TestWorldBackgroundObjectConfig {
+    id: string;
+    name?: string;
+    layer: TestWorldBackgroundObjectLayerId;
+    bounds: TestWorldBackgroundObjectBoundsConfig;
+    visual: TestWorldBackgroundObjectVisualConfig;
+    editor?: TestWorldBackgroundObjectEditorConfig;
+}
+
+export interface TestWorldBackgroundLayerScrollFactorConfig {
+    scrollFactorX: number;
+    scrollFactorY: number;
+}
+
+export interface TestWorldBackgroundLayerSettingsConfig {
+    static?: TestWorldBackgroundLayerScrollFactorConfig;
+    parallax1?: TestWorldBackgroundLayerScrollFactorConfig;
+    parallax2?: TestWorldBackgroundLayerScrollFactorConfig;
+}
+
 export interface TestWorldBackgroundConfig {
     color?: number;
     staticImage?: TestWorldBackgroundImageConfig;
     layers?: TestWorldParallaxLayerConfig[];
+    backgroundObjects?: TestWorldBackgroundObjectConfig[];
+    backgroundLayerSettings?: TestWorldBackgroundLayerSettingsConfig;
 }
 
 export interface TestWorldPlayerSpawnConfig extends TestWorldEditorLockable {

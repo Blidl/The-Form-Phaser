@@ -149,7 +149,10 @@ export class BackgroundAuthoringService {
         }
 
         const nextConfig = cloneTestWorldConfig(afterClear);
+        const preservedBackground = sourceBackground ? { ...sourceBackground } : {};
+        delete preservedBackground.staticImage;
         nextConfig.background = {
+            ...preservedBackground,
             color: preservedColor,
             layers: preservedLayers
         };

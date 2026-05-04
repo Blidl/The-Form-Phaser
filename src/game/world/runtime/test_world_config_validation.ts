@@ -1,7 +1,14 @@
 import {
     TEST_WORLD_CONFIG,
     type TestWorldBackgroundConfig,
+    type TestWorldBackgroundLayerSettingsConfig,
+    type TestWorldBackgroundLayerScrollFactorConfig,
     type TestWorldBackgroundImageConfig,
+    type TestWorldBackgroundObjectBoundsConfig,
+    type TestWorldBackgroundObjectConfig,
+    type TestWorldBackgroundObjectEditorConfig,
+    type TestWorldBackgroundObjectLayerId,
+    type TestWorldBackgroundObjectVisualConfig,
     type TestWorldParallaxLayerConfig,
     cloneTestWorldConfig,
     type TestWorldBoundsConfig,
@@ -41,6 +48,11 @@ const MIN_PICKUP_RADIUS = 4;
 const MIN_WORLD_SIZE = 64;
 const MAX_BACKGROUND_LAYERS = 6;
 const DEFAULT_BACKGROUND_COLOR = 0x263238;
+const DEFAULT_BACKGROUND_OBJECT_LAYER_SCROLL: Record<TestWorldBackgroundObjectLayerId, TestWorldBackgroundLayerScrollFactorConfig> = {
+    static: { scrollFactorX: 0, scrollFactorY: 0 },
+    parallax1: { scrollFactorX: 0.45, scrollFactorY: 0.45 },
+    parallax2: { scrollFactorX: 0.2, scrollFactorY: 0.2 }
+};
 const DEFAULT_TRIGGER_PLATFORM_FILL_COLOR = 0xfff59d;
 const DEFAULT_TRIGGER_PLATFORM_STROKE_COLOR = 0xf9a825;
 const DEFAULT_TRIGGER_PLATFORM_DEACTIVATE_FILL_COLOR = 0xffccbc;
@@ -685,6 +697,217 @@ const normalizeParallaxLayer = (
     };
 };
 
+const asBackgroundObjectLayer = (
+    value: unknown,
+    fallback: TestWorldBackgroundObjectLayerId
+): TestWorldBackgroundObjectLayerId => {
+    return value === 'static' || value === 'parallax1' || value === 'parallax2'
+        ? value
+        : fallback;
+};
+
+const cloneBackgroundObjectBounds = (
+    bounds: TestWorldBackgroundObjectBoundsConfig
+): TestWorldBackgroundObjectBoundsConfig => ({
+    x: bounds.x,
+    y: bounds.y,
+    width: bounds.width,
+    height: bounds.height,
+    rotation: bounds.rotation
+});
+
+const cloneBackgroundObjectVisual = (
+    visual: TestWorldBackgroundObjectVisualConfig
+): TestWorldBackgroundObjectVisualConfig => ({
+    shaderKey: visual.shaderKey,
+    textureKey: visual.textureKey,
+    textureAsset: visual.textureAsset,
+    fillColor: visual.fillColor,
+    strokeColor: visual.strokeColor,
+    alpha: visual.alpha,
+    tileHorizontalRepeat: visual.tileHorizontalRepeat,
+    tileVerticalRepeat: visual.tileVerticalRepeat
+});
+
+const cloneBackgroundObjectEditor = (
+    editor: TestWorldBackgroundObjectEditorConfig | undefined
+): TestWorldBackgroundObjectEditorConfig | undefined => {
+    if (!editor) {
+        return undefined;
+    }
+    return {
+        locked: editor.locked,
+        hidden: editor.hidden
+    };
+};
+
+const cloneBackgroundObject = (
+    entry: TestWorldBackgroundObjectConfig
+): TestWorldBackgroundObjectConfig => ({
+    id: entry.id,
+    name: entry.name,
+    layer: entry.layer,
+    bounds: cloneBackgroundObjectBounds(entry.bounds),
+    visual: cloneBackgroundObjectVisual(entry.visual),
+    editor: cloneBackgroundObjectEditor(entry.editor)
+});
+
+const cloneBackgroundLayerScrollFactor = (
+    entry: TestWorldBackgroundLayerScrollFactorConfig
+): TestWorldBackgroundLayerScrollFactorConfig => ({
+    scrollFactorX: entry.scrollFactorX,
+    scrollFactorY: entry.scrollFactorY
+});
+
+const cloneBackgroundLayerSettings = (
+    settings: TestWorldBackgroundLayerSettingsConfig | undefined
+): TestWorldBackgroundLayerSettingsConfig | undefined => {
+    if (!settings) {
+        return undefined;
+    }
+    return {
+        static: settings.static ? cloneBackgroundLayerScrollFactor(settings.static) : undefined,
+        parallax1: settings.parallax1 ? cloneBackgroundLayerScrollFactor(settings.parallax1) : undefined,
+        parallax2: settings.parallax2 ? cloneBackgroundLayerScrollFactor(settings.parallax2) : undefined
+    };
+};
+
+const normalizeBackgroundObjectVisual = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldBackgroundObjectVisualConfig | undefined
+): TestWorldBackgroundObjectVisualConfig | null => {
+    const textureKey = asOptionalString(raw?.textureKey) ?? fallback?.textureKey;
+    const textureAsset = asOptionalString(raw?.textureAsset) ?? fallback?.textureAsset;
+    const fillColor = asColor(raw?.fillColor, fallback?.fillColor);
+    const hasRenderableSource = textureKey !== undefined || textureAsset !== undefined || fillColor !== undefined;
+    if (!hasRenderableSource) {
+        return null;
+    }
+
+    return {
+        shaderKey: asOptionalString(raw?.shaderKey) ?? fallback?.shaderKey,
+        textureKey,
+        textureAsset,
+        fillColor,
+        strokeColor: asColor(raw?.strokeColor, fallback?.strokeColor),
+        alpha: clampAlpha(raw?.alpha, fallback?.alpha ?? 1),
+        tileHorizontalRepeat: asBoolean(raw?.tileHorizontalRepeat, fallback?.tileHorizontalRepeat ?? false),
+        tileVerticalRepeat: asBoolean(raw?.tileVerticalRepeat, fallback?.tileVerticalRepeat ?? false)
+    };
+};
+
+const normalizeBackgroundObjectEditor = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldBackgroundObjectEditorConfig | undefined
+): TestWorldBackgroundObjectEditorConfig => {
+    return {
+        locked: asBoolean(raw?.locked, fallback?.locked ?? false),
+        hidden: asBoolean(raw?.hidden, fallback?.hidden ?? false)
+    };
+};
+
+const normalizeBackgroundObject = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldBackgroundObjectConfig | undefined,
+    usedIds: Set<string>,
+    index: number
+): TestWorldBackgroundObjectConfig | null => {
+    const fallbackId = fallback?.id ?? `background_object_${index + 1}`;
+    const boundsRaw = asObject(raw?.bounds);
+    const fallbackBounds = fallback?.bounds;
+    const visualRaw = asObject(raw?.visual);
+    const normalizedVisual = normalizeBackgroundObjectVisual(visualRaw, fallback?.visual);
+    if (!normalizedVisual) {
+        return null;
+    }
+
+    return {
+        id: ensureUniqueId(asString(raw?.id, fallbackId), usedIds, fallbackId),
+        name: asOptionalString(raw?.name) ?? fallback?.name,
+        layer: asBackgroundObjectLayer(raw?.layer, fallback?.layer ?? 'static'),
+        bounds: {
+            x: asNumber(boundsRaw?.x, fallbackBounds?.x ?? 0),
+            y: asNumber(boundsRaw?.y, fallbackBounds?.y ?? 0),
+            width: clampRectSize(asNumber(boundsRaw?.width, fallbackBounds?.width ?? MIN_RECT_SIZE)),
+            height: clampRectSize(asNumber(boundsRaw?.height, fallbackBounds?.height ?? MIN_RECT_SIZE)),
+            rotation: asNumber(boundsRaw?.rotation, fallbackBounds?.rotation ?? 0)
+        },
+        visual: normalizedVisual,
+        editor: normalizeBackgroundObjectEditor(asObject(raw?.editor), fallback?.editor)
+    };
+};
+
+const normalizeBackgroundObjects = (
+    rawValue: unknown,
+    fallback: readonly TestWorldBackgroundObjectConfig[] | undefined
+): TestWorldBackgroundObjectConfig[] | undefined => {
+    if (rawValue === undefined) {
+        return fallback?.map((entry) => cloneBackgroundObject(entry));
+    }
+    if (rawValue === null) {
+        return [];
+    }
+    if (!Array.isArray(rawValue)) {
+        return fallback?.map((entry) => cloneBackgroundObject(entry)) ?? [];
+    }
+
+    const fallbackItems = fallback ?? [];
+    const usedIds = new Set<string>();
+    const normalized = rawValue
+        .map((entry, index) => normalizeBackgroundObject(asObject(entry), fallbackItems[index], usedIds, index))
+        .filter((entry): entry is TestWorldBackgroundObjectConfig => entry !== null);
+    return normalized;
+};
+
+const normalizeBackgroundLayerScrollFactor = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldBackgroundLayerScrollFactorConfig | undefined,
+    layer: TestWorldBackgroundObjectLayerId
+): TestWorldBackgroundLayerScrollFactorConfig => {
+    const defaults = DEFAULT_BACKGROUND_OBJECT_LAYER_SCROLL[layer];
+    return {
+        scrollFactorX: clampScrollFactor(raw?.scrollFactorX, fallback?.scrollFactorX ?? defaults.scrollFactorX),
+        scrollFactorY: clampScrollFactor(raw?.scrollFactorY, fallback?.scrollFactorY ?? defaults.scrollFactorY)
+    };
+};
+
+const normalizeBackgroundLayerSettings = (
+    rawValue: unknown,
+    fallback: TestWorldBackgroundLayerSettingsConfig | undefined
+): TestWorldBackgroundLayerSettingsConfig | undefined => {
+    if (rawValue === undefined) {
+        return cloneBackgroundLayerSettings(fallback);
+    }
+    if (rawValue === null) {
+        return undefined;
+    }
+
+    const raw = asObject(rawValue);
+    if (!raw) {
+        return cloneBackgroundLayerSettings(fallback);
+    }
+
+    const hasRawStatic = Object.prototype.hasOwnProperty.call(raw, 'static');
+    const hasRawParallax1 = Object.prototype.hasOwnProperty.call(raw, 'parallax1');
+    const hasRawParallax2 = Object.prototype.hasOwnProperty.call(raw, 'parallax2');
+    const hasFallback = Boolean(fallback?.static || fallback?.parallax1 || fallback?.parallax2);
+    if (!hasRawStatic && !hasRawParallax1 && !hasRawParallax2 && !hasFallback) {
+        return undefined;
+    }
+
+    return {
+        static: hasRawStatic || fallback?.static
+            ? normalizeBackgroundLayerScrollFactor(asObject(raw.static), fallback?.static, 'static')
+            : undefined,
+        parallax1: hasRawParallax1 || fallback?.parallax1
+            ? normalizeBackgroundLayerScrollFactor(asObject(raw.parallax1), fallback?.parallax1, 'parallax1')
+            : undefined,
+        parallax2: hasRawParallax2 || fallback?.parallax2
+            ? normalizeBackgroundLayerScrollFactor(asObject(raw.parallax2), fallback?.parallax2, 'parallax2')
+            : undefined
+    };
+};
+
 const normalizeBackground = (
     rawValue: unknown,
     fallback: TestWorldBackgroundConfig | null
@@ -710,7 +933,12 @@ const normalizeBackground = (
     return {
         color,
         staticImage,
-        layers: normalizedLayers
+        layers: normalizedLayers,
+        backgroundObjects: normalizeBackgroundObjects(raw.backgroundObjects, fallback?.backgroundObjects),
+        backgroundLayerSettings: normalizeBackgroundLayerSettings(
+            raw.backgroundLayerSettings,
+            fallback?.backgroundLayerSettings
+        )
     };
 };
 
