@@ -42,6 +42,14 @@ export interface CreateBackgroundObjectInput {
     bounds?: Partial<TestWorldBackgroundObjectBoundsConfig>;
 }
 
+export interface CreateBackgroundObjectFromTemplateOptions {
+    layer?: BackgroundObjectLayerId;
+    offsetX?: number;
+    offsetY?: number;
+    locked?: boolean;
+    hidden?: boolean;
+}
+
 export interface UpdateBackgroundObjectBoundsPatch {
     x?: number;
     y?: number;
@@ -281,6 +289,66 @@ export class BackgroundObjectAuthoringService {
             return {
                 success: true,
                 object
+            };
+        });
+    }
+
+    public createObjectFromTemplate(
+        template: TestWorldBackgroundObjectConfig,
+        options?: CreateBackgroundObjectFromTemplateOptions
+    ): BackgroundObjectMutationResult {
+        return this.applyConfigEdit((nextConfig) => {
+            const background = this.ensureBackground(nextConfig);
+            const objects = cloneBackgroundObjects(background.backgroundObjects);
+            const layer = normalizeLayer(options?.layer ?? template.layer, 'static');
+            const id = this.generateObjectId(layer, objects);
+            const sourceBounds = template.bounds;
+            const sourceVisual = template.visual;
+            const offsetX = isFiniteNumber(options?.offsetX) ? options.offsetX : 0;
+            const offsetY = isFiniteNumber(options?.offsetY) ? options.offsetY : 0;
+            const candidateVisual: TestWorldBackgroundObjectVisualConfig = {
+                shaderKey: sanitizeOptionalString(sourceVisual.shaderKey),
+                textureKey: sanitizeOptionalString(sourceVisual.textureKey),
+                textureAsset: sanitizeOptionalString(sourceVisual.textureAsset),
+                fillColor: sanitizeColor(sourceVisual.fillColor),
+                strokeColor: sanitizeColor(sourceVisual.strokeColor),
+                alpha: isFiniteNumber(sourceVisual.alpha) ? clamp(sourceVisual.alpha, 0, 1) : undefined,
+                tileHorizontalRepeat: typeof sourceVisual.tileHorizontalRepeat === 'boolean'
+                    ? sourceVisual.tileHorizontalRepeat
+                    : undefined,
+                tileVerticalRepeat: typeof sourceVisual.tileVerticalRepeat === 'boolean'
+                    ? sourceVisual.tileVerticalRepeat
+                    : undefined
+            };
+            if (!isRenderableVisual(candidateVisual)) {
+                return {
+                    success: false,
+                    reason: 'Background object must keep textureKey, textureAsset, or fillColor.'
+                };
+            }
+
+            const nextObject: TestWorldBackgroundObjectConfig = {
+                id,
+                name: sanitizeOptionalString(template.name) ?? this.getDefaultNameForLayer(layer),
+                layer,
+                bounds: {
+                    x: isFiniteNumber(sourceBounds.x) ? sourceBounds.x + offsetX : offsetX,
+                    y: isFiniteNumber(sourceBounds.y) ? sourceBounds.y + offsetY : offsetY,
+                    width: isFiniteNumber(sourceBounds.width) ? Math.max(8, Math.round(sourceBounds.width)) : 8,
+                    height: isFiniteNumber(sourceBounds.height) ? Math.max(8, Math.round(sourceBounds.height)) : 8,
+                    rotation: isFiniteNumber(sourceBounds.rotation) ? sourceBounds.rotation : 0
+                },
+                visual: candidateVisual,
+                editor: {
+                    locked: typeof options?.locked === 'boolean' ? options.locked : false,
+                    hidden: typeof options?.hidden === 'boolean' ? options.hidden : false
+                }
+            };
+            objects.push(nextObject);
+            background.backgroundObjects = objects;
+            return {
+                success: true,
+                object: nextObject
             };
         });
     }

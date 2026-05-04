@@ -123,9 +123,9 @@
   - texture requests include object-based `textureKey` + `textureAsset` pairs
   - fill/stroke rectangle fallback is used when texture is unavailable and visual fallback data exists
 - Object-based layer ordering is rendered in stable order:
+  - `static`
   - `parallax1`
   - `parallax2`
-  - `static`
   - while preserving source array order inside each layer
 - Object-based parallax uses object-layer settings for parallax layers, while static layer follows legacy static behavior.
 - Legacy renderer path remains active during transition:
@@ -255,3 +255,52 @@
 - Limitation (deferred):
   - rotation handle is not implemented
   - resize math is axis-aligned for MVP; on rotated objects, corner drag updates axis-aligned bounds while object rotation/outline remains rotated
+
+## 17. B3.8 background object keyboard shortcuts MVP implemented
+- Active `src/editor/modes/BackgroundEditorMode.ts` now handles Background-only object shortcuts while F2 editor is open and Background tab is active:
+  - `Delete` / `Backspace`: delete selected object (with confirm prompt)
+  - `Ctrl/Cmd+C`: copy selected object into Background-mode local clipboard snapshot
+  - `Ctrl/Cmd+V`: paste one copied object into active layer with new id and `+24/+24` offset
+  - `Ctrl/Cmd+D`: duplicate selected object in same layer with new id and `+24/+24` offset
+- Input-focus guard:
+  - shortcuts are ignored when focus is in `input`, `textarea`, `select`, or `contenteditable` elements
+  - this prevents delete/copy/paste/duplicate shortcuts from interfering with field editing
+- Delete behavior:
+  - locked selected object is blocked with lightweight status message (`Object is locked`)
+  - after successful delete, drag/resize transient state clears and selection moves to another object in the same layer when available
+- Paste behavior:
+  - newly pasted object is selected
+  - pasted object is forced to `editor.locked = false` and `editor.hidden = false` for MVP
+  - visual fields and bounds are copied from clipboard template
+- Added service support in `src/editor/background-authoring/BackgroundObjectAuthoringService.ts`:
+  - `createObjectFromTemplate(template, options?)`
+  - applies one runtime clone-import mutation that only updates `background.backgroundObjects`
+  - validates renderable visual state and preserves legacy background fallback fields unchanged
+- Deferred remains:
+  - Undo/Redo is still not implemented
+
+## 18. B3.8.1 Background Ctrl/Cmd+C/V reliability bugfix implemented
+- Fixed Background mode keyboard matching for copy/paste shortcuts in `src/editor/modes/BackgroundEditorMode.ts`:
+  - copy/paste/duplicate now match both:
+    - normalized `event.key` (`c`, `v`, `d`)
+    - and physical key fallback via `event.code` (`KeyC`, `KeyV`, `KeyD`)
+  - this keeps shortcuts reliable across non-Latin keyboard layouts while preserving Ctrl/Cmd modifier behavior.
+- Shortcut default suppression tightened:
+  - `preventDefault()` is now called only when shortcut action is actually handled successfully.
+  - copy/paste with no valid selection/clipboard no longer claim browser default behavior.
+- Listener lifecycle remains Background-mode scoped and editor-scoped:
+  - shortcut listener is attached on Background mode `enter()`, detached on `exit()`.
+  - listener uses capture phase on `document` with duplicate-attach guard.
+- Input focus guard remains unchanged:
+  - shortcuts are ignored while editing `input`, `textarea`, `select`, or `contenteditable`.
+
+## 19. B3.8.2 background object render order bugfix implemented
+- Fixed object-based background render order in runtime renderer (`src/scenes/runtime/test_scene_background_runtime.ts`):
+  - `static` now renders behind `parallax1` and `parallax2`
+  - per-layer source array order is preserved (later entry in same layer renders on top)
+- Depth ordering for object-based background layers is now:
+  - `static` < `parallax1` < `parallax2`
+  - all remain behind gameplay depths
+- Legacy runtime fallback behavior remains unchanged:
+  - object-based background is primary when `background.backgroundObjects` has entries
+  - legacy `background.staticImage` + `background.layers` render only when object-based entries are absent

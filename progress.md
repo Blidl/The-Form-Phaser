@@ -340,3 +340,54 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
   - Added section `16. B3.7 background object resize handles MVP implemented (no rotation handle)` with behavior + limitation notes.
 - Verification:
   - `npm run build-nolog` PASS.
+
+- 2026-05-04: Implemented B3.8 Background object keyboard shortcuts MVP in active `src/editor/*` path.
+  - `src/editor/modes/BackgroundEditorMode.ts`:
+    - Added Background-mode keyboard shortcuts with input-focus guard (`input`, `textarea`, `select`, `contenteditable`) using shared `isEditorTextInputFocused()` helper:
+      - `Delete` / `Backspace` -> delete selected background object
+      - `Ctrl/Cmd+C` -> copy selected object into mode-local clipboard snapshot
+      - `Ctrl/Cmd+V` -> paste copied object into currently active layer
+      - `Ctrl/Cmd+D` -> duplicate selected object
+    - Keyboard listener lifecycle is mode-scoped (`enter` attach / `exit` detach), so shortcuts only work while Background mode is active in open editor.
+    - Delete shortcut behavior:
+      - reuses existing confirm prompt;
+      - blocks locked objects with status message `Object is locked`;
+      - clears drag/resize/cursor transient state after delete;
+      - selects another object in the same layer if available, otherwise clears selection.
+    - Added lightweight status messages:
+      - `Copied background object`
+      - `Pasted background object`
+      - `Nothing to paste`
+      - `Object is locked`
+  - `src/editor/background-authoring/BackgroundObjectAuthoringService.ts`:
+    - Added `createObjectFromTemplate(template, options?)` for paste flow.
+    - Method clones runtime config, mutates only `background.backgroundObjects`, validates renderable visual, assigns new unique id, applies layer override/offset, and imports via `legacyObjectAdapter.importRuntimeConfig(...)`.
+    - Paste defaults via mode call: new object in active layer, `+24/+24` offset, unlocked, visible.
+  - `docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md` updated with section `17. B3.8 ...`.
+
+- 2026-05-04: Implemented B3.8.1 bugfix for Background Ctrl/Cmd+C/V reliability.
+  - `src/editor/modes/BackgroundEditorMode.ts`:
+    - Updated shortcut matcher to accept both normalized key and physical code:
+      - copy: `key === "c"` or `code === "KeyC"`
+      - paste: `key === "v"` or `code === "KeyV"`
+      - duplicate: `key === "d"` or `code === "KeyD"`
+    - This fixes cases where non-Latin keyboard layout makes `event.key` differ from expected Latin letter.
+    - Tightened `preventDefault()` policy: now applied only when shortcut action is actually handled.
+    - Kept input-focus guard strict to editable fields only.
+    - Kept clipboard storage as mode private field (`backgroundObjectClipboard`) so it survives inspector rerenders.
+    - Listener lifecycle remains mode-scoped; now attached on `document` capture with duplicate-attach guard (`shortcutsAttached`) and removed on mode exit.
+  - Updated docs status:
+    - `docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md` section `18. B3.8.1 ...`.
+
+- 2026-05-04: Implemented B3.8.2 Background object render-order bugfix (runtime only, no editor_v2 changes).
+  - `src/scenes/runtime/test_scene_background_runtime.ts`:
+    - fixed object-based render layer order to `static -> parallax1 -> parallax2`;
+    - fixed layer depth offsets to keep `static` behind `parallax1`, and `parallax1` behind `parallax2`;
+    - preserved source array order within each layer and kept all background object depths behind gameplay.
+  - Legacy fallback behavior kept intact:
+    - object-based background remains primary when `background.backgroundObjects` exists;
+    - legacy `background.staticImage` + `background.layers` remain fallback when object-based entries are absent.
+  - `src/editor/modes/BackgroundEditorMode.ts` hit-test logic review:
+    - no change required; hit-test is layer-scoped by selected tab and still resolves topmost by reverse array scan within that layer.
+  - Updated docs:
+    - `docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md` section `10` ordering note + new section `19`.

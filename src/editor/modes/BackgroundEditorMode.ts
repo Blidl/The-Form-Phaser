@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import type { EditorMode, EditorModeRuntimeContext, EditorPointerEvent } from '../core/EditorMode';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
+import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
 import {
     BackgroundObjectAuthoringService,
     type BackgroundObjectLayerId,
@@ -46,6 +47,10 @@ interface BackgroundObjectResizeState {
         height: number;
         rotation: number;
     };
+}
+
+interface BackgroundShortcutDeleteOptions {
+    requireConfirm: boolean;
 }
 
 const COLOR_HEX_PATTERN = /^#?([0-9a-fA-F]{6})$/;
@@ -139,6 +144,9 @@ export class BackgroundEditorMode implements EditorMode {
     private lastSelectionOutlineSignature: string | null = null;
     private dragState: BackgroundObjectDragState | null = null;
     private resizeState: BackgroundObjectResizeState | null = null;
+    private backgroundObjectClipboard: TestWorldBackgroundObjectConfig | null = null;
+    private readonly handleShortcutKeyDown: (event: KeyboardEvent) => void;
+    private shortcutsAttached = false;
 
     public constructor(options: BackgroundEditorModeOptions) {
         this.scene = options.scene;
@@ -147,9 +155,13 @@ export class BackgroundEditorMode implements EditorMode {
         this.selectionOutline = this.scene.add.graphics();
         this.selectionOutline.setDepth(BACKGROUND_SELECTION_OUTLINE_DEPTH);
         this.selectionOutline.setVisible(false);
+        this.handleShortcutKeyDown = (event: KeyboardEvent) => {
+            this.handleKeyboardShortcuts(event);
+        };
     }
 
     public enter(): void {
+        this.attachShortcutListener();
         this.clearDragState();
         this.clearResizeState();
         this.setSceneCursor('default');
@@ -159,6 +171,7 @@ export class BackgroundEditorMode implements EditorMode {
     }
 
     public exit(): void {
+        this.detachShortcutListener();
         this.clearDragState();
         this.clearResizeState();
         this.setSceneCursor('default');
@@ -673,13 +686,13 @@ export class BackgroundEditorMode implements EditorMode {
         actionsRow.style.flexWrap = 'wrap';
         actionsRow.style.marginBottom = '8px';
         actionsRow.appendChild(this.makeActionButton('Duplicate', () => {
-            this.commitObject(() => this.backgroundObjectAuthoringService.duplicateObject(selectedObject.id));
+            this.duplicateSelectedObjectFromShortcut();
         }));
         actionsRow.appendChild(this.makeConfirmedActionButton(
             'Delete',
             'Delete selected background object?',
             () => {
-                this.commitObject(() => this.backgroundObjectAuthoringService.deleteObject(selectedObject.id));
+                this.deleteSelectedObjectFromShortcut({ requireConfirm: false });
             }
         ));
         container.appendChild(actionsRow);
@@ -1003,6 +1016,143 @@ export class BackgroundEditorMode implements EditorMode {
         return true;
     }
 
+    private handleKeyboardShortcuts(event: KeyboardEvent): void {
+        if (isEditorTextInputFocused()) {
+            return;
+        }
+
+        const key = typeof event.key === 'string' ? event.key.toLowerCase() : '';
+        const code = typeof event.code === 'string' ? event.code : '';
+        const hasCommandModifier = event.ctrlKey || event.metaKey;
+        if (event.key === 'Delete' || event.key === 'Backspace') {
+            if (!event.repeat) {
+                const deleted = this.deleteSelectedObjectFromShortcut({ requireConfirm: true });
+                if (deleted) {
+                    event.preventDefault();
+                }
+            }
+            return;
+        }
+        if (!hasCommandModifier || event.repeat) {
+            return;
+        }
+        if (key === 'c' || code === 'KeyC') {
+            const copied = this.copySelectedObjectToClipboard();
+            if (copied) {
+                event.preventDefault();
+            }
+            return;
+        }
+        if (key === 'v' || code === 'KeyV') {
+            const pasted = this.pasteObjectFromClipboard();
+            if (pasted) {
+                event.preventDefault();
+            }
+            return;
+        }
+        if (key === 'd' || code === 'KeyD') {
+            const duplicated = this.duplicateSelectedObjectFromShortcut();
+            if (duplicated) {
+                event.preventDefault();
+            }
+        }
+    }
+
+    private attachShortcutListener(): void {
+        if (this.shortcutsAttached || typeof document === 'undefined') {
+            return;
+        }
+        document.addEventListener('keydown', this.handleShortcutKeyDown, { capture: true });
+        this.shortcutsAttached = true;
+    }
+
+    private detachShortcutListener(): void {
+        if (!this.shortcutsAttached || typeof document === 'undefined') {
+            return;
+        }
+        document.removeEventListener('keydown', this.handleShortcutKeyDown, { capture: true });
+        this.shortcutsAttached = false;
+    }
+
+    private copySelectedObjectToClipboard(): boolean {
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
+        const selectedObject = this.getSelectedObject(snapshot);
+        if (!selectedObject) {
+            return false;
+        }
+        this.backgroundObjectClipboard = this.cloneObjectForClipboard(selectedObject);
+        this.statusMessage = 'Copied background object';
+        this.onUiChanged();
+        return true;
+    }
+
+    private pasteObjectFromClipboard(): boolean {
+        if (!this.backgroundObjectClipboard) {
+            this.statusMessage = 'Nothing to paste';
+            this.onUiChanged();
+            return false;
+        }
+        const result = this.backgroundObjectAuthoringService.createObjectFromTemplate(
+            this.backgroundObjectClipboard,
+            {
+                layer: this.selectedObjectLayer,
+                offsetX: 24,
+                offsetY: 24,
+                locked: false,
+                hidden: false
+            }
+        );
+        const commitResult = this.handleObjectMutationResult(result, result.object?.id ?? null);
+        if (!commitResult.success) {
+            return false;
+        }
+        this.statusMessage = 'Pasted background object';
+        this.onUiChanged();
+        return true;
+    }
+
+    private duplicateSelectedObjectFromShortcut(): boolean {
+        const selectedObjectId = this.selectedObjectId;
+        if (!selectedObjectId) {
+            return false;
+        }
+        const result = this.backgroundObjectAuthoringService.duplicateObject(selectedObjectId);
+        const commitResult = this.handleObjectMutationResult(result, result.object?.id ?? null);
+        return commitResult.success;
+    }
+
+    private deleteSelectedObjectFromShortcut(options: BackgroundShortcutDeleteOptions): boolean {
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
+        const selectedObject = this.getSelectedObject(snapshot);
+        if (!selectedObject) {
+            return false;
+        }
+        if (selectedObject.editor?.locked) {
+            this.statusMessage = 'Object is locked';
+            this.onUiChanged();
+            return false;
+        }
+        if (options.requireConfirm && !this.confirmAction('Delete selected background object?')) {
+            return false;
+        }
+
+        const selectedLayer = normalizeLayer(selectedObject.layer);
+        const layerObjects = this.getObjectsForLayer(snapshot, selectedLayer);
+        const deletedIndex = layerObjects.findIndex((entry) => entry.id === selectedObject.id);
+        const result = this.backgroundObjectAuthoringService.deleteObject(selectedObject.id);
+        if (!result.success) {
+            this.handleObjectMutationResult(result, null);
+            return false;
+        }
+
+        this.clearDragState();
+        this.clearResizeState();
+        this.setSceneCursor('default');
+        const nextSelectionId = this.resolveNextSelectionAfterDelete(result.snapshot ?? null, selectedLayer, deletedIndex);
+        const commitResult = this.handleObjectMutationResult(result, nextSelectionId);
+        return commitResult.success;
+    }
+
     private setSelectedLayer(layer: BackgroundObjectLayerId): void {
         if (this.selectedObjectLayer === layer) {
             return;
@@ -1075,6 +1225,65 @@ export class BackgroundEditorMode implements EditorMode {
             return [];
         }
         return snapshot.objects.filter((entry) => normalizeLayer(entry.layer) === this.selectedObjectLayer);
+    }
+
+    private getObjectsForLayer(
+        snapshot: BackgroundObjectSnapshot | null,
+        layer: BackgroundObjectLayerId
+    ): TestWorldBackgroundObjectConfig[] {
+        if (!snapshot) {
+            return [];
+        }
+        return snapshot.objects.filter((entry) => normalizeLayer(entry.layer) === layer);
+    }
+
+    private resolveNextSelectionAfterDelete(
+        snapshot: BackgroundObjectSnapshot | null,
+        layer: BackgroundObjectLayerId,
+        deletedIndex: number
+    ): string | null {
+        const layerObjects = this.getObjectsForLayer(snapshot, layer);
+        if (layerObjects.length <= 0) {
+            return null;
+        }
+        if (deletedIndex < 0) {
+            return layerObjects[layerObjects.length - 1]?.id ?? null;
+        }
+        const nextIndex = clamp(deletedIndex, 0, layerObjects.length - 1);
+        return layerObjects[nextIndex]?.id ?? null;
+    }
+
+    private cloneObjectForClipboard(
+        entry: TestWorldBackgroundObjectConfig
+    ): TestWorldBackgroundObjectConfig {
+        return {
+            id: entry.id,
+            name: entry.name,
+            layer: normalizeLayer(entry.layer),
+            bounds: {
+                x: entry.bounds.x,
+                y: entry.bounds.y,
+                width: entry.bounds.width,
+                height: entry.bounds.height,
+                rotation: entry.bounds.rotation
+            },
+            visual: {
+                shaderKey: entry.visual.shaderKey,
+                textureKey: entry.visual.textureKey,
+                textureAsset: entry.visual.textureAsset,
+                fillColor: entry.visual.fillColor,
+                strokeColor: entry.visual.strokeColor,
+                alpha: entry.visual.alpha,
+                tileHorizontalRepeat: entry.visual.tileHorizontalRepeat,
+                tileVerticalRepeat: entry.visual.tileVerticalRepeat
+            },
+            editor: entry.editor
+                ? {
+                    locked: entry.editor.locked,
+                    hidden: entry.editor.hidden
+                }
+                : undefined
+        };
     }
 
     private getSelectedObject(snapshot: BackgroundObjectSnapshot | null): TestWorldBackgroundObjectConfig | null {

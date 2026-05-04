@@ -22,7 +22,7 @@ const DEFAULT_OBJECT_LAYER_SCROLL: Record<TestWorldBackgroundObjectLayerId, { sc
     parallax1: { scrollFactorX: 0.45, scrollFactorY: 0.45 },
     parallax2: { scrollFactorX: 0.2, scrollFactorY: 0.2 }
 };
-const BACKGROUND_OBJECT_RENDER_LAYER_ORDER: readonly TestWorldBackgroundObjectLayerId[] = ['parallax1', 'parallax2', 'static'];
+const BACKGROUND_OBJECT_RENDER_LAYER_ORDER: readonly TestWorldBackgroundObjectLayerId[] = ['static', 'parallax1', 'parallax2'];
 
 interface PendingTextureRequest {
     key: string;
@@ -454,15 +454,15 @@ export const createTestSceneBackgroundRuntime = (
         }
 
         const perLayerEntryCount: Record<TestWorldBackgroundObjectLayerId, number> = {
+            static: 0,
             parallax1: 0,
-            parallax2: 0,
-            static: 0
+            parallax2: 0
         };
         orderedBackgroundObjects.forEach((backgroundObject) => {
             const layer = resolveBackgroundObjectLayer(backgroundObject.layer);
-            const layerDepthOffset = layer === 'parallax1'
+            const layerDepthOffset = layer === 'static'
                 ? 0
-                : layer === 'parallax2'
+                : layer === 'parallax1'
                     ? BACKGROUND_OBJECT_LAYER_DEPTH_STEP
                     : BACKGROUND_OBJECT_LAYER_DEPTH_STEP * 2;
             const layerEntryIndex = perLayerEntryCount[layer];
