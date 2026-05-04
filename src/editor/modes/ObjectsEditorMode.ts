@@ -35,6 +35,13 @@ const CATEGORY_LABELS: Record<EditorObjectCategory, string> = {
 const CATEGORY_ORDER: readonly EditorObjectCategory[] = ['platforms', 'special', 'objects'];
 const GRID_SIZE_OPTIONS = [8, 16, 32, 64];
 const LAYER_OPTIONS = [1, 2, 3, 4, 5] as const;
+const LAYER_OPTION_LABELS: Readonly<Record<number, string>> = {
+    1: 'Layer 1',
+    2: 'Layer 2',
+    3: 'Layer 3 Default',
+    4: 'Layer 4',
+    5: 'Layer 5 Debug'
+};
 const EDITABLE_BOUNDS_FIELDS = ['x', 'y', 'width', 'height', 'rotation'] as const;
 type EditableBoundsField = (typeof EDITABLE_BOUNDS_FIELDS)[number];
 const EDITABLE_VISUAL_TEXT_FIELDS = ['shaderKey', 'textureKey'] as const;
@@ -602,11 +609,11 @@ export class ObjectsEditorMode implements EditorMode {
     public renderRightInspector(panel: EditorPanel): void {
         const activeLevel = this.projectStore.getActiveLevel();
         const objects = this.getActiveObjects();
-        const selectedObject = this.selectedObjectId
-            ? this.projectStore.getObject(activeLevel.id, this.selectedObjectId)
-            : undefined;
 
         panel.setCustomContent('Object Properties', (container) => {
+            const selectedObject = this.selectedObjectId
+                ? this.projectStore.getObject(activeLevel.id, this.selectedObjectId)
+                : undefined;
             if (!selectedObject) {
                 container.appendChild(this.makeLabel(`Active level: ${activeLevel.name} (${activeLevel.id})`));
                 container.appendChild(this.makeLabel(`Object count: ${objects.length}`));
@@ -1100,33 +1107,61 @@ export class ObjectsEditorMode implements EditorMode {
     }
 
     private makeVisualLayerRow(selectedObject: EditorObjectData): HTMLDivElement {
-        const input = document.createElement('input');
-        input.type = 'text';
-        input.value = this.formatNumber(selectedObject.visual.layer);
-        input.inputMode = 'numeric';
-        input.autocomplete = 'off';
-        input.spellcheck = false;
+        const input = document.createElement('select');
         input.style.width = '100%';
         input.style.padding = '2px 4px';
         input.style.border = '1px solid #5f5f5f';
         input.style.boxSizing = 'border-box';
         this.bindEditorInputKeyboardGuards(input);
 
-        const datalistId = `objects-layer-options-${selectedObject.id}`;
-        input.setAttribute('list', datalistId);
-        const datalist = document.createElement('datalist');
-        datalist.id = datalistId;
-        const layerValues = new Set<number>(LAYER_OPTIONS);
-        layerValues.add(selectedObject.visual.layer);
-        [...layerValues].sort((a, b) => a - b).forEach((value) => {
+        LAYER_OPTIONS.forEach((value) => {
             const option = document.createElement('option');
             option.value = String(value);
-            datalist.appendChild(option);
+            option.textContent = LAYER_OPTION_LABELS[value] ?? `Layer ${value}`;
+            input.appendChild(option);
+        });
+        const initialLayer = this.resolveInspectorLayerValue(selectedObject.visual.layer);
+        input.value = String(initialLayer);
+        objectDiag('[LayerField]', {
+            phase: 'render',
+            objectId: selectedObject.id,
+            uiValue: input.value,
+            storedValueBefore: initialLayer,
+            requestedLayer: null,
+            storedValueAfter: initialLayer,
+            success: true,
+            reason: null
         });
 
         const commitField = (): void => {
+            const selectedId = this.selectedObjectId;
+            const storedValueBefore = this.getSelectedVisualNumericFieldValue('layer');
+            const requestedLayer = Number(input.value.trim());
+            objectDiag('[LayerField]', {
+                phase: 'change',
+                objectId: selectedId,
+                uiValue: input.value,
+                storedValueBefore,
+                requestedLayer,
+                storedValueAfter: null,
+                success: null,
+                reason: null
+            });
+
             const committed = this.commitSelectedObjectVisualLayer(input.value);
-            input.value = this.formatNumber(this.getSelectedVisualNumericFieldValue('layer'));
+            const storedValueAfter = this.getSelectedVisualNumericFieldValue('layer');
+            input.value = String(this.resolveInspectorLayerValue(storedValueAfter));
+
+            objectDiag('[LayerField]', {
+                phase: committed ? 'commit-success' : 'commit-fail',
+                objectId: selectedId,
+                uiValue: input.value,
+                storedValueBefore,
+                requestedLayer,
+                storedValueAfter,
+                success: committed,
+                reason: committed ? null : 'Failed to apply via updateObjectVisual.'
+            });
             if (committed) {
                 this.onUiChanged();
             }
@@ -1139,11 +1174,10 @@ export class ObjectsEditorMode implements EditorMode {
                 input.blur();
             }
         });
+        input.addEventListener('change', commitField);
         input.addEventListener('blur', commitField);
 
-        const row = this.makeSingleFieldInputRow('Layer', input);
-        row.appendChild(datalist);
-        return row;
+        return this.makeSingleFieldInputRow('Layer', input);
     }
 
     private makeVisualOnlyDebugViewRow(selectedObject: EditorObjectData): HTMLDivElement {
@@ -1959,11 +1993,14 @@ export class ObjectsEditorMode implements EditorMode {
 
     private commitSelectedObjectVisualLayer(rawValue: string): boolean {
         const parsed = Number(rawValue.trim());
-        if (!Number.isFinite(parsed)) {
+        if (!Number.isFinite(parsed) || !Number.isInteger(parsed)) {
+            return false;
+        }
+        if (!LAYER_OPTIONS.includes(parsed as (typeof LAYER_OPTIONS)[number])) {
             return false;
         }
         return this.commitSelectedObjectBasicVisualPatch({
-            layer
+            layer: parsed
         });
     }
 
@@ -2138,6 +2175,16 @@ export class ObjectsEditorMode implements EditorMode {
             return field === 'alpha' ? 1 : 3;
         }
         return selected.visual[field];
+    }
+
+    private resolveInspectorLayerValue(rawLayer: number): number {
+        if (!Number.isFinite(rawLayer) || !Number.isInteger(rawLayer)) {
+            return 3;
+        }
+        if (!LAYER_OPTIONS.includes(rawLayer as (typeof LAYER_OPTIONS)[number])) {
+            return 3;
+        }
+        return rawLayer;
     }
 
     private getSelectedVisualOnlyDebugViewValue(): boolean {

@@ -20,6 +20,7 @@ const KNOWN_RUNTIME_OBJECT_TYPES = new Set<string>([
     'break_wall',
     'breakable_wall'
 ]);
+const ALLOWED_VISUAL_LAYERS = new Set<number>([1, 2, 3, 4, 5]);
 
 export interface DeleteObjectResult {
     success: boolean;
@@ -393,11 +394,15 @@ export class ObjectAuthoringService {
                 }
             }
             if (visualPatch.layer !== undefined) {
-                if (!Number.isFinite(visualPatch.layer)) {
-                    result = { success: false, reason: 'Invalid layer. Expected number.' };
+                if (!Number.isFinite(visualPatch.layer) || !Number.isInteger(visualPatch.layer)) {
+                    result = { success: false, reason: 'Invalid layer. Expected integer 1..5.' };
                     return result;
                 }
                 const layer = Number(visualPatch.layer);
+                if (!ALLOWED_VISUAL_LAYERS.has(layer)) {
+                    result = { success: false, reason: 'Invalid layer. Expected integer 1..5.' };
+                    return result;
+                }
                 if (layer !== current.visual.layer) {
                     nextVisual.layer = layer;
                 }
