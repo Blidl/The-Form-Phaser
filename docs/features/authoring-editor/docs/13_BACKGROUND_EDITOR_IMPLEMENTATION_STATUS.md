@@ -7,7 +7,8 @@
 
 ## 2. Source of truth and edit gateway
 - `runtimeConfig.background` is canonical for Background data.
-- `BackgroundAuthoringService` is the gateway for background edits.
+- Active F2 Background edits are applied through `BackgroundObjectAuthoringService`.
+- `BackgroundAuthoringService` remains in codebase for legacy compatibility but is not wired to active F2 UI.
 - `ProjectStore` is not canonical for Background.
 - Background edits apply through `legacyObjectAdapter.importRuntimeConfig(...)` so runtime preview, Save, Export, and Import stay aligned.
 - Background edits do not auto-save.
@@ -146,3 +147,25 @@
 - Runtime/editor impact:
   - importing a legacy-only level now clears stale object-based background rendering and Background list entries.
   - object authoring patch flows continue to preserve current state because they apply runtime config clones through patch mode.
+
+## 12. B3.5 legacy Background editor UI retired (runtime fallback kept)
+- Legacy Background editor controls were removed from active F2 Background tab (`src/editor/modes/BackgroundEditorMode.ts`):
+  - removed `Legacy Preview Background` section.
+  - removed legacy Static/Parallax ensure/remove/reset controls.
+  - removed legacy field editors for `background.staticImage` and `background.layers`.
+- Object-based Background UI is now the primary authoring surface in F2:
+  - layer tabs (`Static`, `Parallax 1`, `Parallax 2`)
+  - per-layer `Background Objects` list
+  - `Add Solid` and `Add Demo Texture`
+  - selected object inspector (meta, bounds, visual, duplicate/delete)
+  - object-based parallax layer settings
+- Legacy runtime compatibility is intentionally preserved:
+  - legacy config fields/schemas are still kept (`background.color`, `background.staticImage`, `background.layers`)
+  - renderer keeps legacy fallback path for old levels when `background.backgroundObjects` is empty.
+- Renderer composition rule updated:
+  - always apply `background.color` to camera.
+  - object-based background renders as primary when objects exist.
+  - legacy static/parallax render only as fallback when no object-based entries exist.
+- Deferred status remains unchanged:
+  - canvas selection/move/resize tools are still not implemented.
+  - full migration/removal of legacy background schema is still deferred.

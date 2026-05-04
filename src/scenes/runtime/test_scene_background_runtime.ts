@@ -427,29 +427,32 @@ export const createTestSceneBackgroundRuntime = (
             return;
         }
 
-        const staticFillColor = background.staticImage?.fillColor;
-        if (staticFillColor !== undefined) {
-            const fill = createFillBackdrop(
-                scene,
-                currentConfig.worldBounds.width,
-                currentConfig.worldBounds.height,
-                staticFillColor,
-                1,
-                1
-            );
-            objects.push(fill);
-        }
-
-        const staticImage = createStaticImageBackdrop(scene, currentConfig, background, editorPreviewBasis);
-        if (staticImage) {
-            objects.push(staticImage);
-        }
-
-        background.layers?.forEach((layer) => {
-            objects.push(...createParallaxLayerBackdrop(scene, currentConfig, layer, editorPreviewBasis));
-        });
-
         const orderedBackgroundObjects = collectBackgroundObjectsForRenderOrder(background.backgroundObjects);
+        if (orderedBackgroundObjects.length <= 0) {
+            const staticFillColor = background.staticImage?.fillColor;
+            if (staticFillColor !== undefined) {
+                const fill = createFillBackdrop(
+                    scene,
+                    currentConfig.worldBounds.width,
+                    currentConfig.worldBounds.height,
+                    staticFillColor,
+                    1,
+                    1
+                );
+                objects.push(fill);
+            }
+
+            const staticImage = createStaticImageBackdrop(scene, currentConfig, background, editorPreviewBasis);
+            if (staticImage) {
+                objects.push(staticImage);
+            }
+
+            background.layers?.forEach((layer) => {
+                objects.push(...createParallaxLayerBackdrop(scene, currentConfig, layer, editorPreviewBasis));
+            });
+            return;
+        }
+
         const perLayerEntryCount: Record<TestWorldBackgroundObjectLayerId, number> = {
             parallax1: 0,
             parallax2: 0,

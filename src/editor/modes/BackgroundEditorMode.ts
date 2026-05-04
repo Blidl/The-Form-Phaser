@@ -2,7 +2,6 @@
 import type { EditorMode, EditorModeRuntimeContext } from '../core/EditorMode';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
-import { BackgroundAuthoringService } from '../background-authoring/BackgroundAuthoringService';
 import {
     BackgroundObjectAuthoringService,
     type BackgroundObjectLayerId,
@@ -10,12 +9,8 @@ import {
     type BackgroundObjectSnapshot
 } from '../background-authoring/BackgroundObjectAuthoringService';
 import type {
-    TestWorldBackgroundImageConfig,
-    TestWorldBackgroundObjectConfig,
-    TestWorldParallaxLayerConfig
+    TestWorldBackgroundObjectConfig
 } from '../../game/world/runtime/test_world_config';
-
-type BackgroundTarget = 'static' | 'parallax_1' | 'parallax_2';
 
 interface BackgroundEditorModeOptions {
     legacyObjectAdapter: LegacyObjectAdapter | null;
@@ -44,16 +39,6 @@ const layerToLabel = (layer: BackgroundObjectLayerId): string => {
         return 'Parallax 2';
     }
     return 'Static';
-};
-
-const layerToLegacyTarget = (layer: BackgroundObjectLayerId): BackgroundTarget => {
-    if (layer === 'parallax1') {
-        return 'parallax_1';
-    }
-    if (layer === 'parallax2') {
-        return 'parallax_2';
-    }
-    return 'static';
 };
 
 const layerToDemoTextureKey = (layer: BackgroundObjectLayerId): string => {
@@ -106,22 +91,11 @@ const colorToText = (value: number | undefined): string => {
     return `#${Math.round(clamp(value, 0, 0xffffff)).toString(16).padStart(6, '0')}`;
 };
 
-const isRenderableBackgroundImage = (image: {
-    textureKey?: string;
-    textureAsset?: string;
-    fillColor?: number;
-}): boolean => {
-    const hasTexture = (image.textureKey?.trim().length ?? 0)
-        || (image.textureAsset?.trim().length ?? 0);
-    return hasTexture > 0 || typeof image.fillColor === 'number';
-};
-
 export class BackgroundEditorMode implements EditorMode {
     public readonly id = 'background';
     public readonly label = 'Background';
 
     private readonly onUiChanged: () => void;
-    private readonly backgroundAuthoringService: BackgroundAuthoringService;
     private readonly backgroundObjectAuthoringService: BackgroundObjectAuthoringService;
     private selectedObjectLayer: BackgroundObjectLayerId = 'static';
     private selectedObjectId: string | null = null;
@@ -131,7 +105,6 @@ export class BackgroundEditorMode implements EditorMode {
 
     public constructor(options: BackgroundEditorModeOptions) {
         this.onUiChanged = options.onUiChanged;
-        this.backgroundAuthoringService = new BackgroundAuthoringService(options.legacyObjectAdapter);
         this.backgroundObjectAuthoringService = new BackgroundObjectAuthoringService(options.legacyObjectAdapter);
     }
 
@@ -158,18 +131,17 @@ export class BackgroundEditorMode implements EditorMode {
     }
 
     public renderLeftInspector(panel: EditorPanel): void {
-        const legacySnapshot = this.backgroundAuthoringService.getSnapshot();
         const objectSnapshot = this.backgroundObjectAuthoringService.getSnapshot();
         panel.setCustomContent('Background', (container) => {
-            if (!legacySnapshot && !objectSnapshot) {
+            if (!objectSnapshot) {
                 const unavailable = document.createElement('div');
                 unavailable.textContent = 'Runtime config unavailable.';
                 container.appendChild(unavailable);
                 return;
             }
 
-            const levelId = objectSnapshot?.levelId ?? legacySnapshot?.levelId;
-            const levelName = objectSnapshot?.levelName ?? legacySnapshot?.levelName;
+            const levelId = objectSnapshot.levelId;
+            const levelName = objectSnapshot.levelName;
             if (levelId) {
                 container.appendChild(this.makeLine(`Level ID: ${levelId}`));
                 container.appendChild(this.makeLine(`Level: ${levelName || levelId}`));
@@ -213,12 +185,11 @@ export class BackgroundEditorMode implements EditorMode {
 
     public renderRightInspector(panel: EditorPanel): void {
         const objectSnapshot = this.backgroundObjectAuthoringService.getSnapshot();
-        const legacySnapshot = this.backgroundAuthoringService.getSnapshot();
         this.syncSelectedObject(objectSnapshot);
         const selectedObject = this.getSelectedObject(objectSnapshot);
 
         panel.setCustomContent('Background Properties', (container) => {
-            if (!objectSnapshot && !legacySnapshot) {
+            if (!objectSnapshot) {
                 const unavailable = document.createElement('div');
                 unavailable.textContent = 'Runtime config unavailable.';
                 container.appendChild(unavailable);
@@ -233,8 +204,6 @@ export class BackgroundEditorMode implements EditorMode {
             this.renderLayerSettings(container, objectSnapshot);
             container.appendChild(this.makeSpacer(8));
             this.renderSelectedObjectInspector(container, selectedObject);
-            container.appendChild(this.makeSpacer(10));
-            this.renderLegacyPreviewInspector(container, legacySnapshot);
         });
     }
 
@@ -504,263 +473,6 @@ export class BackgroundEditorMode implements EditorMode {
         container.appendChild(actionsRow);
     }
 
-    private renderLegacyPreviewInspector(
-        container: HTMLDivElement,
-        snapshot: ReturnType<BackgroundAuthoringService['getSnapshot']>
-    ): void {
-        container.appendChild(this.makeSectionTitle('Legacy Preview Background'));
-        container.appendChild(this.makeInfoLine(
-            'Temporary renderer-backed background config. Object-based background items are saved/exported but not rendered yet.'
-        ));
-
-        if (!snapshot) {
-            container.appendChild(this.makeInfoLine('Runtime config unavailable.'));
-            return;
-        }
-
-        const backgroundColor = snapshot.background?.color;
-        container.appendChild(this.makeSpacer(6));
-        container.appendChild(this.makeTextField({
-            label: 'Background color',
-            value: colorToText(backgroundColor),
-            fieldKey: 'legacy.background.color',
-            onCommit: (value) => {
-                const parsed = parseColorInput(value);
-                if (parsed.error) {
-                    return { success: false, error: parsed.error };
-                }
-                if (parsed.value === null) {
-                    return { success: false, error: 'Background color cannot be empty.' };
-                }
-                return this.commitLegacy(() => this.backgroundAuthoringService.patchBackgroundColor(parsed.value));
-            }
-        }));
-
-        const legacyTarget = layerToLegacyTarget(this.selectedObjectLayer);
-        container.appendChild(this.makeSectionTitle(
-            legacyTarget === 'static'
-                ? 'Legacy Target: Static'
-                : legacyTarget === 'parallax_1'
-                    ? 'Legacy Target: Parallax 1'
-                    : 'Legacy Target: Parallax 2'
-        ));
-
-        if (legacyTarget === 'static') {
-            if (!snapshot.staticImage) {
-                container.appendChild(this.makeMissingTargetState(
-                    'Static image is missing.',
-                    'Ensure Static',
-                    () => this.commitLegacy(() => this.backgroundAuthoringService.ensureStatic())
-                ));
-                return;
-            }
-            container.appendChild(this.makeLifecycleActionsRow([
-                this.makeConfirmedActionButton(
-                    'Remove Static',
-                    'Remove Static background?',
-                    () => {
-                        this.commitLegacy(() => this.backgroundAuthoringService.removeStatic());
-                    }
-                ),
-                this.makeConfirmedActionButton(
-                    'Reset Static',
-                    'Reset Static background to defaults?',
-                    () => {
-                        this.commitLegacy(() => this.backgroundAuthoringService.resetStatic());
-                    }
-                )
-            ]));
-            this.renderLegacyImageFields(container, snapshot.staticImage, 'static');
-            return;
-        }
-
-        const layer = legacyTarget === 'parallax_1' ? snapshot.parallax1 : snapshot.parallax2;
-        const slot = legacyTarget === 'parallax_1' ? 1 : 2;
-        if (!layer) {
-            container.appendChild(this.makeMissingTargetState(
-                `Parallax ${slot} is missing.`,
-                `Ensure Parallax ${slot}`,
-                () => this.commitLegacy(() => this.backgroundAuthoringService.ensureParallax(slot))
-            ));
-            return;
-        }
-        container.appendChild(this.makeLifecycleActionsRow([
-            this.makeConfirmedActionButton(
-                `Remove Parallax ${slot}`,
-                `Remove Parallax ${slot}?`,
-                () => {
-                    this.commitLegacy(() => this.backgroundAuthoringService.removeParallaxSlot(slot));
-                }
-            ),
-            this.makeConfirmedActionButton(
-                `Reset Parallax ${slot}`,
-                `Reset Parallax ${slot} to defaults?`,
-                () => {
-                    this.commitLegacy(() => this.backgroundAuthoringService.resetParallaxSlot(slot));
-                }
-            )
-        ]));
-        this.renderLegacyParallaxFields(container, layer, slot);
-    }
-
-    private renderLegacyImageFields(
-        container: HTMLDivElement,
-        image: TestWorldBackgroundImageConfig,
-        kind: 'static' | 1 | 2
-    ): void {
-        const kindKey = kind === 'static' ? 'legacy.static' : `legacy.parallax_${kind}`;
-        const patchImage = (patch: Partial<TestWorldBackgroundImageConfig>) => {
-            if (kind === 'static') {
-                return this.backgroundAuthoringService.patchStaticImage(patch);
-            }
-            return this.backgroundAuthoringService.patchParallaxLayer(kind, patch);
-        };
-        const ensureRenderablePatch = (
-            nextTextureKey: string | undefined,
-            nextTextureAsset: string | undefined,
-            nextFillColor: number | undefined
-        ): CommitResult => {
-            if (!isRenderableBackgroundImage({
-                textureKey: nextTextureKey,
-                textureAsset: nextTextureAsset,
-                fillColor: nextFillColor
-            })) {
-                return {
-                    success: false,
-                    error: 'Texture key/asset can both be empty only when fillColor exists.'
-                };
-            }
-            return { success: true };
-        };
-
-        container.appendChild(this.makeTextField({
-            label: 'textureKey',
-            value: image.textureKey ?? '',
-            fieldKey: `${kindKey}.textureKey`,
-            onCommit: (value) => {
-                const nextTextureKey = value.trim();
-                const guard = ensureRenderablePatch(nextTextureKey, image.textureAsset, image.fillColor);
-                if (!guard.success) {
-                    return guard;
-                }
-                return this.commitLegacy(() => patchImage({ textureKey: nextTextureKey }));
-            }
-        }));
-        container.appendChild(this.makeTextField({
-            label: 'textureAsset',
-            value: image.textureAsset ?? '',
-            fieldKey: `${kindKey}.textureAsset`,
-            onCommit: (value) => {
-                const nextTextureAsset = value.trim();
-                const guard = ensureRenderablePatch(image.textureKey, nextTextureAsset, image.fillColor);
-                if (!guard.success) {
-                    return guard;
-                }
-                return this.commitLegacy(() => patchImage({ textureAsset: nextTextureAsset || undefined }));
-            }
-        }));
-        container.appendChild(this.makeTextField({
-            label: 'fillColor',
-            value: colorToText(image.fillColor),
-            fieldKey: `${kindKey}.fillColor`,
-            onCommit: (value) => {
-                const parsed = parseColorInput(value);
-                if (parsed.error) {
-                    return { success: false, error: parsed.error };
-                }
-                const guard = ensureRenderablePatch(image.textureKey, image.textureAsset, parsed.value ?? undefined);
-                if (!guard.success) {
-                    return guard;
-                }
-                return this.commitLegacy(() => patchImage({ fillColor: parsed.value ?? undefined }));
-            }
-        }));
-        container.appendChild(this.makeTextField({
-            label: 'tintColor',
-            value: colorToText(image.tintColor),
-            fieldKey: `${kindKey}.tintColor`,
-            onCommit: (value) => {
-                const parsed = parseColorInput(value);
-                if (parsed.error) {
-                    return { success: false, error: parsed.error };
-                }
-                return this.commitLegacy(() => patchImage({ tintColor: parsed.value ?? undefined }));
-            }
-        }));
-        container.appendChild(this.makeNumberField({
-            label: 'alpha',
-            value: image.alpha ?? 1,
-            fieldKey: `${kindKey}.alpha`,
-            onCommit: (value) => this.commitLegacy(() => patchImage({ alpha: clamp(value, 0, 1) }))
-        }));
-        container.appendChild(this.makeNumberField({
-            label: 'scale',
-            value: image.scale ?? 1,
-            fieldKey: `${kindKey}.scale`,
-            onCommit: (value) => this.commitLegacy(() => patchImage({ scale: Math.max(0.1, value) }))
-        }));
-        container.appendChild(this.makeNumberField({
-            label: 'width',
-            value: image.width ?? 0,
-            fieldKey: `${kindKey}.width`,
-            integer: true,
-            onCommit: (value) => this.commitLegacy(() => patchImage({ width: Math.max(8, Math.round(value)) }))
-        }));
-        container.appendChild(this.makeNumberField({
-            label: 'height',
-            value: image.height ?? 0,
-            fieldKey: `${kindKey}.height`,
-            integer: true,
-            onCommit: (value) => this.commitLegacy(() => patchImage({ height: Math.max(8, Math.round(value)) }))
-        }));
-        container.appendChild(this.makeBooleanField({
-            label: 'repeat',
-            checked: image.repeat ?? false,
-            fieldKey: `${kindKey}.repeat`,
-            onCommit: (checked) => this.commitLegacy(() => patchImage({ repeat: checked }))
-        }));
-        container.appendChild(this.makeNumberField({
-            label: 'x',
-            value: image.x ?? 0,
-            fieldKey: `${kindKey}.x`,
-            onCommit: (value) => this.commitLegacy(() => patchImage({ x: value }))
-        }));
-        container.appendChild(this.makeNumberField({
-            label: 'y',
-            value: image.y ?? 0,
-            fieldKey: `${kindKey}.y`,
-            onCommit: (value) => this.commitLegacy(() => patchImage({ y: value }))
-        }));
-    }
-
-    private renderLegacyParallaxFields(container: HTMLDivElement, layer: TestWorldParallaxLayerConfig, slot: 1 | 2): void {
-        container.appendChild(this.makeTextField({
-            label: 'id',
-            value: layer.id,
-            fieldKey: `legacy.parallax_${slot}.id`,
-            onCommit: (value) => {
-                const id = value.trim();
-                if (!id) {
-                    return { success: false, error: 'id cannot be empty.' };
-                }
-                return this.commitLegacy(() => this.backgroundAuthoringService.patchParallaxLayer(slot, { id }));
-            }
-        }));
-        this.renderLegacyImageFields(container, layer, slot);
-        container.appendChild(this.makeNumberField({
-            label: 'scrollFactorX',
-            value: layer.scrollFactorX,
-            fieldKey: `legacy.parallax_${slot}.scrollFactorX`,
-            onCommit: (value) => this.commitLegacy(() => this.backgroundAuthoringService.patchParallaxLayer(slot, { scrollFactorX: clamp(value, 0, 2) }))
-        }));
-        container.appendChild(this.makeNumberField({
-            label: 'scrollFactorY',
-            value: layer.scrollFactorY ?? layer.scrollFactorX,
-            fieldKey: `legacy.parallax_${slot}.scrollFactorY`,
-            onCommit: (value) => this.commitLegacy(() => this.backgroundAuthoringService.patchParallaxLayer(slot, { scrollFactorY: clamp(value, 0, 2) }))
-        }));
-    }
-
     private makeLayerButton(label: string, layer: BackgroundObjectLayerId): HTMLButtonElement {
         const button = document.createElement('button');
         button.type = 'button';
@@ -862,16 +574,6 @@ export class BackgroundEditorMode implements EditorMode {
             }
             onConfirm();
         });
-    }
-
-    private makeLifecycleActionsRow(buttons: HTMLButtonElement[]): HTMLDivElement {
-        const row = document.createElement('div');
-        row.style.display = 'flex';
-        row.style.flexWrap = 'wrap';
-        row.style.gap = '4px';
-        row.style.marginBottom = '8px';
-        buttons.forEach((button) => row.appendChild(button));
-        return row;
     }
 
     private makeTextField(options: {
@@ -981,21 +683,6 @@ export class BackgroundEditorMode implements EditorMode {
             row.appendChild(this.makeErrorLine(error));
         }
         return row;
-    }
-
-    private makeMissingTargetState(
-        message: string,
-        actionLabel: string,
-        onEnsure: () => void
-    ): HTMLDivElement {
-        const root = document.createElement('div');
-        root.style.display = 'flex';
-        root.style.flexDirection = 'column';
-        root.style.gap = '6px';
-        root.style.marginBottom = '8px';
-        root.appendChild(this.makeInfoLine(message));
-        root.appendChild(this.makeActionButton(actionLabel, onEnsure));
-        return root;
     }
 
     private makeNumberField(options: {
@@ -1111,19 +798,6 @@ export class BackgroundEditorMode implements EditorMode {
         this.onUiChanged();
     }
 
-    private commitLegacy(action: () => { success: boolean; reason?: string }): CommitResult {
-        const result = action();
-        if (!result.success) {
-            this.statusMessage = result.reason ?? 'Failed to apply background config.';
-            return { success: false, error: this.statusMessage };
-        }
-        this.statusMessage = null;
-        this.captureSignature();
-        this.syncSelectedObject();
-        this.onUiChanged();
-        return { success: true };
-    }
-
     private commitObject(action: () => BackgroundObjectMutationResult): CommitResult {
         const result = action();
         return this.handleObjectMutationResult(result, result.object?.id ?? null);
@@ -1157,12 +831,15 @@ export class BackgroundEditorMode implements EditorMode {
     }
 
     private readBackgroundSignature(): string | null {
-        const snapshot = this.backgroundAuthoringService.getSnapshot();
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
         if (!snapshot) {
             return null;
         }
         try {
-            return JSON.stringify(snapshot.runtimeConfig.background);
+            return JSON.stringify({
+                objects: snapshot.objects,
+                layerSettings: snapshot.layerSettings
+            });
         } catch {
             return null;
         }
