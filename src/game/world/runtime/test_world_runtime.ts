@@ -98,6 +98,10 @@ export interface TestWorldEditorObjectSummary {
     runtimeVisual?: {
         fillColor?: string;
         strokeColor?: string;
+        alpha?: number;
+        layer?: number;
+        shaderKey?: string | null;
+        textureKey?: string | null;
     };
 }
 
@@ -2014,6 +2018,15 @@ const buildWorldInstance = (
             if (!binding || binding.isLocked()) {
                 return false;
             }
+            const configRef = getConfigReference(config, binding.type, rootId) as Record<string, unknown> | null;
+            if (configRef) {
+                if ('editorFillColor' in patch && typeof patch.editorFillColor === 'string') {
+                    configRef.editorFillColor = patch.editorFillColor;
+                }
+                if ('editorStrokeColor' in patch && typeof patch.editorStrokeColor === 'string') {
+                    configRef.editorStrokeColor = patch.editorStrokeColor;
+                }
+            }
             binding.patchFields(patch);
             refreshVisualDepths();
             return true;
@@ -2439,24 +2452,54 @@ const resolveRuntimeVisualSummary = (
     config: TestWorldConfig,
     type: TestWorldEditorObjectType,
     rootId: string
-): { fillColor?: string; strokeColor?: string } | undefined => {
+): {
+    fillColor?: string;
+    strokeColor?: string;
+    alpha?: number;
+    layer?: number;
+    shaderKey?: string | null;
+    textureKey?: string | null;
+} | undefined => {
     const ref = getConfigReference(config, type, rootId) as Record<string, unknown> | null;
     if (!ref) {
         return undefined;
     }
+    const visualLayer = typeof ref.visualLayer === 'string' && /^layer_[1-5]$/.test(ref.visualLayer)
+        ? Number((ref.visualLayer as string).slice('layer_'.length))
+        : undefined;
+    const alpha = typeof ref.alpha === 'number' && Number.isFinite(ref.alpha)
+        ? Math.max(0, Math.min(1, ref.alpha))
+        : undefined;
+    const editorFillColor = typeof ref.editorFillColor === 'string' ? ref.editorFillColor : undefined;
+    const editorStrokeColor = typeof ref.editorStrokeColor === 'string' ? ref.editorStrokeColor : undefined;
     if (type === 'triggerPlatform') {
         const fillColor = rgbIntToHex(ref.platformFillColor as number | undefined);
         const strokeColor = rgbIntToHex(ref.platformStrokeColor as number | undefined);
-        return fillColor || strokeColor ? { fillColor, strokeColor } : undefined;
+        return {
+            fillColor: editorFillColor ?? fillColor,
+            strokeColor: editorStrokeColor ?? strokeColor,
+            alpha,
+            layer: visualLayer
+        };
     }
     if (type === 'triggerVolume') {
         const fillColor = rgbIntToHex(ref.triggerFillColor as number | undefined);
         const strokeColor = rgbIntToHex(ref.triggerStrokeColor as number | undefined);
-        return fillColor || strokeColor ? { fillColor, strokeColor } : undefined;
+        return {
+            fillColor: editorFillColor ?? fillColor,
+            strokeColor: editorStrokeColor ?? strokeColor,
+            alpha,
+            layer: visualLayer
+        };
     }
     const fillColor = rgbIntToHex(ref.fillColor as number | undefined);
     const strokeColor = rgbIntToHex(ref.strokeColor as number | undefined);
-    return fillColor || strokeColor ? { fillColor, strokeColor } : undefined;
+    return {
+        fillColor: editorFillColor ?? fillColor,
+        strokeColor: editorStrokeColor ?? strokeColor,
+        alpha,
+        layer: visualLayer
+    };
 };
 
 const applyActiveCheckpointState = (

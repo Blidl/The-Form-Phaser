@@ -20,6 +20,10 @@ export interface LegacyObjectSummary {
     runtimeVisual?: {
         fillColor?: string;
         strokeColor?: string;
+        alpha?: number;
+        layer?: number;
+        shaderKey?: string | null;
+        textureKey?: string | null;
     };
 }
 
@@ -199,7 +203,14 @@ export class LegacyObjectAdapter {
     private readonly linksByEditorObjectId = new Map<string, LegacyObjectLink>();
     private readonly generatedLegacyIdsByKey = new Map<string, string>();
     private readonly ignoredLegacyIds = new Set<string>();
-    private readonly runtimeVisualByEditorObjectId = new Map<string, { fillColor?: string; strokeColor?: string }>();
+    private readonly runtimeVisualByEditorObjectId = new Map<string, {
+        fillColor?: string;
+        strokeColor?: string;
+        alpha?: number;
+        layer?: number;
+        shaderKey?: string | null;
+        textureKey?: string | null;
+    }>();
     private nextGeneratedLegacyId = 1;
 
     public constructor(source: LegacyObjectSource, objectTypeRegistry: ObjectTypeRegistry) {
@@ -280,6 +291,16 @@ export class LegacyObjectAdapter {
             const category = typeDefinition?.category ?? createLegacyTypeCategory(summary.type);
             const name = summary.label?.trim() || legacyId;
             const nextLocked = summary.locked ?? current?.editor?.locked ?? false;
+            const summaryVisual = summary.runtimeVisual ?? {};
+            const nextVisual = {
+                shaderKey: summaryVisual.shaderKey ?? current?.visual.shaderKey ?? null,
+                textureKey: summaryVisual.textureKey ?? current?.visual.textureKey ?? null,
+                fillColor: summaryVisual.fillColor ?? current?.visual.fillColor ?? '#ffffff',
+                strokeColor: summaryVisual.strokeColor ?? current?.visual.strokeColor ?? '#000000',
+                alpha: Number.isFinite(summaryVisual.alpha) ? Number(summaryVisual.alpha) : (current?.visual.alpha ?? 1),
+                layer: Number.isInteger(summaryVisual.layer) ? Number(summaryVisual.layer) : (current?.visual.layer ?? 3),
+                onlyDebugView: summary.onlyDebugView ?? current?.visual.onlyDebugView ?? false
+            };
             if (!current) {
                 projectStore.addObject(levelId, {
                     id: editorObjectId,
@@ -292,16 +313,29 @@ export class LegacyObjectAdapter {
                     editor: {
                         locked: nextLocked
                     },
-                    visual: {
-                        onlyDebugView: summary.onlyDebugView ?? false
-                    }
+                    visual: nextVisual
                 });
             } else {
+                objectDiag('[ObjectVisualSync]', {
+                    phase: 'sync',
+                    objectId: editorObjectId,
+                    sourceVisual: summaryVisual,
+                    projectStoreVisualBefore: current.visual,
+                    configVisual: summaryVisual,
+                    usedDefault: !summaryVisual.fillColor && !summaryVisual.strokeColor && !summaryVisual.alpha && !summaryVisual.layer,
+                    reason: 'syncIntoProjectStore'
+                });
                 const needsSync = current.name !== name
                     || current.settings.type !== resolvedTypeId
                     || current.settings.category !== category
                     || current.editor?.locked !== nextLocked
-                    || current.visual.onlyDebugView !== (summary.onlyDebugView ?? false)
+                    || current.visual.onlyDebugView !== nextVisual.onlyDebugView
+                    || current.visual.fillColor !== nextVisual.fillColor
+                    || current.visual.strokeColor !== nextVisual.strokeColor
+                    || current.visual.alpha !== nextVisual.alpha
+                    || current.visual.layer !== nextVisual.layer
+                    || current.visual.shaderKey !== nextVisual.shaderKey
+                    || current.visual.textureKey !== nextVisual.textureKey
                     || !areBoundsEqual(current.bounds, bounds);
 
                 if (needsSync) {
@@ -315,9 +349,17 @@ export class LegacyObjectAdapter {
                         editor: {
                             locked: nextLocked
                         },
-                        visual: {
-                            onlyDebugView: summary.onlyDebugView ?? false
-                        }
+                        visual: nextVisual
+                    });
+                    objectDiag('[ObjectVisualSync]', {
+                        phase: 'sync',
+                        objectId: editorObjectId,
+                        sourceVisual: summaryVisual,
+                        projectStoreVisualBefore: current.visual,
+                        projectStoreVisualAfter: nextVisual,
+                        configVisual: summaryVisual,
+                        usedDefault: false,
+                        reason: 'projectStore visual updated'
                     });
                 }
             }
@@ -347,7 +389,14 @@ export class LegacyObjectAdapter {
         });
     }
 
-    public getRuntimeVisual(editorObjectId: string): { fillColor?: string; strokeColor?: string } | null {
+    public getRuntimeVisual(editorObjectId: string): {
+        fillColor?: string;
+        strokeColor?: string;
+        alpha?: number;
+        layer?: number;
+        shaderKey?: string | null;
+        textureKey?: string | null;
+    } | null {
         const visual = this.runtimeVisualByEditorObjectId.get(editorObjectId);
         return visual ? { ...visual } : null;
     }

@@ -701,6 +701,18 @@ export class ObjectsEditorMode implements EditorMode {
                 container.appendChild(this.makeLabel(`Object count: ${objects.length}`));
                 return;
             }
+            objectDiag('[ObjectVisualSync]', {
+                phase: 'select',
+                objectId: selectedObject.id,
+                sourceVisual: this.legacyObjectAdapter?.getRuntimeVisual(selectedObject.id) ?? null,
+                projectStoreVisualAfter: selectedObject.visual,
+                configVisual: this.legacyObjectAdapter?.getRuntimeVisual(selectedObject.id) ?? null,
+                usedDefault: selectedObject.visual.fillColor === '#ffffff'
+                    && selectedObject.visual.strokeColor === '#000000'
+                    && selectedObject.visual.alpha === 1
+                    && selectedObject.visual.layer === 3,
+                reason: 'renderRightInspector selected object'
+            });
 
             container.appendChild(this.makeSectionTitle('Bounds'));
             if (this.isObjectLocked(selectedObject)) {

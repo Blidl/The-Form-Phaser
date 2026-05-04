@@ -54,6 +54,8 @@ export type UpdateObjectVisualPatch = Partial<Pick<EditorObjectVisualData, 'fill
 
 const HEX_COLOR_PATTERN = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
 const TRANSPARENT_COLOR_VALUE = 'transparent';
+const DEFAULT_VISUAL_FILL = '#ffffff';
+const DEFAULT_VISUAL_STROKE = '#000000';
 
 export class ObjectAuthoringService {
     private readonly projectStore: ProjectStore;
@@ -79,7 +81,21 @@ export class ObjectAuthoringService {
     public listObjects(): EditorObjectData[] {
         this.syncProjectStoreMirror();
         const activeLevel = this.projectStore.getActiveLevel();
-        return this.projectStore.listObjects(activeLevel.id);
+        const objects = this.projectStore.listObjects(activeLevel.id);
+        objects.forEach((objectData) => {
+            objectDiag('[ObjectVisualSync]', {
+                phase: 'list',
+                objectId: objectData.id,
+                sourceVisual: this.legacyObjectAdapter?.getRuntimeVisual(objectData.id) ?? null,
+                projectStoreVisualAfter: objectData.visual,
+                usedDefault: objectData.visual.fillColor === DEFAULT_VISUAL_FILL
+                    && objectData.visual.strokeColor === DEFAULT_VISUAL_STROKE
+                    && objectData.visual.alpha === 1
+                    && objectData.visual.layer === 3,
+                reason: 'listObjects result'
+            });
+        });
+        return objects;
     }
 
     public createObject(catalogId: string, x: number, y: number): CreateObjectResult {
@@ -417,11 +433,11 @@ export class ObjectAuthoringService {
             if (hasRuntimeLink && this.legacyObjectAdapter) {
                 if (nextVisual.fillColor !== undefined || nextVisual.strokeColor !== undefined) {
                     const colorsPatch: Record<string, unknown> = {};
-                    if (nextVisual.fillColor !== undefined) {
-                        const fillColor = this.parseHexColorToRgbInt(nextVisual.fillColor);
-                        if (fillColor !== null) {
-                            colorsPatch.fillColor = fillColor;
-                        }
+                if (nextVisual.fillColor !== undefined) {
+                    const fillColor = this.parseHexColorToRgbInt(nextVisual.fillColor);
+                    if (fillColor !== null) {
+                        colorsPatch.fillColor = fillColor;
+                    }
                     }
                     if (nextVisual.strokeColor !== undefined) {
                         const strokeColor = this.parseHexColorToRgbInt(nextVisual.strokeColor);
@@ -467,12 +483,32 @@ export class ObjectAuthoringService {
                         });
                     }
                 }
+                const persistencePatch: Record<string, unknown> = {};
+                if (nextVisual.fillColor !== undefined) {
+                    persistencePatch.editorFillColor = nextVisual.fillColor;
+                }
+                if (nextVisual.strokeColor !== undefined) {
+                    persistencePatch.editorStrokeColor = nextVisual.strokeColor;
+                }
+                if (Object.keys(persistencePatch).length > 0) {
+                    this.legacyObjectAdapter.patchRuntimeObjectFields(objectId, persistencePatch);
+                }
             }
 
             this.projectStore.updateObject(activeLevel.id, objectId, {
                 visual: nextVisual
             });
             this.syncProjectStoreMirror();
+            const after = this.projectStore.getObject(activeLevel.id, objectId);
+            objectDiag('[ObjectVisualSync]', {
+                phase: 'save',
+                objectId,
+                sourceVisual: visualPatch,
+                projectStoreVisualAfter: after?.visual ?? null,
+                configVisual: this.legacyObjectAdapter?.getRuntimeVisual(objectId) ?? null,
+                usedDefault: false,
+                reason: 'updateObjectVisual committed'
+            });
             result = { success: true };
             return result;
         } catch (error) {
