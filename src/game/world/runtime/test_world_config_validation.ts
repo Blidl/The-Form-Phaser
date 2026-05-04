@@ -839,16 +839,21 @@ const normalizeBackgroundObject = (
 
 const normalizeBackgroundObjects = (
     rawValue: unknown,
-    fallback: readonly TestWorldBackgroundObjectConfig[] | undefined
+    fallback: readonly TestWorldBackgroundObjectConfig[] | undefined,
+    preserveMissingFields: boolean
 ): TestWorldBackgroundObjectConfig[] | undefined => {
     if (rawValue === undefined) {
-        return fallback?.map((entry) => cloneBackgroundObject(entry));
+        return preserveMissingFields
+            ? fallback?.map((entry) => cloneBackgroundObject(entry))
+            : [];
     }
     if (rawValue === null) {
         return [];
     }
     if (!Array.isArray(rawValue)) {
-        return fallback?.map((entry) => cloneBackgroundObject(entry)) ?? [];
+        return preserveMissingFields
+            ? (fallback?.map((entry) => cloneBackgroundObject(entry)) ?? [])
+            : [];
     }
 
     const fallbackItems = fallback ?? [];
@@ -873,10 +878,11 @@ const normalizeBackgroundLayerScrollFactor = (
 
 const normalizeBackgroundLayerSettings = (
     rawValue: unknown,
-    fallback: TestWorldBackgroundLayerSettingsConfig | undefined
+    fallback: TestWorldBackgroundLayerSettingsConfig | undefined,
+    preserveMissingFields: boolean
 ): TestWorldBackgroundLayerSettingsConfig | undefined => {
     if (rawValue === undefined) {
-        return cloneBackgroundLayerSettings(fallback);
+        return preserveMissingFields ? cloneBackgroundLayerSettings(fallback) : undefined;
     }
     if (rawValue === null) {
         return undefined;
@@ -884,33 +890,37 @@ const normalizeBackgroundLayerSettings = (
 
     const raw = asObject(rawValue);
     if (!raw) {
-        return cloneBackgroundLayerSettings(fallback);
+        return preserveMissingFields ? cloneBackgroundLayerSettings(fallback) : undefined;
     }
 
     const hasRawStatic = Object.prototype.hasOwnProperty.call(raw, 'static');
     const hasRawParallax1 = Object.prototype.hasOwnProperty.call(raw, 'parallax1');
     const hasRawParallax2 = Object.prototype.hasOwnProperty.call(raw, 'parallax2');
-    const hasFallback = Boolean(fallback?.static || fallback?.parallax1 || fallback?.parallax2);
+    const fallbackStatic = preserveMissingFields ? fallback?.static : undefined;
+    const fallbackParallax1 = preserveMissingFields ? fallback?.parallax1 : undefined;
+    const fallbackParallax2 = preserveMissingFields ? fallback?.parallax2 : undefined;
+    const hasFallback = Boolean(fallbackStatic || fallbackParallax1 || fallbackParallax2);
     if (!hasRawStatic && !hasRawParallax1 && !hasRawParallax2 && !hasFallback) {
         return undefined;
     }
 
     return {
-        static: hasRawStatic || fallback?.static
-            ? normalizeBackgroundLayerScrollFactor(asObject(raw.static), fallback?.static, 'static')
+        static: hasRawStatic || fallbackStatic
+            ? normalizeBackgroundLayerScrollFactor(asObject(raw.static), fallbackStatic, 'static')
             : undefined,
-        parallax1: hasRawParallax1 || fallback?.parallax1
-            ? normalizeBackgroundLayerScrollFactor(asObject(raw.parallax1), fallback?.parallax1, 'parallax1')
+        parallax1: hasRawParallax1 || fallbackParallax1
+            ? normalizeBackgroundLayerScrollFactor(asObject(raw.parallax1), fallbackParallax1, 'parallax1')
             : undefined,
-        parallax2: hasRawParallax2 || fallback?.parallax2
-            ? normalizeBackgroundLayerScrollFactor(asObject(raw.parallax2), fallback?.parallax2, 'parallax2')
+        parallax2: hasRawParallax2 || fallbackParallax2
+            ? normalizeBackgroundLayerScrollFactor(asObject(raw.parallax2), fallbackParallax2, 'parallax2')
             : undefined
     };
 };
 
 const normalizeBackground = (
     rawValue: unknown,
-    fallback: TestWorldBackgroundConfig | null
+    fallback: TestWorldBackgroundConfig | null,
+    preserveMissingObjectFields: boolean
 ): TestWorldBackgroundConfig | null => {
     if (rawValue === undefined || rawValue === null) {
         return null;
@@ -934,10 +944,15 @@ const normalizeBackground = (
         color,
         staticImage,
         layers: normalizedLayers,
-        backgroundObjects: normalizeBackgroundObjects(raw.backgroundObjects, fallback?.backgroundObjects),
+        backgroundObjects: normalizeBackgroundObjects(
+            raw.backgroundObjects,
+            fallback?.backgroundObjects,
+            preserveMissingObjectFields
+        ),
         backgroundLayerSettings: normalizeBackgroundLayerSettings(
             raw.backgroundLayerSettings,
-            fallback?.backgroundLayerSettings
+            fallback?.backgroundLayerSettings,
+            preserveMissingObjectFields
         )
     };
 };
@@ -1642,6 +1657,7 @@ export interface ParseTestWorldConfigResult {
 
 export interface NormalizeTestWorldConfigOptions {
     fallbackConfig?: TestWorldConfig;
+    preserveMissingBackgroundObjectFields?: boolean;
 }
 
 export const normalizeTestWorldConfig = (
@@ -1649,12 +1665,17 @@ export const normalizeTestWorldConfig = (
     options?: NormalizeTestWorldConfigOptions
 ): TestWorldConfig => {
     const defaults = cloneTestWorldConfig(options?.fallbackConfig ?? TEST_WORLD_CONFIG);
+    const preserveMissingBackgroundObjectFields = options?.preserveMissingBackgroundObjectFields ?? true;
     const root = asObject(input);
     const usedIds = new Set<string>();
     const normalized: TestWorldConfig = {
         meta: normalizeMeta(asObject(root?.meta), defaults.meta),
         worldBounds: normalizeWorldBounds(asObject(root?.worldBounds), defaults.worldBounds),
-        background: normalizeBackground(root?.background, defaults.background),
+        background: normalizeBackground(
+            root?.background,
+            defaults.background,
+            preserveMissingBackgroundObjectFields
+        ),
         worldFlags: normalizeWorldFlags(asObject(root?.worldFlags), defaults.worldFlags),
         worldLogicRules: normalizeTestWorldLogicRules(root?.worldLogicRules, defaults.worldLogicRules),
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),

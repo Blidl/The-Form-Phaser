@@ -53,7 +53,10 @@ export interface LegacyObjectSource {
         levelId?: string;
         objectCounts?: Record<string, number>;
     };
-    importRuntimeConfig?: (config: unknown) => {
+    importRuntimeConfig?: (
+        config: unknown,
+        options?: { mode?: 'runtime_patch' | 'full_import' }
+    ) => {
         success: boolean;
         source: 'runtimeConfig';
         reason?: string;
@@ -236,14 +239,17 @@ export class LegacyObjectAdapter {
         return this.source.saveRuntimeConfig?.() ?? null;
     }
 
-    public importRuntimeConfig(config: unknown): {
+    public importRuntimeConfig(
+        config: unknown,
+        options?: { mode?: 'runtime_patch' | 'full_import' }
+    ): {
         success: boolean;
         source: 'runtimeConfig';
         reason?: string;
         levelId?: string;
         objectCounts?: Record<string, number>;
     } | null {
-        return this.source.importRuntimeConfig?.(config) ?? null;
+        return this.source.importRuntimeConfig?.(config, options) ?? null;
     }
 
     public syncIntoProjectStore(projectStore: ProjectStore): void {

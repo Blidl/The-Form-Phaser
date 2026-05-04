@@ -111,3 +111,38 @@
   - object-based renderer migration
   - canvas selection/drag/resize tools
   - full asset picker/preview
+
+## 10. B3.3 object-based runtime rendering implemented
+- Runtime renderer now projects object-based background entries:
+  - `background.backgroundObjects`
+  - `background.backgroundLayerSettings`
+- Object-based background objects are now visible in scene runtime:
+  - hidden objects are skipped
+  - texture-backed objects render when texture exists
+  - texture requests include object-based `textureKey` + `textureAsset` pairs
+  - fill/stroke rectangle fallback is used when texture is unavailable and visual fallback data exists
+- Object-based layer ordering is rendered in stable order:
+  - `parallax1`
+  - `parallax2`
+  - `static`
+  - while preserving source array order inside each layer
+- Object-based parallax uses object-layer settings for parallax layers, while static layer follows legacy static behavior.
+- Legacy renderer path remains active during transition:
+  - `background.staticImage`
+  - `background.layers`
+- Deferred remains:
+  - object-based canvas selection/move/resize tools
+  - full asset picker
+  - undo/redo
+
+## 11. B3.3.1 full import clearing bugfix implemented
+- Fixed full Import JSON semantics for object-based background fields.
+- Root cause:
+  - full import path normalized with `fallbackConfig=currentConfig`, so missing optional object-based fields inherited previous runtime state.
+- Fix:
+  - added full-import mode in runtime replace path, and disabled fallback preservation for missing object-based background fields in that mode.
+  - when full import JSON omits `background.backgroundObjects`, previous object-based background entries are cleared.
+  - when full import JSON omits `background.backgroundLayerSettings`, previous object-based layer settings are not inherited.
+- Runtime/editor impact:
+  - importing a legacy-only level now clears stale object-based background rendering and Background list entries.
+  - object authoring patch flows continue to preserve current state because they apply runtime config clones through patch mode.

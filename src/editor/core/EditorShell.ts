@@ -747,7 +747,9 @@ export class EditorShell {
                     throw new Error(validationError);
                 }
 
-                const importResult = this.legacyObjectAdapter?.importRuntimeConfig(parsed);
+                const importResult = this.legacyObjectAdapter?.importRuntimeConfig(parsed, {
+                    mode: 'full_import'
+                });
                 if (!importResult || !importResult.success) {
                     throw new Error(importResult?.reason ?? 'Runtime import path unavailable.');
                 }

@@ -146,7 +146,10 @@ export interface TestWorldRuntime {
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
-    replaceConfig: (config: unknown) => { success: boolean; reason?: string };
+    replaceConfig: (
+        config: unknown,
+        options?: { mode?: 'runtime_patch' | 'full_import' }
+    ) => { success: boolean; reason?: string };
     getEditorHandles: () => readonly TestWorldEditorHandle[];
     getEditorObjects: () => readonly TestWorldEditorObjectSummary[];
     getEditorHandle: (id: string) => TestWorldEditorHandle | null;
@@ -475,13 +478,18 @@ export const createTestWorldRuntime = (
             });
             rebuildFromCurrentConfig();
         },
-        replaceConfig: (config: unknown): { success: boolean; reason?: string } => {
+        replaceConfig: (
+            config: unknown,
+            options?: { mode?: 'runtime_patch' | 'full_import' }
+        ): { success: boolean; reason?: string } => {
             try {
                 if (!config || typeof config !== 'object' || Array.isArray(config)) {
                     return { success: false, reason: 'Config must be a JSON object.' };
                 }
+                const mode = options?.mode ?? 'runtime_patch';
                 currentConfig = normalizeTestWorldConfig(config, {
-                    fallbackConfig: currentConfig
+                    fallbackConfig: currentConfig,
+                    preserveMissingBackgroundObjectFields: mode !== 'full_import'
                 });
                 rebuildFromCurrentConfig();
                 return { success: true };

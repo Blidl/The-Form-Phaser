@@ -1,6 +1,9 @@
 import { GameObjects, type Scene } from 'phaser';
 import type {
     TestWorldBackgroundConfig,
+    TestWorldBackgroundLayerSettingsConfig,
+    TestWorldBackgroundObjectConfig,
+    TestWorldBackgroundObjectLayerId,
     TestWorldConfig,
     TestWorldParallaxLayerConfig
 } from '../../game/world/runtime/test_world_config';
@@ -9,6 +12,17 @@ const FALLBACK_BACKGROUND_COLOR = 0x263238;
 const BACKGROUND_FILL_ALPHA = 0.38;
 const BACKGROUND_DEPTH = -1000;
 const BACKGROUND_PADDING_MULTIPLIER = 2;
+const MIN_BACKGROUND_OBJECT_SIZE = 8;
+const BACKGROUND_OBJECT_STROKE_WIDTH = 2;
+const BACKGROUND_OBJECT_DEPTH_BASE = BACKGROUND_DEPTH + 2;
+const BACKGROUND_OBJECT_LAYER_DEPTH_STEP = 1;
+const BACKGROUND_OBJECT_ENTRY_DEPTH_STEP = 0.001;
+const DEFAULT_OBJECT_LAYER_SCROLL: Record<TestWorldBackgroundObjectLayerId, { scrollFactorX: number; scrollFactorY: number }> = {
+    static: { scrollFactorX: 1, scrollFactorY: 1 },
+    parallax1: { scrollFactorX: 0.45, scrollFactorY: 0.45 },
+    parallax2: { scrollFactorX: 0.2, scrollFactorY: 0.2 }
+};
+const BACKGROUND_OBJECT_RENDER_LAYER_ORDER: readonly TestWorldBackgroundObjectLayerId[] = ['parallax1', 'parallax2', 'static'];
 
 interface PendingTextureRequest {
     key: string;
@@ -33,6 +47,57 @@ const clampBackgroundColor = (value: number | undefined): number => {
     }
 
     return Math.max(0, Math.min(0xffffff, Math.round(value)));
+};
+
+const clampAlpha = (value: number | undefined, fallback = 1): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return Math.max(0, Math.min(1, fallback));
+    }
+    return Math.max(0, Math.min(1, value));
+};
+
+const clampSize = (value: number | undefined, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return Math.max(MIN_BACKGROUND_OBJECT_SIZE, Math.round(fallback));
+    }
+    return Math.max(MIN_BACKGROUND_OBJECT_SIZE, Math.round(value));
+};
+
+const clampScrollFactor = (value: number | undefined, fallback: number): number => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return Math.max(0, Math.min(2, fallback));
+    }
+    return Math.max(0, Math.min(2, value));
+};
+
+const sanitizeOptionalColor = (value: number | undefined): number | undefined => {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        return undefined;
+    }
+    return Math.max(0, Math.min(0xffffff, Math.round(value)));
+};
+
+const asOptionalTextureKey = (value: string | undefined): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const asOptionalTextureAsset = (value: string | undefined): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const resolveBackgroundObjectLayer = (value: unknown): TestWorldBackgroundObjectLayerId => {
+    if (value === 'parallax1' || value === 'parallax2' || value === 'static') {
+        return value;
+    }
+    return 'static';
 };
 
 const getBackdropWidth = (scene: Scene, worldWidth: number): number => {
@@ -176,24 +241,165 @@ const createParallaxLayerBackdrop = (
     return objects;
 };
 
+const resolveObjectLayerScrollFactors = (
+    layer: TestWorldBackgroundObjectLayerId,
+    backgroundLayerSettings: TestWorldBackgroundLayerSettingsConfig | undefined
+): { scrollFactorX: number; scrollFactorY: number } => {
+    if (layer === 'static') {
+        return { ...DEFAULT_OBJECT_LAYER_SCROLL.static };
+    }
+
+    const fallback = DEFAULT_OBJECT_LAYER_SCROLL[layer];
+    const layerSettings = layer === 'parallax1'
+        ? backgroundLayerSettings?.parallax1
+        : backgroundLayerSettings?.parallax2;
+    return {
+        scrollFactorX: clampScrollFactor(layerSettings?.scrollFactorX, fallback.scrollFactorX),
+        scrollFactorY: clampScrollFactor(layerSettings?.scrollFactorY, fallback.scrollFactorY)
+    };
+};
+
+const resolveObjectLayerRenderState = (
+    layer: TestWorldBackgroundObjectLayerId,
+    background: TestWorldBackgroundConfig,
+    editorPreviewBasis: EditorPreviewCameraBasis | null
+): { scrollFactorX: number; scrollFactorY: number; offsetX: number; offsetY: number } => {
+    if (layer === 'static') {
+        return {
+            scrollFactorX: 1,
+            scrollFactorY: 1,
+            offsetX: 0,
+            offsetY: 0
+        };
+    }
+
+    const layerScroll = resolveObjectLayerScrollFactors(layer, background.backgroundLayerSettings);
+    if (!editorPreviewBasis) {
+        return {
+            scrollFactorX: layerScroll.scrollFactorX,
+            scrollFactorY: layerScroll.scrollFactorY,
+            offsetX: 0,
+            offsetY: 0
+        };
+    }
+
+    return {
+        scrollFactorX: 1,
+        scrollFactorY: 1,
+        offsetX: resolveEditorPreviewOffset(editorPreviewBasis.scrollX, layerScroll.scrollFactorX, editorPreviewBasis),
+        offsetY: resolveEditorPreviewOffset(editorPreviewBasis.scrollY, layerScroll.scrollFactorY, editorPreviewBasis)
+    };
+};
+
+const createBackgroundObjectBackdrop = (
+    scene: Scene,
+    worldConfig: TestWorldConfig,
+    background: TestWorldBackgroundConfig,
+    backgroundObject: TestWorldBackgroundObjectConfig,
+    editorPreviewBasis: EditorPreviewCameraBasis | null,
+    depth: number
+): GameObjects.GameObject[] => {
+    if (backgroundObject.editor?.hidden) {
+        return [];
+    }
+
+    const layer = resolveBackgroundObjectLayer(backgroundObject.layer);
+    const renderState = resolveObjectLayerRenderState(layer, background, editorPreviewBasis);
+    const width = clampSize(backgroundObject.bounds.width, MIN_BACKGROUND_OBJECT_SIZE);
+    const height = clampSize(backgroundObject.bounds.height, MIN_BACKGROUND_OBJECT_SIZE);
+    const centerX = getBackgroundCenterX(worldConfig, backgroundObject.bounds.x) + renderState.offsetX;
+    const centerY = getBackgroundCenterY(worldConfig, backgroundObject.bounds.y) + renderState.offsetY;
+    const rotationDeg = Number.isFinite(backgroundObject.bounds.rotation) ? backgroundObject.bounds.rotation as number : 0;
+    const rotationRad = (rotationDeg * Math.PI) / 180;
+    const textureKey = asOptionalTextureKey(backgroundObject.visual.textureKey);
+    const fillColor = sanitizeOptionalColor(backgroundObject.visual.fillColor);
+    const strokeColor = sanitizeOptionalColor(backgroundObject.visual.strokeColor);
+    const alpha = clampAlpha(backgroundObject.visual.alpha, 1);
+    const hasTexture = textureKey ? scene.textures.exists(textureKey) : false;
+
+    if (hasTexture && textureKey) {
+        const repeatX = backgroundObject.visual.tileHorizontalRepeat ?? false;
+        const repeatY = backgroundObject.visual.tileVerticalRepeat ?? false;
+        if (repeatX || repeatY) {
+            const tile = scene.add.tileSprite(centerX, centerY, width, height, textureKey)
+                .setDepth(depth)
+                .setScrollFactor(renderState.scrollFactorX, renderState.scrollFactorY)
+                .setAlpha(alpha)
+                .setRotation(rotationRad);
+            const sourceImage = scene.textures.get(textureKey).getSourceImage() as { width?: number; height?: number } | null;
+            const sourceWidth = typeof sourceImage?.width === 'number' && sourceImage.width > 0 ? sourceImage.width : width;
+            const sourceHeight = typeof sourceImage?.height === 'number' && sourceImage.height > 0 ? sourceImage.height : height;
+            tile.tileScaleX = repeatX ? 1 : Math.max(0.0001, width / sourceWidth);
+            tile.tileScaleY = repeatY ? 1 : Math.max(0.0001, height / sourceHeight);
+            return [tile];
+        }
+
+        const image = scene.add.image(centerX, centerY, textureKey)
+            .setDepth(depth)
+            .setScrollFactor(renderState.scrollFactorX, renderState.scrollFactorY)
+            .setDisplaySize(width, height)
+            .setAlpha(alpha)
+            .setRotation(rotationRad);
+        return [image];
+    }
+
+    if (fillColor === undefined && strokeColor === undefined) {
+        return [];
+    }
+
+    const fallbackFillColor = fillColor ?? 0xffffff;
+    const fallbackFillAlpha = fillColor !== undefined ? alpha : 0;
+    const rectangle = scene.add.rectangle(centerX, centerY, width, height, fallbackFillColor, fallbackFillAlpha)
+        .setDepth(depth)
+        .setScrollFactor(renderState.scrollFactorX, renderState.scrollFactorY)
+        .setRotation(rotationRad);
+    if (strokeColor !== undefined) {
+        rectangle.setStrokeStyle(BACKGROUND_OBJECT_STROKE_WIDTH, strokeColor, alpha);
+    }
+    return [rectangle];
+};
+
 const collectTextureRequests = (background: TestWorldBackgroundConfig | null): PendingTextureRequest[] => {
     if (!background) {
         return [];
     }
 
     const requests: PendingTextureRequest[] = [];
-    const tryAddRequest = (textureKey: string, textureAsset: string | undefined): void => {
-        if (!textureKey || !textureAsset) {
+    const tryAddRequest = (textureKey: string | undefined, textureAsset: string | undefined): void => {
+        const key = asOptionalTextureKey(textureKey);
+        const asset = asOptionalTextureAsset(textureAsset);
+        if (!key || !asset) {
             return;
         }
-        requests.push({ key: textureKey, asset: textureAsset });
+        requests.push({ key, asset });
     };
 
-    tryAddRequest(background.staticImage?.textureKey ?? '', background.staticImage?.textureAsset);
+    tryAddRequest(background.staticImage?.textureKey, background.staticImage?.textureAsset);
     background.layers?.forEach((layer) => {
         tryAddRequest(layer.textureKey, layer.textureAsset);
     });
+    background.backgroundObjects?.forEach((backgroundObject) => {
+        tryAddRequest(backgroundObject.visual?.textureKey, backgroundObject.visual?.textureAsset);
+    });
     return requests;
+};
+
+const collectBackgroundObjectsForRenderOrder = (
+    backgroundObjects: readonly TestWorldBackgroundObjectConfig[] | undefined
+): TestWorldBackgroundObjectConfig[] => {
+    if (!Array.isArray(backgroundObjects) || backgroundObjects.length <= 0) {
+        return [];
+    }
+
+    const ordered: TestWorldBackgroundObjectConfig[] = [];
+    BACKGROUND_OBJECT_RENDER_LAYER_ORDER.forEach((layer) => {
+        backgroundObjects.forEach((entry) => {
+            if (resolveBackgroundObjectLayer(entry.layer) === layer) {
+                ordered.push(entry);
+            }
+        });
+    });
+    return ordered;
 };
 
 export const createTestSceneBackgroundRuntime = (
@@ -241,6 +447,34 @@ export const createTestSceneBackgroundRuntime = (
 
         background.layers?.forEach((layer) => {
             objects.push(...createParallaxLayerBackdrop(scene, currentConfig, layer, editorPreviewBasis));
+        });
+
+        const orderedBackgroundObjects = collectBackgroundObjectsForRenderOrder(background.backgroundObjects);
+        const perLayerEntryCount: Record<TestWorldBackgroundObjectLayerId, number> = {
+            parallax1: 0,
+            parallax2: 0,
+            static: 0
+        };
+        orderedBackgroundObjects.forEach((backgroundObject) => {
+            const layer = resolveBackgroundObjectLayer(backgroundObject.layer);
+            const layerDepthOffset = layer === 'parallax1'
+                ? 0
+                : layer === 'parallax2'
+                    ? BACKGROUND_OBJECT_LAYER_DEPTH_STEP
+                    : BACKGROUND_OBJECT_LAYER_DEPTH_STEP * 2;
+            const layerEntryIndex = perLayerEntryCount[layer];
+            perLayerEntryCount[layer] += 1;
+            const depth = BACKGROUND_OBJECT_DEPTH_BASE
+                + layerDepthOffset
+                + (layerEntryIndex * BACKGROUND_OBJECT_ENTRY_DEPTH_STEP);
+            objects.push(...createBackgroundObjectBackdrop(
+                scene,
+                currentConfig,
+                background,
+                backgroundObject,
+                editorPreviewBasis,
+                depth
+            ));
         });
     };
 
