@@ -325,3 +325,18 @@ pm run build-nolog). Automated NPC-ride smoke on the passive observer is noisy b
   - `src/editor/core/EditorShell.ts`: editor close/open now calls active mode `exit()/enter()` so editor-only overlays are cleared on close and restored on reopen.
   - Docs updated: `docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md` with B3.6.1 status.
   - Verification: `npm run build-nolog` PASS.
+- 2026-05-04: Implemented B3.7 Background resize handles MVP in active `src/editor/*` path (`src/editor/modes/BackgroundEditorMode.ts`).
+  - Added editor-only corner resize handles (top-left/top-right/bottom-right/bottom-left) in the existing selection overlay lifecycle.
+  - Pointer down now checks resize handles first, then falls back to object hit-test + existing drag/move behavior.
+  - Added resize interaction state with service-driven bounds updates via `BackgroundObjectAuthoringService.updateObjectBounds(...)` only (no direct config mutation).
+  - Width/height resize clamps honor minimum size `>= 8`.
+  - Locked behavior: outline + handles remain visible, but resize drag is blocked.
+  - Hidden behavior: outline/handles are suppressed and resize is unavailable.
+  - Added lightweight resize cursor feedback (`nwse-resize`/`nesw-resize`, `not-allowed` for locked handle hover).
+  - Resize transient state now clears on pointer up, layer switch, mode enter/exit, and import refresh; stale selection cleanup also clears resize state.
+  - Rotation handle remains deferred by design; current resize math is axis-aligned while object rotation/outline remains rotated.
+- 2026-05-04: Updated implementation status doc:
+  - `docs/features/authoring-editor/docs/13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md`
+  - Added section `16. B3.7 background object resize handles MVP implemented (no rotation handle)` with behavior + limitation notes.
+- Verification:
+  - `npm run build-nolog` PASS.

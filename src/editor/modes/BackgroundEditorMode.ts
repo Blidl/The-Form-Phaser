@@ -30,6 +30,24 @@ interface BackgroundObjectDragState {
     pointerOffsetY: number;
 }
 
+type BackgroundResizeHandle =
+    | 'top-left'
+    | 'top-right'
+    | 'bottom-right'
+    | 'bottom-left';
+
+interface BackgroundObjectResizeState {
+    objectId: string;
+    handle: BackgroundResizeHandle;
+    startBounds: {
+        x: number;
+        y: number;
+        width: number;
+        height: number;
+        rotation: number;
+    };
+}
+
 const COLOR_HEX_PATTERN = /^#?([0-9a-fA-F]{6})$/;
 const COLOR_NUMBER_PATTERN = /^(0x)?([0-9a-fA-F]{1,6})$/;
 const DEFAULT_SOLID_FILL_COLOR = 0x1f2a30;
@@ -37,6 +55,9 @@ const DEFAULT_DEMO_TEXTURE_ASSET = 'assets/bg.png';
 const BACKGROUND_SELECTION_OUTLINE_DEPTH = 5102;
 const BACKGROUND_SELECTION_OUTLINE_COLOR = 0x79d7ff;
 const BACKGROUND_SELECTION_OUTLINE_LOCKED_COLOR = 0xff5555;
+const BACKGROUND_RESIZE_HANDLE_SIZE = 8;
+const BACKGROUND_RESIZE_HANDLE_HIT_RADIUS = 6;
+const BACKGROUND_MIN_RESIZE_SIZE = 8;
 
 const clamp = (value: number, min: number, max: number): number => {
     return Math.max(min, Math.min(max, value));
@@ -117,6 +138,7 @@ export class BackgroundEditorMode implements EditorMode {
     private lastBackgroundSignature: string | null = null;
     private lastSelectionOutlineSignature: string | null = null;
     private dragState: BackgroundObjectDragState | null = null;
+    private resizeState: BackgroundObjectResizeState | null = null;
 
     public constructor(options: BackgroundEditorModeOptions) {
         this.scene = options.scene;
@@ -129,6 +151,8 @@ export class BackgroundEditorMode implements EditorMode {
 
     public enter(): void {
         this.clearDragState();
+        this.clearResizeState();
+        this.setSceneCursor('default');
         this.captureSignature();
         this.syncSelectedObject();
         this.syncSelectionOutline(true);
@@ -136,6 +160,8 @@ export class BackgroundEditorMode implements EditorMode {
 
     public exit(): void {
         this.clearDragState();
+        this.clearResizeState();
+        this.setSceneCursor('default');
         this.clearSelectionOutline();
     }
 
@@ -153,6 +179,8 @@ export class BackgroundEditorMode implements EditorMode {
 
     public onRuntimeConfigImported(): void {
         this.clearDragState();
+        this.clearResizeState();
+        this.setSceneCursor('default');
         this.captureSignature();
         this.fieldErrors.clear();
         this.statusMessage = null;
@@ -169,6 +197,34 @@ export class BackgroundEditorMode implements EditorMode {
         if (!snapshot) {
             this.selectedObjectId = null;
             this.clearDragState();
+            this.clearResizeState();
+            this.syncSelectionOutline(true);
+            this.onUiChanged();
+            return;
+        }
+
+        const resizeHit = this.findResizeHandleAtPoint(snapshot, event.worldX, event.worldY);
+        if (resizeHit) {
+            const resizeTarget = snapshot.objects.find((entry) => entry.id === resizeHit.objectId) ?? null;
+            this.selectedObjectId = resizeHit.objectId;
+            this.clearDragState();
+            if (!resizeTarget || resizeTarget.editor?.locked) {
+                this.clearResizeState();
+            } else {
+                this.resizeState = {
+                    objectId: resizeTarget.id,
+                    handle: resizeHit.handle,
+                    startBounds: {
+                        x: Number.isFinite(resizeTarget.bounds.x) ? resizeTarget.bounds.x : 0,
+                        y: Number.isFinite(resizeTarget.bounds.y) ? resizeTarget.bounds.y : 0,
+                        width: Math.max(BACKGROUND_MIN_RESIZE_SIZE, Number.isFinite(resizeTarget.bounds.width) ? resizeTarget.bounds.width : 0),
+                        height: Math.max(BACKGROUND_MIN_RESIZE_SIZE, Number.isFinite(resizeTarget.bounds.height) ? resizeTarget.bounds.height : 0),
+                        rotation: Number.isFinite(resizeTarget.bounds.rotation) ? resizeTarget.bounds.rotation ?? 0 : 0
+                    }
+                };
+                this.setSceneCursor(this.getResizeHandleCursor(resizeHit.handle));
+            }
+            this.statusMessage = null;
             this.syncSelectionOutline(true);
             this.onUiChanged();
             return;
@@ -178,12 +234,15 @@ export class BackgroundEditorMode implements EditorMode {
         if (!hitObject) {
             this.selectedObjectId = null;
             this.clearDragState();
+            this.clearResizeState();
+            this.setSceneCursor('default');
             this.syncSelectionOutline(true);
             this.onUiChanged();
             return;
         }
 
         this.selectedObjectId = hitObject.id;
+        this.clearResizeState();
         if (hitObject.editor?.locked) {
             this.clearDragState();
         } else {
@@ -199,23 +258,34 @@ export class BackgroundEditorMode implements EditorMode {
     }
 
     public onPointerMove(event: EditorPointerEvent): void {
+        const resizeState = this.resizeState;
+        if (resizeState) {
+            this.setSceneCursor(this.getResizeHandleCursor(resizeState.handle));
+            this.applyResizeFromPointer(event.worldX, event.worldY);
+            return;
+        }
+
         const dragState = this.dragState;
         if (!dragState) {
+            this.updateResizeCursor(event.worldX, event.worldY);
             return;
         }
 
         const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
         if (!snapshot) {
             this.clearDragState();
+            this.setSceneCursor('default');
             return;
         }
         const draggedObject = snapshot.objects.find((entry) => entry.id === dragState.objectId);
         if (!draggedObject) {
             this.clearDragState();
+            this.setSceneCursor('default');
             return;
         }
         if (normalizeLayer(draggedObject.layer) !== this.selectedObjectLayer || draggedObject.editor?.hidden || draggedObject.editor?.locked) {
             this.clearDragState();
+            this.setSceneCursor('default');
             return;
         }
 
@@ -242,6 +312,8 @@ export class BackgroundEditorMode implements EditorMode {
             return;
         }
         this.clearDragState();
+        this.clearResizeState();
+        this.setSceneCursor('default');
     }
 
     public renderLeftInspector(panel: EditorPanel): void {
@@ -660,7 +732,8 @@ export class BackgroundEditorMode implements EditorMode {
 
         row.addEventListener('click', () => {
             this.selectedObjectId = entry.id;
-            this.clearDragState(entry.id);
+            this.clearDragState();
+            this.clearResizeState();
             this.statusMessage = null;
             this.syncSelectionOutline(true);
             this.onUiChanged();
@@ -936,6 +1009,8 @@ export class BackgroundEditorMode implements EditorMode {
         }
         this.selectedObjectLayer = layer;
         this.clearDragState();
+        this.clearResizeState();
+        this.setSceneCursor('default');
         this.statusMessage = null;
         this.syncSelectedObject();
         this.syncSelectionOutline(true);
@@ -1059,6 +1134,183 @@ export class BackgroundEditorMode implements EditorMode {
         this.selectionOutline.setVisible(false);
     }
 
+    private getResizeHandlePoints(
+        object: TestWorldBackgroundObjectConfig
+    ): Array<{ handle: BackgroundResizeHandle; x: number; y: number }> {
+        const width = Number.isFinite(object.bounds.width) ? Math.max(0, object.bounds.width) : 0;
+        const height = Number.isFinite(object.bounds.height) ? Math.max(0, object.bounds.height) : 0;
+        const centerX = Number.isFinite(object.bounds.x) ? object.bounds.x : 0;
+        const centerY = Number.isFinite(object.bounds.y) ? object.bounds.y : 0;
+        const rotationDeg = Number.isFinite(object.bounds.rotation) ? object.bounds.rotation ?? 0 : 0;
+        const rotationRad = (rotationDeg * Math.PI) / 180;
+        const halfWidth = width * 0.5;
+        const halfHeight = height * 0.5;
+        const cos = Math.cos(rotationRad);
+        const sin = Math.sin(rotationRad);
+        const toWorld = (localX: number, localY: number): { x: number; y: number } => ({
+            x: centerX + (localX * cos) - (localY * sin),
+            y: centerY + (localX * sin) + (localY * cos)
+        });
+        const topLeft = toWorld(-halfWidth, -halfHeight);
+        const topRight = toWorld(halfWidth, -halfHeight);
+        const bottomRight = toWorld(halfWidth, halfHeight);
+        const bottomLeft = toWorld(-halfWidth, halfHeight);
+        return [
+            { handle: 'top-left', x: topLeft.x, y: topLeft.y },
+            { handle: 'top-right', x: topRight.x, y: topRight.y },
+            { handle: 'bottom-right', x: bottomRight.x, y: bottomRight.y },
+            { handle: 'bottom-left', x: bottomLeft.x, y: bottomLeft.y }
+        ];
+    }
+
+    private findResizeHandleAtPoint(
+        snapshot: BackgroundObjectSnapshot,
+        worldX: number,
+        worldY: number
+    ): { objectId: string; handle: BackgroundResizeHandle } | null {
+        const selectedObject = this.getSelectedObject(snapshot);
+        if (!selectedObject) {
+            return null;
+        }
+        if (normalizeLayer(selectedObject.layer) !== this.selectedObjectLayer) {
+            return null;
+        }
+        if (selectedObject.editor?.hidden) {
+            return null;
+        }
+        const points = this.getResizeHandlePoints(selectedObject);
+        for (const point of points) {
+            const withinX = Math.abs(worldX - point.x) <= BACKGROUND_RESIZE_HANDLE_HIT_RADIUS;
+            const withinY = Math.abs(worldY - point.y) <= BACKGROUND_RESIZE_HANDLE_HIT_RADIUS;
+            if (withinX && withinY) {
+                return {
+                    objectId: selectedObject.id,
+                    handle: point.handle
+                };
+            }
+        }
+        return null;
+    }
+
+    private applyResizeFromPointer(worldX: number, worldY: number): void {
+        const resizeState = this.resizeState;
+        if (!resizeState) {
+            return;
+        }
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
+        if (!snapshot) {
+            this.clearResizeState();
+            this.setSceneCursor('default');
+            return;
+        }
+        const selected = snapshot.objects.find((entry) => entry.id === resizeState.objectId) ?? null;
+        if (!selected) {
+            this.clearResizeState();
+            this.setSceneCursor('default');
+            return;
+        }
+        if (normalizeLayer(selected.layer) !== this.selectedObjectLayer || selected.editor?.hidden || selected.editor?.locked) {
+            this.clearResizeState();
+            this.setSceneCursor('default');
+            return;
+        }
+
+        const start = resizeState.startBounds;
+        const startHalfWidth = start.width * 0.5;
+        const startHalfHeight = start.height * 0.5;
+        const startLeft = start.x - startHalfWidth;
+        const startRight = start.x + startHalfWidth;
+        const startTop = start.y - startHalfHeight;
+        const startBottom = start.y + startHalfHeight;
+        let left = startLeft;
+        let right = startRight;
+        let top = startTop;
+        let bottom = startBottom;
+
+        if (resizeState.handle === 'top-left' || resizeState.handle === 'bottom-left') {
+            left = Math.round(worldX);
+            if ((right - left) < BACKGROUND_MIN_RESIZE_SIZE) {
+                left = right - BACKGROUND_MIN_RESIZE_SIZE;
+            }
+        }
+        if (resizeState.handle === 'top-right' || resizeState.handle === 'bottom-right') {
+            right = Math.round(worldX);
+            if ((right - left) < BACKGROUND_MIN_RESIZE_SIZE) {
+                right = left + BACKGROUND_MIN_RESIZE_SIZE;
+            }
+        }
+        if (resizeState.handle === 'top-left' || resizeState.handle === 'top-right') {
+            top = Math.round(worldY);
+            if ((bottom - top) < BACKGROUND_MIN_RESIZE_SIZE) {
+                top = bottom - BACKGROUND_MIN_RESIZE_SIZE;
+            }
+        }
+        if (resizeState.handle === 'bottom-left' || resizeState.handle === 'bottom-right') {
+            bottom = Math.round(worldY);
+            if ((bottom - top) < BACKGROUND_MIN_RESIZE_SIZE) {
+                bottom = top + BACKGROUND_MIN_RESIZE_SIZE;
+            }
+        }
+
+        const nextX = Math.round((left + right) * 0.5);
+        const nextY = Math.round((top + bottom) * 0.5);
+        const nextWidth = Math.max(BACKGROUND_MIN_RESIZE_SIZE, Math.round(right - left));
+        const nextHeight = Math.max(BACKGROUND_MIN_RESIZE_SIZE, Math.round(bottom - top));
+        const changed = nextX !== selected.bounds.x
+            || nextY !== selected.bounds.y
+            || nextWidth !== selected.bounds.width
+            || nextHeight !== selected.bounds.height;
+        if (!changed) {
+            return;
+        }
+
+        const result = this.backgroundObjectAuthoringService.updateObjectBounds(selected.id, {
+            x: nextX,
+            y: nextY,
+            width: nextWidth,
+            height: nextHeight,
+            rotation: start.rotation
+        });
+        const handled = this.handleObjectMutationResult(result, selected.id);
+        if (!handled.success) {
+            this.clearResizeState();
+            this.setSceneCursor('default');
+        }
+    }
+
+    private updateResizeCursor(worldX: number, worldY: number): void {
+        const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
+        if (!snapshot) {
+            this.setSceneCursor('default');
+            return;
+        }
+        const resizeHit = this.findResizeHandleAtPoint(snapshot, worldX, worldY);
+        if (!resizeHit) {
+            this.setSceneCursor('default');
+            return;
+        }
+        const target = snapshot.objects.find((entry) => entry.id === resizeHit.objectId) ?? null;
+        if (target?.editor?.locked) {
+            this.setSceneCursor('not-allowed');
+            return;
+        }
+        this.setSceneCursor(this.getResizeHandleCursor(resizeHit.handle));
+    }
+
+    private getResizeHandleCursor(handle: BackgroundResizeHandle): string {
+        if (handle === 'top-left' || handle === 'bottom-right') {
+            return 'nwse-resize';
+        }
+        return 'nesw-resize';
+    }
+
+    private setSceneCursor(cursor: string): void {
+        const canvas = this.scene.input.manager.canvas;
+        if (canvas.style.cursor !== cursor) {
+            canvas.style.cursor = cursor;
+        }
+    }
+
     private syncSelectionOutline(forceRedraw = false): void {
         const snapshot = this.backgroundObjectAuthoringService.getSnapshot();
         const selectedObject = this.getSelectedObject(snapshot);
@@ -1106,6 +1358,7 @@ export class BackgroundEditorMode implements EditorMode {
         const topRight = toWorld(halfWidth, -halfHeight);
         const bottomRight = toWorld(halfWidth, halfHeight);
         const bottomLeft = toWorld(-halfWidth, halfHeight);
+        const handlePoints = this.getResizeHandlePoints(selectedObject);
         this.selectionOutline.setVisible(true);
         this.selectionOutline.lineStyle(
             2,
@@ -1119,6 +1372,18 @@ export class BackgroundEditorMode implements EditorMode {
         this.selectionOutline.lineTo(bottomLeft.x, bottomLeft.y);
         this.selectionOutline.closePath();
         this.selectionOutline.strokePath();
+        this.selectionOutline.fillStyle(
+            selectedObject.editor?.locked ? BACKGROUND_SELECTION_OUTLINE_LOCKED_COLOR : BACKGROUND_SELECTION_OUTLINE_COLOR,
+            selectedObject.editor?.locked ? 0.8 : 1
+        );
+        for (const handle of handlePoints) {
+            this.selectionOutline.fillRect(
+                handle.x - (BACKGROUND_RESIZE_HANDLE_SIZE * 0.5),
+                handle.y - (BACKGROUND_RESIZE_HANDLE_SIZE * 0.5),
+                BACKGROUND_RESIZE_HANDLE_SIZE,
+                BACKGROUND_RESIZE_HANDLE_SIZE
+            );
+        }
     }
 
     private buildSelectionOutlineSignature(selectedObject: TestWorldBackgroundObjectConfig | null): string {
@@ -1149,6 +1414,16 @@ export class BackgroundEditorMode implements EditorMode {
         this.dragState = null;
     }
 
+    private clearResizeState(keepObjectId?: string): void {
+        if (!this.resizeState) {
+            return;
+        }
+        if (keepObjectId && this.resizeState.objectId === keepObjectId) {
+            return;
+        }
+        this.resizeState = null;
+    }
+
     private syncDragState(snapshot: BackgroundObjectSnapshot | null): void {
         const dragState = this.dragState;
         if (!dragState || !snapshot) {
@@ -1169,6 +1444,26 @@ export class BackgroundEditorMode implements EditorMode {
         }
     }
 
+    private syncResizeState(snapshot: BackgroundObjectSnapshot | null): void {
+        const resizeState = this.resizeState;
+        if (!resizeState || !snapshot) {
+            this.resizeState = null;
+            return;
+        }
+        if (this.selectedObjectId !== resizeState.objectId) {
+            this.resizeState = null;
+            return;
+        }
+        const selected = snapshot.objects.find((entry) => entry.id === resizeState.objectId);
+        if (!selected) {
+            this.resizeState = null;
+            return;
+        }
+        if (normalizeLayer(selected.layer) !== this.selectedObjectLayer || selected.editor?.hidden || selected.editor?.locked) {
+            this.resizeState = null;
+        }
+    }
+
     private syncSelectedObject(
         snapshotInput?: BackgroundObjectSnapshot | null,
         preferredObjectId?: string | null
@@ -1177,6 +1472,7 @@ export class BackgroundEditorMode implements EditorMode {
         if (!snapshot) {
             this.selectedObjectId = null;
             this.syncDragState(snapshot);
+            this.syncResizeState(snapshot);
             return;
         }
 
@@ -1197,5 +1493,6 @@ export class BackgroundEditorMode implements EditorMode {
 
         this.selectedObjectId = nextSelectedObjectId;
         this.syncDragState(snapshot);
+        this.syncResizeState(snapshot);
     }
 }

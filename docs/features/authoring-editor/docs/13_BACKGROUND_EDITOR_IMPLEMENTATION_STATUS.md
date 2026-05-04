@@ -228,3 +228,30 @@
   - resize handles still deferred;
   - rotation handle still deferred.
 - Legacy runtime fallback behavior from B3.5 remains unchanged for legacy-only levels.
+
+## 16. B3.7 background object resize handles MVP implemented (no rotation handle)
+- Active `src/editor/modes/BackgroundEditorMode.ts` now adds editor-only resize handles for selected object-based background objects in Background mode.
+- Handle scope in this MVP:
+  - corner handles only (`top-left`, `top-right`, `bottom-right`, `bottom-left`)
+  - no edge handles
+- Handle lifecycle/editor-only guarantees:
+  - handles are drawn in the mode-owned selection `Graphics` overlay (same lifecycle as outline)
+  - handles are not persisted to runtime config/export data
+  - bounds changes happen only through `BackgroundObjectAuthoringService.updateObjectBounds(...)`
+- Pointer down priority in Background mode:
+  - handle hit-test runs first
+  - object hit-test/drag runs second when no handle is hit
+- Resize behavior:
+  - corner drag updates `x/y/width/height` through service
+  - width/height minimum size is clamped to `>= 8` (service + mode clamp)
+  - top bar unsaved state remains driven by runtime config mutation/signature changes
+- Locked/hidden behavior:
+  - locked selected object keeps outline + handles visible but resize drag is disabled
+  - hidden selected object shows no outline/handles and cannot be resized
+  - hidden objects remain present in list/inspector
+- State sync:
+  - resize transient state is cleared on pointer up, layer change, mode exit, and runtime import refresh
+  - stale selected-object removal clears resize state through existing selection sync path
+- Limitation (deferred):
+  - rotation handle is not implemented
+  - resize math is axis-aligned for MVP; on rotated objects, corner drag updates axis-aligned bounds while object rotation/outline remains rotated
