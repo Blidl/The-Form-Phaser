@@ -19,29 +19,33 @@ const clamp = (value: number, min: number, max: number): number => {
     return Math.max(min, Math.min(max, value));
 };
 
+const isFiniteNumber = (value: unknown): value is number => {
+    return typeof value === 'number' && Number.isFinite(value);
+};
+
 const clampAlpha = (value: number | undefined, fallback = 1): number => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
+    if (!isFiniteNumber(value)) {
         return fallback;
     }
     return clamp(value, 0, 1);
 };
 
 const clampScale = (value: number | undefined, fallback = 1): number => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
+    if (!isFiniteNumber(value)) {
         return fallback;
     }
     return Math.max(0.1, value);
 };
 
 const clampSize = (value: number | undefined, fallback: number): number => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
+    if (!isFiniteNumber(value)) {
         return Math.max(8, Math.round(fallback));
     }
     return Math.max(8, Math.round(value));
 };
 
 const clampScrollFactor = (value: number | undefined, fallback: number): number => {
-    if (typeof value !== 'number' || !Number.isFinite(value)) {
+    if (!isFiniteNumber(value)) {
         return clamp(fallback, 0, 2);
     }
     return clamp(value, 0, 2);
@@ -66,6 +70,7 @@ export interface BackgroundWriteResult {
 }
 
 export class BackgroundAuthoringService {
+    // Background edits are runtime-backed; runtime config is the canonical source.
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
 
     public constructor(legacyObjectAdapter: LegacyObjectAdapter | null) {
@@ -107,6 +112,12 @@ export class BackgroundAuthoringService {
     }
 
     public patchBackgroundColor(color: number): BackgroundWriteResult {
+        if (!isFiniteNumber(color)) {
+            return {
+                success: false,
+                reason: 'Invalid color value.'
+            };
+        }
         return this.applyConfigEdit((config) => {
             const background = this.ensureBackground(config);
             background.color = clamp(Math.round(color), 0, 0xffffff);
@@ -114,30 +125,81 @@ export class BackgroundAuthoringService {
     }
 
     public patchStaticImage(patch: Partial<TestWorldBackgroundImageConfig>): BackgroundWriteResult {
+        const runtimeConfig = this.getRuntimeConfig();
+        if (!runtimeConfig) {
+            return {
+                success: false,
+                reason: 'Runtime config unavailable.'
+            };
+        }
+        const candidateConfig = cloneTestWorldConfig(runtimeConfig);
+        const background = this.ensureBackground(candidateConfig);
+        const current = this.normalizeStaticImage(background.staticImage, candidateConfig);
+        const candidate = this.normalizeStaticImage({
+            ...current,
+            ...patch
+        }, candidateConfig);
+        if (!this.isRenderableBackgroundImage(candidate)) {
+            return {
+                success: false,
+                reason: 'Texture key/asset can both be empty only when fillColor exists.'
+            };
+        }
         return this.applyConfigEdit((config) => {
             const background = this.ensureBackground(config);
-            const current = this.normalizeStaticImage(background.staticImage, config);
-            background.staticImage = {
-                ...current,
+            const next = this.normalizeStaticImage({
+                ...this.normalizeStaticImage(background.staticImage, config),
                 ...patch
-            };
+            }, config);
+            if (!this.isRenderableBackgroundImage(next)) {
+                throw new Error('Texture key/asset can both be empty only when fillColor exists.');
+            }
+            background.staticImage = next;
         });
     }
 
     public patchParallaxLayer(slot: 1 | 2, patch: Partial<TestWorldParallaxLayerConfig>): BackgroundWriteResult {
+        const runtimeConfig = this.getRuntimeConfig();
+        if (!runtimeConfig) {
+            return {
+                success: false,
+                reason: 'Runtime config unavailable.'
+            };
+        }
+        const candidateConfig = cloneTestWorldConfig(runtimeConfig);
+        const background = this.ensureBackground(candidateConfig);
+        const layers = Array.isArray(background.layers) ? background.layers : [];
+        const layerIndex = this.findLayerIndex(layers, slot);
+        const current = this.normalizeParallaxLayer(
+            layerIndex >= 0 ? layers[layerIndex] : undefined,
+            slot,
+            candidateConfig
+        );
+        const candidate = this.normalizeParallaxLayer({
+            ...current,
+            ...patch
+        }, slot, candidateConfig);
+        if (!this.isRenderableBackgroundImage(candidate)) {
+            return {
+                success: false,
+                reason: 'Texture key/asset can both be empty only when fillColor exists.'
+            };
+        }
         return this.applyConfigEdit((config) => {
             const background = this.ensureBackground(config);
-            const layers = background.layers ?? [];
+            const layers = Array.isArray(background.layers) ? background.layers : [];
             const layerIndex = this.findLayerIndex(layers, slot);
-            const current = this.normalizeParallaxLayer(
+            const next = this.normalizeParallaxLayer({
+                ...this.normalizeParallaxLayer(
                 layerIndex >= 0 ? layers[layerIndex] : undefined,
                 slot,
                 config
-            );
-            const next = {
-                ...current,
+                ),
                 ...patch
-            };
+            }, slot, config);
+            if (!this.isRenderableBackgroundImage(next)) {
+                throw new Error('Texture key/asset can both be empty only when fillColor exists.');
+            }
             if (layerIndex >= 0) {
                 layers[layerIndex] = next;
             } else {
@@ -163,7 +225,15 @@ export class BackgroundAuthoringService {
         }
 
         const nextConfig = cloneTestWorldConfig(runtimeConfig);
-        edit(nextConfig);
+        try {
+            edit(nextConfig);
+        } catch (error) {
+            return {
+                success: false,
+                reason: error instanceof Error ? error.message : 'Failed to apply background config.'
+            };
+        }
+        // Use runtime import path so Save/Export/Import stay aligned with one config pipeline.
         const importResult = this.legacyObjectAdapter.importRuntimeConfig(nextConfig);
         if (!importResult?.success) {
             return {
@@ -172,6 +242,7 @@ export class BackgroundAuthoringService {
             };
         }
 
+        // Background edits update runtime preview only; save remains an explicit action.
         const snapshot = this.getSnapshot();
         return {
             success: true,
@@ -181,7 +252,7 @@ export class BackgroundAuthoringService {
 
     private toSnapshot(config: TestWorldConfig): BackgroundSnapshot {
         const background = config.background;
-        const layers = background?.layers ?? [];
+        const layers = Array.isArray(background?.layers) ? background.layers : [];
         const parallax1Index = this.findLayerIndex(layers, 1);
         const parallax2Index = this.findLayerIndex(layers, 2);
         return {
@@ -196,6 +267,7 @@ export class BackgroundAuthoringService {
     }
 
     private getRuntimeConfig(): TestWorldConfig | null {
+        // ProjectStore mirrors editor UI state; background source of truth stays in runtime config.
         const config = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
         if (!config || typeof config !== 'object') {
             return null;
@@ -215,13 +287,23 @@ export class BackgroundAuthoringService {
             return config.background;
         }
 
-        config.background.color = typeof config.background.color === 'number'
+        config.background.color = isFiniteNumber(config.background.color)
             ? clamp(Math.round(config.background.color), 0, 0xffffff)
             : DEFAULT_BACKGROUND_COLOR;
         if (!Array.isArray(config.background.layers)) {
             config.background.layers = [];
         }
         return config.background;
+    }
+
+    private isRenderableBackgroundImage(image: {
+        textureKey?: string;
+        textureAsset?: string;
+        fillColor?: number;
+    }): boolean {
+        const hasTexture = (image.textureKey?.trim().length ?? 0) > 0
+            || (image.textureAsset?.trim().length ?? 0) > 0;
+        return hasTexture || isFiniteNumber(image.fillColor);
     }
 
     private normalizeStaticImage(
@@ -235,10 +317,10 @@ export class BackgroundAuthoringService {
         return {
             textureKey: current?.textureKey?.trim() ?? DEFAULT_STATIC_TEXTURE_KEY,
             textureAsset: current?.textureAsset?.trim() || DEFAULT_TEXTURE_ASSET,
-            fillColor: typeof current?.fillColor === 'number'
+            fillColor: isFiniteNumber(current?.fillColor)
                 ? clamp(Math.round(current.fillColor), 0, 0xffffff)
                 : DEFAULT_BACKGROUND_FILL,
-            tintColor: typeof current?.tintColor === 'number'
+            tintColor: isFiniteNumber(current?.tintColor)
                 ? clamp(Math.round(current.tintColor), 0, 0xffffff)
                 : DEFAULT_TINT,
             alpha: clampAlpha(current?.alpha, 1),
@@ -246,8 +328,8 @@ export class BackgroundAuthoringService {
             width: clampSize(current?.width, width || 1600),
             height: clampSize(current?.height, height || 900),
             repeat: current?.repeat ?? false,
-            x: typeof current?.x === 'number' && Number.isFinite(current.x) ? current.x : centerX,
-            y: typeof current?.y === 'number' && Number.isFinite(current.y) ? current.y : centerY
+            x: isFiniteNumber(current?.x) ? current.x : centerX,
+            y: isFiniteNumber(current?.y) ? current.y : centerY
         };
     }
 
@@ -265,10 +347,10 @@ export class BackgroundAuthoringService {
             id: current?.id?.trim() || targetId,
             textureKey: current?.textureKey?.trim() || (slot === 1 ? DEFAULT_PARALLAX_1_TEXTURE_KEY : DEFAULT_PARALLAX_2_TEXTURE_KEY),
             textureAsset: current?.textureAsset?.trim() || DEFAULT_TEXTURE_ASSET,
-            fillColor: typeof current?.fillColor === 'number'
+            fillColor: isFiniteNumber(current?.fillColor)
                 ? clamp(Math.round(current.fillColor), 0, 0xffffff)
                 : DEFAULT_BACKGROUND_FILL,
-            tintColor: typeof current?.tintColor === 'number'
+            tintColor: isFiniteNumber(current?.tintColor)
                 ? clamp(Math.round(current.tintColor), 0, 0xffffff)
                 : DEFAULT_TINT,
             alpha: clampAlpha(current?.alpha, slot === 1 ? 0.35 : 0.55),
@@ -276,8 +358,8 @@ export class BackgroundAuthoringService {
             width: clampSize(current?.width, width || 1920),
             height: clampSize(current?.height, Math.round(Math.max(256, height * 0.6))),
             repeat: current?.repeat ?? true,
-            x: typeof current?.x === 'number' && Number.isFinite(current.x) ? current.x : centerX,
-            y: typeof current?.y === 'number' && Number.isFinite(current.y) ? current.y : defaultY,
+            x: isFiniteNumber(current?.x) ? current.x : centerX,
+            y: isFiniteNumber(current?.y) ? current.y : defaultY,
             scrollFactorX: clampScrollFactor(current?.scrollFactorX, slot === 1 ? 0.2 : 0.45),
             scrollFactorY: clampScrollFactor(current?.scrollFactorY, slot === 1 ? 0.2 : 0.45)
         };

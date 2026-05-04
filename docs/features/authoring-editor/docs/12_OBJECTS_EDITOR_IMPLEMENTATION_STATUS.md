@@ -61,3 +61,6 @@
 - Save/Export/Import must use runtime config, not stale `ProjectStore`.
 - `ProjectStore` is mirror, not source of truth for Objects.
 - No fallback rectangles for known runtime object types.
+
+## 8. Related status docs
+- Background editor B1/B1.1 status: `13_BACKGROUND_EDITOR_IMPLEMENTATION_STATUS.md`.

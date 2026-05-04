@@ -26,6 +26,8 @@ export const createAuthoringObjectBridgeSource = (
     worldRuntime: TestWorldRuntime,
     options?: CreateAuthoringObjectBridgeSourceOptions
 ): LegacyObjectSource => {
+    let importInProgress = false;
+
     const countObjects = (config: TestWorldConfig): Record<string, number> => ({
         surfaces: config.surfaces.length,
         dragBoxes: config.dragBoxes.length,
@@ -65,23 +67,42 @@ export const createAuthoringObjectBridgeSource = (
         },
         importRuntimeConfig: (config) => {
             const levelId = worldRuntime.getLevelId();
-            const result = worldRuntime.replaceConfig(config);
-            if (result.success) {
-                options?.onRuntimeConfigApplied?.(worldRuntime.getConfig());
+            if (importInProgress) {
                 return {
-                    success: true,
+                    success: false,
                     source: 'runtimeConfig' as const,
+                    reason: 'Runtime import already in progress.',
                     levelId,
                     objectCounts: countObjects(worldRuntime.getConfig())
                 };
             }
-            return {
-                success: false,
-                source: 'runtimeConfig' as const,
-                reason: result.reason,
-                levelId,
-                objectCounts: countObjects(worldRuntime.getConfig())
-            };
+            importInProgress = true;
+            try {
+                const result = worldRuntime.replaceConfig(config);
+                if (result.success) {
+                    const appliedConfig = worldRuntime.getConfig();
+                    try {
+                        options?.onRuntimeConfigApplied?.(appliedConfig);
+                    } catch {
+                        // Runtime config is already applied; callback failures must not revert import.
+                    }
+                    return {
+                        success: true,
+                        source: 'runtimeConfig' as const,
+                        levelId,
+                        objectCounts: countObjects(appliedConfig)
+                    };
+                }
+                return {
+                    success: false,
+                    source: 'runtimeConfig' as const,
+                    reason: result.reason,
+                    levelId,
+                    objectCounts: countObjects(worldRuntime.getConfig())
+                };
+            } finally {
+                importInProgress = false;
+            }
         },
         getWorldBounds: () => {
             const bounds = worldRuntime.getWorldBounds();

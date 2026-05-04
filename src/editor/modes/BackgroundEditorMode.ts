@@ -195,7 +195,11 @@ export class BackgroundEditorMode implements EditorMode {
 
             if (this.selectedTarget === 'static') {
                 if (!snapshot.staticImage) {
-                    container.appendChild(this.makeInfoLine('Static image missing. Click Ensure Static on the left.'));
+                    container.appendChild(this.makeMissingTargetState(
+                        'Static image is missing.',
+                        'Ensure Static',
+                        () => this.commit(() => this.backgroundAuthoringService.ensureStatic())
+                    ));
                     return;
                 }
                 this.renderImageFields(container, snapshot.staticImage, 'static');
@@ -205,7 +209,11 @@ export class BackgroundEditorMode implements EditorMode {
             const layer = this.selectedTarget === 'parallax_1' ? snapshot.parallax1 : snapshot.parallax2;
             const slot = this.selectedTarget === 'parallax_1' ? 1 : 2;
             if (!layer) {
-                container.appendChild(this.makeInfoLine(`Parallax ${slot} is missing. Click Ensure Parallax ${slot} on the left.`));
+                container.appendChild(this.makeMissingTargetState(
+                    `Parallax ${slot} is missing.`,
+                    `Ensure Parallax ${slot}`,
+                    () => this.commit(() => this.backgroundAuthoringService.ensureParallax(slot))
+                ));
                 return;
             }
             this.renderParallaxFields(container, layer, slot);
@@ -415,14 +423,24 @@ export class BackgroundEditorMode implements EditorMode {
         input.style.boxSizing = 'border-box';
         input.style.border = '1px solid #777';
         input.style.padding = '2px 4px';
+        let lastCommittedValue = options.value;
 
         const commit = (): void => {
-            const result = options.onCommit(input.value);
+            const nextValue = input.value;
+            if (nextValue === lastCommittedValue) {
+                if (this.fieldErrors.has(options.fieldKey)) {
+                    this.clearFieldError(options.fieldKey);
+                    this.onUiChanged();
+                }
+                return;
+            }
+            const result = options.onCommit(nextValue);
             if (!result.success) {
                 this.setFieldError(options.fieldKey, result.error ?? 'Failed to apply value.');
                 this.onUiChanged();
                 return;
             }
+            lastCommittedValue = nextValue;
             this.clearFieldError(options.fieldKey);
         };
 
@@ -440,6 +458,21 @@ export class BackgroundEditorMode implements EditorMode {
             row.appendChild(this.makeErrorLine(error));
         }
         return row;
+    }
+
+    private makeMissingTargetState(
+        message: string,
+        actionLabel: string,
+        onEnsure: () => void
+    ): HTMLDivElement {
+        const root = document.createElement('div');
+        root.style.display = 'flex';
+        root.style.flexDirection = 'column';
+        root.style.gap = '6px';
+        root.style.marginBottom = '8px';
+        root.appendChild(this.makeInfoLine(message));
+        root.appendChild(this.makeActionButton(actionLabel, onEnsure));
+        return root;
     }
 
     private makeNumberField(options: {
