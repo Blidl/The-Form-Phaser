@@ -60,7 +60,10 @@ const createModes = (
         onUiChanged,
         legacyObjectAdapter
     });
-    const background = new BackgroundEditorMode();
+    const background = new BackgroundEditorMode({
+        legacyObjectAdapter,
+        onUiChanged
+    });
     const npc = new NpcEditorMode();
     const cutscenes = new CutscenesEditorMode();
     const logic = new LogicEditorMode();
@@ -756,6 +759,10 @@ export class EditorShell {
                     onRuntimeConfigImported?: () => void;
                 };
                 objectsMode.onRuntimeConfigImported?.();
+                const backgroundMode = this.modes.background as EditorMode & {
+                    onRuntimeConfigImported?: () => void;
+                };
+                backgroundMode.onRuntimeConfigImported?.();
                 objectDiag('[EditorImport]', {
                     phase: 'success',
                     fileName,

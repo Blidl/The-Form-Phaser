@@ -18,7 +18,14 @@ const isCreatableLegacyType = (type: string): boolean => {
         || type === 'triangleFlightBreakWall';
 };
 
-export const createAuthoringObjectBridgeSource = (worldRuntime: TestWorldRuntime): LegacyObjectSource => {
+interface CreateAuthoringObjectBridgeSourceOptions {
+    onRuntimeConfigApplied?: (config: TestWorldConfig) => void;
+}
+
+export const createAuthoringObjectBridgeSource = (
+    worldRuntime: TestWorldRuntime,
+    options?: CreateAuthoringObjectBridgeSourceOptions
+): LegacyObjectSource => {
     const countObjects = (config: TestWorldConfig): Record<string, number> => ({
         surfaces: config.surfaces.length,
         dragBoxes: config.dragBoxes.length,
@@ -60,6 +67,7 @@ export const createAuthoringObjectBridgeSource = (worldRuntime: TestWorldRuntime
             const levelId = worldRuntime.getLevelId();
             const result = worldRuntime.replaceConfig(config);
             if (result.success) {
+                options?.onRuntimeConfigApplied?.(worldRuntime.getConfig());
                 return {
                     success: true,
                     source: 'runtimeConfig' as const,

@@ -219,7 +219,11 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
     const editorPlugin = createEditorPlugin({
         scene,
         followTarget: player.arcadeBodyObject,
-        legacyObjectSource: createAuthoringObjectBridgeSource(worldRuntime)
+        legacyObjectSource: createAuthoringObjectBridgeSource(worldRuntime, {
+            onRuntimeConfigApplied: (config) => {
+                backgroundRuntime.applyConfig(config);
+            }
+        })
     });
     const devHelperRuntime = createTestDevHelperRuntime({
         scene,
