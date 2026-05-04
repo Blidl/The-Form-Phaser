@@ -1,3 +1,10 @@
+/**
+ * WARNING: Frozen placeholder layer.
+ * This file is NOT the active F2 Objects authoring editor.
+ * Active implementation: src/editor/*
+ * Legacy reference path: Shift+F2 in src/game/world/runtime/test_world_editor_runtime.ts
+ * Do not add new Objects authoring features here unless there is an explicit migration plan.
+ */
 import type { AuthoringEditorLayoutInsets } from './AuthoringEditorTypes';
 
 export interface AuthoringEditorDomRoot {

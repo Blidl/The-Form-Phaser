@@ -33,6 +33,9 @@ export interface AuthoringEditorState {
   readonly gridVisible: boolean;
   readonly snapEnabled: boolean;
   readonly gridSize: AuthoringEditorGridSize;
+  readonly saveStatus: string;
+  readonly saveStatusNote: string | null;
+  readonly draftLoaded: boolean;
 }
 
 export interface AuthoringEditorLifecycle {

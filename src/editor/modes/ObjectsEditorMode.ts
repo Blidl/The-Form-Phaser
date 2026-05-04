@@ -227,6 +227,15 @@ export class ObjectsEditorMode implements EditorMode {
         this.syncSelectionOutline();
     }
 
+    public onRuntimeConfigImported(): void {
+        this.clearTransientStateForObject(this.selectedObjectId);
+        this.selectedTypeId = null;
+        this.refreshLiveObjects('import-json');
+        this.syncViewsFromStore();
+        this.syncSelectionOutline();
+        this.onUiChanged();
+    }
+
     public onPointerDown(event: EditorPointerEvent, context: EditorModeRuntimeContext): void {
         this.context = context;
 

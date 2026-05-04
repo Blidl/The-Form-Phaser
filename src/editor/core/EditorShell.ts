@@ -21,6 +21,11 @@ import { ProjectStore } from '../data/ProjectStore';
 import type { LegacyObjectSource } from '../bridge/LegacyObjectAdapter';
 import { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 import {
+    clearTestWorldEditorDraft,
+    getTestWorldEditorDraftStorageAuditSnapshot
+} from '../../game/world/runtime/test_world_editor_storage';
+import type { TestWorldConfig } from '../../game/world/runtime/test_world_config';
+import {
     clearObjectDiagBuffer,
     copyObjectDiagBufferToClipboard,
     getLatestObjectDiagSummary,
@@ -101,6 +106,10 @@ export class EditorShell {
     private readonly diagPanelLastEvent: HTMLDivElement;
     private diagPanelClosedTemporarily = false;
     private lastDiagEvent = '-';
+    private saveStatusMessage: string | null = null;
+    private saveNoteMessage: string | null = null;
+    private lastObservedRuntimeConfigSignature: string | null = null;
+    private lastSavedRuntimeConfigSignature: string | null = null;
 
     public constructor(options: EditorShellOptions) {
         this.scene = options.scene;
@@ -139,6 +148,21 @@ export class EditorShell {
                 this.lastDiagEvent = enabled ? 'Diagnostics enabled from UI' : 'Diagnostics disabled from UI';
                 this.diagPanelClosedTemporarily = false;
                 this.refreshDiagnosticsUi();
+            },
+            onSaveRequested: () => {
+                this.handleSaveRequested();
+            },
+            onClearDraftRequested: () => {
+                this.handleClearDraftRequested();
+            },
+            onExportJsonRequested: () => {
+                this.handleExportJsonRequested();
+            },
+            onImportJsonRequested: () => {
+                this.handleImportJsonRequested();
+            },
+            onReloadRequested: () => {
+                window.location.reload();
             }
         });
         this.topTabs.setDiagnosticsEnabled(isObjectEditorDiagnosticsEnabled());
@@ -253,6 +277,7 @@ export class EditorShell {
         this.refreshDiagnosticsUi();
 
         this.topTabs.setActiveTab(this.state.activeModeId);
+        this.refreshSaveUi();
         this.renderActiveModeInspectors();
     }
 
@@ -294,6 +319,22 @@ export class EditorShell {
             hasProjectStore: true,
             hasObjectAuthoringService: true
         });
+        this.captureRuntimeConfigSignature();
+        this.lastSavedRuntimeConfigSignature = this.lastObservedRuntimeConfigSignature;
+        this.saveStatusMessage = null;
+        this.saveNoteMessage = null;
+        if (this.legacyObjectAdapter) {
+            const levelId = this.legacyObjectAdapter.getLevelId();
+            const runtimeConfig = this.legacyObjectAdapter.getRuntimeConfig() as TestWorldConfig | null;
+            if (runtimeConfig) {
+                const draftAudit = getTestWorldEditorDraftStorageAuditSnapshot(levelId, runtimeConfig);
+                const matchesDraft = draftAudit.draftPresent
+                    && draftAudit.draftValid
+                    && draftAudit.draftConfigSignature === JSON.stringify(runtimeConfig);
+                this.saveStatusMessage = matchesDraft ? 'Draft loaded' : 'No draft';
+            }
+        }
+        this.refreshSaveUi();
         this.renderActiveModeInspectors();
         this.refreshDiagnosticsUi();
     }
@@ -316,6 +357,9 @@ export class EditorShell {
         this.rightPanel.setVisible(false);
         this.topTabs.setVisible(false);
         this.rootElement.style.display = 'none';
+        this.saveStatusMessage = null;
+        this.saveNoteMessage = null;
+        this.refreshSaveUi();
         this.refreshDiagnosticsUi();
     }
 
@@ -354,6 +398,8 @@ export class EditorShell {
         this.state.mouseWorldX = mouseWorld.x;
         this.state.mouseWorldY = mouseWorld.y;
         this.topTabs.setMouseWorldPosition(mouseWorld.x, mouseWorld.y);
+        this.captureRuntimeConfigSignature();
+        this.refreshSaveUi();
         this.modes[this.state.activeModeId].update?.(this.createModeContext());
         this.refreshDiagnosticsUi();
     }
@@ -460,6 +506,307 @@ export class EditorShell {
         this.lastDiagEvent = enabled ? 'Diagnostics enabled from Ctrl+Shift+D' : 'Diagnostics disabled from Ctrl+Shift+D';
         this.diagPanelClosedTemporarily = false;
         this.refreshDiagnosticsUi();
+    }
+
+    private captureRuntimeConfigSignature(): void {
+        const config = this.legacyObjectAdapter?.getRuntimeConfig();
+        if (!config) {
+            this.lastObservedRuntimeConfigSignature = null;
+            return;
+        }
+        try {
+            this.lastObservedRuntimeConfigSignature = JSON.stringify(config);
+        } catch {
+            this.lastObservedRuntimeConfigSignature = null;
+        }
+    }
+
+    private isDirty(): boolean {
+        if (this.lastObservedRuntimeConfigSignature === null || this.lastSavedRuntimeConfigSignature === null) {
+            return false;
+        }
+        return this.lastObservedRuntimeConfigSignature !== this.lastSavedRuntimeConfigSignature;
+    }
+
+    private refreshSaveUi(): void {
+        const dirty = this.isDirty();
+        const resolvedStatus = dirty ? 'Unsaved' : this.saveStatusMessage;
+        this.topTabs.setSaveState(dirty, resolvedStatus, this.saveNoteMessage);
+    }
+
+    private handleSaveRequested(): void {
+        const levelId = this.legacyObjectAdapter?.getLevelId() ?? this.projectStore.getActiveLevel().id;
+        objectDiag('[EditorSave]', {
+            phase: 'start',
+            levelId,
+            source: 'runtimeConfig'
+        });
+        const saveResult = this.legacyObjectAdapter?.saveRuntimeConfig();
+        if (saveResult?.success) {
+            this.captureRuntimeConfigSignature();
+            this.lastSavedRuntimeConfigSignature = this.lastObservedRuntimeConfigSignature;
+            this.saveStatusMessage = 'Saved draft';
+            this.saveNoteMessage = null;
+            objectDiag('[EditorSave]', {
+                phase: 'success',
+                levelId: saveResult.levelId ?? levelId,
+                source: saveResult.source,
+                objectCounts: saveResult.objectCounts ?? null
+            });
+            this.refreshSaveUi();
+            return;
+        }
+
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig();
+        if (runtimeConfig) {
+            try {
+                const blob = new Blob([JSON.stringify(runtimeConfig, null, 2)], { type: 'application/json' });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `${levelId}.json`;
+                link.click();
+                URL.revokeObjectURL(link.href);
+                this.lastSavedRuntimeConfigSignature = this.lastObservedRuntimeConfigSignature;
+                this.saveStatusMessage = 'Saved draft';
+                this.saveNoteMessage = null;
+                objectDiag('[EditorSave]', {
+                    phase: 'success',
+                    levelId,
+                    source: 'exportJson'
+                });
+                this.refreshSaveUi();
+                return;
+            } catch (error) {
+                const reason = error instanceof Error ? error.message : String(error);
+                this.saveStatusMessage = 'Save failed';
+                this.saveNoteMessage = null;
+                objectDiag('[EditorSave]', {
+                    phase: 'fail',
+                    levelId,
+                    source: saveResult?.source ?? 'runtimeConfig',
+                    objectCounts: saveResult?.objectCounts ?? null,
+                    reason
+                });
+                console.error('[EditorSave] Save failed:', reason);
+                this.refreshSaveUi();
+                return;
+            }
+        }
+
+        const reason = saveResult?.reason ?? 'Runtime save path unavailable.';
+        this.saveStatusMessage = 'Save failed';
+        this.saveNoteMessage = null;
+        objectDiag('[EditorSave]', {
+            phase: 'fail',
+            levelId,
+            source: saveResult?.source ?? 'runtimeConfig',
+            objectCounts: saveResult?.objectCounts ?? null,
+            reason
+        });
+        console.error('[EditorSave] Save failed:', reason);
+        this.refreshSaveUi();
+    }
+
+    private handleClearDraftRequested(): void {
+        const levelId = this.legacyObjectAdapter?.getLevelId() ?? this.projectStore.getActiveLevel().id;
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
+        if (!runtimeConfig) {
+            this.saveStatusMessage = 'Save failed';
+            this.saveNoteMessage = null;
+            objectDiag('[EditorDraft]', {
+                action: 'clear',
+                success: false,
+                levelId,
+                draftKey: null,
+                existedBefore: null,
+                existsAfter: null,
+                reason: 'Runtime config unavailable.'
+            });
+            this.refreshSaveUi();
+            return;
+        }
+        try {
+            const beforeAudit = getTestWorldEditorDraftStorageAuditSnapshot(levelId, runtimeConfig);
+            const existedBefore = beforeAudit.draftPresent;
+            clearTestWorldEditorDraft(levelId);
+            const afterAudit = getTestWorldEditorDraftStorageAuditSnapshot(levelId, runtimeConfig);
+            const existsAfter = afterAudit.draftPresent;
+            const success = existedBefore && !existsAfter;
+            this.saveStatusMessage = existedBefore ? 'Draft cleared' : 'No draft found';
+            this.saveNoteMessage = existedBefore ? 'Reload to use source level' : 'No draft found';
+            objectDiag('[EditorDraft]', {
+                action: 'clear',
+                success,
+                levelId,
+                draftKey: beforeAudit.storageKey,
+                existedBefore,
+                existsAfter,
+                reason: existedBefore
+                    ? (success ? null : 'Draft still present after clear.')
+                    : 'No draft found'
+            });
+        } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            this.saveStatusMessage = 'Save failed';
+            this.saveNoteMessage = null;
+            objectDiag('[EditorDraft]', {
+                action: 'clear',
+                success: false,
+                levelId,
+                draftKey: null,
+                existedBefore: null,
+                existsAfter: null,
+                reason
+            });
+        }
+        this.refreshSaveUi();
+    }
+
+    private handleExportJsonRequested(): void {
+        const levelId = this.legacyObjectAdapter?.getLevelId() ?? this.projectStore.getActiveLevel().id;
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig();
+        if (!runtimeConfig) {
+            this.saveStatusMessage = 'Save failed';
+            this.saveNoteMessage = null;
+            objectDiag('[EditorExport]', {
+                action: 'exportJson',
+                success: false,
+                levelId,
+                fileName: `${levelId}.json`,
+                reason: 'Runtime config unavailable.'
+            });
+            this.refreshSaveUi();
+            return;
+        }
+        try {
+            const blob = new Blob([JSON.stringify(runtimeConfig, null, 2)], { type: 'application/json' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            const fileName = `${levelId}.json`;
+            link.download = fileName;
+            link.click();
+            URL.revokeObjectURL(link.href);
+            this.saveStatusMessage = 'JSON exported';
+            this.saveNoteMessage = 'JSON exported. Manual import/replace required.';
+            objectDiag('[EditorExport]', {
+                action: 'exportJson',
+                success: true,
+                levelId,
+                fileName
+            });
+        } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            this.saveStatusMessage = 'Save failed';
+            this.saveNoteMessage = null;
+            objectDiag('[EditorExport]', {
+                action: 'exportJson',
+                success: false,
+                levelId,
+                fileName: `${levelId}.json`,
+                reason
+            });
+        }
+        this.refreshSaveUi();
+    }
+
+    private handleImportJsonRequested(): void {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.json,application/json';
+        input.style.display = 'none';
+        this.rootElement.appendChild(input);
+
+        input.addEventListener('change', async () => {
+            const levelId = this.legacyObjectAdapter?.getLevelId() ?? this.projectStore.getActiveLevel().id;
+            const file = input.files?.[0];
+            const fileName = file?.name ?? 'unknown.json';
+            objectDiag('[EditorImport]', {
+                phase: 'start',
+                fileName,
+                levelId
+            });
+            if (!file) {
+                input.remove();
+                return;
+            }
+
+            try {
+                const jsonText = await file.text();
+                let parsed: unknown;
+                try {
+                    parsed = JSON.parse(jsonText) as unknown;
+                } catch (error) {
+                    throw new Error(`Invalid JSON: ${error instanceof Error ? error.message : String(error)}`);
+                }
+
+                const validationError = this.validateImportedRuntimeConfig(parsed);
+                if (validationError) {
+                    throw new Error(validationError);
+                }
+
+                const importResult = this.legacyObjectAdapter?.importRuntimeConfig(parsed);
+                if (!importResult || !importResult.success) {
+                    throw new Error(importResult?.reason ?? 'Runtime import path unavailable.');
+                }
+
+                this.captureRuntimeConfigSignature();
+                this.saveStatusMessage = 'Imported JSON - Unsaved';
+                this.saveNoteMessage = 'Imported config is applied in runtime. Click Save to persist draft.';
+                const objectsMode = this.modes.objects as EditorMode & {
+                    onRuntimeConfigImported?: () => void;
+                };
+                objectsMode.onRuntimeConfigImported?.();
+                objectDiag('[EditorImport]', {
+                    phase: 'success',
+                    fileName,
+                    levelId: importResult.levelId ?? levelId,
+                    objectCounts: importResult.objectCounts ?? null
+                });
+            } catch (error) {
+                const reason = error instanceof Error ? error.message : String(error);
+                this.saveStatusMessage = 'Import failed';
+                this.saveNoteMessage = null;
+                objectDiag('[EditorImport]', {
+                    phase: 'fail',
+                    fileName,
+                    levelId,
+                    reason
+                });
+                console.error('[EditorImport] Import failed:', reason);
+            } finally {
+                this.refreshSaveUi();
+                input.remove();
+            }
+        }, { once: true });
+
+        input.click();
+    }
+
+    private validateImportedRuntimeConfig(config: unknown): string | null {
+        if (!config || typeof config !== 'object' || Array.isArray(config)) {
+            return 'Config root must be an object.';
+        }
+        const candidate = config as Record<string, unknown>;
+        const requiredArrays = [
+            'surfaces',
+            'dragBoxes',
+            'windZones',
+            'checkpoints',
+            'triggerVolumes',
+            'trianglePickups'
+        ];
+        for (const key of requiredArrays) {
+            if (!Array.isArray(candidate[key])) {
+                return `Missing required array field: ${key}`;
+            }
+        }
+        if (!('playerSpawn' in candidate) || !candidate.playerSpawn || typeof candidate.playerSpawn !== 'object') {
+            return 'Missing required object field: playerSpawn';
+        }
+        if (!('finish' in candidate)) {
+            return 'Missing required field: finish';
+        }
+        return null;
     }
 
     private refreshDiagnosticsUi(): void {

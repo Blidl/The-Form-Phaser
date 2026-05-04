@@ -8,16 +8,21 @@
     "height": 900
   },
   "background": {
-    "mode": "static",
-    "color": 2503224,
+    "color": 3296088,
     "staticImage": {
       "textureKey": "demo_bg_static",
       "textureAsset": "assets/bg.png",
-      "fillColor": 2043190,
-      "tintColor": 16777215,
-      "alpha": 0.22,
-      "scale": 1
-    }
+      "tintColor": 14133159,
+      "alpha": 1,
+      "scale": 1,
+      "width": 1500,
+      "height": 2000,
+      "repeat": false,
+      "fillColor": 16777215,
+      "x": 0,
+      "y": 0
+    },
+    "layers": []
   },
   "worldFlags": {
     "demo_guard_triggered": false
@@ -27,9 +32,8 @@
       "id": "triangle_wall_break_cutscene_once",
       "enabled": true,
       "when": {
-        "kind": "object_state_changed",
-        "objectId": "triangle_flight_break_wall_main",
-        "toState": "broken"
+        "kind": "trigger_event",
+        "eventId": "event_id"
       },
       "conditions": [
         {
@@ -39,8 +43,12 @@
       ],
       "actions": [
         {
-          "kind": "start_cutscene",
-          "cutsceneRef": "observer_smoke_cutscene_v1"
+          "kind": "actor_action",
+          "actorId": "npc_passive_alarm_console",
+          "action": {
+            "kind": "set_emotion",
+            "emotionId": "anger"
+          }
         }
       ]
     }
@@ -71,14 +79,14 @@
     {
       "id": "npc_passive_alarm_console",
       "profileId": "passive_observer",
-      "x": 1328,
-      "y": 324,
+      "x": 690,
+      "y": 468,
       "facing": "right",
       "interactionOverride": {
         "distancePx": 72,
         "outcome": {
-          "kind": "trigger_event",
-          "eventId": "observer_alarm_ping"
+          "kind": "request_cutscene_ref",
+          "cutsceneRef": "cutscene_1"
         }
       },
       "behavior": {
@@ -137,13 +145,16 @@
   "surfaces": [
     {
       "id": "ground",
-      "x": -128,
+      "x": -136,
       "y": 864,
       "width": 2064,
       "height": 64,
       "fillColor": 4678251,
       "strokeColor": 13621468,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "low_platform",
@@ -153,7 +164,10 @@
       "height": 48,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "rollover_floor",
@@ -163,7 +177,10 @@
       "height": 32,
       "fillColor": 16764032,
       "strokeColor": 15690752,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "rollover_wall",
@@ -173,7 +190,10 @@
       "height": 240,
       "fillColor": 4678251,
       "strokeColor": 15132390,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "rollover_ceiling",
@@ -183,27 +203,36 @@
       "height": 32,
       "fillColor": 16764032,
       "strokeColor": 15690752,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_1",
       "x": 16,
-      "y": 416,
+      "y": 408,
       "width": 32,
-      "height": 864,
+      "height": 848,
       "fillColor": 4678251,
       "strokeColor": 13621468,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_2",
-      "x": 384,
+      "x": 376,
       "y": 352,
       "width": 432,
       "height": 704,
       "fillColor": 4678251,
-      "strokeColor": 13621468,
-      "editorLocked": false
+      "strokeColor": 16777215,
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "rollback_blocker",
@@ -213,7 +242,10 @@
       "height": 32,
       "fillColor": 13538264,
       "strokeColor": 6953882,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_3",
@@ -223,7 +255,10 @@
       "height": 864,
       "fillColor": 4678251,
       "strokeColor": 13621468,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_4",
@@ -233,7 +268,10 @@
       "height": 64,
       "fillColor": 4678251,
       "strokeColor": 13621468,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_5",
@@ -243,7 +281,10 @@
       "height": 64,
       "fillColor": 4678251,
       "strokeColor": 13621468,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_6",
@@ -253,7 +294,10 @@
       "height": 32,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_7",
@@ -263,7 +307,10 @@
       "height": 8,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_8",
@@ -273,7 +320,10 @@
       "height": 32,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_9",
@@ -283,7 +333,10 @@
       "height": 208,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_10",
@@ -293,7 +346,10 @@
       "height": 288,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_11",
@@ -303,17 +359,23 @@
       "height": 32,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_12",
       "x": 1408,
-      "y": 528,
+      "y": 520,
       "width": 288,
       "height": 272,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_13",
@@ -323,7 +385,10 @@
       "height": 32,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_14",
@@ -333,29 +398,37 @@
       "height": 592,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "surface_15",
-      "x": 1280,
-      "y": 1376,
+      "x": 1272,
+      "y": 1328,
       "width": 368,
       "height": 32,
       "fillColor": 4678251,
       "strokeColor": 15527921,
-      "editorLocked": false
+      "alpha": 1,
+      "collisionMode": "solid",
+      "editorLocked": false,
+      "onlyDebugView": false
     }
   ],
   "hazards": [
     {
       "id": "hazard_main",
-      "x": 608,
+      "x": 600,
       "y": 352,
       "width": 16,
       "height": 512,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "visualLayer": "layer_1",
+      "onlyDebugView": false
     },
     {
       "id": "hazard_1",
@@ -365,7 +438,9 @@
       "height": 512,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "visualLayer": "layer_1",
+      "onlyDebugView": false
     },
     {
       "id": "hazard_2",
@@ -375,7 +450,8 @@
       "height": 16,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "hazard_3",
@@ -385,7 +461,8 @@
       "height": 16,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "hazard_4",
@@ -395,7 +472,8 @@
       "height": 16,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "hazard_6",
@@ -405,17 +483,21 @@
       "height": 32,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "visualLayer": "layer_1",
+      "onlyDebugView": false
     },
     {
       "id": "hazard_7",
-      "x": 176,
+      "x": 160,
       "y": 592,
       "width": 32,
       "height": 32,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "visualLayer": "layer_1",
+      "onlyDebugView": false
     },
     {
       "id": "hazard_8",
@@ -425,17 +507,21 @@
       "height": 32,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "visualLayer": "layer_1",
+      "onlyDebugView": false
     },
     {
       "id": "hazard_9",
-      "x": 176,
+      "x": 160,
       "y": 448,
       "width": 32,
       "height": 32,
       "fillColor": 15684432,
       "strokeColor": 12000284,
-      "editorLocked": false
+      "editorLocked": false,
+      "visualLayer": "layer_1",
+      "onlyDebugView": false
     }
   ],
   "checkpoints": [
@@ -449,7 +535,8 @@
       "respawnY": 72,
       "fillColor": 9489145,
       "strokeColor": 6600182,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "checkpoint_mid",
@@ -461,7 +548,8 @@
       "respawnY": 232,
       "fillColor": 9489145,
       "strokeColor": 6600182,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "checkpoint_1",
@@ -473,7 +561,8 @@
       "respawnY": 24,
       "fillColor": 9489145,
       "strokeColor": 6600182,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "checkpoint_2",
@@ -485,7 +574,8 @@
       "respawnY": 728,
       "fillColor": 9489145,
       "strokeColor": 6600182,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     }
   ],
   "finish": {
@@ -496,7 +586,8 @@
     "height": 128,
     "fillColor": 10092543,
     "strokeColor": 3445878,
-    "editorLocked": false
+    "editorLocked": false,
+    "onlyDebugView": false
   },
   "movingPlatforms": [
     {
@@ -508,9 +599,11 @@
       "axis": "horizontal",
       "travelDistance": 200,
       "speed": 120,
+      "initialMotionState": "running_loop",
       "fillColor": 16764032,
       "strokeColor": 15690752,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     }
   ],
   "triggerPlatforms": [
@@ -524,18 +617,22 @@
       "deactivateTriggerY": 128,
       "deactivateTriggerWidth": 112,
       "deactivateTriggerHeight": 80,
-      "platformX": 800,
-      "platformY": 64,
+      "platformX": 808,
+      "platformY": 72,
       "platformWidth": 176,
       "platformHeight": 16,
       "activator": "player",
+      "triggerAction": "activate",
+      "deactivateTriggerAction": "deactivate",
+      "initiallyActive": false,
       "triggerFillColor": 16774557,
       "triggerStrokeColor": 16361509,
       "deactivateTriggerFillColor": 16764092,
       "deactivateTriggerStrokeColor": 15092249,
       "platformFillColor": 6381921,
       "platformStrokeColor": 11583173,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "trigger_platform_drag_box",
@@ -548,11 +645,17 @@
       "platformWidth": 496,
       "platformHeight": 32,
       "activator": "drag_box",
+      "triggerAction": "activate",
+      "deactivateTriggerAction": "deactivate",
+      "initiallyActive": false,
       "triggerFillColor": 16774557,
       "triggerStrokeColor": 16361509,
+      "deactivateTriggerFillColor": 16764092,
+      "deactivateTriggerStrokeColor": 15092249,
       "platformFillColor": 6381921,
       "platformStrokeColor": 11583173,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "trigger_platform_1",
@@ -560,8 +663,8 @@
       "triggerY": 128,
       "triggerWidth": 112,
       "triggerHeight": 80,
-      "deactivateTriggerX": 720,
-      "deactivateTriggerY": 128,
+      "deactivateTriggerX": 728,
+      "deactivateTriggerY": 136,
       "deactivateTriggerWidth": 112,
       "deactivateTriggerHeight": 80,
       "platformX": 1088,
@@ -569,114 +672,20 @@
       "platformWidth": 16,
       "platformHeight": 96,
       "activator": "player",
+      "triggerAction": "activate",
+      "deactivateTriggerAction": "deactivate",
+      "initiallyActive": false,
       "triggerFillColor": 16774557,
       "triggerStrokeColor": 16361509,
       "deactivateTriggerFillColor": 16764092,
       "deactivateTriggerStrokeColor": 15092249,
       "platformFillColor": 6381921,
       "platformStrokeColor": 11583173,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     }
   ],
-  "triggerVolumes": [
-    {
-      "id": "trigger_volume_npc_manpu_demo",
-      "triggerX": 1184,
-      "triggerY": 324,
-      "triggerWidth": 96,
-      "triggerHeight": 96,
-      "deactivateTriggerX": 1120,
-      "deactivateTriggerY": 324,
-      "deactivateTriggerWidth": 96,
-      "deactivateTriggerHeight": 96,
-      "activator": "player",
-      "enterCommand": {
-        "targetType": "npc",
-        "targetId": "npc_passive_lookout",
-        "operation": "set_emotion",
-        "value": "anger"
-      },
-      "exitCommand": {
-        "targetType": "npc",
-        "targetId": "npc_passive_lookout",
-        "operation": "set_emotion",
-        "value": "calm"
-      },
-      "onEnter": [
-        {
-          "id": "show_guard_anger_once_or_basic",
-          "conditions": [],
-          "actions": [
-            {
-              "kind": "actor_action",
-              "actorId": "npc_passive_lookout",
-              "action": {
-                "kind": "set_emotion",
-                "emotionId": "anger"
-              }
-            }
-          ]
-        },
-        {
-          "id": "set_guard_flag_once_ball",
-          "conditions": [
-            {
-              "kind": "player_form",
-              "form": "ball"
-            },
-            {
-              "kind": "once",
-              "key": "demo_guard_trigger_once"
-            }
-          ],
-          "actions": [
-            {
-              "kind": "set_flag",
-              "flagId": "demo_guard_triggered",
-              "value": true
-            }
-          ]
-        }
-      ],
-      "onExit": [
-        {
-          "id": "clear_guard_manpu",
-          "conditions": [],
-          "actions": [
-            {
-              "kind": "actor_action",
-              "actorId": "npc_passive_lookout",
-              "action": {
-                "kind": "set_emotion",
-                "emotionId": "calm"
-              }
-            }
-          ]
-        },
-        {
-          "id": "emit_alarm_ping_if_guard_flag",
-          "conditions": [
-            {
-              "kind": "flag",
-              "flagId": "demo_guard_triggered",
-              "equals": true
-            }
-          ],
-          "actions": [
-            {
-              "kind": "trigger_event",
-              "eventId": "observer_alarm_ping"
-            }
-          ]
-        }
-      ],
-      "triggerFillColor": 11724284,
-      "triggerStrokeColor": 1616738,
-      "deactivateTriggerFillColor": 16764092,
-      "deactivateTriggerStrokeColor": 15092249,
-      "editorLocked": false
-    }
-  ],
+  "triggerVolumes": [],
   "dragBoxes": [
     {
       "id": "drag_box_main",
@@ -692,7 +701,8 @@
       "dragX": 900,
       "fillColor": 16774557,
       "strokeColor": 16361509,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     }
   ],
   "windZones": [
@@ -706,30 +716,34 @@
       "force": 160,
       "fillColor": 8445674,
       "strokeColor": 33679,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     }
   ],
   "triangleFlightBreakWalls": [
     {
       "id": "triangle_flight_break_wall_main",
-      "x": 352,
+      "x": 344,
       "y": 768,
       "width": 48,
       "height": 192,
       "fillColor": 10586239,
       "strokeColor": 5125166,
-      "editorLocked": false
+      "editorLocked": false,
+      "visualLayer": "layer_2",
+      "onlyDebugView": false
     }
   ],
   "trianglePickups": [
     {
       "id": "triangle_pickup_a",
-      "x": 656,
-      "y": 528,
-      "radius": 8,
+      "x": 636,
+      "y": 549.5,
+      "radius": 6,
       "fillColor": 16774557,
       "strokeColor": 16763432,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "triangle_pickup_b",
@@ -738,7 +752,8 @@
       "radius": 8,
       "fillColor": 16774557,
       "strokeColor": 16763432,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     },
     {
       "id": "triangle_pickup_c",
@@ -747,7 +762,8 @@
       "radius": 40,
       "fillColor": 16774557,
       "strokeColor": 16763432,
-      "editorLocked": false
+      "editorLocked": false,
+      "onlyDebugView": false
     }
   ],
   "nextLevelId": null

@@ -5,6 +5,11 @@ interface EditorTopTabsOptions {
     tabs: ReadonlyArray<{ id: EditorModeId; label: string }>;
     onTabSelected: (modeId: EditorModeId) => void;
     onDiagnosticsToggle?: () => void;
+    onSaveRequested?: () => void;
+    onClearDraftRequested?: () => void;
+    onExportJsonRequested?: () => void;
+    onImportJsonRequested?: () => void;
+    onReloadRequested?: () => void;
     zIndex?: number;
 }
 
@@ -13,6 +18,14 @@ export class EditorTopTabs {
     private readonly tabButtons: Map<EditorModeId, HTMLButtonElement>;
     private readonly mouseCoordsLabel: HTMLDivElement;
     private readonly diagnosticsToggleButton: HTMLButtonElement;
+    private readonly saveButton: HTMLButtonElement;
+    private readonly clearDraftButton: HTMLButtonElement;
+    private readonly exportJsonButton: HTMLButtonElement;
+    private readonly importJsonButton: HTMLButtonElement;
+    private readonly reloadButton: HTMLButtonElement;
+    private readonly saveStateLabel: HTMLDivElement;
+    private readonly saveStatusLabel: HTMLDivElement;
+    private readonly saveNoteLabel: HTMLDivElement;
 
     public constructor(options: EditorTopTabsOptions) {
         this.root = document.createElement('div');
@@ -100,8 +113,92 @@ export class EditorTopTabs {
             options.onDiagnosticsToggle?.();
         });
         this.setDiagnosticsEnabled(false);
+        this.saveButton = document.createElement('button');
+        this.saveButton.type = 'button';
+        this.saveButton.textContent = 'Save';
+        this.saveButton.style.height = '24px';
+        this.saveButton.style.border = '1px solid #707070';
+        this.saveButton.style.background = '#dcdcdc';
+        this.saveButton.style.cursor = 'pointer';
+        this.saveButton.style.padding = '0 10px';
+        this.saveButton.style.fontSize = '12px';
+        this.saveButton.addEventListener('click', () => {
+            options.onSaveRequested?.();
+        });
+        this.clearDraftButton = document.createElement('button');
+        this.clearDraftButton.type = 'button';
+        this.clearDraftButton.textContent = 'Clear Draft';
+        this.clearDraftButton.style.height = '24px';
+        this.clearDraftButton.style.border = '1px solid #707070';
+        this.clearDraftButton.style.background = '#dcdcdc';
+        this.clearDraftButton.style.cursor = 'pointer';
+        this.clearDraftButton.style.padding = '0 10px';
+        this.clearDraftButton.style.fontSize = '12px';
+        this.clearDraftButton.addEventListener('click', () => {
+            options.onClearDraftRequested?.();
+        });
+        this.exportJsonButton = document.createElement('button');
+        this.exportJsonButton.type = 'button';
+        this.exportJsonButton.textContent = 'Export JSON';
+        this.exportJsonButton.style.height = '24px';
+        this.exportJsonButton.style.border = '1px solid #707070';
+        this.exportJsonButton.style.background = '#dcdcdc';
+        this.exportJsonButton.style.cursor = 'pointer';
+        this.exportJsonButton.style.padding = '0 10px';
+        this.exportJsonButton.style.fontSize = '12px';
+        this.exportJsonButton.addEventListener('click', () => {
+            options.onExportJsonRequested?.();
+        });
+        this.exportJsonButton.title = 'Export downloads current runtime config. To use it in project files, replace/import manually.';
+        this.importJsonButton = document.createElement('button');
+        this.importJsonButton.type = 'button';
+        this.importJsonButton.textContent = 'Import JSON';
+        this.importJsonButton.style.height = '24px';
+        this.importJsonButton.style.border = '1px solid #707070';
+        this.importJsonButton.style.background = '#dcdcdc';
+        this.importJsonButton.style.cursor = 'pointer';
+        this.importJsonButton.style.padding = '0 10px';
+        this.importJsonButton.style.fontSize = '12px';
+        this.importJsonButton.addEventListener('click', () => {
+            options.onImportJsonRequested?.();
+        });
+        this.reloadButton = document.createElement('button');
+        this.reloadButton.type = 'button';
+        this.reloadButton.textContent = 'Reload Page';
+        this.reloadButton.style.height = '24px';
+        this.reloadButton.style.border = '1px solid #707070';
+        this.reloadButton.style.background = '#dcdcdc';
+        this.reloadButton.style.cursor = 'pointer';
+        this.reloadButton.style.padding = '0 10px';
+        this.reloadButton.style.fontSize = '12px';
+        this.reloadButton.addEventListener('click', () => {
+            options.onReloadRequested?.();
+        });
+        this.saveStateLabel = document.createElement('div');
+        this.saveStateLabel.style.minWidth = '80px';
+        this.saveStateLabel.textContent = 'Saved';
+        this.saveStatusLabel = document.createElement('div');
+        this.saveStatusLabel.style.minWidth = '72px';
+        this.saveStatusLabel.textContent = '';
+        this.saveNoteLabel = document.createElement('div');
+        this.saveNoteLabel.style.minWidth = '180px';
+        this.saveNoteLabel.textContent = '';
 
-        controls.append(stopLabel, speedInput, speedLabel, this.mouseCoordsLabel, this.diagnosticsToggleButton);
+        controls.append(
+            stopLabel,
+            speedInput,
+            speedLabel,
+            this.mouseCoordsLabel,
+            this.saveStateLabel,
+            this.saveStatusLabel,
+            this.saveNoteLabel,
+            this.saveButton,
+            this.clearDraftButton,
+            this.exportJsonButton,
+            this.importJsonButton,
+            this.reloadButton,
+            this.diagnosticsToggleButton
+        );
 
         this.root.append(tabsContainer, controls);
         options.parent.appendChild(this.root);
@@ -129,6 +226,13 @@ export class EditorTopTabs {
     public setDiagnosticsEnabled(enabled: boolean): void {
         this.diagnosticsToggleButton.textContent = enabled ? 'Diag ON' : 'Diag OFF';
         this.diagnosticsToggleButton.style.background = enabled ? '#70de63' : '#dcdcdc';
+    }
+
+    public setSaveState(isDirty: boolean, statusMessage: string | null, noteMessage: string | null = null): void {
+        this.saveStateLabel.textContent = isDirty ? 'Unsaved' : 'Saved';
+        this.saveStateLabel.style.color = isDirty ? '#9c5a00' : '#145800';
+        this.saveStatusLabel.textContent = statusMessage ?? '';
+        this.saveNoteLabel.textContent = noteMessage ?? '';
     }
 
     public destroy(): void {

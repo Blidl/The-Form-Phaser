@@ -1,5 +1,7 @@
 import type { TestWorldRuntime } from '../../game/world/runtime/test_world_runtime';
 import type { LegacyObjectSource } from './LegacyObjectAdapter';
+import { saveTestWorldEditorDraft } from '../../game/world/runtime/test_world_editor_storage';
+import type { TestWorldConfig } from '../../game/world/runtime/test_world_config';
 
 const isCreatableLegacyType = (type: string): boolean => {
     return type === 'surface'
@@ -17,9 +19,62 @@ const isCreatableLegacyType = (type: string): boolean => {
 };
 
 export const createAuthoringObjectBridgeSource = (worldRuntime: TestWorldRuntime): LegacyObjectSource => {
+    const countObjects = (config: TestWorldConfig): Record<string, number> => ({
+        surfaces: config.surfaces.length,
+        dragBoxes: config.dragBoxes.length,
+        windZones: config.windZones.length,
+        checkpoints: config.checkpoints.length,
+        triggerVolumes: config.triggerVolumes.length,
+        trianglePickups: config.trianglePickups.length,
+        finish: config.finish ? 1 : 0,
+        playerSpawn: 1
+    });
+
     return {
         getLevelId: () => worldRuntime.getLevelId(),
         getLevelDisplayName: () => worldRuntime.getLevelId(),
+        getRuntimeConfig: () => worldRuntime.getConfig(),
+        saveRuntimeConfig: () => {
+            const levelId = worldRuntime.getLevelId();
+            const config = worldRuntime.getConfig();
+            try {
+                saveTestWorldEditorDraft(levelId, config);
+                return {
+                    success: true,
+                    source: 'localStorage' as const,
+                    levelId,
+                    objectCounts: countObjects(config)
+                };
+            } catch (error) {
+                const reason = error instanceof Error ? error.message : String(error);
+                return {
+                    success: false,
+                    source: 'localStorage' as const,
+                    reason,
+                    levelId,
+                    objectCounts: countObjects(config)
+                };
+            }
+        },
+        importRuntimeConfig: (config) => {
+            const levelId = worldRuntime.getLevelId();
+            const result = worldRuntime.replaceConfig(config);
+            if (result.success) {
+                return {
+                    success: true,
+                    source: 'runtimeConfig' as const,
+                    levelId,
+                    objectCounts: countObjects(worldRuntime.getConfig())
+                };
+            }
+            return {
+                success: false,
+                source: 'runtimeConfig' as const,
+                reason: result.reason,
+                levelId,
+                objectCounts: countObjects(worldRuntime.getConfig())
+            };
+        },
         getWorldBounds: () => {
             const bounds = worldRuntime.getWorldBounds();
             return {

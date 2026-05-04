@@ -1,3 +1,10 @@
+/**
+ * WARNING: Frozen placeholder layer.
+ * This file is NOT the active F2 Objects authoring editor.
+ * Active implementation: src/editor/*
+ * Legacy reference path: Shift+F2 in src/game/world/runtime/test_world_editor_runtime.ts
+ * Do not add new Objects authoring features here unless there is an explicit migration plan.
+ */
 import {
   createAuthoringEditorDomRoot,
   type AuthoringEditorDomRoot,
@@ -9,6 +16,8 @@ import {
 import {
   createInitialAuthoringEditorState,
   setAuthoringEditorActiveTab,
+  setAuthoringEditorDraftLoaded,
+  setAuthoringEditorSaveStatus,
   setAuthoringEditorGridSize,
   setAuthoringEditorGridVisible,
   setAuthoringEditorDirty,
@@ -37,6 +46,7 @@ import { createLogicTab } from './tabs/LogicTab';
 import { createNpcTab } from './tabs/NpcTab';
 import { createObjectsTab } from './tabs/ObjectsTab';
 import { createPlayerTab } from './tabs/PlayerTab';
+import { objectDiag } from '../../../editor/debug/ObjectEditorDiagnostics';
 
 export interface AuthoringEditorApp extends AuthoringEditorLifecycle {
   getState(): AuthoringEditorState;
@@ -85,6 +95,7 @@ export function createAuthoringEditorApp(
   let runtimeSnapshotSignature = createRuntimeSnapshotSignature(runtimeSnapshot);
   let mountedContainer: HTMLElement | null = null;
   let destroyed = false;
+  let lastSavedConfigSignature = runtimeBridge.getConfigSignature();
 
   const topToolbar: TopToolbar = createTopToolbar({
     onTabSelected: (tab: AuthoringEditorTab): void => {
@@ -125,6 +136,55 @@ export function createAuthoringEditorApp(
       syncExternalState();
       render();
     },
+    onSaveRequested: (): void => {
+      const result = runtimeBridge.saveDraft();
+      if (!result.success) {
+        state = setAuthoringEditorSaveStatus(state, 'Save failed', result.error ?? 'Save failed');
+        objectDiag('[EditorSave]', { success: false, error: result.error ?? null });
+        render();
+        return;
+      }
+      lastSavedConfigSignature = runtimeBridge.getConfigSignature();
+      state = setAuthoringEditorDirty(state, false);
+      state = setAuthoringEditorDraftLoaded(state, false);
+      state = setAuthoringEditorSaveStatus(state, 'Saved');
+      objectDiag('[EditorSave]', { success: true });
+      render();
+    },
+    onClearDraftRequested: (): void => {
+      const result = runtimeBridge.clearDraft();
+      if (!result.success) {
+        state = setAuthoringEditorSaveStatus(state, 'Save failed', result.error ?? 'Draft clear failed');
+        objectDiag('[EditorDraft]', { action: 'clear', success: false, error: result.error ?? null });
+        render();
+        return;
+      }
+      state = setAuthoringEditorDraftLoaded(state, false);
+      state = setAuthoringEditorSaveStatus(
+        state,
+        'Draft cleared',
+        result.hadDraft ? 'Reload to use source level' : null,
+      );
+      objectDiag('[EditorDraft]', {
+        action: 'clear',
+        success: true,
+        hadDraft: result.hadDraft,
+        storageKey: result.storageKey,
+      });
+      render();
+    },
+    onExportJsonRequested: (): void => {
+      const result = runtimeBridge.exportJson();
+      if (!result.success) {
+        state = setAuthoringEditorSaveStatus(state, 'Save failed', result.error ?? 'Export failed');
+        objectDiag('[EditorExport]', { success: false, error: result.error ?? null });
+        render();
+        return;
+      }
+      state = setAuthoringEditorSaveStatus(state, 'Saved', `Exported: ${result.filename ?? 'level.json'}`);
+      objectDiag('[EditorExport]', { success: true, filename: result.filename ?? null });
+      render();
+    },
     onCloseRequested: (): void => {
       close();
     },
@@ -150,9 +210,10 @@ export function createAuthoringEditorApp(
     const chips: readonly string[] = [
       `Time: ${state.timeMode}`,
       `Dirty: ${state.dirty ? 'Yes' : 'No'}`,
+      `Status: ${state.draftLoaded ? 'Draft loaded' : state.saveStatus}`,
       'Validation: Pending',
       'Mouse: --,--',
-      'Save/Export: Idle',
+      `Draft: ${runtimeBridge.hasDraft() ? 'Present' : 'None'}`,
     ];
 
     chips.forEach((label) => {
@@ -215,6 +276,10 @@ export function createAuthoringEditorApp(
       return;
     }
     state = setAuthoringEditorOpenState(state, 'open');
+    state = setAuthoringEditorDraftLoaded(state, runtimeBridge.isDraftLoaded());
+    state = setAuthoringEditorSaveStatus(state, runtimeBridge.isDraftLoaded() ? 'Draft loaded' : 'Saved');
+    lastSavedConfigSignature = runtimeBridge.getConfigSignature();
+    state = setAuthoringEditorDirty(state, false);
     runtimeSnapshot = runtimeBridge.readSnapshot();
     runtimeSnapshotSignature = createRuntimeSnapshotSignature(runtimeSnapshot);
     runtimeBridge.onEditorOpened?.(state);
@@ -266,6 +331,18 @@ export function createAuthoringEditorApp(
         return;
       }
       overlay.update(deltaMs);
+      const currentConfigSignature = runtimeBridge.getConfigSignature();
+      if (state.dirty) {
+        if (currentConfigSignature === lastSavedConfigSignature) {
+          state = setAuthoringEditorDirty(state, false);
+          state = setAuthoringEditorSaveStatus(state, state.draftLoaded ? 'Draft loaded' : 'Saved');
+          render();
+        }
+      } else if (currentConfigSignature !== lastSavedConfigSignature) {
+        state = setAuthoringEditorDirty(state, true);
+        state = setAuthoringEditorSaveStatus(state, 'Unsaved');
+        render();
+      }
       const nextRuntimeSnapshot = runtimeBridge.readSnapshot();
       const nextSnapshotSignature = createRuntimeSnapshotSignature(nextRuntimeSnapshot);
       if (nextSnapshotSignature !== runtimeSnapshotSignature) {

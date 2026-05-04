@@ -26,6 +26,12 @@ export interface AuthoringEditorRuntimeBridge {
     snapEnabled: boolean,
     gridSize: AuthoringEditorGridSize,
   ): void;
+  getConfigSignature(): string;
+  isDraftLoaded(): boolean;
+  hasDraft(): boolean;
+  saveDraft(): { success: boolean; error?: string };
+  clearDraft(): { success: boolean; hadDraft: boolean; storageKey: string | null; error?: string };
+  exportJson(): { success: boolean; filename?: string; error?: string };
 }
 
 const EMPTY_RUNTIME_SNAPSHOT: AuthoringEditorRuntimeSnapshot = {
@@ -51,5 +57,16 @@ export function createNoopAuthoringEditorRuntimeBridge(): AuthoringEditorRuntime
       void snapEnabled;
       void gridSize;
     },
+    getConfigSignature: (): string => '',
+    isDraftLoaded: (): boolean => false,
+    hasDraft: (): boolean => false,
+    saveDraft: () => ({ success: false, error: 'runtime bridge unavailable' }),
+    clearDraft: () => ({
+      success: false,
+      hadDraft: false,
+      storageKey: null,
+      error: 'runtime bridge unavailable',
+    }),
+    exportJson: () => ({ success: false, error: 'runtime bridge unavailable' }),
   };
 }

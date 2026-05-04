@@ -142,6 +142,7 @@ export interface TestWorldRuntime {
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
+    replaceConfig: (config: unknown) => { success: boolean; reason?: string };
     getEditorHandles: () => readonly TestWorldEditorHandle[];
     getEditorObjects: () => readonly TestWorldEditorObjectSummary[];
     getEditorHandle: (id: string) => TestWorldEditorHandle | null;
@@ -469,6 +470,21 @@ export const createTestWorldRuntime = (
                 fallbackConfig: currentConfig
             });
             rebuildFromCurrentConfig();
+        },
+        replaceConfig: (config: unknown): { success: boolean; reason?: string } => {
+            try {
+                if (!config || typeof config !== 'object' || Array.isArray(config)) {
+                    return { success: false, reason: 'Config must be a JSON object.' };
+                }
+                currentConfig = normalizeTestWorldConfig(config, {
+                    fallbackConfig: currentConfig
+                });
+                rebuildFromCurrentConfig();
+                return { success: true };
+            } catch (error) {
+                const reason = error instanceof Error ? error.message : String(error);
+                return { success: false, reason };
+            }
         },
         getEditorHandles: (): readonly TestWorldEditorHandle[] => instance.getEditorHandles(),
         getEditorObjects: (): readonly TestWorldEditorObjectSummary[] => instance.getEditorObjects(),

@@ -41,6 +41,21 @@ export interface LegacyObjectSource {
     getLevelId: () => string;
     getLevelDisplayName?: () => string;
     getWorldBounds?: () => LegacyWorldBounds;
+    getRuntimeConfig?: () => unknown;
+    saveRuntimeConfig?: () => {
+        success: boolean;
+        source: 'runtimeConfig' | 'legacySave' | 'exportJson' | 'localStorage';
+        reason?: string;
+        levelId?: string;
+        objectCounts?: Record<string, number>;
+    };
+    importRuntimeConfig?: (config: unknown) => {
+        success: boolean;
+        source: 'runtimeConfig';
+        reason?: string;
+        levelId?: string;
+        objectCounts?: Record<string, number>;
+    };
     listObjects: () => readonly LegacyObjectSummary[];
     listHandles: () => readonly LegacyObjectHandle[];
     patchHandleBounds: (handleId: string, bounds: LegacyObjectBounds) => boolean;
@@ -190,6 +205,34 @@ export class LegacyObjectAdapter {
     public constructor(source: LegacyObjectSource, objectTypeRegistry: ObjectTypeRegistry) {
         this.source = source;
         this.objectTypeRegistry = objectTypeRegistry;
+    }
+
+    public getLevelId(): string {
+        return this.source.getLevelId();
+    }
+
+    public getRuntimeConfig(): unknown | null {
+        return this.source.getRuntimeConfig?.() ?? null;
+    }
+
+    public saveRuntimeConfig(): {
+        success: boolean;
+        source: 'runtimeConfig' | 'legacySave' | 'exportJson' | 'localStorage';
+        reason?: string;
+        levelId?: string;
+        objectCounts?: Record<string, number>;
+    } | null {
+        return this.source.saveRuntimeConfig?.() ?? null;
+    }
+
+    public importRuntimeConfig(config: unknown): {
+        success: boolean;
+        source: 'runtimeConfig';
+        reason?: string;
+        levelId?: string;
+        objectCounts?: Record<string, number>;
+    } | null {
+        return this.source.importRuntimeConfig?.(config) ?? null;
     }
 
     public syncIntoProjectStore(projectStore: ProjectStore): void {

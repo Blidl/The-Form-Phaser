@@ -15,6 +15,9 @@ const DEFAULT_EDITOR_STATE: AuthoringEditorState = {
   gridVisible: true,
   snapEnabled: true,
   gridSize: 16,
+  saveStatus: 'Saved',
+  saveStatusNote: null,
+  draftLoaded: false,
 };
 
 export function createInitialAuthoringEditorState(
@@ -103,5 +106,27 @@ export function setAuthoringEditorGridSize(
   return {
     ...state,
     gridSize,
+  };
+}
+
+export function setAuthoringEditorSaveStatus(
+  state: AuthoringEditorState,
+  saveStatus: string,
+  saveStatusNote: string | null = null,
+): AuthoringEditorState {
+  return {
+    ...state,
+    saveStatus,
+    saveStatusNote,
+  };
+}
+
+export function setAuthoringEditorDraftLoaded(
+  state: AuthoringEditorState,
+  draftLoaded: boolean,
+): AuthoringEditorState {
+  return {
+    ...state,
+    draftLoaded,
   };
 }
