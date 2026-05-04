@@ -1,5 +1,9 @@
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
-import type { EditorObjectBoundsData, EditorObjectData } from '../data/EditorObjectData';
+import type {
+    EditorObjectBoundsData,
+    EditorObjectData,
+    EditorObjectVisualData
+} from '../data/EditorObjectData';
 import type { ObjectTypeRegistry } from '../data/ObjectTypeRegistry';
 import type { ProjectStore } from '../data/ProjectStore';
 import { objectDiag } from '../debug/ObjectEditorDiagnostics';
@@ -39,6 +43,15 @@ export interface UpdateObjectBoundsResult {
     success: boolean;
     reason?: string;
 }
+
+export interface UpdateObjectVisualResult {
+    success: boolean;
+    reason?: string;
+}
+
+export type UpdateObjectVisualPatch = Partial<Pick<EditorObjectVisualData, 'fillColor' | 'strokeColor' | 'alpha' | 'layer'>>;
+
+const HEX_COLOR_PATTERN = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
 
 export class ObjectAuthoringService {
     private readonly projectStore: ProjectStore;
@@ -333,6 +346,143 @@ export class ObjectAuthoringService {
         }
     }
 
+    public updateObjectVisual(
+        objectId: string,
+        visualPatch: UpdateObjectVisualPatch
+    ): UpdateObjectVisualResult {
+        let result: UpdateObjectVisualResult = { success: false, reason: 'No visual changes.' };
+        try {
+            this.syncProjectStoreMirror();
+            const activeLevel = this.projectStore.getActiveLevel();
+            const current = this.projectStore.getObject(activeLevel.id, objectId);
+            if (!current) {
+                result = { success: false, reason: 'Object is not present in active runtime level.' };
+                return result;
+            }
+
+            const nextVisual: UpdateObjectVisualPatch = {};
+            if (visualPatch.fillColor !== undefined) {
+                const normalized = this.normalizeHexColor(visualPatch.fillColor);
+                if (!normalized) {
+                    result = { success: false, reason: 'Invalid fillColor. Expected hex color.' };
+                    return result;
+                }
+                if (normalized !== current.visual.fillColor) {
+                    nextVisual.fillColor = normalized;
+                }
+            }
+            if (visualPatch.strokeColor !== undefined) {
+                const normalized = this.normalizeHexColor(visualPatch.strokeColor);
+                if (!normalized) {
+                    result = { success: false, reason: 'Invalid strokeColor. Expected hex color.' };
+                    return result;
+                }
+                if (normalized !== current.visual.strokeColor) {
+                    nextVisual.strokeColor = normalized;
+                }
+            }
+            if (visualPatch.alpha !== undefined) {
+                if (!Number.isFinite(visualPatch.alpha)) {
+                    result = { success: false, reason: 'Invalid alpha. Expected number.' };
+                    return result;
+                }
+                const alpha = Math.max(0, Math.min(1, visualPatch.alpha));
+                if (alpha !== current.visual.alpha) {
+                    nextVisual.alpha = alpha;
+                }
+            }
+            if (visualPatch.layer !== undefined) {
+                if (!Number.isFinite(visualPatch.layer)) {
+                    result = { success: false, reason: 'Invalid layer. Expected number.' };
+                    return result;
+                }
+                const layer = Number(visualPatch.layer);
+                if (layer !== current.visual.layer) {
+                    nextVisual.layer = layer;
+                }
+            }
+
+            if (Object.keys(nextVisual).length === 0) {
+                result = { success: false, reason: 'No visual changes.' };
+                return result;
+            }
+
+            const hasRuntimeLink = this.legacyObjectAdapter?.hasRuntimeLink(objectId) ?? false;
+            if (hasRuntimeLink && this.legacyObjectAdapter) {
+                if (nextVisual.fillColor !== undefined || nextVisual.strokeColor !== undefined) {
+                    const colorsPatch: Record<string, unknown> = {};
+                    if (nextVisual.fillColor !== undefined) {
+                        const fillColor = this.parseHexColorToRgbInt(nextVisual.fillColor);
+                        if (fillColor !== null) {
+                            colorsPatch.fillColor = fillColor;
+                        }
+                    }
+                    if (nextVisual.strokeColor !== undefined) {
+                        const strokeColor = this.parseHexColorToRgbInt(nextVisual.strokeColor);
+                        if (strokeColor !== null) {
+                            colorsPatch.strokeColor = strokeColor;
+                        }
+                    }
+                    if (Object.keys(colorsPatch).length > 0) {
+                        const applied = this.legacyObjectAdapter.patchRuntimeObjectColors(objectId, colorsPatch);
+                        if (!applied) {
+                            objectDiag('[ObjectAuthoringService:updateVisual:todo]', {
+                                objectId,
+                                kind: 'colors',
+                                reason: 'Runtime color patch unsupported or rejected.'
+                            });
+                        }
+                    }
+                }
+
+                const fieldsPatch: Record<string, unknown> = {};
+                if (nextVisual.alpha !== undefined) {
+                    fieldsPatch.alpha = nextVisual.alpha;
+                }
+                if (nextVisual.layer !== undefined) {
+                    const runtimeVisualLayer = this.mapLayerToRuntimeVisualLayer(nextVisual.layer);
+                    if (runtimeVisualLayer) {
+                        fieldsPatch.visualLayer = runtimeVisualLayer;
+                    } else {
+                        objectDiag('[ObjectAuthoringService:updateVisual:todo]', {
+                            objectId,
+                            kind: 'layer',
+                            reason: `Runtime visual layer mapping is missing for layer=${nextVisual.layer}.`
+                        });
+                    }
+                }
+                if (Object.keys(fieldsPatch).length > 0) {
+                    const applied = this.legacyObjectAdapter.patchRuntimeObjectFields(objectId, fieldsPatch);
+                    if (!applied) {
+                        objectDiag('[ObjectAuthoringService:updateVisual:todo]', {
+                            objectId,
+                            kind: 'fields',
+                            reason: 'Runtime field patch unsupported or rejected.'
+                        });
+                    }
+                }
+            }
+
+            this.projectStore.updateObject(activeLevel.id, objectId, {
+                visual: nextVisual
+            });
+            this.syncProjectStoreMirror();
+            result = { success: true };
+            return result;
+        } catch (error) {
+            const asError = error instanceof Error ? error : new Error(String(error));
+            result = { success: false, reason: `exception: ${asError.message}` };
+            return result;
+        } finally {
+            objectDiag('[ObjectAuthoringService:updateVisual]', {
+                objectId,
+                visualPatch,
+                success: result.success,
+                reason: result.reason ?? null
+            });
+        }
+    }
+
     public syncProjectStoreMirror(): void {
         if (!this.legacyObjectAdapter) {
             return;
@@ -357,5 +507,32 @@ export class ObjectAuthoringService {
     private isKnownRuntimeType(typeId: string): boolean {
         const resolved = this.objectTypeRegistry.resolveId(typeId) ?? typeId;
         return KNOWN_RUNTIME_OBJECT_TYPES.has(resolved);
+    }
+
+    private normalizeHexColor(rawValue: string): string | null {
+        const trimmed = rawValue.trim();
+        if (!HEX_COLOR_PATTERN.test(trimmed)) {
+            return null;
+        }
+        const normalized = trimmed.startsWith('#') ? trimmed.slice(1) : trimmed;
+        const rgbHex = normalized.length === 3
+            ? `${normalized[0]}${normalized[0]}${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}`
+            : normalized;
+        return `#${rgbHex.toLowerCase()}`;
+    }
+
+    private parseHexColorToRgbInt(color: string): number | null {
+        const normalized = this.normalizeHexColor(color);
+        if (!normalized) {
+            return null;
+        }
+        return Number.parseInt(normalized.slice(1), 16);
+    }
+
+    private mapLayerToRuntimeVisualLayer(layer: number): string | null {
+        if (Number.isInteger(layer) && layer >= 1 && layer <= 5) {
+            return `layer_${layer}`;
+        }
+        return null;
     }
 }

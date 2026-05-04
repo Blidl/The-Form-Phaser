@@ -15,7 +15,7 @@ import type { ProjectStore } from '../data/ProjectStore';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
-import { ObjectAuthoringService } from '../object-authoring/ObjectAuthoringService';
+import { ObjectAuthoringService, type UpdateObjectVisualPatch } from '../object-authoring/ObjectAuthoringService';
 import { objectDiag } from '../debug/ObjectEditorDiagnostics';
 
 interface ObjectsEditorModeOptions {
@@ -1184,9 +1184,9 @@ export class ObjectsEditorMode implements EditorMode {
         if (!normalizedColor) {
             return false;
         }
-        return this.commitSelectedObjectVisualPatch({
+        return this.commitSelectedObjectBasicVisualPatch({
             [field]: normalizedColor
-        } as Partial<EditorObjectVisualData>);
+        } as UpdateObjectVisualPatch);
     }
 
     private commitSelectedObjectVisualAlpha(rawValue: string): boolean {
@@ -1195,7 +1195,7 @@ export class ObjectsEditorMode implements EditorMode {
             return false;
         }
         const clamped = Phaser.Math.Clamp(parsed, 0, 1);
-        return this.commitSelectedObjectVisualPatch({
+        return this.commitSelectedObjectBasicVisualPatch({
             alpha: clamped
         });
     }
@@ -1205,10 +1205,24 @@ export class ObjectsEditorMode implements EditorMode {
         if (!Number.isFinite(parsed)) {
             return false;
         }
-        const layer = Math.round(parsed);
-        return this.commitSelectedObjectVisualPatch({
+        return this.commitSelectedObjectBasicVisualPatch({
             layer
         });
+    }
+
+    private commitSelectedObjectBasicVisualPatch(patch: UpdateObjectVisualPatch): boolean {
+        const selectedId = this.selectedObjectId;
+        if (!selectedId) {
+            return false;
+        }
+        const updateResult = this.objectAuthoringService.updateObjectVisual(selectedId, patch);
+        if (!updateResult.success) {
+            return false;
+        }
+        this.refreshLiveObjects('visual-update');
+        this.syncViewsFromStore();
+        this.syncSelectionOutline();
+        return true;
     }
 
     private commitSelectedObjectVisualOnlyDebugView(onlyDebugView: boolean): boolean {
