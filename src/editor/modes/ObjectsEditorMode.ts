@@ -82,6 +82,14 @@ export class ObjectsEditorMode implements EditorMode {
     private searchValue = '';
     private objectsListScrollTop = 0;
     private eyedropperTarget: EyedropperTarget = null;
+    private activeColorPaletteField: EditableVisualColorField | null = null;
+    private colorPaletteObjectId: string | null = null;
+    private colorPaletteRoot: HTMLDivElement | null = null;
+    private colorPaletteAnchor: HTMLElement | null = null;
+    private colorPaletteAnchorRect: { left: number; top: number; width: number; height: number; bottom: number } | null = null;
+    private colorPickerHue = 0;
+    private colorPickerSaturation = 1;
+    private colorPickerValue = 1;
     private syncInProgress = false;
     private syncQueued = false;
     private syncScheduled = false;
@@ -139,6 +147,7 @@ export class ObjectsEditorMode implements EditorMode {
     public exit(): void {
         this.draggingObjectId = null;
         this.eyedropperTarget = null;
+        this.closeColorPalette();
         this.selectionOutline.setVisible(false);
     }
 
@@ -148,7 +157,11 @@ export class ObjectsEditorMode implements EditorMode {
         this.syncScheduled = false;
         this.applyDebugVisibilityToRuntimeLinks();
         this.handleDeleteShortcut();
+        this.handleColorPaletteCancelShortcut();
         this.handleEyedropperCancelShortcut();
+        if (this.activeColorPaletteField && (!this.getSelectedObjectData() || this.colorPaletteObjectId !== this.selectedObjectId)) {
+            this.closeColorPalette();
+        }
         this.syncViewsFromStore();
         this.syncSelectionOutline();
     }
@@ -679,6 +692,16 @@ export class ObjectsEditorMode implements EditorMode {
         this.onUiChanged();
     }
 
+    private handleColorPaletteCancelShortcut(): void {
+        if (!this.activeColorPaletteField || !this.escapeKey) {
+            return;
+        }
+        if (!Phaser.Input.Keyboard.JustDown(this.escapeKey)) {
+            return;
+        }
+        this.closeColorPalette();
+    }
+
     private handleEyedropperSample(worldX: number, worldY: number): void {
         const targetField = this.eyedropperTarget;
         this.eyedropperTarget = null;
@@ -980,15 +1003,39 @@ export class ObjectsEditorMode implements EditorMode {
         controlsRow.style.alignItems = 'center';
         controlsRow.style.gap = '6px';
 
-        const swatch = document.createElement('input');
-        swatch.type = 'color';
-        swatch.value = this.normalizeHexColorForPicker(selectedObject.visual[field]);
+        const swatch = document.createElement('button');
+        swatch.type = 'button';
+        swatch.title = field === 'fillColor' ? 'Open fill palette' : 'Open stroke palette';
         swatch.style.width = '28px';
         swatch.style.height = '24px';
         swatch.style.padding = '0';
         swatch.style.border = '1px solid #5f5f5f';
-        swatch.style.background = 'transparent';
+        swatch.style.background = this.resolveSwatchBackground(selectedObject.visual[field]);
+        swatch.style.position = 'relative';
+        swatch.style.cursor = 'pointer';
+        swatch.style.boxSizing = 'border-box';
+        if (this.isTransparentColorValue(selectedObject.visual[field])) {
+            const transparentMark = document.createElement('span');
+            transparentMark.textContent = '/';
+            transparentMark.style.position = 'absolute';
+            transparentMark.style.left = '0';
+            transparentMark.style.right = '0';
+            transparentMark.style.top = '0';
+            transparentMark.style.bottom = '0';
+            transparentMark.style.display = 'flex';
+            transparentMark.style.alignItems = 'center';
+            transparentMark.style.justifyContent = 'center';
+            transparentMark.style.fontSize = '11px';
+            transparentMark.style.fontWeight = 'bold';
+            transparentMark.style.color = '#111111';
+            transparentMark.style.textShadow = '0 1px 0 #ffffff';
+            swatch.appendChild(transparentMark);
+        }
         this.bindEditorInputKeyboardGuards(swatch);
+        swatch.addEventListener('click', (event) => {
+            event.stopPropagation();
+            this.toggleColorPalette(field, swatch);
+        });
 
         const input = document.createElement('input');
         input.type = 'text';
@@ -1014,7 +1061,7 @@ export class ObjectsEditorMode implements EditorMode {
 
         const noneButton = document.createElement('button');
         noneButton.type = 'button';
-        noneButton.textContent = 'None';
+        noneButton.textContent = field === 'fillColor' ? 'No Fill' : 'No Stroke';
         noneButton.style.padding = '3px 6px';
         noneButton.style.border = '1px solid #5f5f5f';
         noneButton.style.background = '#d9d9d9';
@@ -1023,7 +1070,6 @@ export class ObjectsEditorMode implements EditorMode {
                 [field]: TRANSPARENT_COLOR_VALUE
             } as UpdateObjectVisualPatch);
             input.value = this.getSelectedVisualColorFieldValue(field);
-            swatch.value = this.normalizeHexColorForPicker(input.value);
             if (committed) {
                 this.onUiChanged();
             }
@@ -1032,21 +1078,10 @@ export class ObjectsEditorMode implements EditorMode {
         const commitField = (): void => {
             const committed = this.commitSelectedObjectVisualColorField(field, input.value);
             input.value = this.getSelectedVisualColorFieldValue(field);
-            swatch.value = this.normalizeHexColorForPicker(input.value);
             if (committed) {
                 this.onUiChanged();
             }
         };
-
-        swatch.addEventListener('input', () => {
-            const normalized = this.normalizeHexColorForPicker(swatch.value);
-            const committed = this.commitSelectedObjectVisualColorField(field, normalized);
-            input.value = this.getSelectedVisualColorFieldValue(field);
-            swatch.value = this.normalizeHexColorForPicker(input.value);
-            if (committed) {
-                this.onUiChanged();
-            }
-        });
 
         input.addEventListener('keydown', (event) => {
             if (event.key === 'Enter') {
@@ -1211,6 +1246,375 @@ export class ObjectsEditorMode implements EditorMode {
         input.addEventListener('keydown', stopKeyboardEvent);
         input.addEventListener('keyup', stopKeyboardEvent);
         input.addEventListener('keypress', stopKeyboardEvent);
+    }
+
+    private toggleColorPalette(field: EditableVisualColorField, anchor: HTMLElement): void {
+        if (this.activeColorPaletteField === field && this.colorPaletteRoot) {
+            this.closeColorPalette();
+            return;
+        }
+        this.openColorPalette(field, anchor);
+    }
+
+    private openColorPalette(field: EditableVisualColorField, anchor: HTMLElement): void {
+        this.closeColorPalette();
+        this.activeColorPaletteField = field;
+        this.colorPaletteObjectId = this.selectedObjectId;
+        this.colorPaletteAnchor = anchor;
+        this.colorPaletteAnchorRect = this.readAnchorRect(anchor);
+        const activeColor = this.getSelectedVisualColorFieldValue(field);
+        const normalized = this.normalizeHexLikeColor(activeColor) ?? '#ffffff';
+        const hsv = this.hexToHsv(normalized);
+        this.colorPickerHue = hsv.h;
+        this.colorPickerSaturation = hsv.s;
+        this.colorPickerValue = hsv.v;
+
+        const palette = document.createElement('div');
+        palette.style.position = 'fixed';
+        palette.style.zIndex = '20000';
+        palette.style.width = '244px';
+        palette.style.border = '1px solid #5f5f5f';
+        palette.style.background = '#efefef';
+        palette.style.padding = '8px';
+        palette.style.boxSizing = 'border-box';
+        palette.style.boxShadow = '0 6px 14px rgba(0, 0, 0, 0.2)';
+        palette.addEventListener('pointerdown', (event) => {
+            event.stopPropagation();
+        });
+
+        const title = document.createElement('div');
+        title.textContent = field === 'fillColor' ? 'Fill Palette' : 'Stroke Palette';
+        title.style.fontSize = '11px';
+        title.style.marginBottom = '6px';
+        title.style.fontWeight = 'bold';
+        palette.appendChild(title);
+
+        const svArea = document.createElement('div');
+        svArea.style.width = '100%';
+        svArea.style.height = '124px';
+        svArea.style.position = 'relative';
+        svArea.style.cursor = 'crosshair';
+        svArea.style.marginBottom = '8px';
+        svArea.style.border = '1px solid #5f5f5f';
+        svArea.style.backgroundColor = '#ff0000';
+        svArea.style.backgroundImage = 'linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent)';
+        const svHandle = document.createElement('div');
+        svHandle.style.position = 'absolute';
+        svHandle.style.width = '8px';
+        svHandle.style.height = '8px';
+        svHandle.style.border = '1px solid #ffffff';
+        svHandle.style.boxShadow = '0 0 0 1px #000000';
+        svHandle.style.borderRadius = '50%';
+        svHandle.style.pointerEvents = 'none';
+        svArea.appendChild(svHandle);
+        palette.appendChild(svArea);
+
+        const hueRow = document.createElement('div');
+        hueRow.style.marginBottom = '8px';
+        const hueStrip = document.createElement('div');
+        hueStrip.style.width = '100%';
+        hueStrip.style.height = '14px';
+        hueStrip.style.border = '1px solid #5f5f5f';
+        hueStrip.style.cursor = 'ew-resize';
+        hueStrip.style.background = 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)';
+        hueStrip.style.position = 'relative';
+        const hueHandle = document.createElement('div');
+        hueHandle.style.position = 'absolute';
+        hueHandle.style.top = '-2px';
+        hueHandle.style.width = '4px';
+        hueHandle.style.height = '18px';
+        hueHandle.style.background = '#ffffff';
+        hueHandle.style.border = '1px solid #000000';
+        hueHandle.style.pointerEvents = 'none';
+        hueStrip.appendChild(hueHandle);
+        hueRow.appendChild(hueStrip);
+        palette.appendChild(hueRow);
+
+        const statusRow = document.createElement('div');
+        statusRow.style.display = 'flex';
+        statusRow.style.gap = '6px';
+        statusRow.style.marginBottom = '8px';
+        const preview = document.createElement('div');
+        preview.style.width = '32px';
+        preview.style.height = '24px';
+        preview.style.border = '1px solid #5f5f5f';
+        const hexInput = document.createElement('input');
+        hexInput.type = 'text';
+        hexInput.autocomplete = 'off';
+        hexInput.spellcheck = false;
+        hexInput.style.flex = '1';
+        hexInput.style.padding = '2px 4px';
+        hexInput.style.border = '1px solid #5f5f5f';
+        this.bindEditorInputKeyboardGuards(hexInput);
+        statusRow.appendChild(preview);
+        statusRow.appendChild(hexInput);
+        palette.appendChild(statusRow);
+
+        const bottomRow = document.createElement('div');
+        bottomRow.style.display = 'flex';
+        bottomRow.style.gap = '6px';
+
+        const transparentButton = document.createElement('button');
+        transparentButton.type = 'button';
+        transparentButton.textContent = field === 'fillColor' ? 'No Fill' : 'No Stroke';
+        transparentButton.style.flex = '1';
+        transparentButton.style.padding = '3px 6px';
+        transparentButton.style.border = '1px solid #5f5f5f';
+        transparentButton.style.background = '#d9d9d9';
+        transparentButton.addEventListener('click', () => {
+            this.applyPaletteColor(field, TRANSPARENT_COLOR_VALUE);
+        });
+
+        const closeButton = document.createElement('button');
+        closeButton.type = 'button';
+        closeButton.textContent = 'Close';
+        closeButton.style.padding = '3px 8px';
+        closeButton.style.border = '1px solid #5f5f5f';
+        closeButton.style.background = '#d9d9d9';
+        closeButton.addEventListener('click', () => {
+            this.closeColorPalette();
+        });
+
+        bottomRow.appendChild(transparentButton);
+        bottomRow.appendChild(closeButton);
+        palette.appendChild(bottomRow);
+        document.body.appendChild(palette);
+        this.colorPaletteRoot = palette;
+        this.positionColorPalette();
+        document.addEventListener('pointerdown', this.handleDocumentPointerDownForPalette, true);
+
+        let draggingSv = false;
+        let draggingHue = false;
+        const updateUi = (): void => {
+            const hueColor = this.hsvToHex({ h: this.colorPickerHue, s: 1, v: 1 });
+            svArea.style.backgroundColor = hueColor;
+            const x = Math.round(this.colorPickerSaturation * (svArea.clientWidth - 1));
+            const y = Math.round((1 - this.colorPickerValue) * (svArea.clientHeight - 1));
+            svHandle.style.left = `${Math.max(0, Math.min(svArea.clientWidth - 1, x)) - 4}px`;
+            svHandle.style.top = `${Math.max(0, Math.min(svArea.clientHeight - 1, y)) - 4}px`;
+            const hueX = Math.round((this.colorPickerHue / 360) * (hueStrip.clientWidth - 1));
+            hueHandle.style.left = `${Math.max(0, Math.min(hueStrip.clientWidth - 1, hueX)) - 2}px`;
+            const hex = this.hsvToHex({
+                h: this.colorPickerHue,
+                s: this.colorPickerSaturation,
+                v: this.colorPickerValue
+            });
+            preview.style.background = hex;
+            hexInput.value = hex;
+        };
+        const commitCurrentColor = (): void => {
+            const hex = this.hsvToHex({
+                h: this.colorPickerHue,
+                s: this.colorPickerSaturation,
+                v: this.colorPickerValue
+            });
+            this.applyPaletteColor(field, hex);
+        };
+        const updateSvFromEvent = (event: PointerEvent): void => {
+            const rect = svArea.getBoundingClientRect();
+            const x = Phaser.Math.Clamp(event.clientX - rect.left, 0, rect.width);
+            const y = Phaser.Math.Clamp(event.clientY - rect.top, 0, rect.height);
+            this.colorPickerSaturation = rect.width <= 0 ? 1 : x / rect.width;
+            this.colorPickerValue = rect.height <= 0 ? 1 : 1 - (y / rect.height);
+            updateUi();
+            commitCurrentColor();
+        };
+        const updateHueFromEvent = (event: PointerEvent): void => {
+            const rect = hueStrip.getBoundingClientRect();
+            const x = Phaser.Math.Clamp(event.clientX - rect.left, 0, rect.width);
+            const nextHue = rect.width <= 0 ? 0 : (x / rect.width) * 360;
+            this.colorPickerHue = nextHue >= 360 ? 359.999 : nextHue;
+            updateUi();
+            commitCurrentColor();
+        };
+
+        svArea.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            draggingSv = true;
+            updateSvFromEvent(event);
+        });
+        hueStrip.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            draggingHue = true;
+            updateHueFromEvent(event);
+        });
+        document.addEventListener('pointermove', this.handleColorPickerPointerMove, true);
+        document.addEventListener('pointerup', this.handleColorPickerPointerUp, true);
+        this.onColorPickerPointerMove = (event: PointerEvent): void => {
+            if (draggingSv) {
+                event.preventDefault();
+                event.stopPropagation();
+                updateSvFromEvent(event);
+            } else if (draggingHue) {
+                event.preventDefault();
+                event.stopPropagation();
+                updateHueFromEvent(event);
+            }
+        };
+        this.onColorPickerPointerUp = (): void => {
+            draggingSv = false;
+            draggingHue = false;
+        };
+        hexInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                const normalized = this.normalizeHexLikeColor(hexInput.value);
+                if (!normalized) {
+                    return;
+                }
+                const nextHsv = this.hexToHsv(normalized);
+                this.colorPickerHue = nextHsv.h;
+                this.colorPickerSaturation = nextHsv.s;
+                this.colorPickerValue = nextHsv.v;
+                updateUi();
+                this.applyPaletteColor(field, normalized);
+            }
+        });
+        updateUi();
+    }
+
+    private closeColorPalette(): void {
+        if (this.colorPaletteRoot?.parentElement) {
+            this.colorPaletteRoot.parentElement.removeChild(this.colorPaletteRoot);
+        }
+        this.colorPaletteRoot = null;
+        this.colorPaletteAnchor = null;
+        this.colorPaletteAnchorRect = null;
+        this.colorPaletteObjectId = null;
+        this.activeColorPaletteField = null;
+        document.removeEventListener('pointerdown', this.handleDocumentPointerDownForPalette, true);
+        document.removeEventListener('pointermove', this.handleColorPickerPointerMove, true);
+        document.removeEventListener('pointerup', this.handleColorPickerPointerUp, true);
+        this.onColorPickerPointerMove = null;
+        this.onColorPickerPointerUp = null;
+    }
+
+    private readonly handleDocumentPointerDownForPalette = (event: PointerEvent): void => {
+        if (!this.colorPaletteRoot) {
+            return;
+        }
+        const target = event.target;
+        if (!(target instanceof Node)) {
+            this.closeColorPalette();
+            return;
+        }
+        if (this.colorPaletteRoot.contains(target)) {
+            return;
+        }
+        if (this.colorPaletteAnchor && this.colorPaletteAnchor.contains(target)) {
+            return;
+        }
+        this.closeColorPalette();
+    };
+
+    private applyPaletteColor(field: EditableVisualColorField, rawColor: string): void {
+        const committed = this.commitSelectedObjectVisualColorField(field, rawColor);
+        if (committed) {
+            this.onUiChanged();
+        }
+    }
+
+    private positionColorPalette(): void {
+        if (!this.colorPaletteRoot) {
+            return;
+        }
+        const rect = this.colorPaletteAnchorRect;
+        if (!rect) {
+            return;
+        }
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
+        const paletteWidth = 244;
+        const paletteHeight = 232;
+        const left = Math.min(Math.max(8, rect.left), Math.max(8, viewportWidth - paletteWidth - 8));
+        const top = rect.bottom + 4 + paletteHeight > viewportHeight
+            ? Math.max(8, rect.top - paletteHeight - 6)
+            : rect.bottom + 4;
+        this.colorPaletteRoot.style.left = `${left}px`;
+        this.colorPaletteRoot.style.top = `${top}px`;
+    }
+
+    private isTransparentColorValue(rawValue: string): boolean {
+        return rawValue.trim().toLowerCase() === TRANSPARENT_COLOR_VALUE;
+    }
+
+    private resolveSwatchBackground(rawValue: string): string {
+        if (this.isTransparentColorValue(rawValue)) {
+            return 'repeating-linear-gradient(45deg, #d8d8d8 0px, #d8d8d8 4px, #f4f4f4 4px, #f4f4f4 8px)';
+        }
+        return this.normalizeHexColorForPicker(rawValue);
+    }
+
+    private onColorPickerPointerMove: ((event: PointerEvent) => void) | null = null;
+    private onColorPickerPointerUp: (() => void) | null = null;
+    private readonly handleColorPickerPointerMove = (event: PointerEvent): void => {
+        this.onColorPickerPointerMove?.(event);
+    };
+    private readonly handleColorPickerPointerUp = (): void => {
+        this.onColorPickerPointerUp?.();
+    };
+
+    private readAnchorRect(anchor: HTMLElement): { left: number; top: number; width: number; height: number; bottom: number } {
+        const rect = anchor.getBoundingClientRect();
+        return { left: rect.left, top: rect.top, width: rect.width, height: rect.height, bottom: rect.bottom };
+    }
+
+    private hsvToHex(hsv: { h: number; s: number; v: number }): string {
+        const h = ((hsv.h % 360) + 360) % 360;
+        const s = Phaser.Math.Clamp(hsv.s, 0, 1);
+        const v = Phaser.Math.Clamp(hsv.v, 0, 1);
+        const c = v * s;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const m = v - c;
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        if (h < 60) {
+            r = c; g = x; b = 0;
+        } else if (h < 120) {
+            r = x; g = c; b = 0;
+        } else if (h < 180) {
+            r = 0; g = c; b = x;
+        } else if (h < 240) {
+            r = 0; g = x; b = c;
+        } else if (h < 300) {
+            r = x; g = 0; b = c;
+        } else {
+            r = c; g = 0; b = x;
+        }
+        const toHex = (value: number): string => {
+            const intValue = Math.round((value + m) * 255);
+            return intValue.toString(16).padStart(2, '0');
+        };
+        return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+    }
+
+    private hexToHsv(color: string): { h: number; s: number; v: number } {
+        const normalized = this.normalizeHexLikeColor(color) ?? '#ffffff';
+        const r = Number.parseInt(normalized.slice(1, 3), 16) / 255;
+        const g = Number.parseInt(normalized.slice(3, 5), 16) / 255;
+        const b = Number.parseInt(normalized.slice(5, 7), 16) / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const delta = max - min;
+        let h = 0;
+        if (delta !== 0) {
+            if (max === r) {
+                h = 60 * (((g - b) / delta) % 6);
+            } else if (max === g) {
+                h = 60 * (((b - r) / delta) + 2);
+            } else {
+                h = 60 * (((r - g) / delta) + 4);
+            }
+        }
+        if (h < 0) {
+            h += 360;
+        }
+        const s = max === 0 ? 0 : delta / max;
+        const v = max;
+        return { h, s, v };
     }
 
     private commitSelectedObjectVisualTextField(field: EditableVisualTextField, rawValue: string): boolean {
@@ -1700,3 +2104,4 @@ export class ObjectsEditorMode implements EditorMode {
         return spacer;
     }
 }
+
