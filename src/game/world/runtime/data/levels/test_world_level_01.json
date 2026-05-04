@@ -53,6 +53,10 @@
       ]
     }
   ],
+  "logic": {
+    "scripts": [],
+    "bindings": []
+  },
   "playerSpawn": {
     "x": 96,
     "y": 112,

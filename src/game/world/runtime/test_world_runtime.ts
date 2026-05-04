@@ -489,7 +489,8 @@ export const createTestWorldRuntime = (
                 const mode = options?.mode ?? 'runtime_patch';
                 currentConfig = normalizeTestWorldConfig(config, {
                     fallbackConfig: currentConfig,
-                    preserveMissingBackgroundObjectFields: mode !== 'full_import'
+                    preserveMissingBackgroundObjectFields: mode !== 'full_import',
+                    preserveMissingLogicFields: mode !== 'full_import'
                 });
                 rebuildFromCurrentConfig();
                 return { success: true };

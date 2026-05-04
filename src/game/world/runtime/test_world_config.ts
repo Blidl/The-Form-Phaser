@@ -277,12 +277,67 @@ export interface TestWorldTrianglePickupConfig extends TestWorldEditorLockable, 
     strokeColor?: number;
 }
 
+export type TestWorldLogicScriptCategory =
+    | 'object.move'
+    | 'object.rotate'
+    | 'object.action'
+    | 'npc.patrol'
+    | 'npc.action'
+    | 'npc.altAction'
+    | 'cutscene.npc'
+    | 'cutscene.camera'
+    | 'cutscene.player'
+    | 'cutscene.other'
+    | 'trigger.action'
+    | 'world.rule';
+
+export interface TestWorldLogicScriptCommandConfig {
+    id: string;
+    type: string;
+    params: Record<string, unknown>;
+}
+
+export interface TestWorldLogicScriptEditorConfig {
+    rawLines?: string[];
+    locked?: boolean;
+}
+
+export interface TestWorldLogicScriptConfig {
+    id: string;
+    name: string;
+    category: TestWorldLogicScriptCategory;
+    commands: TestWorldLogicScriptCommandConfig[];
+    editor?: TestWorldLogicScriptEditorConfig;
+}
+
+export type TestWorldLogicBindingTargetType =
+    | 'object'
+    | 'npc'
+    | 'cutscene'
+    | 'trigger'
+    | 'world';
+
+export interface TestWorldLogicBindingConfig {
+    id: string;
+    targetType: TestWorldLogicBindingTargetType;
+    targetId?: string;
+    slot: string;
+    scriptId: string;
+    enabled?: boolean;
+}
+
+export interface TestWorldLogicConfig {
+    scripts: TestWorldLogicScriptConfig[];
+    bindings: TestWorldLogicBindingConfig[];
+}
+
 export interface TestWorldConfig {
     meta: TestWorldMetaConfig;
     worldBounds: TestWorldBoundsConfig;
     background: TestWorldBackgroundConfig | null;
     worldFlags?: Record<string, boolean>;
     worldLogicRules?: TestWorldLogicRule[];
+    logic: TestWorldLogicConfig;
     playerSpawn: TestWorldPlayerSpawnConfig;
     npcs: TestNpcInstanceConfig[];
     surfaces: TestWorldSurfaceConfig[];

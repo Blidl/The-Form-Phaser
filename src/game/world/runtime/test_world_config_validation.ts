@@ -18,6 +18,13 @@ import {
     type TestWorldFinishConfig,
     type TestWorldHazardConfig,
     type TestWorldMetaConfig,
+    type TestWorldLogicBindingConfig,
+    type TestWorldLogicBindingTargetType,
+    type TestWorldLogicConfig,
+    type TestWorldLogicScriptCategory,
+    type TestWorldLogicScriptCommandConfig,
+    type TestWorldLogicScriptConfig,
+    type TestWorldLogicScriptEditorConfig,
     type TestWorldMovingPlatformMotionState,
     type TestWorldMovingPlatformConfig,
     type TestWorldPlayerSpawnConfig,
@@ -64,6 +71,27 @@ const DEFAULT_TRIGGER_VOLUME_STROKE_COLOR = 0x0277bd;
 const DEFAULT_TRIGGER_VOLUME_DEACTIVATE_FILL_COLOR = 0xffccbc;
 const DEFAULT_TRIGGER_VOLUME_DEACTIVATE_STROKE_COLOR = 0xe64a19;
 const PLAYER_FORM_IDS = new Set<PlayerFormId>(['ball', 'triangle', 'square']);
+const TEST_WORLD_LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
+    'object.move',
+    'object.rotate',
+    'object.action',
+    'npc.patrol',
+    'npc.action',
+    'npc.altAction',
+    'cutscene.npc',
+    'cutscene.camera',
+    'cutscene.player',
+    'cutscene.other',
+    'trigger.action',
+    'world.rule'
+]);
+const TEST_WORLD_LOGIC_BINDING_TARGET_TYPES = new Set<TestWorldLogicBindingTargetType>([
+    'object',
+    'npc',
+    'cutscene',
+    'trigger',
+    'world'
+]);
 
 const asNumber = (value: unknown, fallback: number): number => {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -615,6 +643,195 @@ const normalizeTestWorldLogicRules = (
         .map((entry, index) => normalizeTestWorldLogicRule(asObject(entry), `world_logic_rule_${index + 1}`))
         .filter((entry): entry is TestWorldLogicRule => entry !== null);
     return normalized.length > 0 ? normalized : undefined;
+};
+
+const asLogicScriptCategory = (value: unknown): TestWorldLogicScriptCategory | null => {
+    return typeof value === 'string' && TEST_WORLD_LOGIC_SCRIPT_CATEGORIES.has(value as TestWorldLogicScriptCategory)
+        ? value as TestWorldLogicScriptCategory
+        : null;
+};
+
+const asLogicBindingTargetType = (value: unknown): TestWorldLogicBindingTargetType | null => {
+    return typeof value === 'string' && TEST_WORLD_LOGIC_BINDING_TARGET_TYPES.has(value as TestWorldLogicBindingTargetType)
+        ? value as TestWorldLogicBindingTargetType
+        : null;
+};
+
+const normalizeTestWorldLogicScriptCommand = (
+    raw: Record<string, unknown> | null
+): TestWorldLogicScriptCommandConfig | null => {
+    if (!raw) {
+        return null;
+    }
+    const id = asOptionalString(raw.id);
+    const type = asOptionalString(raw.type);
+    if (!id || !type) {
+        return null;
+    }
+
+    return {
+        id,
+        type,
+        params: asObject(raw.params) ?? {}
+    };
+};
+
+const normalizeTestWorldLogicScriptEditor = (
+    raw: Record<string, unknown> | null
+): TestWorldLogicScriptEditorConfig | undefined => {
+    if (!raw) {
+        return undefined;
+    }
+    const rawLines = asArray(raw.rawLines)
+        .filter((entry): entry is string => typeof entry === 'string');
+    const hasLocked = typeof raw.locked === 'boolean';
+    const locked = asBoolean(raw.locked, false);
+    if (rawLines.length <= 0 && !hasLocked) {
+        return undefined;
+    }
+    return {
+        rawLines: rawLines.length > 0 ? rawLines : undefined,
+        locked
+    };
+};
+
+const normalizeTestWorldLogicScripts = (
+    raw: unknown
+): TestWorldLogicScriptConfig[] => {
+    const usedScriptIds = new Set<string>();
+    return asArray(raw)
+        .map((entry, index) => {
+            const item = asObject(entry);
+            if (!item) {
+                return null;
+            }
+            const category = asLogicScriptCategory(item.category);
+            if (!category) {
+                return null;
+            }
+            const commands = asArray(item.commands)
+                .map((commandEntry) => normalizeTestWorldLogicScriptCommand(asObject(commandEntry)))
+                .filter((command): command is TestWorldLogicScriptCommandConfig => command !== null);
+            const scriptId = ensureUniqueId(
+                asString(item.id, `logic_script_${index + 1}`),
+                usedScriptIds,
+                `logic_script_${index + 1}`
+            );
+            return {
+                id: scriptId,
+                name: asString(item.name, scriptId),
+                category,
+                commands,
+                editor: normalizeTestWorldLogicScriptEditor(asObject(item.editor))
+            } satisfies TestWorldLogicScriptConfig;
+        })
+        .filter((entry): entry is TestWorldLogicScriptConfig => entry !== null);
+};
+
+const collectWorldObjectIds = (
+    config: TestWorldConfig,
+    includePlayer: boolean
+): Set<string> => {
+    const ids = new Set<string>([
+        ...config.surfaces.map((entry) => entry.id),
+        ...config.hazards.map((entry) => entry.id),
+        ...config.checkpoints.map((entry) => entry.id),
+        ...config.movingPlatforms.map((entry) => entry.id),
+        ...config.triggerPlatforms.map((entry) => entry.id),
+        ...config.triggerVolumes.map((entry) => entry.id),
+        ...config.dragBoxes.map((entry) => entry.id),
+        ...config.windZones.map((entry) => entry.id),
+        ...config.triangleFlightBreakWalls.map((entry) => entry.id),
+        ...config.trianglePickups.map((entry) => entry.id),
+        ...(config.finish ? [config.finish.id] : [])
+    ]);
+    if (includePlayer) {
+        ids.add('player');
+    }
+    return ids;
+};
+
+const normalizeTestWorldLogicBindings = (
+    raw: unknown,
+    scripts: readonly TestWorldLogicScriptConfig[],
+    config: TestWorldConfig
+): TestWorldLogicBindingConfig[] => {
+    const scriptIds = new Set(scripts.map((entry) => entry.id));
+    const worldObjectIds = collectWorldObjectIds(config, false);
+    const npcIds = new Set(config.npcs.map((entry) => entry.id));
+    const triggerTargetIds = new Set<string>([
+        ...config.triggerPlatforms.map((entry) => entry.id),
+        ...config.triggerVolumes.map((entry) => entry.id)
+    ]);
+    const usedBindingIds = new Set<string>();
+
+    return asArray(raw)
+        .map((entry, index) => {
+            const item = asObject(entry);
+            if (!item) {
+                return null;
+            }
+            const targetType = asLogicBindingTargetType(item.targetType);
+            const slot = asOptionalString(item.slot);
+            const scriptId = asOptionalString(item.scriptId);
+            if (!targetType || !slot || !scriptId || !scriptIds.has(scriptId)) {
+                return null;
+            }
+
+            const targetId = asOptionalString(item.targetId);
+            if (targetType === 'object' && (!targetId || !worldObjectIds.has(targetId))) {
+                return null;
+            }
+            if (targetType === 'npc' && (!targetId || !npcIds.has(targetId))) {
+                return null;
+            }
+            if (targetType === 'trigger' && (!targetId || !triggerTargetIds.has(targetId))) {
+                return null;
+            }
+            if (targetType === 'cutscene' && (!targetId || !isTestCutsceneRef(targetId))) {
+                return null;
+            }
+
+            const bindingId = ensureUniqueId(
+                asString(item.id, `logic_binding_${index + 1}`),
+                usedBindingIds,
+                `logic_binding_${index + 1}`
+            );
+            return {
+                id: bindingId,
+                targetType,
+                targetId: targetType === 'world' ? targetId : targetId ?? undefined,
+                slot,
+                scriptId,
+                enabled: asBoolean(item.enabled, true)
+            } satisfies TestWorldLogicBindingConfig;
+        })
+        .filter((entry): entry is TestWorldLogicBindingConfig => entry !== null);
+};
+
+const normalizeTestWorldLogicConfig = (
+    rawValue: unknown,
+    fallback: TestWorldLogicConfig | undefined,
+    preserveMissingFields: boolean,
+    config: TestWorldConfig
+): TestWorldLogicConfig => {
+    const source = rawValue === undefined
+        ? (preserveMissingFields ? fallback : undefined)
+        : rawValue;
+    const raw = asObject(source);
+    if (!raw) {
+        return {
+            scripts: [],
+            bindings: []
+        };
+    }
+
+    const scripts = normalizeTestWorldLogicScripts(raw.scripts);
+    const bindings = normalizeTestWorldLogicBindings(raw.bindings, scripts, config);
+    return {
+        scripts,
+        bindings
+    };
 };
 
 const normalizePlayerSpawn = (raw: Record<string, unknown> | null): TestWorldPlayerSpawnConfig => {
@@ -1569,20 +1786,7 @@ const fixDanglingTriggerCommandTargets = (config: TestWorldConfig): void => {
         if (!rules || rules.length <= 0) {
             return undefined;
         }
-        const worldObjectIds = new Set<string>([
-            ...config.surfaces.map((entry) => entry.id),
-            ...config.hazards.map((entry) => entry.id),
-            ...config.checkpoints.map((entry) => entry.id),
-            ...config.movingPlatforms.map((entry) => entry.id),
-            ...config.triggerPlatforms.map((entry) => entry.id),
-            ...config.triggerVolumes.map((entry) => entry.id),
-            ...config.dragBoxes.map((entry) => entry.id),
-            ...config.windZones.map((entry) => entry.id),
-            ...config.triangleFlightBreakWalls.map((entry) => entry.id),
-            ...config.trianglePickups.map((entry) => entry.id),
-            ...(config.finish ? [config.finish.id] : []),
-            'player'
-        ]);
+        const worldObjectIds = collectWorldObjectIds(config, true);
         const normalizedRules = rules
             .map((rule) => {
                 if (!rule.id || !rule.when || !Array.isArray(rule.actions) || rule.actions.length <= 0) {
@@ -1658,6 +1862,7 @@ export interface ParseTestWorldConfigResult {
 export interface NormalizeTestWorldConfigOptions {
     fallbackConfig?: TestWorldConfig;
     preserveMissingBackgroundObjectFields?: boolean;
+    preserveMissingLogicFields?: boolean;
 }
 
 export const normalizeTestWorldConfig = (
@@ -1666,6 +1871,7 @@ export const normalizeTestWorldConfig = (
 ): TestWorldConfig => {
     const defaults = cloneTestWorldConfig(options?.fallbackConfig ?? TEST_WORLD_CONFIG);
     const preserveMissingBackgroundObjectFields = options?.preserveMissingBackgroundObjectFields ?? true;
+    const preserveMissingLogicFields = options?.preserveMissingLogicFields ?? true;
     const root = asObject(input);
     const usedIds = new Set<string>();
     const normalized: TestWorldConfig = {
@@ -1678,6 +1884,10 @@ export const normalizeTestWorldConfig = (
         ),
         worldFlags: normalizeWorldFlags(asObject(root?.worldFlags), defaults.worldFlags),
         worldLogicRules: normalizeTestWorldLogicRules(root?.worldLogicRules, defaults.worldLogicRules),
+        logic: {
+            scripts: [],
+            bindings: []
+        },
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
         npcs: normalizeNpcInstances(root?.npcs, defaults.npcs, usedIds),
         surfaces: normalizeArray(root?.surfaces, defaults.surfaces, normalizeSurface, usedIds, (entry) => entry.id),
@@ -1703,6 +1913,12 @@ export const normalizeTestWorldConfig = (
                 ? root.nextLevelId.trim()
                 : defaults.nextLevelId
     };
+    normalized.logic = normalizeTestWorldLogicConfig(
+        root?.logic,
+        defaults.logic,
+        preserveMissingLogicFields,
+        normalized
+    );
     fixDanglingDragBoxTargets(normalized);
     fixDanglingTriggerCommandTargets(normalized);
     return normalized;
@@ -1745,6 +1961,10 @@ export const createMinimalTestWorldConfig = (
         },
         background: null,
         worldLogicRules: [],
+        logic: {
+            scripts: [],
+            bindings: []
+        },
         playerSpawn: {
             x: 128,
             y: 128,
