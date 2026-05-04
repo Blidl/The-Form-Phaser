@@ -42,6 +42,7 @@ type EditableVisualTextField = (typeof EDITABLE_VISUAL_TEXT_FIELDS)[number];
 const EDITABLE_VISUAL_COLOR_FIELDS = ['fillColor', 'strokeColor'] as const;
 type EditableVisualColorField = (typeof EDITABLE_VISUAL_COLOR_FIELDS)[number];
 const HEX_COLOR_LIKE_PATTERN = /^#?([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const TRANSPARENT_COLOR_VALUE = 'transparent';
 const DEBUG_OBJECT_BRIDGE = false;
 const KNOWN_RUNTIME_OBJECT_TYPES = new Set<string>([
     'platform_default',
@@ -181,6 +182,28 @@ export class ObjectsEditorMode implements EditorMode {
                 this.selectedTypeId = null;
                 this.draggingObjectId = null;
                 this.syncSelectionOutline();
+                const isInActiveCategory = created.settings.category === this.activeCatalogCategory;
+                const isDisplayed = isInActiveCategory && this.matchesSearch(created, this.searchValue);
+                objectDiag('[ObjectCreate:postSelect]', {
+                    objectId: created.id,
+                    selectedObjectId: this.selectedObjectId,
+                    foundInServiceList: this.getActiveObjects().some((item) => item.id === created.id),
+                    foundInProjectStore: !!this.projectStore.getObject(this.projectStore.getActiveLevel().id, created.id),
+                    hasRuntimeLink: this.legacyObjectAdapter?.hasRuntimeLink(created.id) ?? false,
+                    hasSelectableHitTestBounds: Number.isFinite(created.bounds.width)
+                        && Number.isFinite(created.bounds.height)
+                        && created.bounds.width > 0
+                        && created.bounds.height > 0,
+                    boundsUsedForHitTest: {
+                        x: created.bounds.x,
+                        y: created.bounds.y,
+                        width: created.bounds.width,
+                        height: created.bounds.height,
+                        rotation: created.bounds.rotation
+                    },
+                    activeCategory: this.activeCatalogCategory,
+                    displayedInObjectsList: isDisplayed
+                });
             }
             this.onUiChanged();
             return;
@@ -215,16 +238,17 @@ export class ObjectsEditorMode implements EditorMode {
             this.onUiChanged();
             return;
         }
-        objectDiag('[ObjectSelect:mouse]', {
-            pointerX: null,
-            pointerY: null,
-            worldX: event.worldX,
-            worldY: event.worldY,
-            hitObjectId: null,
-            hitSource: 'none',
-            selectedObjectId: null,
-            hasRuntimeLink: false
-        });
+            objectDiag('[ObjectSelect:mouse]', {
+                pointerX: null,
+                pointerY: null,
+                worldX: event.worldX,
+                worldY: event.worldY,
+                hitObjectId: null,
+                hitSource: 'none',
+                selectedObjectId: null,
+                hasRuntimeLink: false,
+                nearestObjectsByBoundsDistance: this.buildNearestObjectsForHitTest(event.worldX, event.worldY)
+            });
 
         this.selectedObjectId = null;
         this.draggingObjectId = null;
@@ -988,6 +1012,23 @@ export class ObjectsEditorMode implements EditorMode {
             this.onUiChanged();
         });
 
+        const noneButton = document.createElement('button');
+        noneButton.type = 'button';
+        noneButton.textContent = 'None';
+        noneButton.style.padding = '3px 6px';
+        noneButton.style.border = '1px solid #5f5f5f';
+        noneButton.style.background = '#d9d9d9';
+        noneButton.addEventListener('click', () => {
+            const committed = this.commitSelectedObjectBasicVisualPatch({
+                [field]: TRANSPARENT_COLOR_VALUE
+            } as UpdateObjectVisualPatch);
+            input.value = this.getSelectedVisualColorFieldValue(field);
+            swatch.value = this.normalizeHexColorForPicker(input.value);
+            if (committed) {
+                this.onUiChanged();
+            }
+        });
+
         const commitField = (): void => {
             const committed = this.commitSelectedObjectVisualColorField(field, input.value);
             input.value = this.getSelectedVisualColorFieldValue(field);
@@ -1017,6 +1058,7 @@ export class ObjectsEditorMode implements EditorMode {
         input.addEventListener('blur', commitField);
         controlsRow.appendChild(swatch);
         controlsRow.appendChild(input);
+        controlsRow.appendChild(noneButton);
         controlsRow.appendChild(pickButton);
         fieldWrap.appendChild(fieldLabel);
         fieldWrap.appendChild(controlsRow);
@@ -1180,7 +1222,7 @@ export class ObjectsEditorMode implements EditorMode {
     }
 
     private commitSelectedObjectVisualColorField(field: EditableVisualColorField, rawValue: string): boolean {
-        const normalizedColor = this.normalizeHexLikeColor(rawValue);
+        const normalizedColor = this.normalizeVisualColorValue(rawValue);
         if (!normalizedColor) {
             return false;
         }
@@ -1326,6 +1368,14 @@ export class ObjectsEditorMode implements EditorMode {
         return `#${rgbHex.toLowerCase()}`;
     }
 
+    private normalizeVisualColorValue(rawValue: string): string | null {
+        const trimmed = rawValue.trim().toLowerCase();
+        if (trimmed === TRANSPARENT_COLOR_VALUE) {
+            return TRANSPARENT_COLOR_VALUE;
+        }
+        return this.normalizeHexLikeColor(rawValue);
+    }
+
     private parseHexColorToRgbInt(color: string): number | null {
         const normalized = this.normalizeHexLikeColor(color);
         if (!normalized) {
@@ -1435,10 +1485,16 @@ export class ObjectsEditorMode implements EditorMode {
             }
             const fillColor = this.parseHexColorToRgbInt(objectData.visual.fillColor) ?? 0x77aaff;
             const strokeColor = this.parseHexColorToRgbInt(objectData.visual.strokeColor) ?? 0x222222;
+            const hasTransparentFill = objectData.visual.fillColor.trim().toLowerCase() === TRANSPARENT_COLOR_VALUE;
+            const hasTransparentStroke = objectData.visual.strokeColor.trim().toLowerCase() === TRANSPARENT_COLOR_VALUE;
             view.setPosition(objectData.bounds.x, objectData.bounds.y);
             view.setSize(objectData.bounds.width, objectData.bounds.height);
-            view.setFillStyle(fillColor, objectData.visual.alpha);
-            view.setStrokeStyle(1, strokeColor, Math.max(0.15, objectData.visual.alpha));
+            view.setFillStyle(fillColor, hasTransparentFill ? 0 : objectData.visual.alpha);
+            view.setStrokeStyle(
+                hasTransparentStroke ? 0 : 1,
+                strokeColor,
+                hasTransparentStroke ? 0 : Math.max(0.15, objectData.visual.alpha)
+            );
             view.setRotation(Phaser.Math.DegToRad(objectData.bounds.rotation));
         });
     }
@@ -1466,17 +1522,15 @@ export class ObjectsEditorMode implements EditorMode {
     }
 
     private findObjectIdAtPoint(worldX: number, worldY: number): string | null {
+        this.refreshLiveObjects('hit-test');
+        const objects = this.getActiveObjects();
         const bridgedObjectId = this.legacyObjectAdapter?.findObjectIdAtPoint(worldX, worldY) ?? null;
         if (bridgedObjectId) {
             return bridgedObjectId;
         }
 
-        const objects = this.getActiveObjects();
         for (let i = objects.length - 1; i >= 0; i -= 1) {
             const object = objects[i];
-            if (this.isKnownRuntimeType(object.settings.type)) {
-                continue;
-            }
             const withinX = worldX >= object.bounds.x && worldX <= object.bounds.x + object.bounds.width;
             const withinY = worldY >= object.bounds.y && worldY <= object.bounds.y + object.bounds.height;
             if (withinX && withinY) {
@@ -1591,6 +1645,38 @@ export class ObjectsEditorMode implements EditorMode {
         return objectData.name.toLowerCase().includes(query)
             || objectData.id.toLowerCase().includes(query)
             || objectData.settings.type.toLowerCase().includes(query);
+    }
+
+    private buildNearestObjectsForHitTest(
+        worldX: number,
+        worldY: number,
+        limit = 5
+    ): Array<{
+        id: string;
+        type: string;
+        category: EditorObjectCategory;
+        hasRuntimeLink: boolean;
+        distanceToBounds: number;
+        bounds: { x: number; y: number; width: number; height: number; rotation: number };
+    }> {
+        return this.getActiveObjects()
+            .map((objectData) => {
+                const { x, y, width, height, rotation } = objectData.bounds;
+                const clampedX = Phaser.Math.Clamp(worldX, x, x + width);
+                const clampedY = Phaser.Math.Clamp(worldY, y, y + height);
+                const dx = worldX - clampedX;
+                const dy = worldY - clampedY;
+                return {
+                    id: objectData.id,
+                    type: objectData.settings.type,
+                    category: objectData.settings.category,
+                    hasRuntimeLink: this.legacyObjectAdapter?.hasRuntimeLink(objectData.id) ?? false,
+                    distanceToBounds: Math.sqrt((dx * dx) + (dy * dy)),
+                    bounds: { x, y, width, height, rotation }
+                };
+            })
+            .sort((left, right) => left.distanceToBounds - right.distanceToBounds)
+            .slice(0, Math.max(1, limit));
     }
 
     private makeSectionTitle(text: string): HTMLDivElement {

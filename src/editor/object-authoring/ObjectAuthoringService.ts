@@ -52,6 +52,7 @@ export interface UpdateObjectVisualResult {
 export type UpdateObjectVisualPatch = Partial<Pick<EditorObjectVisualData, 'fillColor' | 'strokeColor' | 'alpha' | 'layer'>>;
 
 const HEX_COLOR_PATTERN = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i;
+const TRANSPARENT_COLOR_VALUE = 'transparent';
 
 export class ObjectAuthoringService {
     private readonly projectStore: ProjectStore;
@@ -362,9 +363,9 @@ export class ObjectAuthoringService {
 
             const nextVisual: UpdateObjectVisualPatch = {};
             if (visualPatch.fillColor !== undefined) {
-                const normalized = this.normalizeHexColor(visualPatch.fillColor);
+                const normalized = this.normalizeVisualColor(visualPatch.fillColor);
                 if (!normalized) {
-                    result = { success: false, reason: 'Invalid fillColor. Expected hex color.' };
+                    result = { success: false, reason: 'Invalid fillColor. Expected hex color or "transparent".' };
                     return result;
                 }
                 if (normalized !== current.visual.fillColor) {
@@ -372,9 +373,9 @@ export class ObjectAuthoringService {
                 }
             }
             if (visualPatch.strokeColor !== undefined) {
-                const normalized = this.normalizeHexColor(visualPatch.strokeColor);
+                const normalized = this.normalizeVisualColor(visualPatch.strokeColor);
                 if (!normalized) {
-                    result = { success: false, reason: 'Invalid strokeColor. Expected hex color.' };
+                    result = { success: false, reason: 'Invalid strokeColor. Expected hex color or "transparent".' };
                     return result;
                 }
                 if (normalized !== current.visual.strokeColor) {
@@ -519,6 +520,14 @@ export class ObjectAuthoringService {
             ? `${normalized[0]}${normalized[0]}${normalized[1]}${normalized[1]}${normalized[2]}${normalized[2]}`
             : normalized;
         return `#${rgbHex.toLowerCase()}`;
+    }
+
+    private normalizeVisualColor(rawValue: string): string | null {
+        const trimmed = rawValue.trim().toLowerCase();
+        if (trimmed === TRANSPARENT_COLOR_VALUE) {
+            return TRANSPARENT_COLOR_VALUE;
+        }
+        return this.normalizeHexColor(rawValue);
     }
 
     private parseHexColorToRgbInt(color: string): number | null {
