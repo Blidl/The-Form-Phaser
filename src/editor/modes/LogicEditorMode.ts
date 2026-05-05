@@ -83,6 +83,9 @@ export class LogicEditorMode implements EditorMode {
     private createBindingError: string | null = null;
     private reloadScriptsStatus: { success: boolean; message: string } | null = null;
     private logicScriptRegistryVersion = 0;
+    private hasRequestedInitialExternalScriptReload = false;
+    private hasCompletedInitialExternalScriptReloadAttempt = false;
+    private isExternalScriptReloadInProgress = false;
     private externalScriptPreviewResult: LogicScriptExecutionResult | null = null;
     private selectedBindingId: string | null = null;
     private selectedBindingDraft: BindingMetadataDraft | null = null;
@@ -113,6 +116,7 @@ export class LogicEditorMode implements EditorMode {
     public enter(): void {
         this.lastSnapshotSignature = this.readSnapshotSignature();
         this.logicScriptRegistryVersion = getLogicScriptRegistryVersion();
+        this.requestInitialExternalScriptReload();
     }
 
     public update(): void {
@@ -156,6 +160,8 @@ export class LogicEditorMode implements EditorMode {
             this.syncSelectedExternalScript(externalAssets);
             const referencedScriptRefIds = new Set(snapshot.scriptRefs.map((entry) => entry.id));
             const diagnostics = this.collectRegistryDiagnostics();
+            const isInitialExternalScriptsLoading = this.isExternalScriptReloadInProgress
+                && !this.hasCompletedInitialExternalScriptReloadAttempt;
 
             renderExternalScriptsSection(container, {
                 dom: this.dom,
@@ -163,6 +169,7 @@ export class LogicEditorMode implements EditorMode {
                 externalAssets,
                 referencedScriptRefIds,
                 diagnostics,
+                isInitialExternalScriptsLoading,
                 selectedExternalScriptId: this.selectedExternalScriptId,
                 reloadScriptsStatus: this.reloadScriptsStatus,
                 addScriptRefError: this.addScriptRefError,
@@ -246,25 +253,7 @@ export class LogicEditorMode implements EditorMode {
                 },
                 onReloadScripts: () => {
                     this.clearExternalScriptPreviewResult();
-                    this.onUiChanged();
-                    void reloadExternalLogicScripts()
-                        .then((result) => {
-                            this.logicScriptRegistryVersion = getLogicScriptRegistryVersion();
-                            this.reloadScriptsStatus = {
-                                success: result.success,
-                                message: result.message
-                            };
-                            this.onUiChanged();
-                        })
-                        .catch((error) => {
-                            this.reloadScriptsStatus = {
-                                success: false,
-                                message: error instanceof Error
-                                    ? error.message
-                                    : 'Failed to reload external scripts.'
-                            };
-                            this.onUiChanged();
-                        });
+                    this.triggerExternalScriptsReload(false);
                 }
             });
 
@@ -561,13 +550,72 @@ export class LogicEditorMode implements EditorMode {
         if (!runtimeConfig) {
             return [];
         }
-        return collectTestWorldLogicDiagnosticsWithRegistry(runtimeConfig).map((entry) => ({
+        const diagnostics = collectTestWorldLogicDiagnosticsWithRegistry(runtimeConfig).map((entry) => ({
             code: entry.code,
             message: entry.message,
             scriptId: entry.scriptId,
             commandId: entry.commandId,
             path: entry.path
         }));
+        if (
+            this.hasRequestedInitialExternalScriptReload
+            && !this.hasCompletedInitialExternalScriptReloadAttempt
+        ) {
+            return diagnostics.filter((entry) => entry.code !== 'missing_logic_script_asset');
+        }
+        return diagnostics;
+    }
+
+    private requestInitialExternalScriptReload(): void {
+        if (this.hasRequestedInitialExternalScriptReload) {
+            return;
+        }
+        this.hasRequestedInitialExternalScriptReload = true;
+        this.triggerExternalScriptsReload(true);
+    }
+
+    private triggerExternalScriptsReload(isInitialLoad: boolean): void {
+        if (this.isExternalScriptReloadInProgress) {
+            if (!isInitialLoad) {
+                this.reloadScriptsStatus = {
+                    success: false,
+                    message: 'External scripts reload already in progress.'
+                };
+                this.onUiChanged();
+            }
+            return;
+        }
+
+        this.isExternalScriptReloadInProgress = true;
+        this.reloadScriptsStatus = {
+            success: true,
+            message: 'Loading external scripts...'
+        };
+        this.onUiChanged();
+
+        void reloadExternalLogicScripts()
+            .then((result) => {
+                this.logicScriptRegistryVersion = getLogicScriptRegistryVersion();
+                this.reloadScriptsStatus = {
+                    success: result.success,
+                    message: result.message
+                };
+            })
+            .catch((error) => {
+                this.reloadScriptsStatus = {
+                    success: false,
+                    message: error instanceof Error
+                        ? error.message
+                        : 'Failed to reload external scripts.'
+                };
+            })
+            .finally(() => {
+                this.isExternalScriptReloadInProgress = false;
+                if (isInitialLoad) {
+                    this.hasCompletedInitialExternalScriptReloadAttempt = true;
+                }
+                this.onUiChanged();
+            });
     }
 
     private getRuntimeWorldOnStartLogicTrace(): LogicWorldOnStartTrace | null {

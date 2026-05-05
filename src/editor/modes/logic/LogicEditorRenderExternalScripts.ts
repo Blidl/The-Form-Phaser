@@ -17,6 +17,7 @@ export interface RenderExternalScriptsContext {
         commandId?: string;
         path?: string;
     }[];
+    isInitialExternalScriptsLoading: boolean;
     selectedExternalScriptId: string | null;
     reloadScriptsStatus: {
         success: boolean;
@@ -97,6 +98,7 @@ export function renderExternalScriptsSection(
         externalAssets,
         referencedScriptRefIds,
         diagnostics,
+        isInitialExternalScriptsLoading,
         selectedExternalScriptId,
         reloadScriptsStatus,
         addScriptRefError,
@@ -130,7 +132,15 @@ export function renderExternalScriptsSection(
     });
     summaryRow.appendChild(reloadScriptsButton);
     container.appendChild(summaryRow);
-    if (reloadScriptsStatus) {
+    if (isInitialExternalScriptsLoading) {
+        const loadingLine = dom.makeInfoLine('Loading external scripts...');
+        loadingLine.style.marginBottom = '4px';
+        container.appendChild(loadingLine);
+    }
+    if (
+        reloadScriptsStatus
+        && (!isInitialExternalScriptsLoading || reloadScriptsStatus.message !== 'Loading external scripts...')
+    ) {
         const reloadStatusLine = dom.makeInfoLine(reloadScriptsStatus.message);
         reloadStatusLine.style.color = reloadScriptsStatus.success ? '#146614' : '#b00020';
         reloadStatusLine.style.marginBottom = '4px';
