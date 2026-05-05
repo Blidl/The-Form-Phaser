@@ -13,6 +13,25 @@ import {
     collectTestWorldLogicDiagnosticsWithRegistry,
     getAllLogicScriptAssets
 } from '../../game/world/runtime/logic_script_registry';
+import {
+    bindEditorInputKeyboardGuards,
+    makeInfoLine,
+    makeSectionTitle,
+    makeSpacer,
+    type LogicEditorDomHelpers
+} from './logic/LogicEditorDom';
+import {
+    renderExternalScriptsSection
+} from './logic/LogicEditorRenderExternalScripts';
+import {
+    renderEmbeddedScriptsSection
+} from './logic/LogicEditorRenderEmbeddedScripts';
+import {
+    renderScriptDetailsSection
+} from './logic/LogicEditorRenderDetails';
+import {
+    renderBindingsSection
+} from './logic/LogicEditorRenderBindings';
 
 interface LogicEditorModeOptions {
     legacyObjectAdapter: LegacyObjectAdapter | null;
@@ -37,6 +56,12 @@ export class LogicEditorMode implements EditorMode {
     private readonly logicAuthoringService: LogicAuthoringService;
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
     private readonly onUiChanged: () => void;
+    private readonly dom: LogicEditorDomHelpers = {
+        makeSectionTitle,
+        makeInfoLine,
+        makeSpacer,
+        bindEditorInputKeyboardGuards
+    };
     private lastSnapshotSignature: string | null = null;
     private isCreateScriptFormOpen = false;
     private createScriptError: string | null = null;
@@ -92,333 +117,132 @@ export class LogicEditorMode implements EditorMode {
         const selectedScript = this.syncSelectedScript(snapshot);
 
         panel.setCustomContent('Logic', (container) => {
-            container.appendChild(this.makeInfoLine('Runtime-backed authoring overview'));
-            container.appendChild(this.makeSpacer(8));
+            container.appendChild(this.dom.makeInfoLine('Runtime-backed authoring overview'));
+            container.appendChild(this.dom.makeSpacer(8));
 
             if (!snapshot) {
-                container.appendChild(this.makeInfoLine('Runtime config unavailable.'));
+                container.appendChild(this.dom.makeInfoLine('Runtime config unavailable.'));
                 return;
             }
 
-            container.appendChild(this.makeSectionTitle('Summary'));
-            container.appendChild(this.makeInfoLine(`Scripts: ${snapshot.scripts.length}`));
-            container.appendChild(this.makeInfoLine(`Script refs: ${snapshot.scriptRefs.length}`));
-            container.appendChild(this.makeInfoLine(`Bindings: ${snapshot.bindings.length}`));
-            container.appendChild(this.makeSpacer(8));
+            container.appendChild(this.dom.makeSectionTitle('Summary'));
+            container.appendChild(this.dom.makeInfoLine(`Scripts: ${snapshot.scripts.length}`));
+            container.appendChild(this.dom.makeInfoLine(`Script refs: ${snapshot.scriptRefs.length}`));
+            container.appendChild(this.dom.makeInfoLine(`Bindings: ${snapshot.bindings.length}`));
+            container.appendChild(this.dom.makeSpacer(8));
 
             const externalAssets = getAllLogicScriptAssets();
             this.syncSelectedExternalScript(externalAssets);
-            const levelScriptRefs = snapshot.scriptRefs;
-            const referencedScriptRefIds = new Set(levelScriptRefs.map((entry) => entry.id));
+            const referencedScriptRefIds = new Set(snapshot.scriptRefs.map((entry) => entry.id));
             const diagnostics = this.collectRegistryDiagnostics();
-            container.appendChild(this.makeSectionTitle('Level Script Refs'));
-            if (levelScriptRefs.length <= 0) {
-                container.appendChild(this.makeInfoLine('No external script refs added to this level yet.'));
-            } else {
-                container.appendChild(this.makeInfoLine(`Count: ${levelScriptRefs.length}`));
-                levelScriptRefs.forEach((scriptRef) => {
-                    const displayName = scriptRef.displayName ?? '-';
-                    const path = scriptRef.path ?? '-';
-                    const scriptRefBox = document.createElement('div');
-                    scriptRefBox.style.border = '1px solid #8b8b8b';
-                    scriptRefBox.style.background = '#d9d9d9';
-                    scriptRefBox.style.padding = '6px';
-                    scriptRefBox.style.marginBottom = '6px';
-                    scriptRefBox.style.wordBreak = 'break-word';
-                    scriptRefBox.appendChild(this.makeInfoLine(`id: ${scriptRef.id}`));
-                    scriptRefBox.appendChild(this.makeInfoLine(`displayName: ${displayName}`));
-                    scriptRefBox.appendChild(this.makeInfoLine(`path: ${path}`));
 
-                    const addBindingButton = document.createElement('button');
-                    addBindingButton.type = 'button';
-                    addBindingButton.textContent = 'Add World Binding';
-                    addBindingButton.style.marginTop = '4px';
-                    addBindingButton.addEventListener('click', () => {
-                        this.createBindingRefId = scriptRef.id;
+            renderExternalScriptsSection(container, {
+                dom: this.dom,
+                levelScriptRefs: snapshot.scriptRefs,
+                externalAssets,
+                referencedScriptRefIds,
+                diagnostics,
+                selectedExternalScriptId: this.selectedExternalScriptId,
+                addScriptRefError: this.addScriptRefError,
+                createBindingRefId: this.createBindingRefId,
+                createBindingSlotDraft: this.createBindingSlotDraft,
+                createBindingEnabledDraft: this.createBindingEnabledDraft,
+                createBindingError: this.createBindingError,
+                onStartCreateBindingForRef: (scriptRefId) => {
+                    this.createBindingRefId = scriptRefId;
+                    this.createBindingSlotDraft = 'onStart';
+                    this.createBindingEnabledDraft = true;
+                    this.createBindingError = null;
+                    this.onUiChanged();
+                },
+                onCreateBindingSlotDraftChanged: (value) => {
+                    this.createBindingSlotDraft = value;
+                },
+                onCreateBindingEnabledDraftChanged: (enabled) => {
+                    this.createBindingEnabledDraft = enabled;
+                },
+                onCreateBindingForRef: (scriptRefId) => {
+                    try {
+                        const result = this.logicAuthoringService.createBinding({
+                            targetType: 'world',
+                            slot: this.createBindingSlotDraft,
+                            scriptId: scriptRefId,
+                            enabled: this.createBindingEnabledDraft
+                        });
+                        if (!result.success) {
+                            this.createBindingError = result.reason ?? 'Failed to create binding.';
+                            this.onUiChanged();
+                            return;
+                        }
+                        this.createBindingRefId = null;
                         this.createBindingSlotDraft = 'onStart';
                         this.createBindingEnabledDraft = true;
                         this.createBindingError = null;
                         this.onUiChanged();
-                    });
-                    scriptRefBox.appendChild(addBindingButton);
-
-                    if (this.createBindingRefId === scriptRef.id) {
-                        const bindingForm = document.createElement('div');
-                        bindingForm.style.border = '1px solid #8b8b8b';
-                        bindingForm.style.background = '#ececec';
-                        bindingForm.style.padding = '6px';
-                        bindingForm.style.marginTop = '6px';
-
-                        const slotLabel = this.makeInfoLine('Slot');
-                        slotLabel.style.marginBottom = '2px';
-                        bindingForm.appendChild(slotLabel);
-
-                        const slotInput = document.createElement('input');
-                        slotInput.type = 'text';
-                        slotInput.value = this.createBindingSlotDraft;
-                        slotInput.style.display = 'block';
-                        slotInput.style.width = '100%';
-                        slotInput.style.boxSizing = 'border-box';
-                        slotInput.style.marginBottom = '6px';
-                        this.bindEditorInputKeyboardGuards(slotInput);
-                        slotInput.addEventListener('input', () => {
-                            this.createBindingSlotDraft = slotInput.value;
-                        });
-                        bindingForm.appendChild(slotInput);
-
-                        const enabledRow = document.createElement('label');
-                        enabledRow.style.display = 'flex';
-                        enabledRow.style.alignItems = 'center';
-                        enabledRow.style.gap = '6px';
-                        enabledRow.style.marginBottom = '6px';
-
-                        const enabledCheckbox = document.createElement('input');
-                        enabledCheckbox.type = 'checkbox';
-                        enabledCheckbox.checked = this.createBindingEnabledDraft;
-                        this.bindEditorInputKeyboardGuards(enabledCheckbox);
-                        enabledCheckbox.addEventListener('change', () => {
-                            this.createBindingEnabledDraft = enabledCheckbox.checked;
-                        });
-                        enabledRow.appendChild(enabledCheckbox);
-
-                        const enabledText = document.createElement('span');
-                        enabledText.textContent = 'Enabled';
-                        enabledRow.appendChild(enabledText);
-                        bindingForm.appendChild(enabledRow);
-
-                        if (this.createBindingError) {
-                            const errorLine = this.makeInfoLine(this.createBindingError);
-                            errorLine.style.color = '#b00020';
-                            errorLine.style.marginBottom = '6px';
-                            bindingForm.appendChild(errorLine);
-                        }
-
-                        const actionRow = document.createElement('div');
-                        actionRow.style.display = 'flex';
-                        actionRow.style.gap = '6px';
-
-                        const createBindingButton = document.createElement('button');
-                        createBindingButton.type = 'button';
-                        createBindingButton.textContent = 'Create Binding';
-                        createBindingButton.addEventListener('click', () => {
-                            try {
-                                const result = this.logicAuthoringService.createBinding({
-                                    targetType: 'world',
-                                    slot: this.createBindingSlotDraft,
-                                    scriptId: scriptRef.id,
-                                    enabled: this.createBindingEnabledDraft
-                                });
-                                if (!result.success) {
-                                    this.createBindingError = result.reason ?? 'Failed to create binding.';
-                                    this.onUiChanged();
-                                    return;
-                                }
-                                this.createBindingRefId = null;
-                                this.createBindingSlotDraft = 'onStart';
-                                this.createBindingEnabledDraft = true;
-                                this.createBindingError = null;
-                                this.onUiChanged();
-                            } catch (error) {
-                                this.createBindingError = error instanceof Error
-                                    ? error.message
-                                    : 'Failed to create binding.';
-                                this.onUiChanged();
-                            }
-                        });
-                        actionRow.appendChild(createBindingButton);
-
-                        const cancelBindingButton = document.createElement('button');
-                        cancelBindingButton.type = 'button';
-                        cancelBindingButton.textContent = 'Cancel';
-                        cancelBindingButton.addEventListener('click', () => {
-                            this.createBindingRefId = null;
-                            this.createBindingSlotDraft = 'onStart';
-                            this.createBindingEnabledDraft = true;
-                            this.createBindingError = null;
-                            this.onUiChanged();
-                        });
-                        actionRow.appendChild(cancelBindingButton);
-
-                        bindingForm.appendChild(actionRow);
-                        scriptRefBox.appendChild(bindingForm);
+                    } catch (error) {
+                        this.createBindingError = error instanceof Error
+                            ? error.message
+                            : 'Failed to create binding.';
+                        this.onUiChanged();
                     }
-
-                    container.appendChild(scriptRefBox);
-                });
-            }
-            container.appendChild(this.makeSpacer(8));
-
-            container.appendChild(this.makeSectionTitle('External Script Assets'));
-            container.appendChild(this.makeInfoLine('External scripts are authored in IDE/source files. This editor only references them.'));
-            container.appendChild(this.makeInfoLine(`External assets: ${externalAssets.length}`));
-            container.appendChild(this.makeSpacer(4));
-
-            if (this.addScriptRefError) {
-                const errorLine = this.makeInfoLine(this.addScriptRefError);
-                errorLine.style.color = '#b00020';
-                errorLine.style.marginBottom = '6px';
-                container.appendChild(errorLine);
-            }
-
-            if (diagnostics.length > 0) {
-                const warningBox = document.createElement('div');
-                warningBox.style.border = '1px solid #c98a00';
-                warningBox.style.background = '#fff4d1';
-                warningBox.style.padding = '6px';
-                warningBox.style.marginBottom = '6px';
-                warningBox.style.wordBreak = 'break-word';
-                warningBox.appendChild(this.makeInfoLine(`Diagnostics: ${diagnostics.length}`));
-                diagnostics.forEach((diagnostic) => {
-                    warningBox.appendChild(this.makeInfoLine(`[${diagnostic.code}] ${diagnostic.message}`));
-                });
-                container.appendChild(warningBox);
-            }
-
-            if (externalAssets.length <= 0) {
-                container.appendChild(this.makeInfoLine('No external script assets found.'));
-                container.appendChild(this.makeInfoLine('Add scripts in src/game/world/runtime/data/logic_scripts.json and reload.'));
-            } else {
-                externalAssets.forEach((script) => {
-                    const scriptBox = document.createElement('div');
-                    const isSelectedExternalScript = script.id === this.selectedExternalScriptId;
-                    scriptBox.style.border = isSelectedExternalScript ? '1px solid #53759b' : '1px solid #8b8b8b';
-                    scriptBox.style.background = isSelectedExternalScript ? '#c9dbf1' : '#d9d9d9';
-                    scriptBox.style.padding = '6px';
-                    scriptBox.style.marginBottom = '6px';
-                    scriptBox.style.wordBreak = 'break-word';
-                    scriptBox.style.cursor = 'pointer';
-                    scriptBox.addEventListener('click', () => {
-                        if (this.selectedExternalScriptId === script.id) {
+                },
+                onCancelCreateBindingForRef: () => {
+                    this.createBindingRefId = null;
+                    this.createBindingSlotDraft = 'onStart';
+                    this.createBindingEnabledDraft = true;
+                    this.createBindingError = null;
+                    this.onUiChanged();
+                },
+                onSelectExternalScript: (scriptId) => {
+                    if (this.selectedExternalScriptId === scriptId) {
+                        return;
+                    }
+                    this.selectedExternalScriptId = scriptId;
+                    this.onUiChanged();
+                },
+                onAddScriptRefToLevel: (script) => {
+                    try {
+                        const result = this.logicAuthoringService.addScriptRef({
+                            id: script.id,
+                            path: 'logic_scripts.json',
+                            displayName: script.name
+                        });
+                        if (!result.success) {
+                            this.addScriptRefError = result.reason ?? 'Failed to add script ref to level.';
+                            this.onUiChanged();
                             return;
                         }
-                        this.selectedExternalScriptId = script.id;
+                        this.addScriptRefError = null;
                         this.onUiChanged();
-                    });
-                    const lockedMarker = script.editor?.locked ? ' [locked]' : '';
-                    scriptBox.appendChild(this.makeInfoLine(`name: ${script.name}${lockedMarker}`));
-                    scriptBox.appendChild(this.makeInfoLine(`id: ${script.id}`));
-                    scriptBox.appendChild(this.makeInfoLine(`category: ${script.category}`));
-                    scriptBox.appendChild(this.makeInfoLine(`command count: ${script.commands.length}`));
-                    if (script.editor?.locked) {
-                        scriptBox.appendChild(this.makeInfoLine('locked: true'));
+                    } catch (error) {
+                        this.addScriptRefError = error instanceof Error
+                            ? error.message
+                            : 'Failed to add script ref to level.';
+                        this.onUiChanged();
                     }
-                    const isReferenced = referencedScriptRefIds.has(script.id);
-                    if (isReferenced) {
-                        const referencedLine = this.makeInfoLine('Referenced');
-                        referencedLine.style.color = '#146614';
-                        scriptBox.appendChild(referencedLine);
-                    } else {
-                        const addRefButton = document.createElement('button');
-                        addRefButton.type = 'button';
-                        addRefButton.textContent = 'Add Ref To Level';
-                        addRefButton.style.marginTop = '4px';
-                        addRefButton.addEventListener('click', () => {
-                            try {
-                                const result = this.logicAuthoringService.addScriptRef({
-                                    id: script.id,
-                                    path: 'logic_scripts.json',
-                                    displayName: script.name
-                                });
-                                if (!result.success) {
-                                    this.addScriptRefError = result.reason ?? 'Failed to add script ref to level.';
-                                    this.onUiChanged();
-                                    return;
-                                }
-                                this.addScriptRefError = null;
-                                this.onUiChanged();
-                            } catch (error) {
-                                this.addScriptRefError = error instanceof Error
-                                    ? error.message
-                                    : 'Failed to add script ref to level.';
-                                this.onUiChanged();
-                            }
-                        });
-                        scriptBox.appendChild(addRefButton);
-                    }
-                    container.appendChild(scriptBox);
-                });
-            }
-
-            container.appendChild(this.makeSpacer(8));
-            container.appendChild(this.makeSectionTitle('Scripts'));
-            const createButton = document.createElement('button');
-            createButton.type = 'button';
-            createButton.textContent = '+ New Script';
-            createButton.style.display = 'inline-block';
-            createButton.style.border = '1px solid #5f5f5f';
-            createButton.style.background = '#d9d9d9';
-            createButton.style.color = '#202020';
-            createButton.style.padding = '4px 6px';
-            createButton.style.cursor = 'pointer';
-            createButton.style.marginBottom = '6px';
-            createButton.addEventListener('click', () => {
-                this.isCreateScriptFormOpen = true;
-                this.createScriptError = null;
-                this.onUiChanged();
+                }
             });
-            container.appendChild(createButton);
 
-            if (this.createScriptError) {
-                const errorLine = this.makeInfoLine(this.createScriptError);
-                errorLine.style.color = '#b00020';
-                errorLine.style.marginBottom = '6px';
-                container.appendChild(errorLine);
-            }
-
-            if (this.isCreateScriptFormOpen) {
-                const formBox = document.createElement('div');
-                formBox.style.border = '1px solid #8b8b8b';
-                formBox.style.background = '#d9d9d9';
-                formBox.style.padding = '6px';
-                formBox.style.marginBottom = '6px';
-
-                const nameLabel = this.makeInfoLine('Name');
-                nameLabel.style.marginBottom = '2px';
-                formBox.appendChild(nameLabel);
-
-                const nameInput = document.createElement('input');
-                nameInput.type = 'text';
-                nameInput.value = 'New Logic Script';
-                nameInput.style.display = 'block';
-                nameInput.style.width = '100%';
-                nameInput.style.boxSizing = 'border-box';
-                nameInput.style.marginBottom = '6px';
-                this.bindEditorInputKeyboardGuards(nameInput);
-                formBox.appendChild(nameInput);
-
-                const categoryLabel = this.makeInfoLine('Category');
-                categoryLabel.style.marginBottom = '2px';
-                formBox.appendChild(categoryLabel);
-
-                const categorySelect = document.createElement('select');
-                categorySelect.style.display = 'block';
-                categorySelect.style.width = '100%';
-                categorySelect.style.boxSizing = 'border-box';
-                categorySelect.style.marginBottom = '6px';
-                this.bindEditorInputKeyboardGuards(categorySelect);
-                this.scriptCategoryOptions.forEach((category) => {
-                    const option = document.createElement('option');
-                    option.value = category;
-                    option.textContent = category;
-                    if (category === 'world.rule') {
-                        option.selected = true;
-                    }
-                    categorySelect.appendChild(option);
-                });
-                formBox.appendChild(categorySelect);
-
-                const actionsRow = document.createElement('div');
-                actionsRow.style.display = 'flex';
-                actionsRow.style.gap = '6px';
-
-                const createFormButton = document.createElement('button');
-                createFormButton.type = 'button';
-                createFormButton.textContent = 'Create';
-                createFormButton.addEventListener('click', () => {
+            renderEmbeddedScriptsSection(container, {
+                dom: this.dom,
+                scripts: snapshot.scripts,
+                selectedScript,
+                selectedScriptId: this.selectedScriptId,
+                selectedScriptDraft: this.selectedScriptDraft,
+                scriptCategoryOptions: this.scriptCategoryOptions,
+                isCreateScriptFormOpen: this.isCreateScriptFormOpen,
+                createScriptError: this.createScriptError,
+                updateScriptError: this.updateScriptError,
+                onOpenCreateScriptForm: () => {
+                    this.isCreateScriptFormOpen = true;
+                    this.createScriptError = null;
+                    this.onUiChanged();
+                },
+                onCreateScript: (name, category) => {
                     try {
                         const result = this.logicAuthoringService.createScript({
-                            name: nameInput.value,
-                            category: categorySelect.value,
+                            name,
+                            category,
                             commands: [],
                             editor: { rawLines: [] }
                         });
@@ -441,215 +265,88 @@ export class LogicEditorMode implements EditorMode {
                             : 'Failed to create script.';
                         this.onUiChanged();
                     }
-                });
-                actionsRow.appendChild(createFormButton);
-
-                const cancelFormButton = document.createElement('button');
-                cancelFormButton.type = 'button';
-                cancelFormButton.textContent = 'Cancel';
-                cancelFormButton.addEventListener('click', () => {
+                },
+                onCancelCreateScriptForm: () => {
                     this.isCreateScriptFormOpen = false;
                     this.createScriptError = null;
                     this.onUiChanged();
-                });
-                actionsRow.appendChild(cancelFormButton);
-
-                formBox.appendChild(actionsRow);
-                container.appendChild(formBox);
-            }
-
-            if (snapshot.scripts.length <= 0) {
-                container.appendChild(this.makeInfoLine('No logic scripts yet.'));
-            } else {
-                snapshot.scripts.forEach((script) => {
-                    const scriptBox = document.createElement('div');
-                    scriptBox.style.border = '1px solid #8b8b8b';
-                    scriptBox.style.background = script.id === this.selectedScriptId ? '#c9dbf1' : '#d9d9d9';
-                    scriptBox.style.padding = '6px';
-                    scriptBox.style.marginBottom = '6px';
-                    scriptBox.style.wordBreak = 'break-word';
-                    scriptBox.style.cursor = 'pointer';
-                    if (script.id === this.selectedScriptId) {
-                        scriptBox.style.border = '1px solid #53759b';
+                },
+                onSelectScript: (script) => {
+                    if (this.selectedScriptId === script.id) {
+                        return;
                     }
-                    scriptBox.addEventListener('click', () => {
-                        if (this.selectedScriptId === script.id) {
+                    this.selectedScriptId = script.id;
+                    this.loadSelectedScriptDraft(script);
+                    this.updateScriptError = null;
+                    this.onUiChanged();
+                },
+                onSelectedScriptNameChanged: (value) => {
+                    if (!this.selectedScriptDraft) {
+                        return;
+                    }
+                    this.selectedScriptDraft.name = value;
+                },
+                onSelectedScriptCategoryChanged: (value) => {
+                    if (!this.selectedScriptDraft) {
+                        return;
+                    }
+                    this.selectedScriptDraft.category = value;
+                },
+                onSelectedScriptLockedChanged: (value) => {
+                    if (!this.selectedScriptDraft) {
+                        return;
+                    }
+                    this.selectedScriptDraft.locked = value;
+                },
+                onApplySelectedScriptChanges: () => {
+                    if (!this.selectedScriptId || !this.selectedScriptDraft) {
+                        return;
+                    }
+                    try {
+                        const result = this.logicAuthoringService.updateScript(this.selectedScriptId, {
+                            name: this.selectedScriptDraft.name,
+                            category: this.selectedScriptDraft.category,
+                            editor: { locked: this.selectedScriptDraft.locked }
+                        });
+                        if (!result.success) {
+                            this.updateScriptError = result.reason ?? 'Failed to update script.';
+                            this.onUiChanged();
                             return;
                         }
-                        this.selectedScriptId = script.id;
-                        this.loadSelectedScriptDraft(script);
+                        const nextScript = result.script ?? this.logicAuthoringService.getScript(this.selectedScriptId);
+                        if (nextScript) {
+                            this.selectedScriptId = nextScript.id;
+                            this.loadSelectedScriptDraft(nextScript);
+                        }
                         this.updateScriptError = null;
                         this.onUiChanged();
-                    });
-                    const lockedMarker = script.editor?.locked ? ' [locked]' : '';
-                    scriptBox.appendChild(this.makeInfoLine(`name: ${script.name}${lockedMarker}`));
-                    scriptBox.appendChild(this.makeInfoLine(`id: ${script.id}`));
-                    scriptBox.appendChild(this.makeInfoLine(`category: ${script.category}`));
-                    scriptBox.appendChild(this.makeInfoLine(`command count: ${script.commands.length}`));
-                    if (script.editor?.locked) {
-                        scriptBox.appendChild(this.makeInfoLine('locked: true'));
+                    } catch (error) {
+                        this.updateScriptError = error instanceof Error
+                            ? error.message
+                            : 'Failed to update script.';
+                        this.onUiChanged();
                     }
-                    container.appendChild(scriptBox);
-                });
-            }
-
-            container.appendChild(this.makeSpacer(8));
-            container.appendChild(this.makeSectionTitle('Script Details'));
-            if (!selectedScript || !this.selectedScriptDraft) {
-                container.appendChild(this.makeInfoLine('Select a script to edit metadata.'));
-                return;
-            }
-
-            const detailsBox = document.createElement('div');
-            detailsBox.style.border = '1px solid #8b8b8b';
-            detailsBox.style.background = '#d9d9d9';
-            detailsBox.style.padding = '6px';
-
-            detailsBox.appendChild(this.makeInfoLine(`id: ${selectedScript.id}`));
-            detailsBox.appendChild(this.makeInfoLine(`command count: ${selectedScript.commands.length}`));
-
-            const nameLabel = this.makeInfoLine('Name');
-            nameLabel.style.marginTop = '6px';
-            nameLabel.style.marginBottom = '2px';
-            detailsBox.appendChild(nameLabel);
-
-            const nameInput = document.createElement('input');
-            nameInput.type = 'text';
-            nameInput.value = this.selectedScriptDraft.name;
-            nameInput.style.display = 'block';
-            nameInput.style.width = '100%';
-            nameInput.style.boxSizing = 'border-box';
-            nameInput.style.marginBottom = '6px';
-            this.bindEditorInputKeyboardGuards(nameInput);
-            nameInput.addEventListener('input', () => {
-                if (!this.selectedScriptDraft) {
-                    return;
-                }
-                this.selectedScriptDraft.name = nameInput.value;
-            });
-            detailsBox.appendChild(nameInput);
-
-            const categoryLabel = this.makeInfoLine('Category');
-            categoryLabel.style.marginBottom = '2px';
-            detailsBox.appendChild(categoryLabel);
-
-            const categorySelect = document.createElement('select');
-            categorySelect.style.display = 'block';
-            categorySelect.style.width = '100%';
-            categorySelect.style.boxSizing = 'border-box';
-            categorySelect.style.marginBottom = '6px';
-            this.bindEditorInputKeyboardGuards(categorySelect);
-            this.scriptCategoryOptions.forEach((category) => {
-                const option = document.createElement('option');
-                option.value = category;
-                option.textContent = category;
-                option.selected = category === this.selectedScriptDraft?.category;
-                categorySelect.appendChild(option);
-            });
-            categorySelect.addEventListener('change', () => {
-                if (!this.selectedScriptDraft) {
-                    return;
-                }
-                const nextCategory = categorySelect.value as TestWorldLogicScriptCategory;
-                this.selectedScriptDraft.category = nextCategory;
-            });
-            detailsBox.appendChild(categorySelect);
-
-            const lockedRow = document.createElement('label');
-            lockedRow.style.display = 'flex';
-            lockedRow.style.alignItems = 'center';
-            lockedRow.style.gap = '6px';
-            lockedRow.style.marginBottom = '6px';
-
-            const lockedCheckbox = document.createElement('input');
-            lockedCheckbox.type = 'checkbox';
-            lockedCheckbox.checked = this.selectedScriptDraft.locked;
-            this.bindEditorInputKeyboardGuards(lockedCheckbox);
-            lockedCheckbox.addEventListener('change', () => {
-                if (!this.selectedScriptDraft) {
-                    return;
-                }
-                this.selectedScriptDraft.locked = lockedCheckbox.checked;
-            });
-            lockedRow.appendChild(lockedCheckbox);
-
-            const lockedLabelText = document.createElement('span');
-            lockedLabelText.textContent = 'Locked';
-            lockedRow.appendChild(lockedLabelText);
-            detailsBox.appendChild(lockedRow);
-
-            if (this.updateScriptError) {
-                const errorLine = this.makeInfoLine(this.updateScriptError);
-                errorLine.style.color = '#b00020';
-                errorLine.style.marginBottom = '6px';
-                detailsBox.appendChild(errorLine);
-            }
-
-            const actionsRow = document.createElement('div');
-            actionsRow.style.display = 'flex';
-            actionsRow.style.gap = '6px';
-
-            const applyButton = document.createElement('button');
-            applyButton.type = 'button';
-            applyButton.textContent = 'Apply';
-            applyButton.addEventListener('click', () => {
-                if (!this.selectedScriptId || !this.selectedScriptDraft) {
-                    return;
-                }
-                try {
-                    const result = this.logicAuthoringService.updateScript(this.selectedScriptId, {
-                        name: this.selectedScriptDraft.name,
-                        category: this.selectedScriptDraft.category,
-                        editor: { locked: this.selectedScriptDraft.locked }
-                    });
-                    if (!result.success) {
-                        this.updateScriptError = result.reason ?? 'Failed to update script.';
+                },
+                onRevertSelectedScriptChanges: () => {
+                    const currentSnapshot = this.logicAuthoringService.getSnapshot();
+                    if (!currentSnapshot || !this.selectedScriptId) {
+                        this.clearSelectedScriptSelection();
                         this.onUiChanged();
                         return;
                     }
-                    const nextScript = result.script ?? this.logicAuthoringService.getScript(this.selectedScriptId);
-                    if (nextScript) {
-                        this.selectedScriptId = nextScript.id;
-                        this.loadSelectedScriptDraft(nextScript);
+                    const currentScript = currentSnapshot.scripts.find(
+                        (entry) => entry.id === this.selectedScriptId
+                    );
+                    if (!currentScript) {
+                        this.clearSelectedScriptSelection();
+                        this.onUiChanged();
+                        return;
                     }
+                    this.loadSelectedScriptDraft(currentScript);
                     this.updateScriptError = null;
                     this.onUiChanged();
-                } catch (error) {
-                    this.updateScriptError = error instanceof Error
-                        ? error.message
-                        : 'Failed to update script.';
-                    this.onUiChanged();
                 }
             });
-            actionsRow.appendChild(applyButton);
-
-            const resetButton = document.createElement('button');
-            resetButton.type = 'button';
-            resetButton.textContent = 'Revert Changes';
-            resetButton.title = 'Reverts unsaved form edits. Does not delete the script.';
-            resetButton.addEventListener('click', () => {
-                const currentSnapshot = this.logicAuthoringService.getSnapshot();
-                if (!currentSnapshot || !this.selectedScriptId) {
-                    this.clearSelectedScriptSelection();
-                    this.onUiChanged();
-                    return;
-                }
-                const currentScript = currentSnapshot.scripts.find(
-                    (entry) => entry.id === this.selectedScriptId
-                );
-                if (!currentScript) {
-                    this.clearSelectedScriptSelection();
-                    this.onUiChanged();
-                    return;
-                }
-                this.loadSelectedScriptDraft(currentScript);
-                this.updateScriptError = null;
-                this.onUiChanged();
-            });
-            actionsRow.appendChild(resetButton);
-
-            detailsBox.appendChild(actionsRow);
-            container.appendChild(detailsBox);
         });
     }
 
@@ -660,93 +357,24 @@ export class LogicEditorMode implements EditorMode {
 
         panel.setCustomContent('Logic Bindings', (container) => {
             if (!snapshot) {
-                container.appendChild(this.makeInfoLine('Runtime config unavailable.'));
+                container.appendChild(this.dom.makeInfoLine('Runtime config unavailable.'));
                 return;
             }
 
-            container.appendChild(this.makeSectionTitle('Script Edit'));
-            if (!selectedExternalScript) {
-                container.appendChild(this.makeInfoLine('Select an external script asset to inspect.'));
-            } else {
-                const scriptEditBox = document.createElement('div');
-                scriptEditBox.style.border = '1px solid #8b8b8b';
-                scriptEditBox.style.background = '#ececec';
-                scriptEditBox.style.padding = '6px';
-                scriptEditBox.style.marginBottom = '8px';
-                scriptEditBox.appendChild(this.makeInfoLine(`Name: ${selectedExternalScript.name}`));
-                scriptEditBox.appendChild(this.makeInfoLine(`ID: ${selectedExternalScript.id}`));
-                scriptEditBox.appendChild(this.makeInfoLine(`Category: ${selectedExternalScript.category}`));
-                if (selectedExternalScript.editor?.locked) {
-                    scriptEditBox.appendChild(this.makeInfoLine('Locked: true'));
-                }
-                scriptEditBox.appendChild(this.makeInfoLine('IDE/source file: logic_scripts.json'));
-                container.appendChild(scriptEditBox);
+            renderScriptDetailsSection(container, {
+                dom: this.dom,
+                selectedExternalScript,
+                bindings: snapshot.bindings
+            });
 
-                container.appendChild(this.makeSectionTitle('Instructions'));
-                const instructionsBox = document.createElement('div');
-                instructionsBox.style.border = '1px solid #8b8b8b';
-                instructionsBox.style.background = '#ececec';
-                instructionsBox.style.padding = '6px';
-                instructionsBox.style.marginBottom = '8px';
-                if (selectedExternalScript.commands.length <= 0) {
-                    instructionsBox.appendChild(this.makeInfoLine('No instructions/commands in this script.'));
-                } else {
-                    selectedExternalScript.commands.forEach((command, index) => {
-                        const commandParams = command.params ?? {};
-                        instructionsBox.appendChild(this.makeInfoLine(
-                            `${index + 1}. ${command.type} ${JSON.stringify(commandParams)}`
-                        ));
-                    });
-                }
-                container.appendChild(instructionsBox);
-
-                container.appendChild(this.makeSectionTitle('Script Users'));
-                const usersBox = document.createElement('div');
-                usersBox.style.border = '1px solid #8b8b8b';
-                usersBox.style.background = '#ececec';
-                usersBox.style.padding = '6px';
-                usersBox.style.marginBottom = '8px';
-                const scriptUsers = snapshot.bindings.filter(
-                    (binding) => binding.scriptId === selectedExternalScript.id
-                );
-                if (scriptUsers.length <= 0) {
-                    usersBox.appendChild(this.makeInfoLine('No level bindings use this script yet.'));
-                } else {
-                    scriptUsers.forEach((binding) => {
-                        const bindingUserBox = document.createElement('div');
-                        bindingUserBox.style.border = '1px solid #8b8b8b';
-                        bindingUserBox.style.background = '#d9d9d9';
-                        bindingUserBox.style.padding = '4px';
-                        bindingUserBox.style.marginBottom = '4px';
-                        bindingUserBox.style.wordBreak = 'break-word';
-                        bindingUserBox.appendChild(this.makeInfoLine(`binding id: ${binding.id}`));
-                        bindingUserBox.appendChild(this.makeInfoLine(`targetType: ${binding.targetType}`));
-                        bindingUserBox.appendChild(this.makeInfoLine(`targetId: ${binding.targetId ?? '-'}`));
-                        bindingUserBox.appendChild(this.makeInfoLine(`slot: ${binding.slot}`));
-                        bindingUserBox.appendChild(this.makeInfoLine(`status: ${binding.enabled ? 'enabled' : 'disabled'}`));
-                        usersBox.appendChild(bindingUserBox);
-                    });
-                }
-                container.appendChild(usersBox);
-            }
-
-            container.appendChild(this.makeSpacer(8));
-            container.appendChild(this.makeSectionTitle('Bindings'));
-            if (snapshot.bindings.length <= 0) {
-                container.appendChild(this.makeInfoLine('No logic bindings yet.'));
-                return;
-            }
-
-            snapshot.bindings.forEach((binding) => {
-                const bindingBox = document.createElement('div');
-                const isSelected = binding.id === this.selectedBindingId;
-                bindingBox.style.border = isSelected ? '1px solid #4f6f91' : '1px solid #8b8b8b';
-                bindingBox.style.background = isSelected ? '#c9dbf1' : '#d9d9d9';
-                bindingBox.style.padding = '6px';
-                bindingBox.style.marginBottom = '6px';
-                bindingBox.style.wordBreak = 'break-word';
-                bindingBox.style.cursor = 'pointer';
-                bindingBox.addEventListener('click', () => {
+            renderBindingsSection(container, {
+                dom: this.dom,
+                bindings: snapshot.bindings,
+                selectedBinding,
+                selectedBindingId: this.selectedBindingId,
+                selectedBindingDraft: this.selectedBindingDraft,
+                updateBindingError: this.updateBindingError,
+                onSelectBinding: (binding) => {
                     if (this.selectedBindingId === binding.id) {
                         return;
                     }
@@ -754,176 +382,91 @@ export class LogicEditorMode implements EditorMode {
                     this.loadSelectedBindingDraft(binding);
                     this.updateBindingError = null;
                     this.onUiChanged();
-                });
-                bindingBox.appendChild(this.makeInfoLine(`id: ${binding.id}`));
-                bindingBox.appendChild(this.makeInfoLine(`targetType: ${binding.targetType}`));
-                bindingBox.appendChild(this.makeInfoLine(`targetId: ${binding.targetId ?? '-'}`));
-                bindingBox.appendChild(this.makeInfoLine(`slot: ${binding.slot}`));
-                bindingBox.appendChild(this.makeInfoLine(`scriptId: ${binding.scriptId}`));
-                bindingBox.appendChild(this.makeInfoLine(`status: ${binding.enabled ? 'enabled' : 'disabled'}`));
-                container.appendChild(bindingBox);
-            });
-
-            container.appendChild(this.makeSpacer(8));
-            container.appendChild(this.makeSectionTitle('Selected Binding'));
-            if (!selectedBinding || !this.selectedBindingDraft) {
-                container.appendChild(this.makeInfoLine('Select a binding to edit.'));
-                return;
-            }
-
-            const detailsBox = document.createElement('div');
-            detailsBox.style.border = '1px solid #8b8b8b';
-            detailsBox.style.background = '#ececec';
-            detailsBox.style.padding = '6px';
-
-            detailsBox.appendChild(this.makeInfoLine(`id: ${selectedBinding.id}`));
-            detailsBox.appendChild(this.makeInfoLine(`targetType: ${selectedBinding.targetType}`));
-            detailsBox.appendChild(this.makeInfoLine(`targetId: ${selectedBinding.targetId ?? '-'}`));
-            detailsBox.appendChild(this.makeInfoLine(`scriptId: ${selectedBinding.scriptId}`));
-            detailsBox.appendChild(this.makeSpacer(6));
-
-            const slotLabel = this.makeInfoLine('Slot');
-            slotLabel.style.marginBottom = '2px';
-            detailsBox.appendChild(slotLabel);
-
-            const slotInput = document.createElement('input');
-            slotInput.type = 'text';
-            slotInput.value = this.selectedBindingDraft.slot;
-            slotInput.style.display = 'block';
-            slotInput.style.width = '100%';
-            slotInput.style.boxSizing = 'border-box';
-            slotInput.style.marginBottom = '6px';
-            this.bindEditorInputKeyboardGuards(slotInput);
-            slotInput.addEventListener('input', () => {
-                if (!this.selectedBindingDraft) {
-                    return;
-                }
-                this.selectedBindingDraft.slot = slotInput.value;
-            });
-            detailsBox.appendChild(slotInput);
-
-            const enabledRow = document.createElement('label');
-            enabledRow.style.display = 'flex';
-            enabledRow.style.alignItems = 'center';
-            enabledRow.style.gap = '6px';
-            enabledRow.style.marginBottom = '6px';
-
-            const enabledCheckbox = document.createElement('input');
-            enabledCheckbox.type = 'checkbox';
-            enabledCheckbox.checked = this.selectedBindingDraft.enabled;
-            this.bindEditorInputKeyboardGuards(enabledCheckbox);
-            enabledCheckbox.addEventListener('change', () => {
-                if (!this.selectedBindingDraft) {
-                    return;
-                }
-                this.selectedBindingDraft.enabled = enabledCheckbox.checked;
-            });
-            enabledRow.appendChild(enabledCheckbox);
-
-            const enabledText = document.createElement('span');
-            enabledText.textContent = 'Enabled';
-            enabledRow.appendChild(enabledText);
-            detailsBox.appendChild(enabledRow);
-
-            if (this.updateBindingError) {
-                const errorLine = this.makeInfoLine(this.updateBindingError);
-                errorLine.style.color = '#b00020';
-                errorLine.style.marginBottom = '6px';
-                detailsBox.appendChild(errorLine);
-            }
-
-            const actionsRow = document.createElement('div');
-            actionsRow.style.display = 'flex';
-            actionsRow.style.gap = '6px';
-
-            const applyButton = document.createElement('button');
-            applyButton.type = 'button';
-            applyButton.textContent = 'Apply';
-            applyButton.addEventListener('click', () => {
-                if (!this.selectedBindingId || !this.selectedBindingDraft) {
-                    return;
-                }
-                try {
-                    const result = this.logicAuthoringService.updateBinding(this.selectedBindingId, {
-                        slot: this.selectedBindingDraft.slot,
-                        enabled: this.selectedBindingDraft.enabled
-                    });
-                    if (!result.success) {
-                        this.updateBindingError = result.reason ?? 'Failed to update binding.';
+                },
+                onSelectedBindingSlotChanged: (value) => {
+                    if (!this.selectedBindingDraft) {
+                        return;
+                    }
+                    this.selectedBindingDraft.slot = value;
+                },
+                onSelectedBindingEnabledChanged: (value) => {
+                    if (!this.selectedBindingDraft) {
+                        return;
+                    }
+                    this.selectedBindingDraft.enabled = value;
+                },
+                onApplySelectedBindingChanges: () => {
+                    if (!this.selectedBindingId || !this.selectedBindingDraft) {
+                        return;
+                    }
+                    try {
+                        const result = this.logicAuthoringService.updateBinding(this.selectedBindingId, {
+                            slot: this.selectedBindingDraft.slot,
+                            enabled: this.selectedBindingDraft.enabled
+                        });
+                        if (!result.success) {
+                            this.updateBindingError = result.reason ?? 'Failed to update binding.';
+                            this.onUiChanged();
+                            return;
+                        }
+                        const nextBinding = result.binding ?? this.logicAuthoringService.getBinding(this.selectedBindingId);
+                        if (nextBinding) {
+                            this.selectedBindingId = nextBinding.id;
+                            this.loadSelectedBindingDraft(nextBinding);
+                        }
+                        this.updateBindingError = null;
+                        this.onUiChanged();
+                    } catch (error) {
+                        this.updateBindingError = error instanceof Error
+                            ? error.message
+                            : 'Failed to update binding.';
+                        this.onUiChanged();
+                    }
+                },
+                onRevertSelectedBindingChanges: () => {
+                    const currentSnapshot = this.logicAuthoringService.getSnapshot();
+                    if (!currentSnapshot || !this.selectedBindingId) {
+                        this.clearSelectedBindingSelection();
                         this.onUiChanged();
                         return;
                     }
-                    const nextBinding = result.binding ?? this.logicAuthoringService.getBinding(this.selectedBindingId);
-                    if (nextBinding) {
-                        this.selectedBindingId = nextBinding.id;
-                        this.loadSelectedBindingDraft(nextBinding);
+                    const currentBinding = currentSnapshot.bindings.find(
+                        (entry) => entry.id === this.selectedBindingId
+                    );
+                    if (!currentBinding) {
+                        this.clearSelectedBindingSelection();
+                        this.onUiChanged();
+                        return;
                     }
+                    this.loadSelectedBindingDraft(currentBinding);
                     this.updateBindingError = null;
                     this.onUiChanged();
-                } catch (error) {
-                    this.updateBindingError = error instanceof Error
-                        ? error.message
-                        : 'Failed to update binding.';
-                    this.onUiChanged();
-                }
-            });
-            actionsRow.appendChild(applyButton);
-
-            const revertButton = document.createElement('button');
-            revertButton.type = 'button';
-            revertButton.textContent = 'Revert Changes';
-            revertButton.addEventListener('click', () => {
-                const currentSnapshot = this.logicAuthoringService.getSnapshot();
-                if (!currentSnapshot || !this.selectedBindingId) {
-                    this.clearSelectedBindingSelection();
-                    this.onUiChanged();
-                    return;
-                }
-                const currentBinding = currentSnapshot.bindings.find(
-                    (entry) => entry.id === this.selectedBindingId
-                );
-                if (!currentBinding) {
-                    this.clearSelectedBindingSelection();
-                    this.onUiChanged();
-                    return;
-                }
-                this.loadSelectedBindingDraft(currentBinding);
-                this.updateBindingError = null;
-                this.onUiChanged();
-            });
-            actionsRow.appendChild(revertButton);
-
-            const deleteButton = document.createElement('button');
-            deleteButton.type = 'button';
-            deleteButton.textContent = 'Delete';
-            deleteButton.addEventListener('click', () => {
-                if (!this.selectedBindingId) {
-                    return;
-                }
-                const shouldDelete = confirm('Delete selected logic binding?');
-                if (!shouldDelete) {
-                    return;
-                }
-                try {
-                    const result = this.logicAuthoringService.deleteBinding(this.selectedBindingId);
-                    if (!result.success) {
-                        this.updateBindingError = result.reason ?? 'Failed to delete binding.';
-                        this.onUiChanged();
+                },
+                onDeleteSelectedBinding: () => {
+                    if (!this.selectedBindingId) {
                         return;
                     }
-                    this.clearSelectedBindingSelection();
-                    this.onUiChanged();
-                } catch (error) {
-                    this.updateBindingError = error instanceof Error
-                        ? error.message
-                        : 'Failed to delete binding.';
-                    this.onUiChanged();
+                    const shouldDelete = confirm('Delete selected logic binding?');
+                    if (!shouldDelete) {
+                        return;
+                    }
+                    try {
+                        const result = this.logicAuthoringService.deleteBinding(this.selectedBindingId);
+                        if (!result.success) {
+                            this.updateBindingError = result.reason ?? 'Failed to delete binding.';
+                            this.onUiChanged();
+                            return;
+                        }
+                        this.clearSelectedBindingSelection();
+                        this.onUiChanged();
+                    } catch (error) {
+                        this.updateBindingError = error instanceof Error
+                            ? error.message
+                            : 'Failed to delete binding.';
+                        this.onUiChanged();
+                    }
                 }
             });
-            actionsRow.appendChild(deleteButton);
-
-            detailsBox.appendChild(actionsRow);
-            container.appendChild(detailsBox);
         });
     }
 
@@ -1045,34 +588,5 @@ export class LogicEditorMode implements EditorMode {
         this.selectedBindingId = null;
         this.selectedBindingDraft = null;
         this.updateBindingError = null;
-    }
-
-    private makeSectionTitle(text: string): HTMLDivElement {
-        const title = document.createElement('div');
-        title.textContent = text;
-        title.style.fontWeight = 'bold';
-        title.style.marginBottom = '4px';
-        return title;
-    }
-
-    private makeInfoLine(text: string): HTMLDivElement {
-        const line = document.createElement('div');
-        line.textContent = text;
-        return line;
-    }
-
-    private makeSpacer(heightPx: number): HTMLDivElement {
-        const spacer = document.createElement('div');
-        spacer.style.height = `${heightPx}px`;
-        return spacer;
-    }
-
-    private bindEditorInputKeyboardGuards(input: HTMLElement): void {
-        const stopKeyboardEvent = (event: Event): void => {
-            event.stopPropagation();
-        };
-        input.addEventListener('keydown', stopKeyboardEvent);
-        input.addEventListener('keyup', stopKeyboardEvent);
-        input.addEventListener('keypress', stopKeyboardEvent);
     }
 }
