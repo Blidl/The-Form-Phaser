@@ -4,6 +4,7 @@ import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService'
 import type { LogicSnapshot } from '../logic-authoring/LogicAuthoringTypes';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type {
+    TestWorldLogicBindingConfig,
     TestWorldConfig,
     TestWorldLogicScriptCategory,
     TestWorldLogicScriptConfig
@@ -24,6 +25,11 @@ interface ScriptMetadataDraft {
     locked: boolean;
 }
 
+interface BindingMetadataDraft {
+    slot: string;
+    enabled: boolean;
+}
+
 export class LogicEditorMode implements EditorMode {
     public readonly id = 'logic';
     public readonly label = 'Logic';
@@ -42,6 +48,9 @@ export class LogicEditorMode implements EditorMode {
     private createBindingSlotDraft = 'onStart';
     private createBindingEnabledDraft = true;
     private createBindingError: string | null = null;
+    private selectedBindingId: string | null = null;
+    private selectedBindingDraft: BindingMetadataDraft | null = null;
+    private updateBindingError: string | null = null;
 
     private readonly scriptCategoryOptions: TestWorldLogicScriptCategory[] = [
         'object.move',
@@ -635,6 +644,7 @@ export class LogicEditorMode implements EditorMode {
 
     public renderRightInspector(panel: EditorPanel): void {
         const snapshot = this.logicAuthoringService.getSnapshot();
+        const selectedBinding = this.syncSelectedBinding(snapshot);
 
         panel.setCustomContent('Logic Bindings', (container) => {
             if (!snapshot) {
@@ -650,11 +660,22 @@ export class LogicEditorMode implements EditorMode {
 
             snapshot.bindings.forEach((binding) => {
                 const bindingBox = document.createElement('div');
-                bindingBox.style.border = '1px solid #8b8b8b';
-                bindingBox.style.background = '#d9d9d9';
+                const isSelected = binding.id === this.selectedBindingId;
+                bindingBox.style.border = isSelected ? '1px solid #4f6f91' : '1px solid #8b8b8b';
+                bindingBox.style.background = isSelected ? '#c9dbf1' : '#d9d9d9';
                 bindingBox.style.padding = '6px';
                 bindingBox.style.marginBottom = '6px';
                 bindingBox.style.wordBreak = 'break-word';
+                bindingBox.style.cursor = 'pointer';
+                bindingBox.addEventListener('click', () => {
+                    if (this.selectedBindingId === binding.id) {
+                        return;
+                    }
+                    this.selectedBindingId = binding.id;
+                    this.loadSelectedBindingDraft(binding);
+                    this.updateBindingError = null;
+                    this.onUiChanged();
+                });
                 bindingBox.appendChild(this.makeInfoLine(`id: ${binding.id}`));
                 bindingBox.appendChild(this.makeInfoLine(`targetType: ${binding.targetType}`));
                 bindingBox.appendChild(this.makeInfoLine(`targetId: ${binding.targetId ?? '-'}`));
@@ -663,6 +684,167 @@ export class LogicEditorMode implements EditorMode {
                 bindingBox.appendChild(this.makeInfoLine(`status: ${binding.enabled ? 'enabled' : 'disabled'}`));
                 container.appendChild(bindingBox);
             });
+
+            container.appendChild(this.makeSpacer(8));
+            container.appendChild(this.makeSectionTitle('Selected Binding'));
+            if (!selectedBinding || !this.selectedBindingDraft) {
+                container.appendChild(this.makeInfoLine('Select a binding to edit.'));
+                return;
+            }
+
+            const detailsBox = document.createElement('div');
+            detailsBox.style.border = '1px solid #8b8b8b';
+            detailsBox.style.background = '#ececec';
+            detailsBox.style.padding = '6px';
+
+            detailsBox.appendChild(this.makeInfoLine(`id: ${selectedBinding.id}`));
+            detailsBox.appendChild(this.makeInfoLine(`targetType: ${selectedBinding.targetType}`));
+            detailsBox.appendChild(this.makeInfoLine(`targetId: ${selectedBinding.targetId ?? '-'}`));
+            detailsBox.appendChild(this.makeInfoLine(`scriptId: ${selectedBinding.scriptId}`));
+            detailsBox.appendChild(this.makeSpacer(6));
+
+            const slotLabel = this.makeInfoLine('Slot');
+            slotLabel.style.marginBottom = '2px';
+            detailsBox.appendChild(slotLabel);
+
+            const slotInput = document.createElement('input');
+            slotInput.type = 'text';
+            slotInput.value = this.selectedBindingDraft.slot;
+            slotInput.style.display = 'block';
+            slotInput.style.width = '100%';
+            slotInput.style.boxSizing = 'border-box';
+            slotInput.style.marginBottom = '6px';
+            this.bindEditorInputKeyboardGuards(slotInput);
+            slotInput.addEventListener('input', () => {
+                if (!this.selectedBindingDraft) {
+                    return;
+                }
+                this.selectedBindingDraft.slot = slotInput.value;
+            });
+            detailsBox.appendChild(slotInput);
+
+            const enabledRow = document.createElement('label');
+            enabledRow.style.display = 'flex';
+            enabledRow.style.alignItems = 'center';
+            enabledRow.style.gap = '6px';
+            enabledRow.style.marginBottom = '6px';
+
+            const enabledCheckbox = document.createElement('input');
+            enabledCheckbox.type = 'checkbox';
+            enabledCheckbox.checked = this.selectedBindingDraft.enabled;
+            this.bindEditorInputKeyboardGuards(enabledCheckbox);
+            enabledCheckbox.addEventListener('change', () => {
+                if (!this.selectedBindingDraft) {
+                    return;
+                }
+                this.selectedBindingDraft.enabled = enabledCheckbox.checked;
+            });
+            enabledRow.appendChild(enabledCheckbox);
+
+            const enabledText = document.createElement('span');
+            enabledText.textContent = 'Enabled';
+            enabledRow.appendChild(enabledText);
+            detailsBox.appendChild(enabledRow);
+
+            if (this.updateBindingError) {
+                const errorLine = this.makeInfoLine(this.updateBindingError);
+                errorLine.style.color = '#b00020';
+                errorLine.style.marginBottom = '6px';
+                detailsBox.appendChild(errorLine);
+            }
+
+            const actionsRow = document.createElement('div');
+            actionsRow.style.display = 'flex';
+            actionsRow.style.gap = '6px';
+
+            const applyButton = document.createElement('button');
+            applyButton.type = 'button';
+            applyButton.textContent = 'Apply';
+            applyButton.addEventListener('click', () => {
+                if (!this.selectedBindingId || !this.selectedBindingDraft) {
+                    return;
+                }
+                try {
+                    const result = this.logicAuthoringService.updateBinding(this.selectedBindingId, {
+                        slot: this.selectedBindingDraft.slot,
+                        enabled: this.selectedBindingDraft.enabled
+                    });
+                    if (!result.success) {
+                        this.updateBindingError = result.reason ?? 'Failed to update binding.';
+                        this.onUiChanged();
+                        return;
+                    }
+                    const nextBinding = result.binding ?? this.logicAuthoringService.getBinding(this.selectedBindingId);
+                    if (nextBinding) {
+                        this.selectedBindingId = nextBinding.id;
+                        this.loadSelectedBindingDraft(nextBinding);
+                    }
+                    this.updateBindingError = null;
+                    this.onUiChanged();
+                } catch (error) {
+                    this.updateBindingError = error instanceof Error
+                        ? error.message
+                        : 'Failed to update binding.';
+                    this.onUiChanged();
+                }
+            });
+            actionsRow.appendChild(applyButton);
+
+            const revertButton = document.createElement('button');
+            revertButton.type = 'button';
+            revertButton.textContent = 'Revert Changes';
+            revertButton.addEventListener('click', () => {
+                const currentSnapshot = this.logicAuthoringService.getSnapshot();
+                if (!currentSnapshot || !this.selectedBindingId) {
+                    this.clearSelectedBindingSelection();
+                    this.onUiChanged();
+                    return;
+                }
+                const currentBinding = currentSnapshot.bindings.find(
+                    (entry) => entry.id === this.selectedBindingId
+                );
+                if (!currentBinding) {
+                    this.clearSelectedBindingSelection();
+                    this.onUiChanged();
+                    return;
+                }
+                this.loadSelectedBindingDraft(currentBinding);
+                this.updateBindingError = null;
+                this.onUiChanged();
+            });
+            actionsRow.appendChild(revertButton);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.textContent = 'Delete';
+            deleteButton.addEventListener('click', () => {
+                if (!this.selectedBindingId) {
+                    return;
+                }
+                const shouldDelete = confirm('Delete selected logic binding?');
+                if (!shouldDelete) {
+                    return;
+                }
+                try {
+                    const result = this.logicAuthoringService.deleteBinding(this.selectedBindingId);
+                    if (!result.success) {
+                        this.updateBindingError = result.reason ?? 'Failed to delete binding.';
+                        this.onUiChanged();
+                        return;
+                    }
+                    this.clearSelectedBindingSelection();
+                    this.onUiChanged();
+                } catch (error) {
+                    this.updateBindingError = error instanceof Error
+                        ? error.message
+                        : 'Failed to delete binding.';
+                    this.onUiChanged();
+                }
+            });
+            actionsRow.appendChild(deleteButton);
+
+            detailsBox.appendChild(actionsRow);
+            container.appendChild(detailsBox);
         });
     }
 
@@ -728,6 +910,25 @@ export class LogicEditorMode implements EditorMode {
         return selectedScript;
     }
 
+    private syncSelectedBinding(snapshot: LogicSnapshot | null): TestWorldLogicBindingConfig | null {
+        if (!snapshot) {
+            this.clearSelectedBindingSelection();
+            return null;
+        }
+        if (!this.selectedBindingId) {
+            return null;
+        }
+        const selectedBinding = snapshot.bindings.find((entry) => entry.id === this.selectedBindingId);
+        if (!selectedBinding) {
+            this.clearSelectedBindingSelection();
+            return null;
+        }
+        if (!this.selectedBindingDraft) {
+            this.loadSelectedBindingDraft(selectedBinding);
+        }
+        return selectedBinding;
+    }
+
     private loadSelectedScriptDraft(script: TestWorldLogicScriptConfig): void {
         this.selectedScriptDraft = {
             name: script.name,
@@ -736,10 +937,23 @@ export class LogicEditorMode implements EditorMode {
         };
     }
 
+    private loadSelectedBindingDraft(binding: TestWorldLogicBindingConfig): void {
+        this.selectedBindingDraft = {
+            slot: binding.slot,
+            enabled: Boolean(binding.enabled)
+        };
+    }
+
     private clearSelectedScriptSelection(): void {
         this.selectedScriptId = null;
         this.selectedScriptDraft = null;
         this.updateScriptError = null;
+    }
+
+    private clearSelectedBindingSelection(): void {
+        this.selectedBindingId = null;
+        this.selectedBindingDraft = null;
+        this.updateBindingError = null;
     }
 
     private makeSectionTitle(text: string): HTMLDivElement {
