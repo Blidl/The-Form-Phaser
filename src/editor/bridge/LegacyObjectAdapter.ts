@@ -46,6 +46,7 @@ export interface LegacyObjectSource {
     getLevelDisplayName?: () => string;
     getWorldBounds?: () => LegacyWorldBounds;
     getRuntimeConfig?: () => unknown;
+    getWorldOnStartLogicTrace?: () => unknown;
     saveRuntimeConfig?: () => {
         success: boolean;
         source: 'runtimeConfig' | 'legacySave' | 'exportJson' | 'localStorage';
@@ -227,6 +228,10 @@ export class LegacyObjectAdapter {
 
     public getRuntimeConfig(): unknown | null {
         return this.source.getRuntimeConfig?.() ?? null;
+    }
+
+    public getWorldOnStartLogicTrace(): unknown | null {
+        return this.source.getWorldOnStartLogicTrace?.() ?? null;
     }
 
     public saveRuntimeConfig(): {

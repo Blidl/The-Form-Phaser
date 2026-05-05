@@ -1,6 +1,9 @@
 import type { LogicSnapshot } from '../../logic-authoring/LogicAuthoringTypes';
 import type { TestWorldLogicScriptConfig } from '../../../game/world/runtime/test_world_config';
-import type { LogicScriptExecutionResult } from '../../../game/world/runtime/logic_script_runtime';
+import type {
+    LogicScriptExecutionResult,
+    LogicWorldOnStartTrace
+} from '../../../game/world/runtime/logic_script_runtime';
 import type { LogicEditorDomHelpers } from './LogicEditorDom';
 
 export interface RenderScriptDetailsContext {
@@ -8,6 +11,7 @@ export interface RenderScriptDetailsContext {
     selectedExternalScript: TestWorldLogicScriptConfig | null;
     bindings: LogicSnapshot['bindings'];
     previewResult: LogicScriptExecutionResult | null;
+    runtimeWorldOnStartTrace: LogicWorldOnStartTrace | null;
     onPlayPreview: () => void;
     onStopPreview: () => void;
 }
@@ -21,6 +25,7 @@ export function renderScriptDetailsSection(
         selectedExternalScript,
         bindings,
         previewResult,
+        runtimeWorldOnStartTrace,
         onPlayPreview,
         onStopPreview
     } = context;
@@ -122,10 +127,69 @@ export function renderScriptDetailsSection(
         container.appendChild(previewBox);
     };
 
+    const renderRuntimeOnStartTraceSection = (): void => {
+        container.appendChild(dom.makeSectionTitle('Runtime onStart Trace'));
+
+        const traceBox = document.createElement('div');
+        traceBox.style.border = '1px solid #8b8b8b';
+        traceBox.style.background = '#ececec';
+        traceBox.style.padding = '6px';
+        traceBox.style.marginBottom = '8px';
+
+        if (!runtimeWorldOnStartTrace) {
+            traceBox.appendChild(dom.makeInfoLine('No runtime onStart trace recorded.'));
+            container.appendChild(traceBox);
+            return;
+        }
+
+        traceBox.appendChild(dom.makeInfoLine(`Overall status: ${runtimeWorldOnStartTrace.status}`));
+        if (runtimeWorldOnStartTrace.bindings.length <= 0) {
+            traceBox.appendChild(dom.makeInfoLine('Bindings: (none)'));
+            container.appendChild(traceBox);
+            return;
+        }
+
+        runtimeWorldOnStartTrace.bindings.forEach((bindingTrace) => {
+            const bindingBox = document.createElement('div');
+            bindingBox.style.border = '1px solid #8b8b8b';
+            bindingBox.style.background = '#d9d9d9';
+            bindingBox.style.padding = '4px';
+            bindingBox.style.marginTop = '4px';
+            bindingBox.style.wordBreak = 'break-word';
+            bindingBox.appendChild(dom.makeInfoLine(`binding id: ${bindingTrace.bindingId}`));
+            bindingBox.appendChild(dom.makeInfoLine(`script id: ${bindingTrace.scriptId}`));
+            bindingBox.appendChild(dom.makeInfoLine(`targetType: ${bindingTrace.targetType}`));
+            bindingBox.appendChild(dom.makeInfoLine(`slot: ${bindingTrace.slot}`));
+            bindingBox.appendChild(dom.makeInfoLine(`status: ${bindingTrace.status}`));
+            if (bindingTrace.reason) {
+                bindingBox.appendChild(dom.makeInfoLine(`reason: ${bindingTrace.reason}`));
+            }
+
+            if (bindingTrace.scriptResult) {
+                bindingBox.appendChild(dom.makeInfoLine('Command results:'));
+                if (bindingTrace.scriptResult.commands.length <= 0) {
+                    bindingBox.appendChild(dom.makeInfoLine('- skipped/empty: no commands to trace'));
+                } else {
+                    bindingTrace.scriptResult.commands.forEach((command) => {
+                        bindingBox.appendChild(dom.makeInfoLine(`- command id: ${command.commandId}`));
+                        bindingBox.appendChild(dom.makeInfoLine(`  type: ${command.type}`));
+                        bindingBox.appendChild(dom.makeInfoLine(`  status: ${command.status}`));
+                        bindingBox.appendChild(dom.makeInfoLine(`  message: ${command.message}`));
+                    });
+                }
+            }
+
+            traceBox.appendChild(bindingBox);
+        });
+
+        container.appendChild(traceBox);
+    };
+
     container.appendChild(dom.makeSectionTitle('Script Edit'));
     if (!selectedExternalScript) {
         container.appendChild(dom.makeInfoLine('Select an external script asset to inspect.'));
         renderPreviewSection();
+        renderRuntimeOnStartTraceSection();
         container.appendChild(dom.makeSpacer(8));
         return;
     }
@@ -192,5 +256,6 @@ export function renderScriptDetailsSection(
     container.appendChild(usersBox);
 
     renderPreviewSection();
+    renderRuntimeOnStartTraceSection();
     container.appendChild(dom.makeSpacer(8));
 }

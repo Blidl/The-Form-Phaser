@@ -11,7 +11,8 @@ import type {
 } from '../../game/world/runtime/test_world_config';
 import {
     executeLogicScriptPreviewSandbox,
-    type LogicScriptExecutionResult
+    type LogicScriptExecutionResult,
+    type LogicWorldOnStartTrace
 } from '../../game/world/runtime/logic_script_runtime';
 import {
     collectTestWorldLogicDiagnosticsWithRegistry,
@@ -398,6 +399,7 @@ export class LogicEditorMode implements EditorMode {
         const snapshot = this.logicAuthoringService.getSnapshot();
         const selectedBinding = this.syncSelectedBinding(snapshot);
         const selectedExternalScript = this.syncSelectedExternalScript(getAllLogicScriptAssets());
+        const runtimeWorldOnStartTrace = this.getRuntimeWorldOnStartLogicTrace();
 
         panel.setCustomContent('Logic Bindings', (container) => {
             if (!snapshot) {
@@ -410,6 +412,7 @@ export class LogicEditorMode implements EditorMode {
                 selectedExternalScript,
                 bindings: snapshot.bindings,
                 previewResult: this.externalScriptPreviewResult,
+                runtimeWorldOnStartTrace,
                 onPlayPreview: () => {
                     if (!selectedExternalScript) {
                         return;
@@ -565,6 +568,17 @@ export class LogicEditorMode implements EditorMode {
             commandId: entry.commandId,
             path: entry.path
         }));
+    }
+
+    private getRuntimeWorldOnStartLogicTrace(): LogicWorldOnStartTrace | null {
+        const trace = this.legacyObjectAdapter?.getWorldOnStartLogicTrace() as LogicWorldOnStartTrace | null;
+        if (!trace || typeof trace !== 'object') {
+            return null;
+        }
+        if (!Array.isArray(trace.bindings)) {
+            return null;
+        }
+        return trace;
     }
 
     private getCurrentRuntimeConfig(): TestWorldConfig | null {
