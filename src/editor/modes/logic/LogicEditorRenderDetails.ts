@@ -14,9 +14,46 @@ export function renderScriptDetailsSection(
 ): void {
     const { dom, selectedExternalScript, bindings } = context;
 
+    const renderPreviewSection = (): void => {
+        container.appendChild(dom.makeSectionTitle('Preview'));
+
+        const previewBox = document.createElement('div');
+        previewBox.style.border = '1px solid #8b8b8b';
+        previewBox.style.background = '#ececec';
+        previewBox.style.padding = '6px';
+        previewBox.style.marginBottom = '8px';
+
+        const controlsRow = document.createElement('div');
+        controlsRow.style.display = 'flex';
+        controlsRow.style.flexWrap = 'wrap';
+        controlsRow.style.gap = '6px';
+        controlsRow.style.marginBottom = '6px';
+
+        ['Play', 'Pause', 'Stop', 'Focus'].forEach((label) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.textContent = label;
+            button.disabled = true;
+            button.style.opacity = '0.65';
+            button.style.cursor = 'not-allowed';
+            controlsRow.appendChild(button);
+        });
+
+        previewBox.appendChild(controlsRow);
+        previewBox.appendChild(dom.makeInfoLine('Preview execution is deferred.'));
+        if (selectedExternalScript) {
+            previewBox.appendChild(dom.makeInfoLine(`Selected script: ${selectedExternalScript.id}`));
+        } else {
+            previewBox.appendChild(dom.makeInfoLine('Select a script to preview later.'));
+        }
+
+        container.appendChild(previewBox);
+    };
+
     container.appendChild(dom.makeSectionTitle('Script Edit'));
     if (!selectedExternalScript) {
         container.appendChild(dom.makeInfoLine('Select an external script asset to inspect.'));
+        renderPreviewSection();
         container.appendChild(dom.makeSpacer(8));
         return;
     }
@@ -81,5 +118,7 @@ export function renderScriptDetailsSection(
         });
     }
     container.appendChild(usersBox);
+
+    renderPreviewSection();
     container.appendChild(dom.makeSpacer(8));
 }
