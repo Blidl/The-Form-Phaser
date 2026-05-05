@@ -77,11 +77,11 @@ import type {
     DebugEventType,
     EventDebugRecordInput
 } from '../../debug/event_debug_types';
+import type { LogicWorldOnStartTrace } from './logic_script_runtime';
 import {
-    traceWorldOnStartLogicBindings,
-    type LogicWorldOnStartTrace
-} from './logic_script_runtime';
-import { ensureExternalLogicScriptsLoaded } from './logic_script_registry';
+    cloneWorldOnStartLogicTrace,
+    createWorldOnStartLogicStartupTrace
+} from './logic_script_startup_runtime';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -251,10 +251,6 @@ interface BuiltWorldInstance {
     destroy: () => void;
 }
 
-const cloneWorldOnStartLogicTrace = (
-    trace: LogicWorldOnStartTrace
-): LogicWorldOnStartTrace => JSON.parse(JSON.stringify(trace)) as LogicWorldOnStartTrace;
-
 interface FinishTriggerObject {
     trigger: Phaser.GameObjects.Rectangle;
     refresh: () => void;
@@ -349,13 +345,19 @@ export const createTestWorldRuntime = (
         if (hasExecutedWorldOnStartLogicTrace) {
             return;
         }
-        void ensureExternalLogicScriptsLoaded()
-            .finally(() => {
+        void createWorldOnStartLogicStartupTrace(worldOnStartTraceConfig)
+            .then((trace) => {
                 if (hasExecutedWorldOnStartLogicTrace) {
                     return;
                 }
                 hasExecutedWorldOnStartLogicTrace = true;
-                lastWorldOnStartLogicTrace = traceWorldOnStartLogicBindings(worldOnStartTraceConfig);
+                lastWorldOnStartLogicTrace = trace;
+            })
+            .catch(() => {
+                if (hasExecutedWorldOnStartLogicTrace) {
+                    return;
+                }
+                hasExecutedWorldOnStartLogicTrace = true;
             });
     };
 
