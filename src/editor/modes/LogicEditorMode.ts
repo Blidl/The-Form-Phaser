@@ -4,9 +4,14 @@ import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService'
 import type { LogicSnapshot } from '../logic-authoring/LogicAuthoringTypes';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type {
+    TestWorldConfig,
     TestWorldLogicScriptCategory,
     TestWorldLogicScriptConfig
 } from '../../game/world/runtime/test_world_config';
+import {
+    collectTestWorldLogicDiagnosticsWithRegistry,
+    getAllLogicScriptAssets
+} from '../../game/world/runtime/logic_script_registry';
 
 interface LogicEditorModeOptions {
     legacyObjectAdapter: LegacyObjectAdapter | null;
@@ -24,6 +29,7 @@ export class LogicEditorMode implements EditorMode {
     public readonly label = 'Logic';
 
     private readonly logicAuthoringService: LogicAuthoringService;
+    private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
     private readonly onUiChanged: () => void;
     private lastSnapshotSignature: string | null = null;
     private isCreateScriptFormOpen = false;
@@ -48,6 +54,7 @@ export class LogicEditorMode implements EditorMode {
     ];
 
     public constructor(options: LogicEditorModeOptions) {
+        this.legacyObjectAdapter = options.legacyObjectAdapter;
         this.logicAuthoringService = new LogicAuthoringService(options.legacyObjectAdapter);
         this.onUiChanged = options.onUiChanged;
     }
@@ -83,6 +90,51 @@ export class LogicEditorMode implements EditorMode {
             container.appendChild(this.makeInfoLine(`Bindings: ${snapshot.bindings.length}`));
             container.appendChild(this.makeSpacer(8));
 
+            const externalAssets = getAllLogicScriptAssets();
+            const diagnostics = this.collectRegistryDiagnostics();
+            container.appendChild(this.makeSectionTitle('External Script Assets'));
+            container.appendChild(this.makeInfoLine('External scripts are authored in IDE/source files. This editor only references them.'));
+            container.appendChild(this.makeInfoLine(`External assets: ${externalAssets.length}`));
+            container.appendChild(this.makeSpacer(4));
+
+            if (diagnostics.length > 0) {
+                const warningBox = document.createElement('div');
+                warningBox.style.border = '1px solid #c98a00';
+                warningBox.style.background = '#fff4d1';
+                warningBox.style.padding = '6px';
+                warningBox.style.marginBottom = '6px';
+                warningBox.style.wordBreak = 'break-word';
+                warningBox.appendChild(this.makeInfoLine(`Diagnostics: ${diagnostics.length}`));
+                diagnostics.forEach((diagnostic) => {
+                    warningBox.appendChild(this.makeInfoLine(`[${diagnostic.code}] ${diagnostic.message}`));
+                });
+                container.appendChild(warningBox);
+            }
+
+            if (externalAssets.length <= 0) {
+                container.appendChild(this.makeInfoLine('No external script assets found.'));
+                container.appendChild(this.makeInfoLine('Add scripts in src/game/world/runtime/data/logic_scripts.json and reload.'));
+            } else {
+                externalAssets.forEach((script) => {
+                    const scriptBox = document.createElement('div');
+                    scriptBox.style.border = '1px solid #8b8b8b';
+                    scriptBox.style.background = '#d9d9d9';
+                    scriptBox.style.padding = '6px';
+                    scriptBox.style.marginBottom = '6px';
+                    scriptBox.style.wordBreak = 'break-word';
+                    const lockedMarker = script.editor?.locked ? ' [locked]' : '';
+                    scriptBox.appendChild(this.makeInfoLine(`name: ${script.name}${lockedMarker}`));
+                    scriptBox.appendChild(this.makeInfoLine(`id: ${script.id}`));
+                    scriptBox.appendChild(this.makeInfoLine(`category: ${script.category}`));
+                    scriptBox.appendChild(this.makeInfoLine(`command count: ${script.commands.length}`));
+                    if (script.editor?.locked) {
+                        scriptBox.appendChild(this.makeInfoLine('locked: true'));
+                    }
+                    container.appendChild(scriptBox);
+                });
+            }
+
+            container.appendChild(this.makeSpacer(8));
             container.appendChild(this.makeSectionTitle('Scripts'));
             const createButton = document.createElement('button');
             createButton.type = 'button';
@@ -439,13 +491,37 @@ export class LogicEditorMode implements EditorMode {
             return null;
         }
         try {
+            const runtimeConfig = this.getCurrentRuntimeConfig();
             return JSON.stringify({
                 scripts: snapshot.scripts,
-                bindings: snapshot.bindings
+                bindings: snapshot.bindings,
+                scriptRefs: runtimeConfig?.logic?.scriptRefs ?? []
             });
         } catch {
             return `${snapshot.scripts.length}|${snapshot.bindings.length}`;
         }
+    }
+
+    private collectRegistryDiagnostics(): { code: string; message: string }[] {
+        const runtimeConfig = this.getCurrentRuntimeConfig();
+        if (!runtimeConfig) {
+            return [];
+        }
+        return collectTestWorldLogicDiagnosticsWithRegistry(runtimeConfig).map((entry) => ({
+            code: entry.code,
+            message: entry.message
+        }));
+    }
+
+    private getCurrentRuntimeConfig(): TestWorldConfig | null {
+        const config = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
+        if (!config || typeof config !== 'object') {
+            return null;
+        }
+        if (!config.meta || !config.worldBounds) {
+            return null;
+        }
+        return config;
     }
 
     private syncSelectedScript(snapshot: LogicSnapshot | null): TestWorldLogicScriptConfig | null {
