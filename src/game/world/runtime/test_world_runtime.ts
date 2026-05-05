@@ -77,6 +77,10 @@ import type {
     DebugEventType,
     EventDebugRecordInput
 } from '../../debug/event_debug_types';
+import {
+    traceWorldOnStartLogicBindings,
+    type LogicWorldOnStartTrace
+} from './logic_script_runtime';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -144,6 +148,7 @@ export interface TestWorldRuntime {
     };
     getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
+    getWorldOnStartLogicTrace: () => LogicWorldOnStartTrace | null;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     replaceConfig: (
@@ -245,6 +250,10 @@ interface BuiltWorldInstance {
     destroy: () => void;
 }
 
+const cloneWorldOnStartLogicTrace = (
+    trace: LogicWorldOnStartTrace
+): LogicWorldOnStartTrace => JSON.parse(JSON.stringify(trace)) as LogicWorldOnStartTrace;
+
 interface FinishTriggerObject {
     trigger: Phaser.GameObjects.Rectangle;
     refresh: () => void;
@@ -321,6 +330,8 @@ export const createTestWorldRuntime = (
     let currentConfig = normalizeTestWorldConfig(params.initialConfig, {
         fallbackConfig: params.initialConfig
     });
+    let hasExecutedWorldOnStartLogicTrace = false;
+    let lastWorldOnStartLogicTrace: LogicWorldOnStartTrace | null = null;
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let editorDebugViewActive = false;
     let instance = buildWorldInstance(
@@ -331,6 +342,16 @@ export const createTestWorldRuntime = (
         useArcadePlatformCollisions,
         forwardedEventDebugSink
     );
+
+    const executeWorldOnStartLogicTraceOnce = (): void => {
+        if (hasExecutedWorldOnStartLogicTrace) {
+            return;
+        }
+        hasExecutedWorldOnStartLogicTrace = true;
+        lastWorldOnStartLogicTrace = traceWorldOnStartLogicBindings(currentConfig);
+    };
+
+    executeWorldOnStartLogicTraceOnce();
 
     const rebuildFromCurrentConfig = (): void => {
         instance.destroy();
@@ -471,6 +492,12 @@ export const createTestWorldRuntime = (
         getNpcCameraFocusObject: (actorId: string): GameObjects.Container | null => (
             instance.getNpcCameraFocusObject(actorId)
         ),
+        getWorldOnStartLogicTrace: (): LogicWorldOnStartTrace | null => {
+            if (!lastWorldOnStartLogicTrace) {
+                return null;
+            }
+            return cloneWorldOnStartLogicTrace(lastWorldOnStartLogicTrace);
+        },
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
             currentConfig = normalizeTestWorldConfig(config, {
