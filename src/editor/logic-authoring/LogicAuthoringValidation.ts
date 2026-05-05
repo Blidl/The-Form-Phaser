@@ -7,7 +7,8 @@ import type {
     TestWorldLogicScriptCategory,
     TestWorldLogicScriptCommandConfig,
     TestWorldLogicScriptConfig,
-    TestWorldLogicScriptEditorConfig
+    TestWorldLogicScriptEditorConfig,
+    TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
 
 export const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
@@ -136,6 +137,12 @@ export const cloneLogicBinding = (binding: TestWorldLogicBindingConfig): TestWor
     enabled: binding.enabled
 });
 
+export const cloneLogicScriptRef = (scriptRef: TestWorldLogicScriptRefConfig): TestWorldLogicScriptRefConfig => ({
+    id: scriptRef.id,
+    path: scriptRef.path,
+    displayName: scriptRef.displayName
+});
+
 export const normalizeLogicScript = (value: unknown): TestWorldLogicScriptConfig | null => {
     if (!isObjectRecord(value)) {
         return null;
@@ -201,12 +208,36 @@ export const normalizeBindingList = (rawBindings: unknown): TestWorldLogicBindin
         .map((entry) => cloneLogicBinding(entry));
 };
 
+export const normalizeScriptRefList = (rawScriptRefs: unknown): TestWorldLogicScriptRefConfig[] => {
+    if (!Array.isArray(rawScriptRefs)) {
+        return [];
+    }
+    return rawScriptRefs
+        .map((entry) => {
+            if (!isObjectRecord(entry)) {
+                return null;
+            }
+            const id = asOptionalString(entry.id);
+            if (!id) {
+                return null;
+            }
+            return {
+                id,
+                path: asOptionalString(entry.path),
+                displayName: asOptionalString(entry.displayName)
+            } satisfies TestWorldLogicScriptRefConfig;
+        })
+        .filter((entry): entry is TestWorldLogicScriptRefConfig => entry !== null)
+        .map((entry) => cloneLogicScriptRef(entry));
+};
+
 export const resolveLogicForRead = (config: TestWorldConfig): TestWorldLogicConfig => {
     const logic = isObjectRecord(config.logic)
         ? config.logic
         : undefined;
     return {
         scripts: normalizeScriptList(logic?.scripts),
+        scriptRefs: normalizeScriptRefList(logic?.scriptRefs),
         bindings: normalizeBindingList(logic?.bindings)
     };
 };

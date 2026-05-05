@@ -25,6 +25,7 @@ import {
     type TestWorldLogicScriptCommandConfig,
     type TestWorldLogicScriptConfig,
     type TestWorldLogicScriptEditorConfig,
+    type TestWorldLogicScriptRefConfig,
     type TestWorldMovingPlatformMotionState,
     type TestWorldMovingPlatformConfig,
     type TestWorldPlayerSpawnConfig,
@@ -92,6 +93,24 @@ const TEST_WORLD_LOGIC_BINDING_TARGET_TYPES = new Set<TestWorldLogicBindingTarge
     'trigger',
     'world'
 ]);
+
+export type TestWorldLogicDiagnosticSeverity = 'warning' | 'error';
+
+export type TestWorldLogicDiagnosticCode =
+    | 'missing_logic_script_ref'
+    | 'duplicate_logic_script_id'
+    | 'duplicate_logic_script_ref'
+    | 'invalid_logic_binding_target';
+
+export interface TestWorldLogicDiagnostic {
+    id: string;
+    severity: TestWorldLogicDiagnosticSeverity;
+    code: TestWorldLogicDiagnosticCode;
+    message: string;
+    scriptId?: string;
+    bindingId?: string;
+    path?: string;
+}
 
 const asNumber = (value: unknown, fallback: number): number => {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -728,6 +747,30 @@ const normalizeTestWorldLogicScripts = (
         .filter((entry): entry is TestWorldLogicScriptConfig => entry !== null);
 };
 
+const normalizeTestWorldLogicScriptRefs = (
+    raw: unknown
+): TestWorldLogicScriptRefConfig[] => {
+    const usedScriptRefIds = new Set<string>();
+    return asArray(raw)
+        .map((entry, index) => {
+            const item = asObject(entry);
+            if (!item) {
+                return null;
+            }
+            const rawScriptRefId = asOptionalString(item.id);
+            if (!rawScriptRefId) {
+                return null;
+            }
+            const id = ensureUniqueId(rawScriptRefId, usedScriptRefIds, `logic_script_ref_${index + 1}`);
+            return {
+                id,
+                path: asOptionalString(item.path),
+                displayName: asOptionalString(item.displayName)
+            } satisfies TestWorldLogicScriptRefConfig;
+        })
+        .filter((entry): entry is TestWorldLogicScriptRefConfig => entry !== null);
+};
+
 const collectWorldObjectIds = (
     config: TestWorldConfig,
     includePlayer: boolean
@@ -753,10 +796,8 @@ const collectWorldObjectIds = (
 
 const normalizeTestWorldLogicBindings = (
     raw: unknown,
-    scripts: readonly TestWorldLogicScriptConfig[],
     config: TestWorldConfig
 ): TestWorldLogicBindingConfig[] => {
-    const scriptIds = new Set(scripts.map((entry) => entry.id));
     const worldObjectIds = collectWorldObjectIds(config, false);
     const npcIds = new Set(config.npcs.map((entry) => entry.id));
     const triggerTargetIds = new Set<string>([
@@ -774,7 +815,7 @@ const normalizeTestWorldLogicBindings = (
             const targetType = asLogicBindingTargetType(item.targetType);
             const slot = asOptionalString(item.slot);
             const scriptId = asOptionalString(item.scriptId);
-            if (!targetType || !slot || !scriptId || !scriptIds.has(scriptId)) {
+            if (!targetType || !slot || !scriptId) {
                 return null;
             }
 
@@ -822,16 +863,144 @@ const normalizeTestWorldLogicConfig = (
     if (!raw) {
         return {
             scripts: [],
+            scriptRefs: [],
             bindings: []
         };
     }
 
     const scripts = normalizeTestWorldLogicScripts(raw.scripts);
-    const bindings = normalizeTestWorldLogicBindings(raw.bindings, scripts, config);
+    const scriptRefs = normalizeTestWorldLogicScriptRefs(raw.scriptRefs);
+    const bindings = normalizeTestWorldLogicBindings(raw.bindings, config);
     return {
         scripts,
+        scriptRefs,
         bindings
     };
+};
+
+export const collectTestWorldLogicDiagnostics = (
+    config: TestWorldConfig,
+    options?: {
+        availableExternalScriptIds?: ReadonlySet<string> | string[];
+    }
+): TestWorldLogicDiagnostic[] => {
+    const diagnostics: TestWorldLogicDiagnostic[] = [];
+    let diagnosticIndex = 1;
+    const nextDiagnosticId = (code: TestWorldLogicDiagnosticCode): string => {
+        const id = `${code}_${diagnosticIndex}`;
+        diagnosticIndex += 1;
+        return id;
+    };
+    const logic = config.logic;
+    const scripts = Array.isArray(logic?.scripts) ? logic.scripts : [];
+    const scriptRefs = Array.isArray(logic?.scriptRefs) ? logic.scriptRefs : [];
+    const bindings = Array.isArray(logic?.bindings) ? logic.bindings : [];
+    const knownScriptIds = new Set<string>();
+    const seenScriptIds = new Set<string>();
+    const seenScriptRefIds = new Set<string>();
+
+    scripts.forEach((script, index) => {
+        const scriptId = typeof script.id === 'string' ? script.id.trim() : '';
+        if (scriptId.length <= 0) {
+            return;
+        }
+        if (seenScriptIds.has(scriptId)) {
+            diagnostics.push({
+                id: nextDiagnosticId('duplicate_logic_script_id'),
+                severity: 'warning',
+                code: 'duplicate_logic_script_id',
+                message: `Duplicate logic script id "${scriptId}".`,
+                scriptId,
+                path: `logic.scripts[${index}].id`
+            });
+        } else {
+            seenScriptIds.add(scriptId);
+        }
+        knownScriptIds.add(scriptId);
+    });
+
+    scriptRefs.forEach((scriptRef, index) => {
+        const scriptId = typeof scriptRef.id === 'string' ? scriptRef.id.trim() : '';
+        if (scriptId.length <= 0) {
+            return;
+        }
+        if (seenScriptRefIds.has(scriptId)) {
+            diagnostics.push({
+                id: nextDiagnosticId('duplicate_logic_script_ref'),
+                severity: 'warning',
+                code: 'duplicate_logic_script_ref',
+                message: `Duplicate logic script ref id "${scriptId}".`,
+                scriptId,
+                path: `logic.scriptRefs[${index}].id`
+            });
+        } else {
+            seenScriptRefIds.add(scriptId);
+        }
+        knownScriptIds.add(scriptId);
+    });
+
+    const availableExternalScriptIds = options?.availableExternalScriptIds;
+    if (availableExternalScriptIds) {
+        availableExternalScriptIds.forEach((entry) => {
+            const scriptId = entry.trim();
+            if (scriptId.length > 0) {
+                knownScriptIds.add(scriptId);
+            }
+        });
+    }
+
+    const worldObjectIds = collectWorldObjectIds(config, false);
+    const npcIds = new Set(config.npcs.map((entry) => entry.id));
+    const triggerTargetIds = new Set<string>([
+        ...config.triggerPlatforms.map((entry) => entry.id),
+        ...config.triggerVolumes.map((entry) => entry.id)
+    ]);
+
+    bindings.forEach((binding, index) => {
+        const bindingId = typeof binding.id === 'string' ? binding.id.trim() : '';
+        const scriptId = typeof binding.scriptId === 'string' ? binding.scriptId.trim() : '';
+        if (scriptId.length > 0 && !knownScriptIds.has(scriptId)) {
+            diagnostics.push({
+                id: nextDiagnosticId('missing_logic_script_ref'),
+                severity: 'warning',
+                code: 'missing_logic_script_ref',
+                message: `Binding "${bindingId || `logic_binding_${index + 1}`}" references missing script "${scriptId}".`,
+                scriptId,
+                bindingId: bindingId || undefined,
+                path: `logic.bindings[${index}].scriptId`
+            });
+        }
+
+        const targetType = binding.targetType;
+        const targetId = typeof binding.targetId === 'string' ? binding.targetId.trim() : '';
+        let targetValid = true;
+        if (targetType === 'object') {
+            targetValid = targetId.length > 0 && worldObjectIds.has(targetId);
+        } else if (targetType === 'npc') {
+            targetValid = targetId.length > 0 && npcIds.has(targetId);
+        } else if (targetType === 'trigger') {
+            targetValid = targetId.length > 0 && triggerTargetIds.has(targetId);
+        } else if (targetType === 'cutscene') {
+            targetValid = targetId.length > 0 && isTestCutsceneRef(targetId);
+        } else if (targetType === 'world') {
+            targetValid = true;
+        } else {
+            targetValid = false;
+        }
+
+        if (!targetValid) {
+            diagnostics.push({
+                id: nextDiagnosticId('invalid_logic_binding_target'),
+                severity: 'error',
+                code: 'invalid_logic_binding_target',
+                message: `Binding "${bindingId || `logic_binding_${index + 1}`}" has an invalid ${targetType} target.`,
+                bindingId: bindingId || undefined,
+                path: `logic.bindings[${index}].targetId`
+            });
+        }
+    });
+
+    return diagnostics;
 };
 
 const normalizePlayerSpawn = (raw: Record<string, unknown> | null): TestWorldPlayerSpawnConfig => {
@@ -1886,6 +2055,7 @@ export const normalizeTestWorldConfig = (
         worldLogicRules: normalizeTestWorldLogicRules(root?.worldLogicRules, defaults.worldLogicRules),
         logic: {
             scripts: [],
+            scriptRefs: [],
             bindings: []
         },
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
@@ -1963,6 +2133,7 @@ export const createMinimalTestWorldConfig = (
         worldLogicRules: [],
         logic: {
             scripts: [],
+            scriptRefs: [],
             bindings: []
         },
         playerSpawn: {

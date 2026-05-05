@@ -310,6 +310,12 @@ export interface TestWorldLogicScriptConfig {
     editor?: TestWorldLogicScriptEditorConfig;
 }
 
+export interface TestWorldLogicScriptRefConfig {
+    id: string;
+    path?: string;
+    displayName?: string;
+}
+
 export type TestWorldLogicBindingTargetType =
     | 'object'
     | 'npc'
@@ -328,6 +334,7 @@ export interface TestWorldLogicBindingConfig {
 
 export interface TestWorldLogicConfig {
     scripts: TestWorldLogicScriptConfig[];
+    scriptRefs: TestWorldLogicScriptRefConfig[];
     bindings: TestWorldLogicBindingConfig[];
 }
 

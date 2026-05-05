@@ -55,6 +55,7 @@
   ],
   "logic": {
     "scripts": [],
+    "scriptRefs": [],
     "bindings": []
   },
   "playerSpawn": {

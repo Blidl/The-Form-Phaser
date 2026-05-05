@@ -484,12 +484,16 @@ export class LogicAuthoringService {
         if (!config.logic) {
             config.logic = {
                 scripts: [],
+                scriptRefs: [],
                 bindings: []
             };
             return config.logic;
         }
         if (!Array.isArray(config.logic.scripts)) {
             config.logic.scripts = [];
+        }
+        if (!Array.isArray(config.logic.scriptRefs)) {
+            config.logic.scriptRefs = [];
         }
         if (!Array.isArray(config.logic.bindings)) {
             config.logic.bindings = [];
