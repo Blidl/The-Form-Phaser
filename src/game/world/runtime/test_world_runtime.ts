@@ -82,6 +82,10 @@ import {
     cloneWorldOnStartLogicTrace,
     createWorldOnStartLogicStartupTrace
 } from './logic_script_startup_runtime';
+import {
+    normalizeRuntimeReplaceConfig,
+    normalizeRuntimeSetConfig
+} from './test_world_runtime_rebuild';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -510,31 +514,20 @@ export const createTestWorldRuntime = (
         },
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
-            currentConfig = normalizeTestWorldConfig(config, {
-                fallbackConfig: currentConfig
-            });
+            currentConfig = normalizeRuntimeSetConfig(config, currentConfig);
             rebuildFromCurrentConfig();
         },
         replaceConfig: (
             config: unknown,
             options?: { mode?: 'runtime_patch' | 'full_import' }
         ): { success: boolean; reason?: string } => {
-            try {
-                if (!config || typeof config !== 'object' || Array.isArray(config)) {
-                    return { success: false, reason: 'Config must be a JSON object.' };
-                }
-                const mode = options?.mode ?? 'runtime_patch';
-                currentConfig = normalizeTestWorldConfig(config, {
-                    fallbackConfig: currentConfig,
-                    preserveMissingBackgroundObjectFields: mode !== 'full_import',
-                    preserveMissingLogicFields: mode !== 'full_import'
-                });
-                rebuildFromCurrentConfig();
-                return { success: true };
-            } catch (error) {
-                const reason = error instanceof Error ? error.message : String(error);
-                return { success: false, reason };
+            const result = normalizeRuntimeReplaceConfig(config, currentConfig, options);
+            if (!result.success) {
+                return { success: false, reason: result.reason };
             }
+            currentConfig = result.nextConfig;
+            rebuildFromCurrentConfig();
+            return { success: true };
         },
         getEditorHandles: (): readonly TestWorldEditorHandle[] => instance.getEditorHandles(),
         getEditorObjects: (): readonly TestWorldEditorObjectSummary[] => instance.getEditorObjects(),
