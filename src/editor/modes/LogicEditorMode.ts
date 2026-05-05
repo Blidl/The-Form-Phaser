@@ -37,6 +37,7 @@ export class LogicEditorMode implements EditorMode {
     private selectedScriptId: string | null = null;
     private selectedScriptDraft: ScriptMetadataDraft | null = null;
     private updateScriptError: string | null = null;
+    private addScriptRefError: string | null = null;
 
     private readonly scriptCategoryOptions: TestWorldLogicScriptCategory[] = [
         'object.move',
@@ -87,15 +88,38 @@ export class LogicEditorMode implements EditorMode {
 
             container.appendChild(this.makeSectionTitle('Summary'));
             container.appendChild(this.makeInfoLine(`Scripts: ${snapshot.scripts.length}`));
+            container.appendChild(this.makeInfoLine(`Script refs: ${snapshot.scriptRefs.length}`));
             container.appendChild(this.makeInfoLine(`Bindings: ${snapshot.bindings.length}`));
             container.appendChild(this.makeSpacer(8));
 
             const externalAssets = getAllLogicScriptAssets();
+            const levelScriptRefs = snapshot.scriptRefs;
+            const referencedScriptRefIds = new Set(levelScriptRefs.map((entry) => entry.id));
             const diagnostics = this.collectRegistryDiagnostics();
+            container.appendChild(this.makeSectionTitle('Level Script Refs'));
+            if (levelScriptRefs.length <= 0) {
+                container.appendChild(this.makeInfoLine('No external script refs added to this level yet.'));
+            } else {
+                container.appendChild(this.makeInfoLine(`Count: ${levelScriptRefs.length}`));
+                levelScriptRefs.forEach((scriptRef) => {
+                    const displayName = scriptRef.displayName ?? '-';
+                    const path = scriptRef.path ?? '-';
+                    container.appendChild(this.makeInfoLine(`- ${scriptRef.id} (displayName: ${displayName}, path: ${path})`));
+                });
+            }
+            container.appendChild(this.makeSpacer(8));
+
             container.appendChild(this.makeSectionTitle('External Script Assets'));
             container.appendChild(this.makeInfoLine('External scripts are authored in IDE/source files. This editor only references them.'));
             container.appendChild(this.makeInfoLine(`External assets: ${externalAssets.length}`));
             container.appendChild(this.makeSpacer(4));
+
+            if (this.addScriptRefError) {
+                const errorLine = this.makeInfoLine(this.addScriptRefError);
+                errorLine.style.color = '#b00020';
+                errorLine.style.marginBottom = '6px';
+                container.appendChild(errorLine);
+            }
 
             if (diagnostics.length > 0) {
                 const warningBox = document.createElement('div');
@@ -129,6 +153,39 @@ export class LogicEditorMode implements EditorMode {
                     scriptBox.appendChild(this.makeInfoLine(`command count: ${script.commands.length}`));
                     if (script.editor?.locked) {
                         scriptBox.appendChild(this.makeInfoLine('locked: true'));
+                    }
+                    const isReferenced = referencedScriptRefIds.has(script.id);
+                    if (isReferenced) {
+                        const referencedLine = this.makeInfoLine('Referenced');
+                        referencedLine.style.color = '#146614';
+                        scriptBox.appendChild(referencedLine);
+                    } else {
+                        const addRefButton = document.createElement('button');
+                        addRefButton.type = 'button';
+                        addRefButton.textContent = 'Add Ref To Level';
+                        addRefButton.style.marginTop = '4px';
+                        addRefButton.addEventListener('click', () => {
+                            try {
+                                const result = this.logicAuthoringService.addScriptRef({
+                                    id: script.id,
+                                    path: 'logic_scripts.json',
+                                    displayName: script.name
+                                });
+                                if (!result.success) {
+                                    this.addScriptRefError = result.reason ?? 'Failed to add script ref to level.';
+                                    this.onUiChanged();
+                                    return;
+                                }
+                                this.addScriptRefError = null;
+                                this.onUiChanged();
+                            } catch (error) {
+                                this.addScriptRefError = error instanceof Error
+                                    ? error.message
+                                    : 'Failed to add script ref to level.';
+                                this.onUiChanged();
+                            }
+                        });
+                        scriptBox.appendChild(addRefButton);
                     }
                     container.appendChild(scriptBox);
                 });
