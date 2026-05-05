@@ -302,9 +302,11 @@ export const reloadExternalLogicScripts = async (): Promise<LogicScriptRegistryR
     const isBrowser = typeof window !== 'undefined';
     const isDev = import.meta.env.DEV;
     if (isDev && isBrowser) {
+        hasLoadedExternalLogicScripts = false;
         try {
-            const response = await fetch('/__theform/logic-scripts', {
+            const response = await fetch(`/__theform/logic-scripts?ts=${Date.now()}`, {
                 method: 'GET',
+                cache: 'no-store',
                 headers: {
                     Accept: 'application/json'
                 }
@@ -373,7 +375,8 @@ export const reloadExternalLogicScripts = async (): Promise<LogicScriptRegistryR
 };
 
 export const ensureExternalLogicScriptsLoaded = async (): Promise<LogicScriptRegistryReloadResult> => {
-    if (hasLoadedExternalLogicScripts) {
+    const hasSuccessfulDevFetchState = registryState.source === 'dev-fetch' && !registryState.lastError;
+    if (hasLoadedExternalLogicScripts && hasSuccessfulDevFetchState) {
         return {
             success: true,
             version: registryState.version,
@@ -398,10 +401,13 @@ export const ensureExternalLogicScriptsLoaded = async (): Promise<LogicScriptReg
             .then((result) => {
                 if (result.success) {
                     hasLoadedExternalLogicScripts = true;
+                } else {
+                    hasLoadedExternalLogicScripts = false;
                 }
                 return result;
             })
             .catch((error) => {
+                hasLoadedExternalLogicScripts = false;
                 const message = error instanceof Error ? error.message : 'unknown fetch failure';
                 return {
                     success: false,

@@ -4,7 +4,10 @@ import {
     traceWorldOnStartLogicBindings,
     type LogicWorldOnStartTrace
 } from './logic_script_runtime';
-import { ensureExternalLogicScriptsLoaded } from './logic_script_registry';
+import {
+    ensureExternalLogicScriptsLoaded,
+    reloadExternalLogicScripts
+} from './logic_script_registry';
 
 export interface WorldOnStartLogicRuntimeContext {
     setWorldFlag: (key: string, value: boolean) => void;
@@ -14,10 +17,10 @@ export const createWorldOnStartLogicStartupTrace = async (
     config: TestWorldConfig,
     context: WorldOnStartLogicRuntimeContext
 ): Promise<LogicWorldOnStartTrace> => {
-    try {
-        await ensureExternalLogicScriptsLoaded();
-    } catch {
-        // Ignore preload errors and produce the same trace shape from current registry state.
+    let preloadResult = await ensureExternalLogicScriptsLoaded();
+    if (!preloadResult.success) {
+        // Retry once to avoid finalizing trace from a transient empty fallback state.
+        preloadResult = await reloadExternalLogicScripts();
     }
     return traceWorldOnStartLogicBindings(
         config,
