@@ -8,6 +8,15 @@ const persistedTuningModulePath = path.join(
     projectRoot,
     'src/game/player/tuning/player_tuning_persisted.generated.ts'
 );
+const logicScriptsJsonPath = path.join(
+    projectRoot,
+    'src/game/world/runtime/data/logic_scripts.json'
+);
+const logicScriptsJsonRelativeSuffix = '/src/game/world/runtime/data/logic_scripts.json';
+
+const toPosixPath = (value) => {
+    return value.replaceAll('\\', '/');
+};
 
 const isValidSnapshotPayload = (value) => {
     return typeof value === 'object'
@@ -79,6 +88,50 @@ export default defineConfig({
                     }));
                 }
             });
+        }
+    }, {
+        name: 'logic-scripts-read-endpoint',
+        configureServer(server) {
+            server.middlewares.use('/__theform/logic-scripts', async (req, res) => {
+                if (req.method !== 'GET') {
+                    res.statusCode = 405;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({ message: 'method not allowed' }));
+                    return;
+                }
+
+                try {
+                    const rawJson = await fs.readFile(logicScriptsJsonPath, 'utf8');
+                    const payload = JSON.parse(rawJson);
+                    res.statusCode = 200;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify(payload));
+                } catch (error) {
+                    res.statusCode = 500;
+                    res.setHeader('Content-Type', 'application/json');
+                    res.end(JSON.stringify({
+                        message: error instanceof Error
+                            ? error.message
+                            : 'failed to load logic scripts'
+                    }));
+                }
+            });
+        }
+    }, {
+        name: 'logic-scripts-hmr-suppressor',
+        handleHotUpdate(context) {
+            const normalizedFilePath = toPosixPath(context.file);
+            const normalizedTargetPath = toPosixPath(logicScriptsJsonPath);
+            const isLogicScriptsJsonChange = normalizedFilePath === normalizedTargetPath
+                || normalizedFilePath.endsWith(logicScriptsJsonRelativeSuffix);
+            if (!isLogicScriptsJsonChange) {
+                return;
+            }
+            context.server.config.logger.info(
+                'logic_scripts.json changed; use Logic tab Reload Scripts.',
+                { timestamp: true }
+            );
+            return [];
         }
     }]
 });

@@ -18,6 +18,10 @@ export interface RenderExternalScriptsContext {
         path?: string;
     }[];
     selectedExternalScriptId: string | null;
+    reloadScriptsStatus: {
+        success: boolean;
+        message: string;
+    } | null;
     addScriptRefError: string | null;
     createBindingRefId: string | null;
     createBindingSlotDraft: string;
@@ -30,6 +34,7 @@ export interface RenderExternalScriptsContext {
     onCancelCreateBindingForRef: () => void;
     onSelectExternalScript: (scriptId: string) => void;
     onAddScriptRefToLevel: (script: TestWorldLogicScriptConfig) => void;
+    onReloadScripts: () => void;
 }
 
 interface ScriptCategoryGroupConfig {
@@ -93,6 +98,7 @@ export function renderExternalScriptsSection(
         referencedScriptRefIds,
         diagnostics,
         selectedExternalScriptId,
+        reloadScriptsStatus,
         addScriptRefError,
         createBindingRefId,
         createBindingSlotDraft,
@@ -104,12 +110,32 @@ export function renderExternalScriptsSection(
         onCreateBindingForRef,
         onCancelCreateBindingForRef,
         onSelectExternalScript,
-        onAddScriptRefToLevel
+        onAddScriptRefToLevel,
+        onReloadScripts
     } = context;
 
     container.appendChild(dom.makeSectionTitle('External Script Assets'));
     container.appendChild(dom.makeInfoLine('External scripts are authored in IDE/source files. This editor only references them.'));
-    container.appendChild(dom.makeInfoLine(`External assets: ${externalAssets.length}`));
+    const summaryRow = document.createElement('div');
+    summaryRow.style.display = 'flex';
+    summaryRow.style.alignItems = 'center';
+    summaryRow.style.gap = '8px';
+    summaryRow.style.marginBottom = '4px';
+    summaryRow.appendChild(dom.makeInfoLine(`External assets: ${externalAssets.length}`));
+    const reloadScriptsButton = document.createElement('button');
+    reloadScriptsButton.type = 'button';
+    reloadScriptsButton.textContent = 'Reload Scripts';
+    reloadScriptsButton.addEventListener('click', () => {
+        onReloadScripts();
+    });
+    summaryRow.appendChild(reloadScriptsButton);
+    container.appendChild(summaryRow);
+    if (reloadScriptsStatus) {
+        const reloadStatusLine = dom.makeInfoLine(reloadScriptsStatus.message);
+        reloadStatusLine.style.color = reloadScriptsStatus.success ? '#146614' : '#b00020';
+        reloadStatusLine.style.marginBottom = '4px';
+        container.appendChild(reloadStatusLine);
+    }
     container.appendChild(dom.makeSpacer(4));
 
     if (addScriptRefError) {

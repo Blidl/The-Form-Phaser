@@ -11,7 +11,9 @@ import type {
 } from '../../game/world/runtime/test_world_config';
 import {
     collectTestWorldLogicDiagnosticsWithRegistry,
-    getAllLogicScriptAssets
+    getAllLogicScriptAssets,
+    getLogicScriptRegistryVersion,
+    reloadExternalLogicScripts
 } from '../../game/world/runtime/logic_script_registry';
 import {
     bindEditorInputKeyboardGuards,
@@ -74,6 +76,8 @@ export class LogicEditorMode implements EditorMode {
     private createBindingSlotDraft = 'onStart';
     private createBindingEnabledDraft = true;
     private createBindingError: string | null = null;
+    private reloadScriptsStatus: { success: boolean; message: string } | null = null;
+    private logicScriptRegistryVersion = 0;
     private selectedBindingId: string | null = null;
     private selectedBindingDraft: BindingMetadataDraft | null = null;
     private updateBindingError: string | null = null;
@@ -97,19 +101,29 @@ export class LogicEditorMode implements EditorMode {
         this.legacyObjectAdapter = options.legacyObjectAdapter;
         this.logicAuthoringService = new LogicAuthoringService(options.legacyObjectAdapter);
         this.onUiChanged = options.onUiChanged;
+        this.logicScriptRegistryVersion = getLogicScriptRegistryVersion();
     }
 
     public enter(): void {
         this.lastSnapshotSignature = this.readSnapshotSignature();
+        this.logicScriptRegistryVersion = getLogicScriptRegistryVersion();
     }
 
     public update(): void {
+        let shouldRefreshUi = false;
         const nextSignature = this.readSnapshotSignature();
-        if (nextSignature === this.lastSnapshotSignature) {
-            return;
+        if (nextSignature !== this.lastSnapshotSignature) {
+            this.lastSnapshotSignature = nextSignature;
+            shouldRefreshUi = true;
         }
-        this.lastSnapshotSignature = nextSignature;
-        this.onUiChanged();
+        const nextRegistryVersion = getLogicScriptRegistryVersion();
+        if (nextRegistryVersion !== this.logicScriptRegistryVersion) {
+            this.logicScriptRegistryVersion = nextRegistryVersion;
+            shouldRefreshUi = true;
+        }
+        if (shouldRefreshUi) {
+            this.onUiChanged();
+        }
     }
 
     public renderLeftInspector(panel: EditorPanel): void {
@@ -143,6 +157,7 @@ export class LogicEditorMode implements EditorMode {
                 referencedScriptRefIds,
                 diagnostics,
                 selectedExternalScriptId: this.selectedExternalScriptId,
+                reloadScriptsStatus: this.reloadScriptsStatus,
                 addScriptRefError: this.addScriptRefError,
                 createBindingRefId: this.createBindingRefId,
                 createBindingSlotDraft: this.createBindingSlotDraft,
@@ -220,6 +235,26 @@ export class LogicEditorMode implements EditorMode {
                             : 'Failed to add script ref to level.';
                         this.onUiChanged();
                     }
+                },
+                onReloadScripts: () => {
+                    void reloadExternalLogicScripts()
+                        .then((result) => {
+                            this.logicScriptRegistryVersion = getLogicScriptRegistryVersion();
+                            this.reloadScriptsStatus = {
+                                success: result.success,
+                                message: result.message
+                            };
+                            this.onUiChanged();
+                        })
+                        .catch((error) => {
+                            this.reloadScriptsStatus = {
+                                success: false,
+                                message: error instanceof Error
+                                    ? error.message
+                                    : 'Failed to reload external scripts.'
+                            };
+                            this.onUiChanged();
+                        });
                 }
             });
 

@@ -1,4 +1,3 @@
-import logicScriptRegistryJson from './data/logic_scripts.json';
 import type {
     TestWorldConfig,
     TestWorldLogicScriptCategory,
@@ -25,6 +24,18 @@ const SUPPORTED_LOGIC_COMMAND_TYPES = new Set<string>([
     'noop',
     'set_world_flag'
 ]);
+const EMPTY_LOGIC_SCRIPT_REGISTRY: { scripts: unknown[] } = { scripts: [] };
+
+interface LogicScriptRegistryState {
+    assets: TestWorldLogicScriptConfig[];
+    byId: Map<string, TestWorldLogicScriptConfig>;
+    ids: string[];
+    version: number;
+    source: string;
+    lastReloadedAt: number;
+    lastError?: string;
+    lastRawRegistry: unknown;
+}
 
 const asObject = (value: unknown): Record<string, unknown> | null => {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -135,10 +146,16 @@ const normalizeLogicScript = (value: unknown): TestWorldLogicScriptConfig | null
     };
 };
 
-const normalizeLogicScriptAssets = (rawRegistry: unknown): TestWorldLogicScriptConfig[] => {
+const normalizeLogicScriptAssets = (rawRegistry: unknown): {
+    assets: TestWorldLogicScriptConfig[];
+    error: string | null;
+} => {
     const rawRoot = asObject(rawRegistry);
     if (!rawRoot || !Array.isArray(rawRoot.scripts)) {
-        return [];
+        return {
+            assets: [],
+            error: 'Registry payload must be an object with a scripts array.'
+        };
     }
 
     const usedIds = new Set<string>();
@@ -151,17 +168,47 @@ const normalizeLogicScriptAssets = (rawRegistry: unknown): TestWorldLogicScriptC
         usedIds.add(script.id);
         normalized.push(cloneLogicScriptAsset(script));
     });
-    return normalized;
+    return {
+        assets: normalized,
+        error: null
+    };
 };
 
-const LOGIC_SCRIPT_ASSETS = normalizeLogicScriptAssets(logicScriptRegistryJson);
-const LOGIC_SCRIPT_ASSET_BY_ID = new Map<string, TestWorldLogicScriptConfig>(
-    LOGIC_SCRIPT_ASSETS.map((entry) => [entry.id, entry] as const)
-);
-const LOGIC_SCRIPT_ASSET_IDS = LOGIC_SCRIPT_ASSETS.map((entry) => entry.id);
+const registryState: LogicScriptRegistryState = {
+    assets: [],
+    byId: new Map<string, TestWorldLogicScriptConfig>(),
+    ids: [],
+    version: 0,
+    source: 'init',
+    lastReloadedAt: Date.now(),
+    lastRawRegistry: EMPTY_LOGIC_SCRIPT_REGISTRY
+};
+
+const commitLogicScriptRegistry = (rawRegistry: unknown, source: string): void => {
+    const normalized = normalizeLogicScriptAssets(rawRegistry);
+    if (normalized.error) {
+        registryState.source = source;
+        registryState.lastError = normalized.error;
+        return;
+    }
+
+    const nextAssets = normalized.assets.map((entry) => cloneLogicScriptAsset(entry));
+    registryState.assets = nextAssets;
+    registryState.byId = new Map<string, TestWorldLogicScriptConfig>(
+        nextAssets.map((entry) => [entry.id, entry] as const)
+    );
+    registryState.ids = nextAssets.map((entry) => entry.id);
+    registryState.lastRawRegistry = rawRegistry;
+    registryState.version += 1;
+    registryState.source = source;
+    registryState.lastReloadedAt = Date.now();
+    registryState.lastError = undefined;
+};
+
+commitLogicScriptRegistry(EMPTY_LOGIC_SCRIPT_REGISTRY, 'module_init_fallback');
 
 export const getAllLogicScriptAssets = (): TestWorldLogicScriptConfig[] => {
-    return LOGIC_SCRIPT_ASSETS.map((entry) => cloneLogicScriptAsset(entry));
+    return registryState.assets.map((entry) => cloneLogicScriptAsset(entry));
 };
 
 export const getLogicScriptAsset = (id: string): TestWorldLogicScriptConfig | null => {
@@ -169,17 +216,17 @@ export const getLogicScriptAsset = (id: string): TestWorldLogicScriptConfig | nu
     if (scriptId.length <= 0) {
         return null;
     }
-    const script = LOGIC_SCRIPT_ASSET_BY_ID.get(scriptId);
+    const script = registryState.byId.get(scriptId);
     return script ? cloneLogicScriptAsset(script) : null;
 };
 
 export const hasLogicScriptAsset = (id: string): boolean => {
     const scriptId = id.trim();
-    return scriptId.length > 0 && LOGIC_SCRIPT_ASSET_BY_ID.has(scriptId);
+    return scriptId.length > 0 && registryState.byId.has(scriptId);
 };
 
 export const getLogicScriptAssetIds = (): string[] => {
-    return [...LOGIC_SCRIPT_ASSET_IDS];
+    return [...registryState.ids];
 };
 
 export const resolveLogicScriptAssetIds = (
@@ -192,7 +239,7 @@ export const resolveLogicScriptAssetIds = (
         if (scriptId.length <= 0) {
             return;
         }
-        const script = LOGIC_SCRIPT_ASSET_BY_ID.get(scriptId);
+        const script = registryState.byId.get(scriptId);
         if (script) {
             found.push(cloneLogicScriptAsset(script));
             return;
@@ -223,6 +270,104 @@ const isValidSetWorldFlagParams = (params: unknown): boolean => {
     return typeof rawParams.value === 'boolean';
 };
 
+export const getLogicScriptRegistryVersion = (): number => {
+    return registryState.version;
+};
+
+export const getLogicScriptRegistryStatus = (): {
+    version: number;
+    source: string;
+    assetCount: number;
+    lastReloadedAt: number;
+    lastError?: string;
+} => {
+    return {
+        version: registryState.version,
+        source: registryState.source,
+        assetCount: registryState.assets.length,
+        lastReloadedAt: registryState.lastReloadedAt,
+        lastError: registryState.lastError
+    };
+};
+
+export const reloadExternalLogicScripts = async (): Promise<{
+    success: boolean;
+    version: number;
+    assetCount: number;
+    message: string;
+}> => {
+    const isBrowser = typeof window !== 'undefined';
+    const isDev = import.meta.env.DEV;
+    if (isDev && isBrowser) {
+        try {
+            const response = await fetch('/__theform/logic-scripts', {
+                method: 'GET',
+                headers: {
+                    Accept: 'application/json'
+                }
+            });
+            const responsePayload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                const errorMessage = asObject(responsePayload) && typeof responsePayload.message === 'string'
+                    ? responsePayload.message
+                    : `HTTP ${response.status}`;
+                registryState.source = 'dev-fetch';
+                registryState.lastError = errorMessage;
+                return {
+                    success: false,
+                    version: registryState.version,
+                    assetCount: registryState.assets.length,
+                    message: `Failed to reload external scripts: ${errorMessage}`
+                };
+            }
+
+            const previousVersion = registryState.version;
+            commitLogicScriptRegistry(responsePayload, 'dev-fetch');
+            if (registryState.version === previousVersion && registryState.lastError) {
+                return {
+                    success: false,
+                    version: registryState.version,
+                    assetCount: registryState.assets.length,
+                    message: `Failed to reload external scripts: ${registryState.lastError}`
+                };
+            }
+            return {
+                success: true,
+                version: registryState.version,
+                assetCount: registryState.assets.length,
+                message: `Reloaded external scripts: ${registryState.assets.length} assets.`
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'unknown fetch failure';
+            registryState.source = 'dev-fetch';
+            registryState.lastError = errorMessage;
+            return {
+                success: false,
+                version: registryState.version,
+                assetCount: registryState.assets.length,
+                message: `Failed to reload external scripts: ${errorMessage}`
+            };
+        }
+    }
+
+    const previousVersion = registryState.version;
+    commitLogicScriptRegistry(registryState.lastRawRegistry, 'manual_reload');
+    if (registryState.version === previousVersion && registryState.lastError) {
+        return {
+            success: false,
+            version: registryState.version,
+            assetCount: registryState.assets.length,
+            message: `Failed to reload external scripts: ${registryState.lastError}`
+        };
+    }
+    return {
+        success: true,
+        version: registryState.version,
+        assetCount: registryState.assets.length,
+        message: `Reloaded external scripts: ${registryState.assets.length} assets.`
+    };
+};
+
 export const collectLogicScriptAssetDiagnostics = (): TestWorldLogicDiagnostic[] => {
     const diagnostics: TestWorldLogicDiagnostic[] = [];
     let diagnosticIndex = 1;
@@ -232,7 +377,7 @@ export const collectLogicScriptAssetDiagnostics = (): TestWorldLogicDiagnostic[]
         return id;
     };
 
-    LOGIC_SCRIPT_ASSETS.forEach((script) => {
+    registryState.assets.forEach((script) => {
         script.commands.forEach((command, commandIndex) => {
             const commandType = command.type.trim();
             const path = `logicScripts.${script.id}.commands[${commandIndex}]`;
@@ -285,7 +430,7 @@ export const collectTestWorldLogicDiagnosticsWithRegistry = (
     config: TestWorldConfig
 ): TestWorldLogicDiagnostic[] => {
     const levelDiagnostics = collectTestWorldLogicDiagnostics(config, {
-        availableExternalScriptIds: LOGIC_SCRIPT_ASSET_IDS
+        availableExternalScriptIds: registryState.ids
     });
     const assetDiagnostics = collectLogicScriptAssetDiagnostics();
     return [
