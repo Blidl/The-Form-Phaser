@@ -81,6 +81,7 @@ import {
     traceWorldOnStartLogicBindings,
     type LogicWorldOnStartTrace
 } from './logic_script_runtime';
+import { ensureExternalLogicScriptsLoaded } from './logic_script_registry';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -330,6 +331,7 @@ export const createTestWorldRuntime = (
     let currentConfig = normalizeTestWorldConfig(params.initialConfig, {
         fallbackConfig: params.initialConfig
     });
+    const worldOnStartTraceConfig = cloneTestWorldConfig(currentConfig);
     let hasExecutedWorldOnStartLogicTrace = false;
     let lastWorldOnStartLogicTrace: LogicWorldOnStartTrace | null = null;
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
@@ -347,8 +349,14 @@ export const createTestWorldRuntime = (
         if (hasExecutedWorldOnStartLogicTrace) {
             return;
         }
-        hasExecutedWorldOnStartLogicTrace = true;
-        lastWorldOnStartLogicTrace = traceWorldOnStartLogicBindings(currentConfig);
+        void ensureExternalLogicScriptsLoaded()
+            .finally(() => {
+                if (hasExecutedWorldOnStartLogicTrace) {
+                    return;
+                }
+                hasExecutedWorldOnStartLogicTrace = true;
+                lastWorldOnStartLogicTrace = traceWorldOnStartLogicBindings(worldOnStartTraceConfig);
+            });
     };
 
     executeWorldOnStartLogicTraceOnce();

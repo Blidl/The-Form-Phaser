@@ -25,6 +25,12 @@ const SUPPORTED_LOGIC_COMMAND_TYPES = new Set<string>([
     'set_world_flag'
 ]);
 const EMPTY_LOGIC_SCRIPT_REGISTRY: { scripts: unknown[] } = { scripts: [] };
+type LogicScriptRegistryReloadResult = {
+    success: boolean;
+    version: number;
+    assetCount: number;
+    message: string;
+};
 
 interface LogicScriptRegistryState {
     assets: TestWorldLogicScriptConfig[];
@@ -206,6 +212,8 @@ const commitLogicScriptRegistry = (rawRegistry: unknown, source: string): void =
 };
 
 commitLogicScriptRegistry(EMPTY_LOGIC_SCRIPT_REGISTRY, 'module_init_fallback');
+let hasLoadedExternalLogicScripts = false;
+let initialExternalLogicScriptsLoadPromise: Promise<LogicScriptRegistryReloadResult> | null = null;
 
 export const getAllLogicScriptAssets = (): TestWorldLogicScriptConfig[] => {
     return registryState.assets.map((entry) => cloneLogicScriptAsset(entry));
@@ -290,12 +298,7 @@ export const getLogicScriptRegistryStatus = (): {
     };
 };
 
-export const reloadExternalLogicScripts = async (): Promise<{
-    success: boolean;
-    version: number;
-    assetCount: number;
-    message: string;
-}> => {
+export const reloadExternalLogicScripts = async (): Promise<LogicScriptRegistryReloadResult> => {
     const isBrowser = typeof window !== 'undefined';
     const isDev = import.meta.env.DEV;
     if (isDev && isBrowser) {
@@ -331,6 +334,7 @@ export const reloadExternalLogicScripts = async (): Promise<{
                     message: `Failed to reload external scripts: ${registryState.lastError}`
                 };
             }
+            hasLoadedExternalLogicScripts = true;
             return {
                 success: true,
                 version: registryState.version,
@@ -366,6 +370,52 @@ export const reloadExternalLogicScripts = async (): Promise<{
         assetCount: registryState.assets.length,
         message: `Reloaded external scripts: ${registryState.assets.length} assets.`
     };
+};
+
+export const ensureExternalLogicScriptsLoaded = async (): Promise<LogicScriptRegistryReloadResult> => {
+    if (hasLoadedExternalLogicScripts) {
+        return {
+            success: true,
+            version: registryState.version,
+            assetCount: registryState.assets.length,
+            message: `External scripts already loaded: ${registryState.assets.length} assets.`
+        };
+    }
+
+    const isBrowser = typeof window !== 'undefined';
+    const isDev = import.meta.env.DEV;
+    if (!isBrowser || !isDev) {
+        return {
+            success: false,
+            version: registryState.version,
+            assetCount: registryState.assets.length,
+            message: 'External scripts preload is only available in browser dev mode.'
+        };
+    }
+
+    if (!initialExternalLogicScriptsLoadPromise) {
+        initialExternalLogicScriptsLoadPromise = reloadExternalLogicScripts()
+            .then((result) => {
+                if (result.success) {
+                    hasLoadedExternalLogicScripts = true;
+                }
+                return result;
+            })
+            .catch((error) => {
+                const message = error instanceof Error ? error.message : 'unknown fetch failure';
+                return {
+                    success: false,
+                    version: registryState.version,
+                    assetCount: registryState.assets.length,
+                    message: `Failed to preload external scripts: ${message}`
+                };
+            })
+            .finally(() => {
+                initialExternalLogicScriptsLoadPromise = null;
+            });
+    }
+
+    return initialExternalLogicScriptsLoadPromise;
 };
 
 export const collectLogicScriptAssetDiagnostics = (): TestWorldLogicDiagnostic[] => {
