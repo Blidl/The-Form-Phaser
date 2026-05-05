@@ -54,7 +54,7 @@ export function renderEmbeddedScriptsSection(
     } = context;
 
     container.appendChild(dom.makeSpacer(8));
-    container.appendChild(dom.makeSectionTitle('Scripts'));
+    container.appendChild(dom.makeSectionTitle('Embedded Level Scripts (transitional)'));
     const createButton = document.createElement('button');
     createButton.type = 'button';
     createButton.textContent = '+ New Script';
