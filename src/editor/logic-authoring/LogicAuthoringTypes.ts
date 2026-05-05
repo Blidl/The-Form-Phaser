@@ -4,13 +4,15 @@ import type {
     TestWorldLogicScriptCategory,
     TestWorldLogicScriptCommandConfig,
     TestWorldLogicScriptConfig,
-    TestWorldLogicScriptEditorConfig
+    TestWorldLogicScriptEditorConfig,
+    TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
 
 export interface LogicSnapshot {
     levelId: string;
     levelName: string;
     scripts: TestWorldLogicScriptConfig[];
+    scriptRefs: TestWorldLogicScriptRefConfig[];
     bindings: TestWorldLogicBindingConfig[];
 }
 
@@ -19,7 +21,19 @@ export interface LogicMutationResult {
     reason?: string;
     snapshot?: LogicSnapshot;
     script?: TestWorldLogicScriptConfig;
+    scriptRef?: TestWorldLogicScriptRefConfig;
     binding?: TestWorldLogicBindingConfig;
+}
+
+export interface CreateLogicScriptRefInput {
+    id: string;
+    path?: string;
+    displayName?: string;
+}
+
+export interface UpdateLogicScriptRefPatch {
+    path?: string;
+    displayName?: string;
 }
 
 export interface CreateLogicScriptInput {

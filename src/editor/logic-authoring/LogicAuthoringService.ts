@@ -6,13 +6,16 @@ import {
     type TestWorldLogicBindingTargetType,
     type TestWorldLogicConfig,
     type TestWorldLogicScriptCommandConfig,
-    type TestWorldLogicScriptConfig
+    type TestWorldLogicScriptConfig,
+    type TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
 import {
+    type CreateLogicScriptRefInput,
     type CreateLogicBindingInput,
     type CreateLogicScriptInput,
     type LogicMutationResult,
     type LogicSnapshot,
+    type UpdateLogicScriptRefPatch,
     type UpdateLogicBindingPatch,
     type UpdateLogicScriptPatch
 } from './LogicAuthoringTypes';
@@ -27,9 +30,11 @@ import {
     asOptionalString,
     cloneLogicBinding,
     cloneLogicScript,
+    cloneLogicScriptRef,
     normalizeBindingList,
     normalizeLogicScriptCommand,
     normalizeLogicScriptEditor,
+    normalizeScriptRefList,
     normalizeScriptList,
     resolveLogicForRead,
     validateBindingTarget
@@ -61,6 +66,27 @@ export class LogicAuthoringService {
         }
         const script = this.listScripts().find((entry) => entry.id === targetId);
         return script ? cloneLogicScript(script) : null;
+    }
+
+    public listScriptRefs(): TestWorldLogicScriptRefConfig[] {
+        return this.getSnapshot()?.scriptRefs ?? [];
+    }
+
+    public getScriptRef(id: string): TestWorldLogicScriptRefConfig | null {
+        const targetId = id.trim();
+        if (!targetId) {
+            return null;
+        }
+        const scriptRef = this.listScriptRefs().find((entry) => entry.id === targetId);
+        return scriptRef ? cloneLogicScriptRef(scriptRef) : null;
+    }
+
+    public hasScriptRef(id: string): boolean {
+        const targetId = id.trim();
+        if (!targetId) {
+            return false;
+        }
+        return this.listScriptRefs().some((entry) => entry.id === targetId);
     }
 
     public listBindings(): TestWorldLogicBindingConfig[] {
@@ -295,6 +321,114 @@ export class LogicAuthoringService {
         });
     }
 
+    public addScriptRef(input: CreateLogicScriptRefInput): LogicMutationResult {
+        return this.applyConfigEdit((nextConfig) => {
+            const logic = this.ensureLogicForWrite(nextConfig);
+            const scriptRefs = normalizeScriptRefList(logic.scriptRefs);
+            const scriptRefId = asOptionalString(input.id);
+            if (!scriptRefId) {
+                return {
+                    success: false,
+                    reason: 'Script ref id must be a non-empty string.'
+                };
+            }
+            if (scriptRefs.some((entry) => entry.id === scriptRefId)) {
+                return {
+                    success: false,
+                    reason: 'Script ref id already exists.'
+                };
+            }
+
+            const scriptRef: TestWorldLogicScriptRefConfig = {
+                id: scriptRefId,
+                path: asOptionalString(input.path),
+                displayName: asOptionalString(input.displayName)
+            };
+            scriptRefs.push(scriptRef);
+            logic.scriptRefs = scriptRefs;
+            return {
+                success: true,
+                scriptRef
+            };
+        });
+    }
+
+    public updateScriptRef(id: string, patch: UpdateLogicScriptRefPatch): LogicMutationResult {
+        return this.applyConfigEdit((nextConfig) => {
+            const logic = this.ensureLogicForWrite(nextConfig);
+            const scriptRefs = normalizeScriptRefList(logic.scriptRefs);
+            const scriptRefIndex = this.findScriptRefIndex(scriptRefs, id);
+            if (scriptRefIndex < 0) {
+                return {
+                    success: false,
+                    reason: 'Logic script ref not found.'
+                };
+            }
+
+            const current = scriptRefs[scriptRefIndex];
+            const next = cloneLogicScriptRef(current);
+            let changed = false;
+
+            if (Object.prototype.hasOwnProperty.call(patch, 'path')) {
+                next.path = asOptionalString(patch.path);
+                changed = true;
+            }
+
+            if (Object.prototype.hasOwnProperty.call(patch, 'displayName')) {
+                next.displayName = asOptionalString(patch.displayName);
+                changed = true;
+            }
+
+            if (!changed) {
+                return {
+                    success: false,
+                    reason: 'No valid script ref fields to update.'
+                };
+            }
+
+            scriptRefs[scriptRefIndex] = next;
+            logic.scriptRefs = scriptRefs;
+            return {
+                success: true,
+                scriptRef: next
+            };
+        });
+    }
+
+    public deleteScriptRef(
+        id: string,
+        options?: { deleteBindings?: boolean }
+    ): LogicMutationResult {
+        return this.applyConfigEdit((nextConfig) => {
+            const logic = this.ensureLogicForWrite(nextConfig);
+            const scriptRefs = normalizeScriptRefList(logic.scriptRefs);
+            const bindings = normalizeBindingList(logic.bindings);
+            const scriptRefIndex = this.findScriptRefIndex(scriptRefs, id);
+            if (scriptRefIndex < 0) {
+                return {
+                    success: false,
+                    reason: 'Logic script ref not found.'
+                };
+            }
+
+            const scriptRef = scriptRefs[scriptRefIndex];
+            const hasBindingRefs = bindings.some((entry) => entry.scriptId === scriptRef.id);
+            if (hasBindingRefs && !options?.deleteBindings) {
+                return {
+                    success: false,
+                    reason: 'Logic script ref is referenced by bindings.'
+                };
+            }
+
+            scriptRefs.splice(scriptRefIndex, 1);
+            logic.scriptRefs = scriptRefs;
+            logic.bindings = options?.deleteBindings
+                ? bindings.filter((entry) => entry.scriptId !== scriptRef.id)
+                : bindings;
+            return { success: true };
+        });
+    }
+
     public createBinding(input: CreateLogicBindingInput): LogicMutationResult {
         return this.applyConfigEdit((nextConfig) => {
             const logic = this.ensureLogicForWrite(nextConfig);
@@ -476,6 +610,7 @@ export class LogicAuthoringService {
             levelId: config.meta.id,
             levelName: config.meta.displayName,
             scripts: logic.scripts,
+            scriptRefs: logic.scriptRefs,
             bindings: logic.bindings
         };
     }
@@ -546,6 +681,7 @@ export class LogicAuthoringService {
             reason: editResult.reason,
             snapshot,
             script: editResult.script ? cloneLogicScript(editResult.script) : undefined,
+            scriptRef: editResult.scriptRef ? cloneLogicScriptRef(editResult.scriptRef) : undefined,
             binding: editResult.binding ? cloneLogicBinding(editResult.binding) : undefined
         };
     }
@@ -564,5 +700,13 @@ export class LogicAuthoringService {
             return -1;
         }
         return bindings.findIndex((entry) => entry.id === targetId);
+    }
+
+    private findScriptRefIndex(scriptRefs: TestWorldLogicScriptRefConfig[], id: string): number {
+        const targetId = id.trim();
+        if (!targetId) {
+            return -1;
+        }
+        return scriptRefs.findIndex((entry) => entry.id === targetId);
     }
 }
