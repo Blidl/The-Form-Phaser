@@ -1,18 +1,29 @@
 import type { LogicSnapshot } from '../../logic-authoring/LogicAuthoringTypes';
 import type { TestWorldLogicScriptConfig } from '../../../game/world/runtime/test_world_config';
+import type { LogicScriptExecutionResult } from '../../../game/world/runtime/logic_script_runtime';
 import type { LogicEditorDomHelpers } from './LogicEditorDom';
 
 export interface RenderScriptDetailsContext {
     dom: LogicEditorDomHelpers;
     selectedExternalScript: TestWorldLogicScriptConfig | null;
     bindings: LogicSnapshot['bindings'];
+    previewResult: LogicScriptExecutionResult | null;
+    onPlayPreview: () => void;
+    onStopPreview: () => void;
 }
 
 export function renderScriptDetailsSection(
     container: HTMLElement,
     context: RenderScriptDetailsContext
 ): void {
-    const { dom, selectedExternalScript, bindings } = context;
+    const {
+        dom,
+        selectedExternalScript,
+        bindings,
+        previewResult,
+        onPlayPreview,
+        onStopPreview
+    } = context;
 
     const renderPreviewSection = (): void => {
         container.appendChild(dom.makeSectionTitle('Preview'));
@@ -29,22 +40,63 @@ export function renderScriptDetailsSection(
         controlsRow.style.gap = '6px';
         controlsRow.style.marginBottom = '6px';
 
-        ['Play', 'Pause', 'Stop', 'Focus'].forEach((label) => {
+        const createControlButton = (
+            label: string,
+            options: {
+                disabled: boolean;
+                onClick?: () => void;
+            }
+        ): HTMLButtonElement => {
             const button = document.createElement('button');
             button.type = 'button';
             button.textContent = label;
-            button.disabled = true;
-            button.style.opacity = '0.65';
-            button.style.cursor = 'not-allowed';
-            controlsRow.appendChild(button);
-        });
+            button.disabled = options.disabled;
+            if (options.disabled) {
+                button.style.opacity = '0.65';
+                button.style.cursor = 'not-allowed';
+            }
+            if (!options.disabled && options.onClick) {
+                button.addEventListener('click', () => {
+                    options.onClick?.();
+                });
+            }
+            return button;
+        };
+
+        controlsRow.appendChild(createControlButton('Play', {
+            disabled: !selectedExternalScript,
+            onClick: onPlayPreview
+        }));
+        controlsRow.appendChild(createControlButton('Pause', { disabled: true }));
+        controlsRow.appendChild(createControlButton('Stop', {
+            disabled: !previewResult,
+            onClick: onStopPreview
+        }));
+        controlsRow.appendChild(createControlButton('Focus', { disabled: true }));
 
         previewBox.appendChild(controlsRow);
-        previewBox.appendChild(dom.makeInfoLine('Preview execution is deferred.'));
+        previewBox.appendChild(dom.makeInfoLine('Preview is trace-only. Gameplay execution is deferred.'));
         if (selectedExternalScript) {
             previewBox.appendChild(dom.makeInfoLine(`Selected script: ${selectedExternalScript.id}`));
         } else {
             previewBox.appendChild(dom.makeInfoLine('Select a script to preview later.'));
+        }
+
+        if (previewResult) {
+            previewBox.appendChild(dom.makeSpacer(4));
+            previewBox.appendChild(dom.makeInfoLine(`Trace script id: ${previewResult.scriptId}`));
+            previewBox.appendChild(dom.makeInfoLine(`Trace status: ${previewResult.status}`));
+            previewBox.appendChild(dom.makeInfoLine('Command results:'));
+            if (previewResult.commands.length <= 0) {
+                previewBox.appendChild(dom.makeInfoLine('- skipped/empty: no commands to trace'));
+            } else {
+                previewResult.commands.forEach((command) => {
+                    previewBox.appendChild(dom.makeInfoLine(`- command id: ${command.commandId}`));
+                    previewBox.appendChild(dom.makeInfoLine(`  type: ${command.type}`));
+                    previewBox.appendChild(dom.makeInfoLine(`  status: ${command.status}`));
+                    previewBox.appendChild(dom.makeInfoLine(`  message: ${command.message}`));
+                });
+            }
         }
 
         container.appendChild(previewBox);

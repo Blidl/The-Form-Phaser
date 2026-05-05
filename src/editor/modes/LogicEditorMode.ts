@@ -10,6 +10,10 @@ import type {
     TestWorldLogicScriptConfig
 } from '../../game/world/runtime/test_world_config';
 import {
+    executeLogicScriptNoopOnly,
+    type LogicScriptExecutionResult
+} from '../../game/world/runtime/logic_script_runtime';
+import {
     collectTestWorldLogicDiagnosticsWithRegistry,
     getAllLogicScriptAssets,
     getLogicScriptRegistryVersion,
@@ -78,6 +82,7 @@ export class LogicEditorMode implements EditorMode {
     private createBindingError: string | null = null;
     private reloadScriptsStatus: { success: boolean; message: string } | null = null;
     private logicScriptRegistryVersion = 0;
+    private externalScriptPreviewResult: LogicScriptExecutionResult | null = null;
     private selectedBindingId: string | null = null;
     private selectedBindingDraft: BindingMetadataDraft | null = null;
     private updateBindingError: string | null = null;
@@ -119,6 +124,7 @@ export class LogicEditorMode implements EditorMode {
         const nextRegistryVersion = getLogicScriptRegistryVersion();
         if (nextRegistryVersion !== this.logicScriptRegistryVersion) {
             this.logicScriptRegistryVersion = nextRegistryVersion;
+            this.clearExternalScriptPreviewResult();
             shouldRefreshUi = true;
         }
         if (shouldRefreshUi) {
@@ -213,6 +219,7 @@ export class LogicEditorMode implements EditorMode {
                         return;
                     }
                     this.selectedExternalScriptId = scriptId;
+                    this.clearExternalScriptPreviewResult();
                     this.onUiChanged();
                 },
                 onAddScriptRefToLevel: (script) => {
@@ -237,6 +244,8 @@ export class LogicEditorMode implements EditorMode {
                     }
                 },
                 onReloadScripts: () => {
+                    this.clearExternalScriptPreviewResult();
+                    this.onUiChanged();
                     void reloadExternalLogicScripts()
                         .then((result) => {
                             this.logicScriptRegistryVersion = getLogicScriptRegistryVersion();
@@ -399,7 +408,19 @@ export class LogicEditorMode implements EditorMode {
             renderScriptDetailsSection(container, {
                 dom: this.dom,
                 selectedExternalScript,
-                bindings: snapshot.bindings
+                bindings: snapshot.bindings,
+                previewResult: this.externalScriptPreviewResult,
+                onPlayPreview: () => {
+                    if (!selectedExternalScript) {
+                        return;
+                    }
+                    this.runExternalScriptPreview(selectedExternalScript);
+                    this.onUiChanged();
+                },
+                onStopPreview: () => {
+                    this.clearExternalScriptPreviewResult();
+                    this.onUiChanged();
+                }
             });
 
             renderBindingsSection(container, {
@@ -597,14 +618,48 @@ export class LogicEditorMode implements EditorMode {
 
     private syncSelectedExternalScript(externalAssets: TestWorldLogicScriptConfig[]): TestWorldLogicScriptConfig | null {
         if (!this.selectedExternalScriptId) {
+            this.clearExternalScriptPreviewResult();
             return null;
         }
         const selectedScript = externalAssets.find((entry) => entry.id === this.selectedExternalScriptId);
         if (!selectedScript) {
             this.selectedExternalScriptId = null;
+            this.clearExternalScriptPreviewResult();
             return null;
         }
+        if (
+            this.externalScriptPreviewResult &&
+            this.externalScriptPreviewResult.scriptId !== selectedScript.id
+        ) {
+            this.clearExternalScriptPreviewResult();
+        }
         return selectedScript;
+    }
+
+    private runExternalScriptPreview(script: TestWorldLogicScriptConfig): void {
+        try {
+            this.externalScriptPreviewResult = executeLogicScriptNoopOnly(script);
+        } catch (error) {
+            const message = error instanceof Error && error.message.trim().length > 0
+                ? error.message
+                : 'Unknown error';
+            this.externalScriptPreviewResult = {
+                scriptId: script.id,
+                status: 'error',
+                commands: [
+                    {
+                        commandId: 'preview',
+                        type: 'preview',
+                        status: 'error',
+                        message: `Unexpected preview error: ${message}`
+                    }
+                ]
+            };
+        }
+    }
+
+    private clearExternalScriptPreviewResult(): void {
+        this.externalScriptPreviewResult = null;
     }
 
     private loadSelectedScriptDraft(script: TestWorldLogicScriptConfig): void {
