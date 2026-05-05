@@ -3,11 +3,20 @@ import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService';
 import type { LogicSnapshot } from '../logic-authoring/LogicAuthoringTypes';
 import type { EditorPanel } from '../ui/EditorPanel';
-import type { TestWorldLogicScriptCategory } from '../../game/world/runtime/test_world_config';
+import type {
+    TestWorldLogicScriptCategory,
+    TestWorldLogicScriptConfig
+} from '../../game/world/runtime/test_world_config';
 
 interface LogicEditorModeOptions {
     legacyObjectAdapter: LegacyObjectAdapter | null;
     onUiChanged: () => void;
+}
+
+interface ScriptMetadataDraft {
+    name: string;
+    category: TestWorldLogicScriptCategory;
+    locked: boolean;
 }
 
 export class LogicEditorMode implements EditorMode {
@@ -19,6 +28,9 @@ export class LogicEditorMode implements EditorMode {
     private lastSnapshotSignature: string | null = null;
     private isCreateScriptFormOpen = false;
     private createScriptError: string | null = null;
+    private selectedScriptId: string | null = null;
+    private selectedScriptDraft: ScriptMetadataDraft | null = null;
+    private updateScriptError: string | null = null;
 
     private readonly scriptCategoryOptions: TestWorldLogicScriptCategory[] = [
         'object.move',
@@ -55,6 +67,7 @@ export class LogicEditorMode implements EditorMode {
 
     public renderLeftInspector(panel: EditorPanel): void {
         const snapshot = this.logicAuthoringService.getSnapshot();
+        const selectedScript = this.syncSelectedScript(snapshot);
 
         panel.setCustomContent('Logic', (container) => {
             container.appendChild(this.makeInfoLine('Runtime-backed authoring overview'));
@@ -159,6 +172,11 @@ export class LogicEditorMode implements EditorMode {
                         }
                         this.isCreateScriptFormOpen = false;
                         this.createScriptError = null;
+                        if (result.script) {
+                            this.selectedScriptId = result.script.id;
+                            this.loadSelectedScriptDraft(result.script);
+                            this.updateScriptError = null;
+                        }
                         this.onUiChanged();
                     } catch (error) {
                         this.createScriptError = error instanceof Error
@@ -189,10 +207,23 @@ export class LogicEditorMode implements EditorMode {
                 snapshot.scripts.forEach((script) => {
                     const scriptBox = document.createElement('div');
                     scriptBox.style.border = '1px solid #8b8b8b';
-                    scriptBox.style.background = '#d9d9d9';
+                    scriptBox.style.background = script.id === this.selectedScriptId ? '#c9dbf1' : '#d9d9d9';
                     scriptBox.style.padding = '6px';
                     scriptBox.style.marginBottom = '6px';
                     scriptBox.style.wordBreak = 'break-word';
+                    scriptBox.style.cursor = 'pointer';
+                    if (script.id === this.selectedScriptId) {
+                        scriptBox.style.border = '1px solid #53759b';
+                    }
+                    scriptBox.addEventListener('click', () => {
+                        if (this.selectedScriptId === script.id) {
+                            return;
+                        }
+                        this.selectedScriptId = script.id;
+                        this.loadSelectedScriptDraft(script);
+                        this.updateScriptError = null;
+                        this.onUiChanged();
+                    });
                     const lockedMarker = script.editor?.locked ? ' [locked]' : '';
                     scriptBox.appendChild(this.makeInfoLine(`name: ${script.name}${lockedMarker}`));
                     scriptBox.appendChild(this.makeInfoLine(`id: ${script.id}`));
@@ -204,6 +235,163 @@ export class LogicEditorMode implements EditorMode {
                     container.appendChild(scriptBox);
                 });
             }
+
+            container.appendChild(this.makeSpacer(8));
+            container.appendChild(this.makeSectionTitle('Script Details'));
+            if (!selectedScript || !this.selectedScriptDraft) {
+                container.appendChild(this.makeInfoLine('Select a script to edit metadata.'));
+                return;
+            }
+
+            const detailsBox = document.createElement('div');
+            detailsBox.style.border = '1px solid #8b8b8b';
+            detailsBox.style.background = '#d9d9d9';
+            detailsBox.style.padding = '6px';
+
+            detailsBox.appendChild(this.makeInfoLine(`id: ${selectedScript.id}`));
+            detailsBox.appendChild(this.makeInfoLine(`command count: ${selectedScript.commands.length}`));
+
+            const nameLabel = this.makeInfoLine('Name');
+            nameLabel.style.marginTop = '6px';
+            nameLabel.style.marginBottom = '2px';
+            detailsBox.appendChild(nameLabel);
+
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.value = this.selectedScriptDraft.name;
+            nameInput.style.display = 'block';
+            nameInput.style.width = '100%';
+            nameInput.style.boxSizing = 'border-box';
+            nameInput.style.marginBottom = '6px';
+            this.bindEditorInputKeyboardGuards(nameInput);
+            nameInput.addEventListener('input', () => {
+                if (!this.selectedScriptDraft) {
+                    return;
+                }
+                this.selectedScriptDraft.name = nameInput.value;
+            });
+            detailsBox.appendChild(nameInput);
+
+            const categoryLabel = this.makeInfoLine('Category');
+            categoryLabel.style.marginBottom = '2px';
+            detailsBox.appendChild(categoryLabel);
+
+            const categorySelect = document.createElement('select');
+            categorySelect.style.display = 'block';
+            categorySelect.style.width = '100%';
+            categorySelect.style.boxSizing = 'border-box';
+            categorySelect.style.marginBottom = '6px';
+            this.bindEditorInputKeyboardGuards(categorySelect);
+            this.scriptCategoryOptions.forEach((category) => {
+                const option = document.createElement('option');
+                option.value = category;
+                option.textContent = category;
+                option.selected = category === this.selectedScriptDraft?.category;
+                categorySelect.appendChild(option);
+            });
+            categorySelect.addEventListener('change', () => {
+                if (!this.selectedScriptDraft) {
+                    return;
+                }
+                const nextCategory = categorySelect.value as TestWorldLogicScriptCategory;
+                this.selectedScriptDraft.category = nextCategory;
+            });
+            detailsBox.appendChild(categorySelect);
+
+            const lockedRow = document.createElement('label');
+            lockedRow.style.display = 'flex';
+            lockedRow.style.alignItems = 'center';
+            lockedRow.style.gap = '6px';
+            lockedRow.style.marginBottom = '6px';
+
+            const lockedCheckbox = document.createElement('input');
+            lockedCheckbox.type = 'checkbox';
+            lockedCheckbox.checked = this.selectedScriptDraft.locked;
+            this.bindEditorInputKeyboardGuards(lockedCheckbox);
+            lockedCheckbox.addEventListener('change', () => {
+                if (!this.selectedScriptDraft) {
+                    return;
+                }
+                this.selectedScriptDraft.locked = lockedCheckbox.checked;
+            });
+            lockedRow.appendChild(lockedCheckbox);
+
+            const lockedLabelText = document.createElement('span');
+            lockedLabelText.textContent = 'Locked';
+            lockedRow.appendChild(lockedLabelText);
+            detailsBox.appendChild(lockedRow);
+
+            if (this.updateScriptError) {
+                const errorLine = this.makeInfoLine(this.updateScriptError);
+                errorLine.style.color = '#b00020';
+                errorLine.style.marginBottom = '6px';
+                detailsBox.appendChild(errorLine);
+            }
+
+            const actionsRow = document.createElement('div');
+            actionsRow.style.display = 'flex';
+            actionsRow.style.gap = '6px';
+
+            const applyButton = document.createElement('button');
+            applyButton.type = 'button';
+            applyButton.textContent = 'Apply';
+            applyButton.addEventListener('click', () => {
+                if (!this.selectedScriptId || !this.selectedScriptDraft) {
+                    return;
+                }
+                try {
+                    const result = this.logicAuthoringService.updateScript(this.selectedScriptId, {
+                        name: this.selectedScriptDraft.name,
+                        category: this.selectedScriptDraft.category,
+                        editor: { locked: this.selectedScriptDraft.locked }
+                    });
+                    if (!result.success) {
+                        this.updateScriptError = result.reason ?? 'Failed to update script.';
+                        this.onUiChanged();
+                        return;
+                    }
+                    const nextScript = result.script ?? this.logicAuthoringService.getScript(this.selectedScriptId);
+                    if (nextScript) {
+                        this.selectedScriptId = nextScript.id;
+                        this.loadSelectedScriptDraft(nextScript);
+                    }
+                    this.updateScriptError = null;
+                    this.onUiChanged();
+                } catch (error) {
+                    this.updateScriptError = error instanceof Error
+                        ? error.message
+                        : 'Failed to update script.';
+                    this.onUiChanged();
+                }
+            });
+            actionsRow.appendChild(applyButton);
+
+            const resetButton = document.createElement('button');
+            resetButton.type = 'button';
+            resetButton.textContent = 'Reset';
+            resetButton.addEventListener('click', () => {
+                const currentSnapshot = this.logicAuthoringService.getSnapshot();
+                if (!currentSnapshot || !this.selectedScriptId) {
+                    this.clearSelectedScriptSelection();
+                    this.onUiChanged();
+                    return;
+                }
+                const currentScript = currentSnapshot.scripts.find(
+                    (entry) => entry.id === this.selectedScriptId
+                );
+                if (!currentScript) {
+                    this.clearSelectedScriptSelection();
+                    this.onUiChanged();
+                    return;
+                }
+                this.loadSelectedScriptDraft(currentScript);
+                this.updateScriptError = null;
+                this.onUiChanged();
+            });
+            actionsRow.appendChild(resetButton);
+
+            detailsBox.appendChild(actionsRow);
+            container.appendChild(detailsBox);
         });
     }
 
@@ -257,6 +445,39 @@ export class LogicEditorMode implements EditorMode {
         } catch {
             return `${snapshot.scripts.length}|${snapshot.bindings.length}`;
         }
+    }
+
+    private syncSelectedScript(snapshot: LogicSnapshot | null): TestWorldLogicScriptConfig | null {
+        if (!snapshot) {
+            this.clearSelectedScriptSelection();
+            return null;
+        }
+        if (!this.selectedScriptId) {
+            return null;
+        }
+        const selectedScript = snapshot.scripts.find((entry) => entry.id === this.selectedScriptId);
+        if (!selectedScript) {
+            this.clearSelectedScriptSelection();
+            return null;
+        }
+        if (!this.selectedScriptDraft) {
+            this.loadSelectedScriptDraft(selectedScript);
+        }
+        return selectedScript;
+    }
+
+    private loadSelectedScriptDraft(script: TestWorldLogicScriptConfig): void {
+        this.selectedScriptDraft = {
+            name: script.name,
+            category: script.category,
+            locked: Boolean(script.editor?.locked)
+        };
+    }
+
+    private clearSelectedScriptSelection(): void {
+        this.selectedScriptId = null;
+        this.selectedScriptDraft = null;
+        this.updateScriptError = null;
     }
 
     private makeSectionTitle(text: string): HTMLDivElement {
