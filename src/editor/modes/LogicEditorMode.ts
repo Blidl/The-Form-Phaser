@@ -42,6 +42,7 @@ export class LogicEditorMode implements EditorMode {
     private createScriptError: string | null = null;
     private selectedScriptId: string | null = null;
     private selectedScriptDraft: ScriptMetadataDraft | null = null;
+    private selectedExternalScriptId: string | null = null;
     private updateScriptError: string | null = null;
     private addScriptRefError: string | null = null;
     private createBindingRefId: string | null = null;
@@ -106,6 +107,7 @@ export class LogicEditorMode implements EditorMode {
             container.appendChild(this.makeSpacer(8));
 
             const externalAssets = getAllLogicScriptAssets();
+            this.syncSelectedExternalScript(externalAssets);
             const levelScriptRefs = snapshot.scriptRefs;
             const referencedScriptRefIds = new Set(levelScriptRefs.map((entry) => entry.id));
             const diagnostics = this.collectRegistryDiagnostics();
@@ -278,11 +280,20 @@ export class LogicEditorMode implements EditorMode {
             } else {
                 externalAssets.forEach((script) => {
                     const scriptBox = document.createElement('div');
-                    scriptBox.style.border = '1px solid #8b8b8b';
-                    scriptBox.style.background = '#d9d9d9';
+                    const isSelectedExternalScript = script.id === this.selectedExternalScriptId;
+                    scriptBox.style.border = isSelectedExternalScript ? '1px solid #53759b' : '1px solid #8b8b8b';
+                    scriptBox.style.background = isSelectedExternalScript ? '#c9dbf1' : '#d9d9d9';
                     scriptBox.style.padding = '6px';
                     scriptBox.style.marginBottom = '6px';
                     scriptBox.style.wordBreak = 'break-word';
+                    scriptBox.style.cursor = 'pointer';
+                    scriptBox.addEventListener('click', () => {
+                        if (this.selectedExternalScriptId === script.id) {
+                            return;
+                        }
+                        this.selectedExternalScriptId = script.id;
+                        this.onUiChanged();
+                    });
                     const lockedMarker = script.editor?.locked ? ' [locked]' : '';
                     scriptBox.appendChild(this.makeInfoLine(`name: ${script.name}${lockedMarker}`));
                     scriptBox.appendChild(this.makeInfoLine(`id: ${script.id}`));
@@ -645,6 +656,7 @@ export class LogicEditorMode implements EditorMode {
     public renderRightInspector(panel: EditorPanel): void {
         const snapshot = this.logicAuthoringService.getSnapshot();
         const selectedBinding = this.syncSelectedBinding(snapshot);
+        const selectedExternalScript = this.syncSelectedExternalScript(getAllLogicScriptAssets());
 
         panel.setCustomContent('Logic Bindings', (container) => {
             if (!snapshot) {
@@ -652,6 +664,73 @@ export class LogicEditorMode implements EditorMode {
                 return;
             }
 
+            container.appendChild(this.makeSectionTitle('Script Edit'));
+            if (!selectedExternalScript) {
+                container.appendChild(this.makeInfoLine('Select an external script asset to inspect.'));
+            } else {
+                const scriptEditBox = document.createElement('div');
+                scriptEditBox.style.border = '1px solid #8b8b8b';
+                scriptEditBox.style.background = '#ececec';
+                scriptEditBox.style.padding = '6px';
+                scriptEditBox.style.marginBottom = '8px';
+                scriptEditBox.appendChild(this.makeInfoLine(`Name: ${selectedExternalScript.name}`));
+                scriptEditBox.appendChild(this.makeInfoLine(`ID: ${selectedExternalScript.id}`));
+                scriptEditBox.appendChild(this.makeInfoLine(`Category: ${selectedExternalScript.category}`));
+                if (selectedExternalScript.editor?.locked) {
+                    scriptEditBox.appendChild(this.makeInfoLine('Locked: true'));
+                }
+                scriptEditBox.appendChild(this.makeInfoLine('IDE/source file: logic_scripts.json'));
+                container.appendChild(scriptEditBox);
+
+                container.appendChild(this.makeSectionTitle('Instructions'));
+                const instructionsBox = document.createElement('div');
+                instructionsBox.style.border = '1px solid #8b8b8b';
+                instructionsBox.style.background = '#ececec';
+                instructionsBox.style.padding = '6px';
+                instructionsBox.style.marginBottom = '8px';
+                if (selectedExternalScript.commands.length <= 0) {
+                    instructionsBox.appendChild(this.makeInfoLine('No instructions/commands in this script.'));
+                } else {
+                    selectedExternalScript.commands.forEach((command, index) => {
+                        const commandParams = command.params ?? {};
+                        instructionsBox.appendChild(this.makeInfoLine(
+                            `${index + 1}. ${command.type} ${JSON.stringify(commandParams)}`
+                        ));
+                    });
+                }
+                container.appendChild(instructionsBox);
+
+                container.appendChild(this.makeSectionTitle('Script Users'));
+                const usersBox = document.createElement('div');
+                usersBox.style.border = '1px solid #8b8b8b';
+                usersBox.style.background = '#ececec';
+                usersBox.style.padding = '6px';
+                usersBox.style.marginBottom = '8px';
+                const scriptUsers = snapshot.bindings.filter(
+                    (binding) => binding.scriptId === selectedExternalScript.id
+                );
+                if (scriptUsers.length <= 0) {
+                    usersBox.appendChild(this.makeInfoLine('No level bindings use this script yet.'));
+                } else {
+                    scriptUsers.forEach((binding) => {
+                        const bindingUserBox = document.createElement('div');
+                        bindingUserBox.style.border = '1px solid #8b8b8b';
+                        bindingUserBox.style.background = '#d9d9d9';
+                        bindingUserBox.style.padding = '4px';
+                        bindingUserBox.style.marginBottom = '4px';
+                        bindingUserBox.style.wordBreak = 'break-word';
+                        bindingUserBox.appendChild(this.makeInfoLine(`binding id: ${binding.id}`));
+                        bindingUserBox.appendChild(this.makeInfoLine(`targetType: ${binding.targetType}`));
+                        bindingUserBox.appendChild(this.makeInfoLine(`targetId: ${binding.targetId ?? '-'}`));
+                        bindingUserBox.appendChild(this.makeInfoLine(`slot: ${binding.slot}`));
+                        bindingUserBox.appendChild(this.makeInfoLine(`status: ${binding.enabled ? 'enabled' : 'disabled'}`));
+                        usersBox.appendChild(bindingUserBox);
+                    });
+                }
+                container.appendChild(usersBox);
+            }
+
+            container.appendChild(this.makeSpacer(8));
             container.appendChild(this.makeSectionTitle('Bindings'));
             if (snapshot.bindings.length <= 0) {
                 container.appendChild(this.makeInfoLine('No logic bindings yet.'));
@@ -927,6 +1006,18 @@ export class LogicEditorMode implements EditorMode {
             this.loadSelectedBindingDraft(selectedBinding);
         }
         return selectedBinding;
+    }
+
+    private syncSelectedExternalScript(externalAssets: TestWorldLogicScriptConfig[]): TestWorldLogicScriptConfig | null {
+        if (!this.selectedExternalScriptId) {
+            return null;
+        }
+        const selectedScript = externalAssets.find((entry) => entry.id === this.selectedExternalScriptId);
+        if (!selectedScript) {
+            this.selectedExternalScriptId = null;
+            return null;
+        }
+        return selectedScript;
     }
 
     private loadSelectedScriptDraft(script: TestWorldLogicScriptConfig): void {
