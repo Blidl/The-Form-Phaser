@@ -38,6 +38,10 @@ export class LogicEditorMode implements EditorMode {
     private selectedScriptDraft: ScriptMetadataDraft | null = null;
     private updateScriptError: string | null = null;
     private addScriptRefError: string | null = null;
+    private createBindingRefId: string | null = null;
+    private createBindingSlotDraft = 'onStart';
+    private createBindingEnabledDraft = true;
+    private createBindingError: string | null = null;
 
     private readonly scriptCategoryOptions: TestWorldLogicScriptCategory[] = [
         'object.move',
@@ -104,7 +108,131 @@ export class LogicEditorMode implements EditorMode {
                 levelScriptRefs.forEach((scriptRef) => {
                     const displayName = scriptRef.displayName ?? '-';
                     const path = scriptRef.path ?? '-';
-                    container.appendChild(this.makeInfoLine(`- ${scriptRef.id} (displayName: ${displayName}, path: ${path})`));
+                    const scriptRefBox = document.createElement('div');
+                    scriptRefBox.style.border = '1px solid #8b8b8b';
+                    scriptRefBox.style.background = '#d9d9d9';
+                    scriptRefBox.style.padding = '6px';
+                    scriptRefBox.style.marginBottom = '6px';
+                    scriptRefBox.style.wordBreak = 'break-word';
+                    scriptRefBox.appendChild(this.makeInfoLine(`id: ${scriptRef.id}`));
+                    scriptRefBox.appendChild(this.makeInfoLine(`displayName: ${displayName}`));
+                    scriptRefBox.appendChild(this.makeInfoLine(`path: ${path}`));
+
+                    const addBindingButton = document.createElement('button');
+                    addBindingButton.type = 'button';
+                    addBindingButton.textContent = 'Add World Binding';
+                    addBindingButton.style.marginTop = '4px';
+                    addBindingButton.addEventListener('click', () => {
+                        this.createBindingRefId = scriptRef.id;
+                        this.createBindingSlotDraft = 'onStart';
+                        this.createBindingEnabledDraft = true;
+                        this.createBindingError = null;
+                        this.onUiChanged();
+                    });
+                    scriptRefBox.appendChild(addBindingButton);
+
+                    if (this.createBindingRefId === scriptRef.id) {
+                        const bindingForm = document.createElement('div');
+                        bindingForm.style.border = '1px solid #8b8b8b';
+                        bindingForm.style.background = '#ececec';
+                        bindingForm.style.padding = '6px';
+                        bindingForm.style.marginTop = '6px';
+
+                        const slotLabel = this.makeInfoLine('Slot');
+                        slotLabel.style.marginBottom = '2px';
+                        bindingForm.appendChild(slotLabel);
+
+                        const slotInput = document.createElement('input');
+                        slotInput.type = 'text';
+                        slotInput.value = this.createBindingSlotDraft;
+                        slotInput.style.display = 'block';
+                        slotInput.style.width = '100%';
+                        slotInput.style.boxSizing = 'border-box';
+                        slotInput.style.marginBottom = '6px';
+                        this.bindEditorInputKeyboardGuards(slotInput);
+                        slotInput.addEventListener('input', () => {
+                            this.createBindingSlotDraft = slotInput.value;
+                        });
+                        bindingForm.appendChild(slotInput);
+
+                        const enabledRow = document.createElement('label');
+                        enabledRow.style.display = 'flex';
+                        enabledRow.style.alignItems = 'center';
+                        enabledRow.style.gap = '6px';
+                        enabledRow.style.marginBottom = '6px';
+
+                        const enabledCheckbox = document.createElement('input');
+                        enabledCheckbox.type = 'checkbox';
+                        enabledCheckbox.checked = this.createBindingEnabledDraft;
+                        this.bindEditorInputKeyboardGuards(enabledCheckbox);
+                        enabledCheckbox.addEventListener('change', () => {
+                            this.createBindingEnabledDraft = enabledCheckbox.checked;
+                        });
+                        enabledRow.appendChild(enabledCheckbox);
+
+                        const enabledText = document.createElement('span');
+                        enabledText.textContent = 'Enabled';
+                        enabledRow.appendChild(enabledText);
+                        bindingForm.appendChild(enabledRow);
+
+                        if (this.createBindingError) {
+                            const errorLine = this.makeInfoLine(this.createBindingError);
+                            errorLine.style.color = '#b00020';
+                            errorLine.style.marginBottom = '6px';
+                            bindingForm.appendChild(errorLine);
+                        }
+
+                        const actionRow = document.createElement('div');
+                        actionRow.style.display = 'flex';
+                        actionRow.style.gap = '6px';
+
+                        const createBindingButton = document.createElement('button');
+                        createBindingButton.type = 'button';
+                        createBindingButton.textContent = 'Create Binding';
+                        createBindingButton.addEventListener('click', () => {
+                            try {
+                                const result = this.logicAuthoringService.createBinding({
+                                    targetType: 'world',
+                                    slot: this.createBindingSlotDraft,
+                                    scriptId: scriptRef.id,
+                                    enabled: this.createBindingEnabledDraft
+                                });
+                                if (!result.success) {
+                                    this.createBindingError = result.reason ?? 'Failed to create binding.';
+                                    this.onUiChanged();
+                                    return;
+                                }
+                                this.createBindingRefId = null;
+                                this.createBindingSlotDraft = 'onStart';
+                                this.createBindingEnabledDraft = true;
+                                this.createBindingError = null;
+                                this.onUiChanged();
+                            } catch (error) {
+                                this.createBindingError = error instanceof Error
+                                    ? error.message
+                                    : 'Failed to create binding.';
+                                this.onUiChanged();
+                            }
+                        });
+                        actionRow.appendChild(createBindingButton);
+
+                        const cancelBindingButton = document.createElement('button');
+                        cancelBindingButton.type = 'button';
+                        cancelBindingButton.textContent = 'Cancel';
+                        cancelBindingButton.addEventListener('click', () => {
+                            this.createBindingRefId = null;
+                            this.createBindingSlotDraft = 'onStart';
+                            this.createBindingEnabledDraft = true;
+                            this.createBindingError = null;
+                            this.onUiChanged();
+                        });
+                        actionRow.appendChild(cancelBindingButton);
+
+                        bindingForm.appendChild(actionRow);
+                        scriptRefBox.appendChild(bindingForm);
+                    }
+
+                    container.appendChild(scriptRefBox);
                 });
             }
             container.appendChild(this.makeSpacer(8));

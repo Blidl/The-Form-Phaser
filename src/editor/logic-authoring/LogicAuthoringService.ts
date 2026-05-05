@@ -433,12 +433,19 @@ export class LogicAuthoringService {
         return this.applyConfigEdit((nextConfig) => {
             const logic = this.ensureLogicForWrite(nextConfig);
             const scripts = normalizeScriptList(logic.scripts);
+            const scriptRefs = normalizeScriptRefList(logic.scriptRefs);
             const bindings = normalizeBindingList(logic.bindings);
             const scriptId = asOptionalString(input.scriptId);
-            if (!scriptId || !scripts.some((entry) => entry.id === scriptId)) {
+            const hasLocalScript = scriptId
+                ? scripts.some((entry) => entry.id === scriptId)
+                : false;
+            const hasScriptRef = scriptId
+                ? scriptRefs.some((entry) => entry.id === scriptId)
+                : false;
+            if (!scriptId || (!hasLocalScript && !hasScriptRef)) {
                 return {
                     success: false,
-                    reason: 'Binding scriptId must reference an existing script.'
+                    reason: 'Binding scriptId must reference an existing script or script ref.'
                 };
             }
             const targetType = asLogicBindingTargetType(input.targetType);
