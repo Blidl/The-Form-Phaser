@@ -1,0 +1,14 @@
+{
+  "scripts": [
+    {
+      "id": "external_demo_world_start",
+      "name": "External Demo World Start",
+      "category": "world.rule",
+      "commands": [],
+      "editor": {
+        "rawLines": [],
+        "locked": false
+      }
+    }
+  ]
+}

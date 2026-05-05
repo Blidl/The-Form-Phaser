@@ -368,7 +368,8 @@ export class LogicEditorMode implements EditorMode {
 
             const resetButton = document.createElement('button');
             resetButton.type = 'button';
-            resetButton.textContent = 'Reset';
+            resetButton.textContent = 'Revert Changes';
+            resetButton.title = 'Reverts unsaved form edits. Does not delete the script.';
             resetButton.addEventListener('click', () => {
                 const currentSnapshot = this.logicAuthoringService.getSnapshot();
                 if (!currentSnapshot || !this.selectedScriptId) {
