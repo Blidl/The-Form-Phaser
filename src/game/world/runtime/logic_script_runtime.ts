@@ -33,6 +33,10 @@ export interface LogicScriptStateChange {
     to: boolean;
 }
 
+export interface LogicScriptWorldOnStartExecutionContext {
+    setWorldFlag: (key: string, value: boolean) => void;
+}
+
 export type LogicBindingRuntimeStatus =
     | 'success'
     | 'skipped'
@@ -254,6 +258,87 @@ export const executeLogicScriptPreviewSandbox = (
     };
 };
 
+export const executeLogicScriptForWorldOnStart = (
+    script: TestWorldLogicScriptConfig,
+    context: LogicScriptWorldOnStartExecutionContext
+): LogicScriptExecutionResult => {
+    const commandResults: LogicScriptCommandExecutionResult[] = [];
+    const commands = script.commands;
+
+    if (commands.length <= 0) {
+        return {
+            scriptId: script.id,
+            status: 'skipped',
+            commands: commandResults
+        };
+    }
+
+    for (const command of commands) {
+        try {
+            if (command.type === 'noop') {
+                commandResults.push({
+                    commandId: command.id,
+                    type: command.type,
+                    status: 'success',
+                    message: 'noop'
+                });
+                continue;
+            }
+
+            if (command.type === 'set_world_flag') {
+                const key = command.params?.key;
+                const value = command.params?.value;
+                if (!isNonEmptyString(key) || !isBoolean(value)) {
+                    commandResults.push({
+                        commandId: command.id,
+                        type: command.type,
+                        status: 'error',
+                        message: 'invalid set_world_flag params'
+                    });
+                    return {
+                        scriptId: script.id,
+                        status: 'error',
+                        commands: commandResults
+                    };
+                }
+                context.setWorldFlag(key, value);
+                commandResults.push({
+                    commandId: command.id,
+                    type: command.type,
+                    status: 'success',
+                    message: `set_world_flag "${key}" = ${value}`
+                });
+                continue;
+            }
+
+            commandResults.push({
+                commandId: command.id,
+                type: command.type,
+                status: 'error',
+                message: `Unknown command type: ${command.type}`
+            });
+            return {
+                scriptId: script.id,
+                status: 'error',
+                commands: commandResults
+            };
+        } catch (error) {
+            commandResults.push(toCommandErrorResult(command.id, command.type, error));
+            return {
+                scriptId: script.id,
+                status: 'error',
+                commands: commandResults
+            };
+        }
+    }
+
+    return {
+        scriptId: script.id,
+        status: 'success',
+        commands: commandResults
+    };
+};
+
 export const createLogicScriptPreviewTrace = (
     script: TestWorldLogicScriptConfig
 ): LogicScriptCommandExecutionResult[] => {
@@ -308,7 +393,8 @@ const resolveBindingScript = (
 };
 
 export const traceWorldOnStartLogicBindings = (
-    config: TestWorldConfig
+    config: TestWorldConfig,
+    executeScript: (script: TestWorldLogicScriptConfig) => LogicScriptExecutionResult = executeLogicScriptNoopOnly
 ): LogicWorldOnStartTrace => {
     const candidates = config.logic.bindings.filter((binding) => isWorldOnStartBinding(binding));
     if (candidates.length <= 0) {
@@ -350,7 +436,7 @@ export const traceWorldOnStartLogicBindings = (
             continue;
         }
 
-        const scriptResult = executeLogicScriptNoopOnly(script);
+        const scriptResult = executeScript(script);
         traces.push({
             bindingId: binding.id,
             scriptId,

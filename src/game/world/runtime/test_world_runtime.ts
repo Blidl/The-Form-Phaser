@@ -349,7 +349,11 @@ export const createTestWorldRuntime = (
         if (hasExecutedWorldOnStartLogicTrace) {
             return;
         }
-        void createWorldOnStartLogicStartupTrace(worldOnStartTraceConfig)
+        void createWorldOnStartLogicStartupTrace(worldOnStartTraceConfig, {
+            setWorldFlag: (key, value) => {
+                setWorldFlag(key, value);
+            }
+        })
             .then((trace) => {
                 if (hasExecutedWorldOnStartLogicTrace) {
                     return;
