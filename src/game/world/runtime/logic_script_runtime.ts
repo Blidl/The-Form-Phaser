@@ -1,4 +1,10 @@
-import type { TestWorldLogicScriptConfig } from './test_world_config';
+import { getLogicScriptAsset } from './logic_script_registry';
+import type {
+    TestWorldConfig,
+    TestWorldLogicBindingConfig,
+    TestWorldLogicBindingTargetType,
+    TestWorldLogicScriptConfig
+} from './test_world_config';
 
 export type LogicScriptRuntimeStatus =
     | 'success'
@@ -25,6 +31,26 @@ export interface LogicScriptStateChange {
     key: string;
     from: boolean | undefined;
     to: boolean;
+}
+
+export type LogicBindingRuntimeStatus =
+    | 'success'
+    | 'skipped'
+    | 'error';
+
+export interface LogicBindingExecutionTrace {
+    bindingId: string;
+    scriptId: string;
+    targetType: TestWorldLogicBindingTargetType;
+    slot: string;
+    status: LogicBindingRuntimeStatus;
+    reason?: string;
+    scriptResult?: LogicScriptExecutionResult;
+}
+
+export interface LogicWorldOnStartTrace {
+    status: LogicBindingRuntimeStatus;
+    bindings: LogicBindingExecutionTrace[];
 }
 
 const asErrorMessage = (error: unknown): string => {
@@ -232,4 +258,128 @@ export const createLogicScriptPreviewTrace = (
     script: TestWorldLogicScriptConfig
 ): LogicScriptCommandExecutionResult[] => {
     return executeLogicScriptNoopOnly(script).commands;
+};
+
+const LOGIC_WORLD_ON_START_SLOT = 'onStart';
+
+const isWorldOnStartBinding = (binding: TestWorldLogicBindingConfig): boolean => {
+    return binding.targetType === 'world' && binding.slot.trim() === LOGIC_WORLD_ON_START_SLOT;
+};
+
+const collectEmbeddedLogicScripts = (config: TestWorldConfig): Map<string, TestWorldLogicScriptConfig> => {
+    const scriptsById = new Map<string, TestWorldLogicScriptConfig>();
+    for (const script of config.logic.scripts) {
+        const scriptId = script.id.trim();
+        if (scriptId.length <= 0 || scriptsById.has(scriptId)) {
+            continue;
+        }
+        scriptsById.set(scriptId, script);
+    }
+    return scriptsById;
+};
+
+const collectReferencedScriptIds = (config: TestWorldConfig): Set<string> => {
+    const scriptRefIds = new Set<string>();
+    for (const scriptRef of config.logic.scriptRefs) {
+        const scriptId = scriptRef.id.trim();
+        if (scriptId.length <= 0) {
+            continue;
+        }
+        scriptRefIds.add(scriptId);
+    }
+    return scriptRefIds;
+};
+
+const resolveBindingScript = (
+    scriptId: string,
+    embeddedScripts: Map<string, TestWorldLogicScriptConfig>,
+    referencedScriptIds: Set<string>
+): TestWorldLogicScriptConfig | null => {
+    const embeddedScript = embeddedScripts.get(scriptId);
+    if (embeddedScript) {
+        return embeddedScript;
+    }
+
+    if (!referencedScriptIds.has(scriptId)) {
+        return null;
+    }
+
+    return getLogicScriptAsset(scriptId);
+};
+
+export const traceWorldOnStartLogicBindings = (
+    config: TestWorldConfig
+): LogicWorldOnStartTrace => {
+    const candidates = config.logic.bindings.filter((binding) => isWorldOnStartBinding(binding));
+    if (candidates.length <= 0) {
+        return {
+            status: 'skipped',
+            bindings: []
+        };
+    }
+
+    const embeddedScripts = collectEmbeddedLogicScripts(config);
+    const referencedScriptIds = collectReferencedScriptIds(config);
+    const traces: LogicBindingExecutionTrace[] = [];
+
+    for (const binding of candidates) {
+        const scriptId = binding.scriptId.trim();
+
+        if (binding.enabled === false) {
+            traces.push({
+                bindingId: binding.id,
+                scriptId,
+                targetType: binding.targetType,
+                slot: binding.slot,
+                status: 'skipped',
+                reason: 'disabled'
+            });
+            continue;
+        }
+
+        const script = resolveBindingScript(scriptId, embeddedScripts, referencedScriptIds);
+        if (!script) {
+            traces.push({
+                bindingId: binding.id,
+                scriptId,
+                targetType: binding.targetType,
+                slot: binding.slot,
+                status: 'error',
+                reason: 'missing script'
+            });
+            continue;
+        }
+
+        const scriptResult = executeLogicScriptNoopOnly(script);
+        traces.push({
+            bindingId: binding.id,
+            scriptId,
+            targetType: binding.targetType,
+            slot: binding.slot,
+            status: scriptResult.status === 'error' ? 'error' : 'success',
+            reason: scriptResult.status === 'error' ? 'script execution error' : undefined,
+            scriptResult
+        });
+    }
+
+    const hasErrors = traces.some((trace) => trace.status === 'error');
+    if (hasErrors) {
+        return {
+            status: 'error',
+            bindings: traces
+        };
+    }
+
+    const hasEnabledBinding = candidates.some((binding) => binding.enabled !== false);
+    if (!hasEnabledBinding) {
+        return {
+            status: 'skipped',
+            bindings: traces
+        };
+    }
+
+    return {
+        status: 'success',
+        bindings: traces
+    };
 };
