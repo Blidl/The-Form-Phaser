@@ -21,6 +21,10 @@ const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
     'trigger.action',
     'world.rule'
 ]);
+const SUPPORTED_LOGIC_COMMAND_TYPES = new Set<string>([
+    'noop',
+    'set_world_flag'
+]);
 
 const asObject = (value: unknown): Record<string, unknown> | null => {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -34,6 +38,10 @@ const asOptionalString = (value: unknown): string | null => {
     }
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
+};
+
+const isNonEmptyString = (value: unknown): value is string => {
+    return typeof value === 'string' && value.trim().length > 0;
 };
 
 const cloneParamsObject = (params: Record<string, unknown>): Record<string, unknown> => {
@@ -197,10 +205,91 @@ export const resolveLogicScriptAssetIds = (
     };
 };
 
+const isValidNoopCommandParams = (params: unknown): boolean => {
+    if (params === undefined) {
+        return true;
+    }
+    return asObject(params) !== null;
+};
+
+const isValidSetWorldFlagParams = (params: unknown): boolean => {
+    const rawParams = asObject(params);
+    if (!rawParams) {
+        return false;
+    }
+    if (!isNonEmptyString(rawParams.key)) {
+        return false;
+    }
+    return typeof rawParams.value === 'boolean';
+};
+
+export const collectLogicScriptAssetDiagnostics = (): TestWorldLogicDiagnostic[] => {
+    const diagnostics: TestWorldLogicDiagnostic[] = [];
+    let diagnosticIndex = 1;
+    const nextDiagnosticId = (code: TestWorldLogicDiagnostic['code']): string => {
+        const id = `registry_${code}_${diagnosticIndex}`;
+        diagnosticIndex += 1;
+        return id;
+    };
+
+    LOGIC_SCRIPT_ASSETS.forEach((script) => {
+        script.commands.forEach((command, commandIndex) => {
+            const commandType = command.type.trim();
+            const path = `logicScripts.${script.id}.commands[${commandIndex}]`;
+            const commandId = command.id.trim() || undefined;
+
+            if (!SUPPORTED_LOGIC_COMMAND_TYPES.has(commandType)) {
+                diagnostics.push({
+                    id: nextDiagnosticId('unknown_logic_command_type'),
+                    severity: 'error',
+                    code: 'unknown_logic_command_type',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has unknown command type "${commandType}".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`
+                });
+                return;
+            }
+
+            if (commandType === 'noop' && !isValidNoopCommandParams(command.params)) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_params'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_params',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has invalid params for "${commandType}".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.params`
+                });
+                return;
+            }
+
+            if (commandType === 'set_world_flag' && !isValidSetWorldFlagParams(command.params)) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_params'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_params',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has invalid params for "${commandType}" (requires non-empty key and boolean value).`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.params`
+                });
+            }
+        });
+    });
+
+    return diagnostics;
+};
+
 export const collectTestWorldLogicDiagnosticsWithRegistry = (
     config: TestWorldConfig
 ): TestWorldLogicDiagnostic[] => {
-    return collectTestWorldLogicDiagnostics(config, {
+    const levelDiagnostics = collectTestWorldLogicDiagnostics(config, {
         availableExternalScriptIds: LOGIC_SCRIPT_ASSET_IDS
     });
+    const assetDiagnostics = collectLogicScriptAssetDiagnostics();
+    return [
+        ...levelDiagnostics,
+        ...assetDiagnostics
+    ];
 };

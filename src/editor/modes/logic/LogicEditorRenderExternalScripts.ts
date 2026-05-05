@@ -10,7 +10,13 @@ export interface RenderExternalScriptsContext {
     levelScriptRefs: LogicSnapshot['scriptRefs'];
     externalAssets: TestWorldLogicScriptConfig[];
     referencedScriptRefIds: Set<string>;
-    diagnostics: { code: string; message: string }[];
+    diagnostics: {
+        code: string;
+        message: string;
+        scriptId?: string;
+        commandId?: string;
+        path?: string;
+    }[];
     selectedExternalScriptId: string | null;
     addScriptRefError: string | null;
     createBindingRefId: string | null;
@@ -124,6 +130,15 @@ export function renderExternalScriptsSection(
         warningBox.appendChild(dom.makeInfoLine(`Diagnostics: ${diagnostics.length}`));
         diagnostics.forEach((diagnostic) => {
             warningBox.appendChild(dom.makeInfoLine(`[${diagnostic.code}] ${diagnostic.message}`));
+            if (diagnostic.scriptId) {
+                warningBox.appendChild(dom.makeInfoLine(`script: ${diagnostic.scriptId}`));
+            }
+            if (diagnostic.commandId) {
+                warningBox.appendChild(dom.makeInfoLine(`command: ${diagnostic.commandId}`));
+            }
+            if (diagnostic.path) {
+                warningBox.appendChild(dom.makeInfoLine(`path: ${diagnostic.path}`));
+            }
         });
         container.appendChild(warningBox);
         container.appendChild(dom.makeSpacer(4));

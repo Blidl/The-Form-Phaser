@@ -98,9 +98,12 @@ export type TestWorldLogicDiagnosticSeverity = 'warning' | 'error';
 
 export type TestWorldLogicDiagnosticCode =
     | 'missing_logic_script_ref'
+    | 'missing_logic_script_asset'
     | 'duplicate_logic_script_id'
     | 'duplicate_logic_script_ref'
-    | 'invalid_logic_binding_target';
+    | 'invalid_logic_binding_target'
+    | 'unknown_logic_command_type'
+    | 'invalid_logic_command_params';
 
 export interface TestWorldLogicDiagnostic {
     id: string;
@@ -108,6 +111,7 @@ export interface TestWorldLogicDiagnostic {
     code: TestWorldLogicDiagnosticCode;
     message: string;
     scriptId?: string;
+    commandId?: string;
     bindingId?: string;
     path?: string;
 }
@@ -898,6 +902,7 @@ export const collectTestWorldLogicDiagnostics = (
     const knownScriptIds = new Set<string>();
     const seenScriptIds = new Set<string>();
     const seenScriptRefIds = new Set<string>();
+    const externalScriptIds = new Set<string>();
 
     scripts.forEach((script, index) => {
         const scriptId = typeof script.id === 'string' ? script.id.trim() : '';
@@ -944,7 +949,28 @@ export const collectTestWorldLogicDiagnostics = (
         availableExternalScriptIds.forEach((entry) => {
             const scriptId = entry.trim();
             if (scriptId.length > 0) {
+                externalScriptIds.add(scriptId);
                 knownScriptIds.add(scriptId);
+            }
+        });
+    }
+
+    if (availableExternalScriptIds) {
+        scriptRefs.forEach((scriptRef, index) => {
+            const scriptId = typeof scriptRef.id === 'string' ? scriptRef.id.trim() : '';
+            if (scriptId.length <= 0) {
+                return;
+            }
+            const hasEmbeddedScript = seenScriptIds.has(scriptId);
+            if (!hasEmbeddedScript && !externalScriptIds.has(scriptId)) {
+                diagnostics.push({
+                    id: nextDiagnosticId('missing_logic_script_asset'),
+                    severity: 'warning',
+                    code: 'missing_logic_script_asset',
+                    message: `Script ref "${scriptId}" is missing from external logic script assets.`,
+                    scriptId,
+                    path: `logic.scriptRefs[${index}].id`
+                });
             }
         });
     }

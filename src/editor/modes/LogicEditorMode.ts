@@ -491,14 +491,23 @@ export class LogicEditorMode implements EditorMode {
         }
     }
 
-    private collectRegistryDiagnostics(): { code: string; message: string }[] {
+    private collectRegistryDiagnostics(): {
+        code: string;
+        message: string;
+        scriptId?: string;
+        commandId?: string;
+        path?: string;
+    }[] {
         const runtimeConfig = this.getCurrentRuntimeConfig();
         if (!runtimeConfig) {
             return [];
         }
         return collectTestWorldLogicDiagnosticsWithRegistry(runtimeConfig).map((entry) => ({
             code: entry.code,
-            message: entry.message
+            message: entry.message,
+            scriptId: entry.scriptId,
+            commandId: entry.commandId,
+            path: entry.path
         }));
     }
 
