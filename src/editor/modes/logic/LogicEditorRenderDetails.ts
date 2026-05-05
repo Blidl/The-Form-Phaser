@@ -75,7 +75,7 @@ export function renderScriptDetailsSection(
         controlsRow.appendChild(createControlButton('Focus', { disabled: true }));
 
         previewBox.appendChild(controlsRow);
-        previewBox.appendChild(dom.makeInfoLine('Preview is trace-only. Gameplay execution is deferred.'));
+        previewBox.appendChild(dom.makeInfoLine('Preview is sandbox-only. Gameplay execution is deferred.'));
         if (selectedExternalScript) {
             previewBox.appendChild(dom.makeInfoLine(`Selected script: ${selectedExternalScript.id}`));
         } else {
@@ -96,6 +96,26 @@ export function renderScriptDetailsSection(
                     previewBox.appendChild(dom.makeInfoLine(`  status: ${command.status}`));
                     previewBox.appendChild(dom.makeInfoLine(`  message: ${command.message}`));
                 });
+            }
+
+            if (previewResult.stateChanges && previewResult.stateChanges.length > 0) {
+                previewBox.appendChild(dom.makeInfoLine('Preview State Changes:'));
+                previewResult.stateChanges.forEach((change) => {
+                    const fromText = change.from === undefined ? 'unset' : String(change.from);
+                    previewBox.appendChild(dom.makeInfoLine(`- ${change.key}: ${fromText} -> ${String(change.to)}`));
+                });
+            }
+
+            if (previewResult.worldFlags) {
+                const previewFlagEntries = Object.entries(previewResult.worldFlags);
+                previewBox.appendChild(dom.makeInfoLine('Preview World Flags:'));
+                if (previewFlagEntries.length <= 0) {
+                    previewBox.appendChild(dom.makeInfoLine('- (none)'));
+                } else {
+                    previewFlagEntries.forEach(([key, value]) => {
+                        previewBox.appendChild(dom.makeInfoLine(`- ${key}: ${String(value)}`));
+                    });
+                }
             }
         }
 

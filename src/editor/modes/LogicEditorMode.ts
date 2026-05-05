@@ -10,7 +10,7 @@ import type {
     TestWorldLogicScriptConfig
 } from '../../game/world/runtime/test_world_config';
 import {
-    executeLogicScriptNoopOnly,
+    executeLogicScriptPreviewSandbox,
     type LogicScriptExecutionResult
 } from '../../game/world/runtime/logic_script_runtime';
 import {
@@ -638,7 +638,10 @@ export class LogicEditorMode implements EditorMode {
 
     private runExternalScriptPreview(script: TestWorldLogicScriptConfig): void {
         try {
-            this.externalScriptPreviewResult = executeLogicScriptNoopOnly(script);
+            const initialWorldFlags = this.getCurrentRuntimeConfig()?.worldFlags ?? {};
+            this.externalScriptPreviewResult = executeLogicScriptPreviewSandbox(script, {
+                initialWorldFlags
+            });
         } catch (error) {
             const message = error instanceof Error && error.message.trim().length > 0
                 ? error.message
