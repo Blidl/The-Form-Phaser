@@ -69,7 +69,10 @@ const createModes = (
         legacyObjectAdapter,
         onUiChanged
     });
-    const cutscenes = new CutscenesEditorMode();
+    const cutscenes = new CutscenesEditorMode({
+        legacyObjectAdapter,
+        onUiChanged
+    });
     const logic = new LogicEditorMode({
         legacyObjectAdapter,
         onUiChanged
