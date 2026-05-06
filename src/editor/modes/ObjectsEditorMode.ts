@@ -3070,6 +3070,12 @@ export class ObjectsEditorMode implements EditorMode {
             bindingBox.appendChild(this.makeLabel(`slot: ${binding.slot}`));
             bindingBox.appendChild(this.makeLabel(`scriptId: ${binding.scriptId}`));
             bindingBox.appendChild(this.makeLabel(`status: ${binding.enabled === false ? 'disabled' : 'enabled'}`));
+            const normalizedSlot = binding.slot.trim();
+            bindingBox.appendChild(this.makeLabel(
+                normalizedSlot === OBJECT_LOGIC_BINDING_DEFAULT_SLOT
+                    ? 'runtime: enabled for object/onInteract'
+                    : 'runtime: not supported for this slot yet'
+            ));
 
             const enabledRow = document.createElement('label');
             enabledRow.style.display = 'flex';
@@ -3125,7 +3131,6 @@ export class ObjectsEditorMode implements EditorMode {
             bindingBox.appendChild(actionRow);
             wrap.appendChild(bindingBox);
         });
-        wrap.appendChild(this.makeLabel('authoring only; runtime execution deferred'));
         return wrap;
     }
 

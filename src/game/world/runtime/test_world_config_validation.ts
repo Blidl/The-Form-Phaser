@@ -102,6 +102,7 @@ export type TestWorldLogicDiagnosticCode =
     | 'duplicate_logic_script_id'
     | 'duplicate_logic_script_ref'
     | 'invalid_logic_binding_target'
+    | 'unsupported_logic_binding_runtime_slot'
     | 'unknown_logic_command_type'
     | 'invalid_logic_command_params'
     | 'invalid_logic_command_ref'
@@ -115,10 +116,32 @@ export interface TestWorldLogicDiagnostic {
     scriptId?: string;
     commandId?: string;
     bindingId?: string;
+    targetType?: string;
+    targetId?: string;
+    slot?: string;
     path?: string;
     cutsceneId?: string;
     missingParticipantId?: string;
 }
+
+const isRuntimeSupportedLogicBindingSlot = (targetType: string, slot: string): boolean => {
+    return (targetType === 'world' && slot === 'onStart')
+        || (targetType === 'object' && slot === 'onInteract');
+};
+
+const getUnsupportedRuntimeBindingSlotMessage = (
+    bindingLabel: string,
+    targetType: string,
+    slot: string
+): string => {
+    if (targetType === 'object') {
+        return `Binding "${bindingLabel}" targets object slot "${slot}", but runtime currently supports only object/onInteract.`;
+    }
+    if (targetType === 'world') {
+        return `Binding "${bindingLabel}" targets world slot "${slot}", but runtime currently supports only world/onStart.`;
+    }
+    return `Binding "${bindingLabel}" targets ${targetType} slot "${slot}", but runtime currently supports only world/onStart and object/onInteract.`;
+};
 
 const asNumber = (value: unknown, fallback: number): number => {
     return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
@@ -988,13 +1011,15 @@ export const collectTestWorldLogicDiagnostics = (
 
     bindings.forEach((binding, index) => {
         const bindingId = typeof binding.id === 'string' ? binding.id.trim() : '';
+        const bindingLabel = bindingId || `logic_binding_${index + 1}`;
         const scriptId = typeof binding.scriptId === 'string' ? binding.scriptId.trim() : '';
+        const slot = typeof binding.slot === 'string' ? binding.slot.trim() : '';
         if (scriptId.length > 0 && !knownScriptIds.has(scriptId)) {
             diagnostics.push({
                 id: nextDiagnosticId('missing_logic_script_ref'),
                 severity: 'warning',
                 code: 'missing_logic_script_ref',
-                message: `Binding "${bindingId || `logic_binding_${index + 1}`}" references missing script "${scriptId}".`,
+                message: `Binding "${bindingLabel}" references missing script "${scriptId}".`,
                 scriptId,
                 bindingId: bindingId || undefined,
                 path: `logic.bindings[${index}].scriptId`
@@ -1023,9 +1048,23 @@ export const collectTestWorldLogicDiagnostics = (
                 id: nextDiagnosticId('invalid_logic_binding_target'),
                 severity: 'error',
                 code: 'invalid_logic_binding_target',
-                message: `Binding "${bindingId || `logic_binding_${index + 1}`}" has an invalid ${targetType} target.`,
+                message: `Binding "${bindingLabel}" has an invalid ${targetType} target.`,
                 bindingId: bindingId || undefined,
                 path: `logic.bindings[${index}].targetId`
+            });
+        }
+
+        if (!isRuntimeSupportedLogicBindingSlot(targetType, slot)) {
+            diagnostics.push({
+                id: nextDiagnosticId('unsupported_logic_binding_runtime_slot'),
+                severity: 'warning',
+                code: 'unsupported_logic_binding_runtime_slot',
+                message: getUnsupportedRuntimeBindingSlotMessage(bindingLabel, targetType, slot),
+                bindingId: bindingId || undefined,
+                targetType,
+                targetId: targetId || undefined,
+                slot,
+                path: `logic.bindings[${index}].slot`
             });
         }
     });
