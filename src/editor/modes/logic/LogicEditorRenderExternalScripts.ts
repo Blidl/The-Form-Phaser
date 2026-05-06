@@ -119,7 +119,8 @@ export function renderExternalScriptsSection(
     } = context;
 
     container.appendChild(dom.makeSectionTitle('External Script Assets'));
-    container.appendChild(dom.makeInfoLine('External scripts are authored in IDE/source files. This editor only references them.'));
+    container.appendChild(dom.makeInfoLine('External scripts are loaded from src/game/world/runtime/data/logic_scripts.json.'));
+    container.appendChild(dom.makeInfoLine('Authoring in this panel references those assets and level script refs.'));
     const summaryRow = document.createElement('div');
     summaryRow.style.display = 'flex';
     summaryRow.style.alignItems = 'center';
@@ -166,6 +167,7 @@ export function renderExternalScriptsSection(
         warningBox.style.marginBottom = '6px';
         warningBox.style.wordBreak = 'break-word';
         warningBox.appendChild(dom.makeInfoLine(`Diagnostics: ${diagnostics.length}`));
+        warningBox.appendChild(dom.makeInfoLine('Includes unsupported runtime slot checks (world/onStart, object/onInteract).'));
         diagnostics.forEach((diagnostic) => {
             warningBox.appendChild(dom.makeInfoLine(`[${diagnostic.code}] ${diagnostic.message}`));
             if (diagnostic.scriptId) {

@@ -43,7 +43,7 @@ export function renderScriptDetailsSection(
     } = context;
 
     const renderPreviewSection = (): void => {
-        container.appendChild(dom.makeSectionTitle('Preview'));
+        container.appendChild(dom.makeSectionTitle('Preview Sandbox'));
 
         const previewBox = document.createElement('div');
         previewBox.style.border = '1px solid #8b8b8b';
@@ -92,7 +92,7 @@ export function renderScriptDetailsSection(
         controlsRow.appendChild(createControlButton('Focus', { disabled: true }));
 
         previewBox.appendChild(controlsRow);
-        previewBox.appendChild(dom.makeInfoLine('Preview is sandbox-only. Gameplay execution is deferred.'));
+        previewBox.appendChild(dom.makeInfoLine('Preview runs in a sandbox. It does not execute in live gameplay runtime.'));
         if (selectedExternalScript) {
             previewBox.appendChild(dom.makeInfoLine(`Selected script: ${selectedExternalScript.id}`));
         } else {
@@ -140,7 +140,7 @@ export function renderScriptDetailsSection(
     };
 
     const renderRuntimeOnStartTraceSection = (): void => {
-        container.appendChild(dom.makeSectionTitle('Runtime onStart Trace'));
+        container.appendChild(dom.makeSectionTitle('Runtime world/onStart Trace'));
 
         const traceBox = document.createElement('div');
         traceBox.style.border = '1px solid #8b8b8b';
@@ -148,8 +148,10 @@ export function renderScriptDetailsSection(
         traceBox.style.padding = '6px';
         traceBox.style.marginBottom = '8px';
 
+        traceBox.appendChild(dom.makeInfoLine('Runtime support: world/onStart executes once after world runtime init.'));
+
         if (!runtimeWorldOnStartTrace) {
-            traceBox.appendChild(dom.makeInfoLine('No runtime onStart trace recorded.'));
+            traceBox.appendChild(dom.makeInfoLine('No runtime world/onStart trace recorded.'));
             container.appendChild(traceBox);
             return;
         }

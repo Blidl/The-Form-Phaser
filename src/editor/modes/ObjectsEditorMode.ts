@@ -2907,6 +2907,7 @@ export class ObjectsEditorMode implements EditorMode {
     ): HTMLDivElement {
         const wrap = document.createElement('div');
         wrap.appendChild(this.makeSectionTitle('Object Interaction Trace'));
+        wrap.appendChild(this.makeLabel('Runtime execution: press I in gameplay to trigger nearest object onInteract binding.'));
         wrap.appendChild(this.makeObjectInteractionTraceView(selectedObject.id));
         wrap.appendChild(this.makeSpacer());
         this.syncObjectLogicBindingTransientState(bindings);
@@ -2919,7 +2920,7 @@ export class ObjectsEditorMode implements EditorMode {
 
         const addButton = document.createElement('button');
         addButton.type = 'button';
-        addButton.textContent = 'Add Logic Binding';
+        addButton.textContent = 'Add Object Binding';
         addButton.style.marginTop = '4px';
         addButton.disabled = hasOnInteractBinding;
         this.bindEditorInputKeyboardGuards(addButton);
@@ -3056,6 +3057,8 @@ export class ObjectsEditorMode implements EditorMode {
             return wrap;
         }
 
+        wrap.appendChild(this.makeLabel('Runtime support: object/onInteract executes by I key (nearest interaction target).'));
+
         bindings.forEach((binding) => {
             const bindingEnabledDraft = this.objectLogicBindingEnabledDrafts.get(binding.id) ?? (binding.enabled !== false);
             const hasEnabledChanged = bindingEnabledDraft !== (binding.enabled !== false);
@@ -3073,8 +3076,8 @@ export class ObjectsEditorMode implements EditorMode {
             const normalizedSlot = binding.slot.trim();
             bindingBox.appendChild(this.makeLabel(
                 normalizedSlot === OBJECT_LOGIC_BINDING_DEFAULT_SLOT
-                    ? 'runtime: enabled for object/onInteract'
-                    : 'runtime: not supported for this slot yet'
+                    ? 'runtime support: object/onInteract (I key) is enabled for this slot'
+                    : 'runtime support: unsupported slot (supported: object/onInteract only)'
             ));
 
             const enabledRow = document.createElement('label');

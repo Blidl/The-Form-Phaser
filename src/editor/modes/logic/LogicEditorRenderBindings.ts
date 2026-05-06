@@ -41,6 +41,7 @@ export function renderBindingsSection(
     } = context;
 
     container.appendChild(dom.makeSectionTitle('Bindings'));
+    container.appendChild(dom.makeInfoLine('Runtime-supported slots: world/onStart and object/onInteract.'));
     if (bindings.length <= 0) {
         container.appendChild(dom.makeInfoLine('No logic bindings yet.'));
         return;
@@ -64,6 +65,15 @@ export function renderBindingsSection(
         bindingBox.appendChild(dom.makeInfoLine(`slot: ${binding.slot}`));
         bindingBox.appendChild(dom.makeInfoLine(`scriptId: ${binding.scriptId}`));
         bindingBox.appendChild(dom.makeInfoLine(`status: ${binding.enabled ? 'enabled' : 'disabled'}`));
+        const isRuntimeSupported = (
+            (binding.targetType === 'world' && binding.slot.trim() === 'onStart')
+            || (binding.targetType === 'object' && binding.slot.trim() === 'onInteract')
+        );
+        bindingBox.appendChild(dom.makeInfoLine(
+            isRuntimeSupported
+                ? 'runtime support: supported'
+                : 'runtime support: unsupported slot (see diagnostics)'
+        ));
         container.appendChild(bindingBox);
     });
 
