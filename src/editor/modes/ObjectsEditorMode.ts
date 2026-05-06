@@ -3223,6 +3223,28 @@ export class ObjectsEditorMode implements EditorMode {
             wrap.appendChild(this.makeLabel(`Candidates: ${candidateSummary.join(', ')}`));
         }
 
+        if (trace.bindingTrace && Array.isArray(trace.bindingTrace.bindings)) {
+            wrap.appendChild(this.makeLabel('Binding results:'));
+            trace.bindingTrace.bindings.forEach((binding) => {
+                wrap.appendChild(this.makeLabel(`- binding id: ${binding.bindingId}`));
+                wrap.appendChild(this.makeLabel(`  scriptId: ${binding.scriptId}`));
+                wrap.appendChild(this.makeLabel(`  status: ${binding.status}`));
+                if (typeof binding.reason === 'string' && binding.reason.trim().length > 0) {
+                    wrap.appendChild(this.makeLabel(`  reason: ${binding.reason}`));
+                }
+                if (!Array.isArray(binding.commands) || binding.commands.length <= 0) {
+                    wrap.appendChild(this.makeLabel('  Command results: none'));
+                    return;
+                }
+                binding.commands.forEach((command) => {
+                    wrap.appendChild(this.makeLabel(`  command id: ${command.commandId}`));
+                    wrap.appendChild(this.makeLabel(`  type: ${command.type}`));
+                    wrap.appendChild(this.makeLabel(`  status: ${command.status}`));
+                    wrap.appendChild(this.makeLabel(`  message: ${command.message}`));
+                });
+            });
+        }
+
         return wrap;
     }
 
