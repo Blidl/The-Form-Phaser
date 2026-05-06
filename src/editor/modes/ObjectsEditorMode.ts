@@ -16,7 +16,9 @@ import type { EditorPanel } from '../ui/EditorPanel';
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
 import { ObjectAuthoringService, type UpdateObjectVisualPatch } from '../object-authoring/ObjectAuthoringService';
+import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService';
 import { objectDiag } from '../debug/ObjectEditorDiagnostics';
+import type { TestWorldLogicBindingConfig } from '../../game/world/runtime/test_world_config';
 
 interface ObjectsEditorModeOptions {
     scene: Phaser.Scene;
@@ -115,6 +117,7 @@ export class ObjectsEditorMode implements EditorMode {
     private readonly onUiChanged: () => void;
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
     private readonly objectAuthoringService: ObjectAuthoringService;
+    private readonly logicAuthoringService: LogicAuthoringService;
     private readonly objectViews = new Map<string, Phaser.GameObjects.Rectangle>();
     private readonly selectionOutline: Phaser.GameObjects.Graphics;
     private readonly deleteKey: Phaser.Input.Keyboard.Key | null;
@@ -170,6 +173,7 @@ export class ObjectsEditorMode implements EditorMode {
             objectTypeRegistry: this.objectTypeRegistry,
             legacyObjectAdapter: this.legacyObjectAdapter
         });
+        this.logicAuthoringService = new LogicAuthoringService(this.legacyObjectAdapter);
 
         this.selectionOutline = this.scene.add.graphics();
         this.selectionOutline.setDepth(5101);
@@ -699,8 +703,12 @@ export class ObjectsEditorMode implements EditorMode {
             if (!selectedObject) {
                 container.appendChild(this.makeLabel(`Active level: ${activeLevel.name} (${activeLevel.id})`));
                 container.appendChild(this.makeLabel(`Object count: ${objects.length}`));
+                container.appendChild(this.makeSpacer());
+                container.appendChild(this.makeSectionTitle('Logic Actions'));
+                container.appendChild(this.makeLabel('Select an object to inspect logic actions.'));
                 return;
             }
+            const objectLogicBindings = this.logicAuthoringService.listBindingsForTarget('object', selectedObject.id);
             objectDiag('[ObjectVisualSync]', {
                 phase: 'select',
                 objectId: selectedObject.id,
@@ -767,6 +775,9 @@ export class ObjectsEditorMode implements EditorMode {
             container.appendChild(
                 this.makeLabel(`Action 1: ${selectedObject.actions.actionScriptIds[0] ?? '-'}`)
             );
+            container.appendChild(this.makeSpacer());
+            container.appendChild(this.makeSectionTitle('Logic Actions'));
+            container.appendChild(this.makeLogicActionsReadOnlyView(objectLogicBindings));
         });
     }
 
@@ -2872,6 +2883,30 @@ export class ObjectsEditorMode implements EditorMode {
             }
         }));
 
+        return wrap;
+    }
+
+    private makeLogicActionsReadOnlyView(bindings: TestWorldLogicBindingConfig[]): HTMLDivElement {
+        const wrap = document.createElement('div');
+        if (bindings.length <= 0) {
+            wrap.appendChild(this.makeLabel('No logic bindings for this object.'));
+            return wrap;
+        }
+
+        bindings.forEach((binding) => {
+            const bindingBox = document.createElement('div');
+            bindingBox.style.border = '1px solid #8b8b8b';
+            bindingBox.style.background = '#d9d9d9';
+            bindingBox.style.padding = '6px';
+            bindingBox.style.marginBottom = '6px';
+            bindingBox.style.wordBreak = 'break-word';
+            bindingBox.appendChild(this.makeLabel(`id: ${binding.id}`));
+            bindingBox.appendChild(this.makeLabel(`slot: ${binding.slot}`));
+            bindingBox.appendChild(this.makeLabel(`scriptId: ${binding.scriptId}`));
+            bindingBox.appendChild(this.makeLabel(`status: ${binding.enabled === false ? 'disabled' : 'enabled'}`));
+            wrap.appendChild(bindingBox);
+        });
+        wrap.appendChild(this.makeLabel('authoring only; runtime execution deferred'));
         return wrap;
     }
 
