@@ -5,6 +5,7 @@ import type {
     TestWorldLogicScriptConfig
 } from './test_world_config';
 import { collectTestWorldLogicDiagnostics, type TestWorldLogicDiagnostic } from './test_world_config_validation';
+import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
 
 const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
     'object.move',
@@ -22,7 +23,8 @@ const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
 ]);
 const SUPPORTED_LOGIC_COMMAND_TYPES = new Set<string>([
     'noop',
-    'set_world_flag'
+    'set_world_flag',
+    'start_cutscene'
 ]);
 const EMPTY_LOGIC_SCRIPT_REGISTRY: { scripts: unknown[] } = { scripts: [] };
 type LogicScriptRegistryReloadResult = {
@@ -278,6 +280,17 @@ const isValidSetWorldFlagParams = (params: unknown): boolean => {
     return typeof rawParams.value === 'boolean';
 };
 
+const getStartCutsceneCommandCutsceneId = (params: unknown): string | null => {
+    const rawParams = asObject(params);
+    if (!rawParams) {
+        return null;
+    }
+    if (!isNonEmptyString(rawParams.cutsceneId)) {
+        return null;
+    }
+    return rawParams.cutsceneId.trim();
+};
+
 export const getLogicScriptRegistryVersion = (): number => {
     return registryState.version;
 };
@@ -475,6 +488,35 @@ export const collectLogicScriptAssetDiagnostics = (): TestWorldLogicDiagnostic[]
                     commandId,
                     path: `${path}.params`
                 });
+                return;
+            }
+
+            if (commandType === 'start_cutscene') {
+                const cutsceneId = getStartCutsceneCommandCutsceneId(command.params);
+                if (!cutsceneId) {
+                    diagnostics.push({
+                        id: nextDiagnosticId('invalid_logic_command_params'),
+                        severity: 'error',
+                        code: 'invalid_logic_command_params',
+                        message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has invalid params for "${commandType}" (requires non-empty cutsceneId).`,
+                        scriptId: script.id,
+                        commandId,
+                        path: `${path}.params.cutsceneId`
+                    });
+                    return;
+                }
+
+                if (!isTestCutsceneRef(cutsceneId)) {
+                    diagnostics.push({
+                        id: nextDiagnosticId('invalid_logic_command_ref'),
+                        severity: 'error',
+                        code: 'invalid_logic_command_ref',
+                        message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" references unknown cutscene "${cutsceneId}".`,
+                        scriptId: script.id,
+                        commandId,
+                        path: `${path}.params.cutsceneId`
+                    });
+                }
             }
         });
     });

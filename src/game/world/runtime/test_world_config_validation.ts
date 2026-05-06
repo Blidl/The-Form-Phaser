@@ -103,7 +103,8 @@ export type TestWorldLogicDiagnosticCode =
     | 'duplicate_logic_script_ref'
     | 'invalid_logic_binding_target'
     | 'unknown_logic_command_type'
-    | 'invalid_logic_command_params';
+    | 'invalid_logic_command_params'
+    | 'invalid_logic_command_ref';
 
 export interface TestWorldLogicDiagnostic {
     id: string;
