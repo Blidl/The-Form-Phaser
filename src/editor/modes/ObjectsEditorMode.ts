@@ -165,6 +165,8 @@ export class ObjectsEditorMode implements EditorMode {
     private objectLogicBindingCreateScriptRefId: string | null = null;
     private objectLogicBindingCreateEnabledDraft = true;
     private objectLogicBindingCreateError: string | null = null;
+    private readonly objectLogicBindingEnabledDrafts = new Map<string, boolean>();
+    private readonly objectLogicBindingMutationErrors = new Map<string, string>();
     private context: EditorModeRuntimeContext = {
         mouseWorldX: null,
         mouseWorldY: null,
@@ -2903,7 +2905,8 @@ export class ObjectsEditorMode implements EditorMode {
         bindings: TestWorldLogicBindingConfig[]
     ): HTMLDivElement {
         const wrap = document.createElement('div');
-        wrap.appendChild(this.makeLogicActionsReadOnlyView(bindings));
+        this.syncObjectLogicBindingTransientState(bindings);
+        wrap.appendChild(this.makeLogicActionsAuthoringView(bindings));
 
         const scriptRefs = this.logicAuthoringService.listScriptRefs();
         this.syncObjectLogicBindingCreateState(selectedObject.id, scriptRefs);
@@ -3042,7 +3045,7 @@ export class ObjectsEditorMode implements EditorMode {
         return wrap;
     }
 
-    private makeLogicActionsReadOnlyView(bindings: TestWorldLogicBindingConfig[]): HTMLDivElement {
+    private makeLogicActionsAuthoringView(bindings: TestWorldLogicBindingConfig[]): HTMLDivElement {
         const wrap = document.createElement('div');
         if (bindings.length <= 0) {
             wrap.appendChild(this.makeLabel('No logic bindings for this object.'));
@@ -3050,6 +3053,9 @@ export class ObjectsEditorMode implements EditorMode {
         }
 
         bindings.forEach((binding) => {
+            const bindingEnabledDraft = this.objectLogicBindingEnabledDrafts.get(binding.id) ?? (binding.enabled !== false);
+            const hasEnabledChanged = bindingEnabledDraft !== (binding.enabled !== false);
+            const bindingError = this.objectLogicBindingMutationErrors.get(binding.id);
             const bindingBox = document.createElement('div');
             bindingBox.style.border = '1px solid #8b8b8b';
             bindingBox.style.background = '#d9d9d9';
@@ -3060,10 +3066,79 @@ export class ObjectsEditorMode implements EditorMode {
             bindingBox.appendChild(this.makeLabel(`slot: ${binding.slot}`));
             bindingBox.appendChild(this.makeLabel(`scriptId: ${binding.scriptId}`));
             bindingBox.appendChild(this.makeLabel(`status: ${binding.enabled === false ? 'disabled' : 'enabled'}`));
+
+            const enabledRow = document.createElement('label');
+            enabledRow.style.display = 'flex';
+            enabledRow.style.alignItems = 'center';
+            enabledRow.style.gap = '6px';
+            enabledRow.style.marginBottom = '6px';
+
+            const enabledCheckbox = document.createElement('input');
+            enabledCheckbox.type = 'checkbox';
+            enabledCheckbox.checked = bindingEnabledDraft;
+            this.bindEditorInputKeyboardGuards(enabledCheckbox);
+            enabledCheckbox.addEventListener('change', () => {
+                this.objectLogicBindingEnabledDrafts.set(binding.id, enabledCheckbox.checked);
+                this.objectLogicBindingMutationErrors.delete(binding.id);
+                this.onUiChanged();
+            });
+            enabledRow.appendChild(enabledCheckbox);
+
+            const enabledText = document.createElement('span');
+            enabledText.textContent = 'Enabled';
+            enabledRow.appendChild(enabledText);
+            bindingBox.appendChild(enabledRow);
+
+            if (bindingError) {
+                const errorLine = this.makeLabel(bindingError);
+                errorLine.style.color = '#b00020';
+                errorLine.style.marginBottom = '6px';
+                bindingBox.appendChild(errorLine);
+            }
+
+            const actionRow = document.createElement('div');
+            actionRow.style.display = 'flex';
+            actionRow.style.gap = '6px';
+
+            const applyButton = document.createElement('button');
+            applyButton.type = 'button';
+            applyButton.textContent = 'Apply';
+            applyButton.disabled = !hasEnabledChanged;
+            this.bindEditorInputKeyboardGuards(applyButton);
+            applyButton.addEventListener('click', () => {
+                this.updateObjectLogicBindingEnabled(binding.id);
+            });
+            actionRow.appendChild(applyButton);
+
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.textContent = 'Delete';
+            this.bindEditorInputKeyboardGuards(deleteButton);
+            deleteButton.addEventListener('click', () => {
+                this.deleteObjectLogicBinding(binding.id);
+            });
+            actionRow.appendChild(deleteButton);
+            bindingBox.appendChild(actionRow);
             wrap.appendChild(bindingBox);
         });
         wrap.appendChild(this.makeLabel('authoring only; runtime execution deferred'));
         return wrap;
+    }
+
+    private syncObjectLogicBindingTransientState(bindings: readonly TestWorldLogicBindingConfig[]): void {
+        const activeBindingIds = new Set<string>();
+        bindings.forEach((binding) => {
+            activeBindingIds.add(binding.id);
+            if (!this.objectLogicBindingEnabledDrafts.has(binding.id)) {
+                this.objectLogicBindingEnabledDrafts.set(binding.id, binding.enabled !== false);
+            }
+        });
+        Array.from(this.objectLogicBindingEnabledDrafts.keys()).forEach((bindingId) => {
+            if (!activeBindingIds.has(bindingId)) {
+                this.objectLogicBindingEnabledDrafts.delete(bindingId);
+                this.objectLogicBindingMutationErrors.delete(bindingId);
+            }
+        });
     }
 
     private startObjectLogicBindingCreateForm(
@@ -3160,6 +3235,36 @@ export class ObjectsEditorMode implements EditorMode {
         }
 
         this.resetObjectLogicBindingCreateForm();
+        this.onUiChanged();
+    }
+
+    private updateObjectLogicBindingEnabled(bindingId: string): void {
+        const enabled = this.objectLogicBindingEnabledDrafts.get(bindingId);
+        if (typeof enabled !== 'boolean') {
+            this.objectLogicBindingMutationErrors.set(bindingId, 'Binding state unavailable.');
+            this.onUiChanged();
+            return;
+        }
+        this.objectLogicBindingMutationErrors.delete(bindingId);
+        const result = this.logicAuthoringService.updateBinding(bindingId, { enabled });
+        if (!result.success) {
+            this.objectLogicBindingMutationErrors.set(bindingId, result.reason ?? 'Failed to update logic binding.');
+            this.onUiChanged();
+            return;
+        }
+        this.onUiChanged();
+    }
+
+    private deleteObjectLogicBinding(bindingId: string): void {
+        this.objectLogicBindingMutationErrors.delete(bindingId);
+        const result = this.logicAuthoringService.deleteBinding(bindingId);
+        if (!result.success) {
+            this.objectLogicBindingMutationErrors.set(bindingId, result.reason ?? 'Failed to delete logic binding.');
+            this.onUiChanged();
+            return;
+        }
+        this.objectLogicBindingEnabledDrafts.delete(bindingId);
+        this.objectLogicBindingMutationErrors.delete(bindingId);
         this.onUiChanged();
     }
 
