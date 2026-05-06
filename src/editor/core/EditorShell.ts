@@ -65,7 +65,10 @@ const createModes = (
         legacyObjectAdapter,
         onUiChanged
     });
-    const npc = new NpcEditorMode();
+    const npc = new NpcEditorMode({
+        legacyObjectAdapter,
+        onUiChanged
+    });
     const cutscenes = new CutscenesEditorMode();
     const logic = new LogicEditorMode({
         legacyObjectAdapter,
