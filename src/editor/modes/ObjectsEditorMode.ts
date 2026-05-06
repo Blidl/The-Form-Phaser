@@ -18,7 +18,10 @@ import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
 import { ObjectAuthoringService, type UpdateObjectVisualPatch } from '../object-authoring/ObjectAuthoringService';
 import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService';
 import { objectDiag } from '../debug/ObjectEditorDiagnostics';
-import type { TestWorldLogicBindingConfig } from '../../game/world/runtime/test_world_config';
+import type {
+    TestWorldLogicBindingConfig,
+    TestWorldLogicScriptRefConfig
+} from '../../game/world/runtime/test_world_config';
 
 interface ObjectsEditorModeOptions {
     scene: Phaser.Scene;
@@ -66,6 +69,7 @@ const HEX_COLOR_LIKE_PATTERN = /^#?([0-9a-f]{3}|[0-9a-f]{4}|[0-9a-f]{6}|[0-9a-f]
 const TRANSPARENT_COLOR_VALUE = 'transparent';
 const DEFAULT_AUTHORING_FILL_COLOR = '#ffffff';
 const DEFAULT_AUTHORING_STROKE_COLOR = '#000000';
+const OBJECT_LOGIC_BINDING_DEFAULT_SLOT = 'onInteract';
 const DEBUG_OBJECT_BRIDGE = false;
 const RESIZE_HANDLE_SIZE = 8;
 const RESIZE_HANDLE_HIT_RADIUS = 6;
@@ -156,6 +160,11 @@ export class ObjectsEditorMode implements EditorMode {
     private objectClipboard: ObjectClipboardData | null = null;
     private lastObjectsListDiagKey: string | null = null;
     private lastBreakWallSummaryDiagKey: string | null = null;
+    private objectLogicBindingCreateFormObjectId: string | null = null;
+    private objectLogicBindingCreateSlotDraft = OBJECT_LOGIC_BINDING_DEFAULT_SLOT;
+    private objectLogicBindingCreateScriptRefId: string | null = null;
+    private objectLogicBindingCreateEnabledDraft = true;
+    private objectLogicBindingCreateError: string | null = null;
     private context: EditorModeRuntimeContext = {
         mouseWorldX: null,
         mouseWorldY: null,
@@ -777,7 +786,7 @@ export class ObjectsEditorMode implements EditorMode {
             );
             container.appendChild(this.makeSpacer());
             container.appendChild(this.makeSectionTitle('Logic Actions'));
-            container.appendChild(this.makeLogicActionsReadOnlyView(objectLogicBindings));
+            container.appendChild(this.makeObjectLogicActionsView(selectedObject, objectLogicBindings));
         });
     }
 
@@ -2591,6 +2600,9 @@ export class ObjectsEditorMode implements EditorMode {
         if (this.colorPaletteObjectId === objectId) {
             this.closeColorPalette();
         }
+        if (this.objectLogicBindingCreateFormObjectId === objectId) {
+            this.resetObjectLogicBindingCreateForm();
+        }
         this.activePointerButton = null;
     }
 
@@ -2886,6 +2898,150 @@ export class ObjectsEditorMode implements EditorMode {
         return wrap;
     }
 
+    private makeObjectLogicActionsView(
+        selectedObject: EditorObjectData,
+        bindings: TestWorldLogicBindingConfig[]
+    ): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.appendChild(this.makeLogicActionsReadOnlyView(bindings));
+
+        const scriptRefs = this.logicAuthoringService.listScriptRefs();
+        this.syncObjectLogicBindingCreateState(selectedObject.id, scriptRefs);
+        const hasOnInteractBinding = bindings.some((entry) => entry.slot === OBJECT_LOGIC_BINDING_DEFAULT_SLOT);
+        const isCreateOpen = this.objectLogicBindingCreateFormObjectId === selectedObject.id;
+
+        const addButton = document.createElement('button');
+        addButton.type = 'button';
+        addButton.textContent = 'Add Logic Binding';
+        addButton.style.marginTop = '4px';
+        addButton.disabled = hasOnInteractBinding;
+        this.bindEditorInputKeyboardGuards(addButton);
+        addButton.addEventListener('click', () => {
+            if (hasOnInteractBinding) {
+                return;
+            }
+            this.startObjectLogicBindingCreateForm(selectedObject.id, scriptRefs);
+            this.onUiChanged();
+        });
+        wrap.appendChild(addButton);
+
+        if (hasOnInteractBinding) {
+            wrap.appendChild(this.makeLabel('This object already has an onInteract binding.'));
+        }
+
+        if (!isCreateOpen) {
+            return wrap;
+        }
+
+        const form = document.createElement('div');
+        form.style.border = '1px solid #8b8b8b';
+        form.style.background = '#ececec';
+        form.style.padding = '6px';
+        form.style.marginTop = '6px';
+
+        const slotLabel = this.makeLabel('Slot');
+        slotLabel.style.marginBottom = '2px';
+        form.appendChild(slotLabel);
+
+        const slotSelect = document.createElement('select');
+        slotSelect.style.display = 'block';
+        slotSelect.style.width = '100%';
+        slotSelect.style.boxSizing = 'border-box';
+        slotSelect.style.marginBottom = '6px';
+        slotSelect.appendChild(new Option(OBJECT_LOGIC_BINDING_DEFAULT_SLOT, OBJECT_LOGIC_BINDING_DEFAULT_SLOT));
+        slotSelect.value = this.objectLogicBindingCreateSlotDraft;
+        this.bindEditorInputKeyboardGuards(slotSelect);
+        slotSelect.addEventListener('change', () => {
+            this.objectLogicBindingCreateSlotDraft = slotSelect.value;
+            this.objectLogicBindingCreateError = null;
+        });
+        form.appendChild(slotSelect);
+
+        const scriptLabel = this.makeLabel('Script');
+        scriptLabel.style.marginBottom = '2px';
+        form.appendChild(scriptLabel);
+
+        const scriptSelect = document.createElement('select');
+        scriptSelect.style.display = 'block';
+        scriptSelect.style.width = '100%';
+        scriptSelect.style.boxSizing = 'border-box';
+        scriptSelect.style.marginBottom = '6px';
+        scriptSelect.disabled = scriptRefs.length <= 0;
+        scriptRefs.forEach((scriptRef) => {
+            scriptSelect.appendChild(new Option(this.formatObjectLogicScriptRefOptionLabel(scriptRef), scriptRef.id));
+        });
+        const resolvedScriptRefId = this.resolveObjectLogicBindingSelectedScriptRefId(scriptRefs);
+        if (resolvedScriptRefId) {
+            scriptSelect.value = resolvedScriptRefId;
+        }
+        this.bindEditorInputKeyboardGuards(scriptSelect);
+        scriptSelect.addEventListener('change', () => {
+            this.objectLogicBindingCreateScriptRefId = scriptSelect.value.trim() || null;
+            this.objectLogicBindingCreateError = null;
+        });
+        form.appendChild(scriptSelect);
+
+        const enabledRow = document.createElement('label');
+        enabledRow.style.display = 'flex';
+        enabledRow.style.alignItems = 'center';
+        enabledRow.style.gap = '6px';
+        enabledRow.style.marginBottom = '6px';
+
+        const enabledCheckbox = document.createElement('input');
+        enabledCheckbox.type = 'checkbox';
+        enabledCheckbox.checked = this.objectLogicBindingCreateEnabledDraft;
+        this.bindEditorInputKeyboardGuards(enabledCheckbox);
+        enabledCheckbox.addEventListener('change', () => {
+            this.objectLogicBindingCreateEnabledDraft = enabledCheckbox.checked;
+            this.objectLogicBindingCreateError = null;
+        });
+        enabledRow.appendChild(enabledCheckbox);
+
+        const enabledText = document.createElement('span');
+        enabledText.textContent = 'Enabled';
+        enabledRow.appendChild(enabledText);
+        form.appendChild(enabledRow);
+
+        if (scriptRefs.length <= 0) {
+            form.appendChild(this.makeLabel('Add a script ref in Logic tab first.'));
+        }
+
+        if (this.objectLogicBindingCreateError) {
+            const errorLine = this.makeLabel(this.objectLogicBindingCreateError);
+            errorLine.style.color = '#b00020';
+            errorLine.style.marginBottom = '6px';
+            form.appendChild(errorLine);
+        }
+
+        const actionRow = document.createElement('div');
+        actionRow.style.display = 'flex';
+        actionRow.style.gap = '6px';
+
+        const createButton = document.createElement('button');
+        createButton.type = 'button';
+        createButton.textContent = 'Create';
+        createButton.disabled = hasOnInteractBinding || scriptRefs.length <= 0 || !resolvedScriptRefId;
+        this.bindEditorInputKeyboardGuards(createButton);
+        createButton.addEventListener('click', () => {
+            this.createObjectLogicBinding(selectedObject.id);
+        });
+        actionRow.appendChild(createButton);
+
+        const cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.textContent = 'Cancel';
+        this.bindEditorInputKeyboardGuards(cancelButton);
+        cancelButton.addEventListener('click', () => {
+            this.resetObjectLogicBindingCreateForm();
+            this.onUiChanged();
+        });
+        actionRow.appendChild(cancelButton);
+
+        form.appendChild(actionRow);
+        wrap.appendChild(form);
+        return wrap;
+    }
+
     private makeLogicActionsReadOnlyView(bindings: TestWorldLogicBindingConfig[]): HTMLDivElement {
         const wrap = document.createElement('div');
         if (bindings.length <= 0) {
@@ -2908,6 +3064,103 @@ export class ObjectsEditorMode implements EditorMode {
         });
         wrap.appendChild(this.makeLabel('authoring only; runtime execution deferred'));
         return wrap;
+    }
+
+    private startObjectLogicBindingCreateForm(
+        objectId: string,
+        scriptRefs: readonly TestWorldLogicScriptRefConfig[]
+    ): void {
+        this.objectLogicBindingCreateFormObjectId = objectId;
+        this.objectLogicBindingCreateSlotDraft = OBJECT_LOGIC_BINDING_DEFAULT_SLOT;
+        this.objectLogicBindingCreateScriptRefId = scriptRefs[0]?.id ?? null;
+        this.objectLogicBindingCreateEnabledDraft = true;
+        this.objectLogicBindingCreateError = null;
+    }
+
+    private resetObjectLogicBindingCreateForm(): void {
+        this.objectLogicBindingCreateFormObjectId = null;
+        this.objectLogicBindingCreateSlotDraft = OBJECT_LOGIC_BINDING_DEFAULT_SLOT;
+        this.objectLogicBindingCreateScriptRefId = null;
+        this.objectLogicBindingCreateEnabledDraft = true;
+        this.objectLogicBindingCreateError = null;
+    }
+
+    private syncObjectLogicBindingCreateState(
+        selectedObjectId: string,
+        scriptRefs: readonly TestWorldLogicScriptRefConfig[]
+    ): void {
+        if (this.objectLogicBindingCreateFormObjectId && this.objectLogicBindingCreateFormObjectId !== selectedObjectId) {
+            this.resetObjectLogicBindingCreateForm();
+            return;
+        }
+        if (this.objectLogicBindingCreateFormObjectId !== selectedObjectId) {
+            return;
+        }
+        this.objectLogicBindingCreateSlotDraft = OBJECT_LOGIC_BINDING_DEFAULT_SLOT;
+        this.objectLogicBindingCreateScriptRefId = this.resolveObjectLogicBindingSelectedScriptRefId(scriptRefs);
+    }
+
+    private resolveObjectLogicBindingSelectedScriptRefId(
+        scriptRefs: readonly TestWorldLogicScriptRefConfig[]
+    ): string | null {
+        const current = this.objectLogicBindingCreateScriptRefId?.trim() ?? '';
+        if (current && scriptRefs.some((entry) => entry.id === current)) {
+            return current;
+        }
+        return scriptRefs[0]?.id ?? null;
+    }
+
+    private formatObjectLogicScriptRefOptionLabel(scriptRef: TestWorldLogicScriptRefConfig): string {
+        const displayName = scriptRef.displayName?.trim();
+        if (displayName) {
+            return `${displayName} (${scriptRef.id})`;
+        }
+        const path = scriptRef.path?.trim();
+        if (path) {
+            return `${scriptRef.id} (${path})`;
+        }
+        return scriptRef.id;
+    }
+
+    private createObjectLogicBinding(objectId: string): void {
+        const slot = this.objectLogicBindingCreateSlotDraft.trim() || OBJECT_LOGIC_BINDING_DEFAULT_SLOT;
+        const selectedBindings = this.logicAuthoringService.listBindingsForTarget('object', objectId);
+        const hasOnInteractBinding = selectedBindings.some((entry) => entry.slot === slot);
+        if (hasOnInteractBinding) {
+            this.objectLogicBindingCreateError = 'This object already has an onInteract binding.';
+            this.onUiChanged();
+            return;
+        }
+
+        const scriptRefs = this.logicAuthoringService.listScriptRefs();
+        if (scriptRefs.length <= 0) {
+            this.objectLogicBindingCreateError = 'Add a script ref in Logic tab first.';
+            this.onUiChanged();
+            return;
+        }
+
+        const scriptRefId = this.resolveObjectLogicBindingSelectedScriptRefId(scriptRefs);
+        if (!scriptRefId) {
+            this.objectLogicBindingCreateError = 'Select a script ref.';
+            this.onUiChanged();
+            return;
+        }
+
+        const result = this.logicAuthoringService.createBinding({
+            targetType: 'object',
+            targetId: objectId,
+            slot,
+            scriptId: scriptRefId,
+            enabled: this.objectLogicBindingCreateEnabledDraft
+        });
+        if (!result.success) {
+            this.objectLogicBindingCreateError = result.reason ?? 'Failed to create logic binding.';
+            this.onUiChanged();
+            return;
+        }
+
+        this.resetObjectLogicBindingCreateForm();
+        this.onUiChanged();
     }
 
     private isObjectLocked(objectData: EditorObjectData): boolean {
