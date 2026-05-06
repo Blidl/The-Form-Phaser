@@ -153,6 +153,15 @@ export interface ObjectInteractionTrace {
     message: string;
 }
 
+export interface CutsceneLogicTrace {
+    attemptId: number;
+    cutsceneId: string;
+    slot: 'onFinish';
+    status: LogicBindingEventTrace['status'];
+    bindingTrace: LogicBindingEventTrace;
+    message: string;
+}
+
 export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
@@ -193,9 +202,11 @@ export interface TestWorldRuntime {
     };
     getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
+    executeCutsceneLogicOnFinish: (cutsceneId: string) => LogicBindingEventTrace;
     getWorldOnStartLogicTrace: () => LogicWorldOnStartTrace | null;
     getRuntimeWorldFlagsSnapshot: () => Record<string, boolean>;
     getLastObjectInteractionTrace: () => ObjectInteractionTrace;
+    getLastCutsceneLogicTrace: () => CutsceneLogicTrace | null;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     replaceConfig: (
@@ -339,6 +350,7 @@ const NPC_CARRY_SUPPORT_GRACE_FRAMES = 3;
 const NPC_CARRY_GRACE_MAX_UPWARD_VELOCITY = -40;
 const OBJECT_LOGIC_INTERACTION_SLOT = 'onInteract';
 const OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX = 96;
+const CUTSCENE_LOGIC_ON_FINISH_SLOT = 'onFinish';
 
 const createIdleObjectInteractionTrace = (): ObjectInteractionTrace => ({
     attempted: false,
@@ -353,6 +365,10 @@ const createIdleObjectInteractionTrace = (): ObjectInteractionTrace => ({
 const cloneObjectInteractionTrace = (
     trace: ObjectInteractionTrace
 ): ObjectInteractionTrace => JSON.parse(JSON.stringify(trace)) as ObjectInteractionTrace;
+
+const cloneCutsceneLogicTrace = (
+    trace: CutsceneLogicTrace
+): CutsceneLogicTrace => JSON.parse(JSON.stringify(trace)) as CutsceneLogicTrace;
 
 const clamp = (value: number, min: number, max: number): number => {
     return Math.min(max, Math.max(min, value));
@@ -415,7 +431,9 @@ export const createTestWorldRuntime = (
     let hasExecutedWorldOnStartLogicTrace = false;
     let lastWorldOnStartLogicTrace: LogicWorldOnStartTrace | null = null;
     let lastObjectInteractionTrace: ObjectInteractionTrace = createIdleObjectInteractionTrace();
+    let lastCutsceneLogicTrace: CutsceneLogicTrace | null = null;
     let objectInteractionAttemptId = 0;
+    let cutsceneLogicAttemptId = 0;
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let editorDebugViewActive = false;
     let instance = buildWorldInstance(
@@ -704,6 +722,36 @@ export const createTestWorldRuntime = (
         return true;
     };
 
+    const executeCutsceneLogicOnFinish = (cutsceneId: string): LogicBindingEventTrace => {
+        const normalizedCutsceneId = cutsceneId.trim();
+        const bindingTrace = executeLogicBindingsForEvent(
+            currentConfig,
+            {
+                targetType: 'cutscene',
+                targetId: normalizedCutsceneId,
+                slot: CUTSCENE_LOGIC_ON_FINISH_SLOT
+            },
+            createLogicScriptRuntimeContext()
+        );
+        cutsceneLogicAttemptId += 1;
+        const message = bindingTrace.bindings.length <= 0
+            ? `No matching cutscene/${CUTSCENE_LOGIC_ON_FINISH_SLOT} bindings.`
+            : bindingTrace.status === 'success'
+                ? `Executed cutscene/${CUTSCENE_LOGIC_ON_FINISH_SLOT} bindings.`
+                : bindingTrace.status === 'error'
+                    ? `Cutscene/${CUTSCENE_LOGIC_ON_FINISH_SLOT} binding execution failed.`
+                    : `Cutscene/${CUTSCENE_LOGIC_ON_FINISH_SLOT} binding execution skipped.`;
+        lastCutsceneLogicTrace = {
+            attemptId: cutsceneLogicAttemptId,
+            cutsceneId: normalizedCutsceneId,
+            slot: CUTSCENE_LOGIC_ON_FINISH_SLOT,
+            status: bindingTrace.status,
+            bindingTrace,
+            message
+        };
+        return bindingTrace;
+    };
+
     return {
         get hazards(): readonly HazardObject[] {
             return instance.hazards;
@@ -764,6 +812,7 @@ export const createTestWorldRuntime = (
         getNpcCameraFocusObject: (actorId: string): GameObjects.Container | null => (
             instance.getNpcCameraFocusObject(actorId)
         ),
+        executeCutsceneLogicOnFinish,
         getWorldOnStartLogicTrace: (): LogicWorldOnStartTrace | null => {
             if (!lastWorldOnStartLogicTrace) {
                 return null;
@@ -775,6 +824,12 @@ export const createTestWorldRuntime = (
         }),
         getLastObjectInteractionTrace: (): ObjectInteractionTrace => {
             return cloneObjectInteractionTrace(lastObjectInteractionTrace);
+        },
+        getLastCutsceneLogicTrace: (): CutsceneLogicTrace | null => {
+            if (!lastCutsceneLogicTrace) {
+                return null;
+            }
+            return cloneCutsceneLogicTrace(lastCutsceneLogicTrace);
         },
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {

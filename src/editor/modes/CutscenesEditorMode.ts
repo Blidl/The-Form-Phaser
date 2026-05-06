@@ -4,6 +4,7 @@ import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService'
 import type { EditorPanel } from '../ui/EditorPanel';
 import type { TestCutsceneDefinition, TestCutsceneStep } from '../../game/cutscene/cutscene_types';
 import type { TestWorldLogicBindingConfig } from '../../game/world/runtime/test_world_config';
+import type { LogicBindingEventTrace } from '../../game/world/runtime/logic_script_runtime';
 import { getTestCutsceneDefinitions } from '../../game/cutscene/test_cutscene_registry';
 import { bindEditorInputKeyboardGuards } from './logic/LogicEditorDom';
 
@@ -12,12 +13,22 @@ interface CutscenesEditorModeOptions {
     onUiChanged: () => void;
 }
 
+interface RuntimeCutsceneLogicTrace {
+    attemptId: number;
+    cutsceneId: string;
+    slot: string;
+    status: string;
+    bindingTrace: LogicBindingEventTrace;
+    message: string;
+}
+
 export class CutscenesEditorMode implements EditorMode {
     public readonly id = 'cutscenes';
     public readonly label = 'Cutscenes';
 
     private static readonly CUTSCENE_BINDING_SLOT = 'onFinish';
 
+    private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
     private readonly logicAuthoringService: LogicAuthoringService;
     private readonly onUiChanged: () => void;
     private selectedCutsceneId: string | null = null;
@@ -30,6 +41,7 @@ export class CutscenesEditorMode implements EditorMode {
     private readonly bindingErrorById = new Map<string, string>();
 
     public constructor(options: CutscenesEditorModeOptions) {
+        this.legacyObjectAdapter = options.legacyObjectAdapter;
         this.logicAuthoringService = new LogicAuthoringService(options.legacyObjectAdapter);
         this.onUiChanged = options.onUiChanged;
     }
@@ -153,7 +165,10 @@ export class CutscenesEditorMode implements EditorMode {
                     card.appendChild(this.makeKeyValueLine('slot', binding.slot));
                     card.appendChild(this.makeKeyValueLine('scriptId', binding.scriptId));
                     card.appendChild(this.makeKeyValueLine('status', binding.enabled === false ? 'disabled' : 'enabled'));
-                    card.appendChild(this.makeKeyValueLine('runtime', 'not supported for cutscene slots yet'));
+                    card.appendChild(this.makeKeyValueLine(
+                        'runtime',
+                        this.getCutsceneBindingRuntimeSupportText(binding)
+                    ));
 
                     const enabledDraft = this.getBindingEnabledDraft(binding);
                     const enabledRow = document.createElement('label');
@@ -248,6 +263,10 @@ export class CutscenesEditorMode implements EditorMode {
 
                 container.appendChild(bindingsList);
             }
+
+            container.appendChild(this.makeSpacer(8));
+            container.appendChild(this.makeSectionTitle('Cutscene Logic Trace'));
+            container.appendChild(this.makeCutsceneLogicTraceView(selectedCutscene.id));
 
             container.appendChild(this.makeSpacer(8));
             const addButton = document.createElement('button');
@@ -435,13 +454,15 @@ export class CutscenesEditorMode implements EditorMode {
     private readSnapshotSignature(): string | null {
         const cutscenes = this.getCutsceneDefinitions();
         const cutsceneBindings = this.logicAuthoringService.listBindingsForTarget('cutscene');
+        const runtimeCutsceneLogicTrace = this.getRuntimeCutsceneLogicTrace();
         try {
             return JSON.stringify({
                 cutscenes,
-                cutsceneBindings
+                cutsceneBindings,
+                runtimeCutsceneLogicTrace
             });
         } catch {
-            return `${cutscenes.length}|${cutsceneBindings.length}`;
+            return `${cutscenes.length}|${cutsceneBindings.length}|${runtimeCutsceneLogicTrace ? 1 : 0}`;
         }
     }
 
@@ -458,6 +479,82 @@ export class CutscenesEditorMode implements EditorMode {
 
     private getBindingEnabledDraft(binding: TestWorldLogicBindingConfig): boolean {
         return this.bindingEnabledDraftById.get(binding.id) ?? this.isBindingEnabled(binding);
+    }
+
+    private getCutsceneBindingRuntimeSupportText(binding: TestWorldLogicBindingConfig): string {
+        const slot = binding.slot.trim();
+        if (slot === CutscenesEditorMode.CUTSCENE_BINDING_SLOT) {
+            return 'supported on cutscene finish';
+        }
+        return 'not supported for this cutscene slot yet';
+    }
+
+    private getRuntimeCutsceneLogicTrace(): RuntimeCutsceneLogicTrace | null {
+        const trace = this.legacyObjectAdapter?.getLastCutsceneLogicTrace() as RuntimeCutsceneLogicTrace | null;
+        if (!trace || typeof trace !== 'object') {
+            return null;
+        }
+        if (typeof trace.cutsceneId !== 'string' || typeof trace.slot !== 'string' || typeof trace.status !== 'string') {
+            return null;
+        }
+        if (!trace.bindingTrace || typeof trace.bindingTrace !== 'object' || !Array.isArray(trace.bindingTrace.bindings)) {
+            return null;
+        }
+        return trace;
+    }
+
+    private makeCutsceneLogicTraceView(selectedCutsceneId: string): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.border = '1px solid #8b8b8b';
+        wrap.style.background = '#ececec';
+        wrap.style.padding = '6px';
+        wrap.style.display = 'grid';
+        wrap.style.gap = '4px';
+
+        const trace = this.getRuntimeCutsceneLogicTrace();
+        if (!trace) {
+            wrap.appendChild(this.makeInfoLine('No cutscene Logic trace recorded.'));
+            return wrap;
+        }
+        if (trace.cutsceneId !== selectedCutsceneId) {
+            wrap.appendChild(this.makeInfoLine('No trace recorded for selected cutscene.'));
+            return wrap;
+        }
+
+        wrap.appendChild(this.makeKeyValueLine('cutscene id', trace.cutsceneId));
+        wrap.appendChild(this.makeKeyValueLine('slot', trace.slot));
+        wrap.appendChild(this.makeKeyValueLine('status', trace.status));
+        wrap.appendChild(this.makeKeyValueLine('message', trace.message || '-'));
+        if (Number.isFinite(trace.attemptId)) {
+            wrap.appendChild(this.makeKeyValueLine('attempt', String(trace.attemptId)));
+        }
+
+        if (!Array.isArray(trace.bindingTrace.bindings) || trace.bindingTrace.bindings.length <= 0) {
+            wrap.appendChild(this.makeInfoLine('Binding results: none'));
+            return wrap;
+        }
+
+        wrap.appendChild(this.makeInfoLine('Binding results:'));
+        trace.bindingTrace.bindings.forEach((binding) => {
+            wrap.appendChild(this.makeInfoLine(`- binding id: ${binding.bindingId}`));
+            wrap.appendChild(this.makeInfoLine(`  scriptId: ${binding.scriptId}`));
+            wrap.appendChild(this.makeInfoLine(`  status: ${binding.status}`));
+            if (typeof binding.reason === 'string' && binding.reason.trim().length > 0) {
+                wrap.appendChild(this.makeInfoLine(`  reason: ${binding.reason}`));
+            }
+            if (!Array.isArray(binding.commands) || binding.commands.length <= 0) {
+                wrap.appendChild(this.makeInfoLine('  Command results: none'));
+                return;
+            }
+            binding.commands.forEach((command) => {
+                wrap.appendChild(this.makeInfoLine(`  command id: ${command.commandId}`));
+                wrap.appendChild(this.makeInfoLine(`  type: ${command.type}`));
+                wrap.appendChild(this.makeInfoLine(`  status: ${command.status}`));
+                wrap.appendChild(this.makeInfoLine(`  message: ${command.message}`));
+            });
+        });
+
+        return wrap;
     }
 
     private resetCreateBindingForm(): void {

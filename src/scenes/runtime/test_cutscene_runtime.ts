@@ -65,6 +65,7 @@ interface CreateTestCutsceneRuntimeParams {
         | 'dispatchCutsceneActorSequenceRef'
         | 'dispatchCutsceneSetEmotion'
         | 'dispatchWorldLogicEvent'
+        | 'executeCutsceneLogicOnFinish'
         | 'getCutsceneActorSequenceSnapshot'
         | 'getNpcCameraFocusObject'
     >;
@@ -237,6 +238,7 @@ export const createTestCutsceneRuntime = (
                     cutsceneRef: completedCutsceneRef
                 };
                 worldRuntime.dispatchWorldLogicEvent(event);
+                worldRuntime.executeCutsceneLogicOnFinish(completedCutsceneRef);
             }
         } else if (nextStatus === 'failed') {
             recordCutsceneDebug({

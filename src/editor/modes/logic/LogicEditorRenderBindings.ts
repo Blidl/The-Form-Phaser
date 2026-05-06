@@ -21,6 +21,13 @@ export interface RenderBindingsContext {
     onDeleteSelectedBinding: () => void;
 }
 
+const isRuntimeSupportedBindingSlot = (binding: TestWorldLogicBindingConfig): boolean => {
+    const slot = binding.slot.trim();
+    return (binding.targetType === 'world' && slot === 'onStart')
+        || (binding.targetType === 'object' && slot === 'onInteract')
+        || (binding.targetType === 'cutscene' && slot === 'onFinish');
+};
+
 export function renderBindingsSection(
     container: HTMLElement,
     context: RenderBindingsContext
@@ -41,7 +48,7 @@ export function renderBindingsSection(
     } = context;
 
     container.appendChild(dom.makeSectionTitle('Bindings'));
-    container.appendChild(dom.makeInfoLine('Runtime-supported slots: world/onStart and object/onInteract.'));
+    container.appendChild(dom.makeInfoLine('Runtime-supported slots: world/onStart, object/onInteract, and cutscene/onFinish.'));
     if (bindings.length <= 0) {
         container.appendChild(dom.makeInfoLine('No logic bindings yet.'));
         return;
@@ -65,10 +72,7 @@ export function renderBindingsSection(
         bindingBox.appendChild(dom.makeInfoLine(`slot: ${binding.slot}`));
         bindingBox.appendChild(dom.makeInfoLine(`scriptId: ${binding.scriptId}`));
         bindingBox.appendChild(dom.makeInfoLine(`status: ${binding.enabled ? 'enabled' : 'disabled'}`));
-        const isRuntimeSupported = (
-            (binding.targetType === 'world' && binding.slot.trim() === 'onStart')
-            || (binding.targetType === 'object' && binding.slot.trim() === 'onInteract')
-        );
+        const isRuntimeSupported = isRuntimeSupportedBindingSlot(binding);
         bindingBox.appendChild(dom.makeInfoLine(
             isRuntimeSupported
                 ? 'runtime support: supported'
