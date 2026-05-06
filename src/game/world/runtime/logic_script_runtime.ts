@@ -58,6 +58,33 @@ export interface LogicWorldOnStartTrace {
     bindings: LogicBindingExecutionTrace[];
 }
 
+export type LogicBindingEventTargetType = TestWorldLogicBindingTargetType;
+
+export interface LogicBindingEventDescriptor {
+    targetType: LogicBindingEventTargetType;
+    targetId?: string;
+    slot: string;
+}
+
+export interface LogicBindingEventExecutionTrace {
+    bindingId: string;
+    targetType: LogicBindingEventTargetType;
+    targetId?: string;
+    slot: string;
+    scriptId: string;
+    status: LogicBindingRuntimeStatus;
+    reason?: string;
+    commands: LogicScriptCommandExecutionResult[];
+}
+
+export interface LogicBindingEventTrace {
+    targetType: LogicBindingEventTargetType;
+    targetId?: string;
+    slot: string;
+    status: LogicBindingRuntimeStatus;
+    bindings: LogicBindingEventExecutionTrace[];
+}
+
 const asErrorMessage = (error: unknown): string => {
     if (error instanceof Error && error.message.trim().length > 0) {
         return error.message;
@@ -497,6 +524,125 @@ const resolveBindingScript = (
     }
 
     return getLogicScriptAsset(scriptId);
+};
+
+const doesBindingMatchEvent = (
+    binding: TestWorldLogicBindingConfig,
+    event: LogicBindingEventDescriptor
+): boolean => {
+    if (binding.targetType !== event.targetType) {
+        return false;
+    }
+
+    if (binding.slot.trim() !== event.slot.trim()) {
+        return false;
+    }
+
+    if (event.targetType === 'world') {
+        return true;
+    }
+
+    return binding.targetId === event.targetId;
+};
+
+export const executeLogicBindingsForEvent = (
+    config: TestWorldConfig,
+    event: LogicBindingEventDescriptor,
+    context: LogicScriptWorldOnStartExecutionContext,
+    executeScript: (
+        script: TestWorldLogicScriptConfig,
+        runtimeContext: LogicScriptWorldOnStartExecutionContext
+    ) => LogicScriptExecutionResult = executeLogicScriptForWorldOnStart
+): LogicBindingEventTrace => {
+    const candidates = config.logic.bindings.filter((binding) => doesBindingMatchEvent(binding, event));
+    if (candidates.length <= 0) {
+        return {
+            targetType: event.targetType,
+            targetId: event.targetId,
+            slot: event.slot,
+            status: 'skipped',
+            bindings: []
+        };
+    }
+
+    const embeddedScripts = collectEmbeddedLogicScripts(config);
+    const referencedScriptIds = collectReferencedScriptIds(config);
+    const traces: LogicBindingEventExecutionTrace[] = [];
+
+    for (const binding of candidates) {
+        const scriptId = binding.scriptId.trim();
+
+        if (binding.enabled === false) {
+            traces.push({
+                bindingId: binding.id,
+                targetType: binding.targetType,
+                targetId: binding.targetId,
+                slot: binding.slot,
+                scriptId,
+                status: 'skipped',
+                reason: 'disabled',
+                commands: []
+            });
+            continue;
+        }
+
+        const script = resolveBindingScript(scriptId, embeddedScripts, referencedScriptIds);
+        if (!script) {
+            traces.push({
+                bindingId: binding.id,
+                targetType: binding.targetType,
+                targetId: binding.targetId,
+                slot: binding.slot,
+                scriptId,
+                status: 'error',
+                reason: 'missing script',
+                commands: []
+            });
+            continue;
+        }
+
+        const scriptResult = executeScript(script, context);
+        traces.push({
+            bindingId: binding.id,
+            targetType: binding.targetType,
+            targetId: binding.targetId,
+            slot: binding.slot,
+            scriptId,
+            status: scriptResult.status,
+            reason: scriptResult.status === 'error' ? 'script execution error' : undefined,
+            commands: scriptResult.commands
+        });
+    }
+
+    const hasError = traces.some((trace) => trace.status === 'error');
+    if (hasError) {
+        return {
+            targetType: event.targetType,
+            targetId: event.targetId,
+            slot: event.slot,
+            status: 'error',
+            bindings: traces
+        };
+    }
+
+    const allSkipped = traces.every((trace) => trace.status === 'skipped');
+    if (allSkipped) {
+        return {
+            targetType: event.targetType,
+            targetId: event.targetId,
+            slot: event.slot,
+            status: 'skipped',
+            bindings: traces
+        };
+    }
+
+    return {
+        targetType: event.targetType,
+        targetId: event.targetId,
+        slot: event.slot,
+        status: 'success',
+        bindings: traces
+    };
 };
 
 export const traceWorldOnStartLogicBindings = (
