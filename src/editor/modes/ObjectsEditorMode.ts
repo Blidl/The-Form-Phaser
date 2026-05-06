@@ -22,6 +22,7 @@ import type {
     TestWorldLogicBindingConfig,
     TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
+import type { ObjectInteractionTrace } from '../../game/world/runtime/test_world_runtime';
 
 interface ObjectsEditorModeOptions {
     scene: Phaser.Scene;
@@ -2905,6 +2906,9 @@ export class ObjectsEditorMode implements EditorMode {
         bindings: TestWorldLogicBindingConfig[]
     ): HTMLDivElement {
         const wrap = document.createElement('div');
+        wrap.appendChild(this.makeSectionTitle('Object Interaction Trace'));
+        wrap.appendChild(this.makeObjectInteractionTraceView(selectedObject.id));
+        wrap.appendChild(this.makeSpacer());
         this.syncObjectLogicBindingTransientState(bindings);
         wrap.appendChild(this.makeLogicActionsAuthoringView(bindings));
 
@@ -3122,6 +3126,103 @@ export class ObjectsEditorMode implements EditorMode {
             wrap.appendChild(bindingBox);
         });
         wrap.appendChild(this.makeLabel('authoring only; runtime execution deferred'));
+        return wrap;
+    }
+
+    private getRuntimeObjectInteractionTrace(): ObjectInteractionTrace | null {
+        const trace = this.legacyObjectAdapter?.getLastObjectInteractionTrace() as ObjectInteractionTrace | null;
+        if (!trace || typeof trace !== 'object') {
+            return null;
+        }
+        if (typeof trace.status !== 'string') {
+            return null;
+        }
+        return trace;
+    }
+
+    private makeObjectInteractionTraceView(selectedObjectId: string): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.border = '1px solid #8b8b8b';
+        wrap.style.background = '#ececec';
+        wrap.style.padding = '6px';
+        wrap.style.marginBottom = '6px';
+
+        const trace = this.getRuntimeObjectInteractionTrace();
+        if (!trace || !trace.attempted || trace.status === 'idle') {
+            wrap.appendChild(this.makeLabel('No interaction attempted yet.'));
+            return wrap;
+        }
+
+        const attemptText = Number.isFinite(trace.attemptId) ? `#${trace.attemptId}` : '(unknown)';
+        const selectedTargetId = typeof trace.selectedTargetId === 'string' ? trace.selectedTargetId : null;
+        const selectedDistancePx = Number.isFinite(trace.selectedDistancePx)
+            ? Number(trace.selectedDistancePx)
+            : null;
+        const radiusPx = Number.isFinite(trace.radiusPx)
+            ? Number(trace.radiusPx)
+            : null;
+        const candidateCount = Number.isFinite(trace.candidateCount)
+            ? Number(trace.candidateCount)
+            : (Array.isArray(trace.candidates) ? trace.candidates.length : 0);
+        const candidateList = Array.isArray(trace.candidates) ? trace.candidates : [];
+        const nearestCandidate = candidateList
+            .filter((candidate): candidate is { targetId: string; distancePx: number; hasFocusPoint: boolean; inRange: boolean } => (
+                typeof candidate?.targetId === 'string'
+                && Number.isFinite(candidate?.distancePx)
+            ))
+            .sort((left, right) => left.distancePx - right.distancePx)[0] ?? null;
+
+        if (trace.status === 'no_target_in_range') {
+            const nearestText = nearestCandidate
+                ? `, nearest ${nearestCandidate.targetId} distance ${nearestCandidate.distancePx}px`
+                : '';
+            const radiusText = radiusPx === null ? '' : `, radius ${radiusPx}px`;
+            wrap.appendChild(this.makeLabel(
+                `Last attempt ${attemptText}: no target in range. candidates: ${candidateCount}${nearestText}${radiusText}.`
+            ));
+        } else if (trace.status === 'executed') {
+            const targetText = selectedTargetId ?? '(unknown target)';
+            const distanceText = selectedDistancePx === null ? '' : ` at ${selectedDistancePx}px`;
+            wrap.appendChild(this.makeLabel(
+                `Last attempt ${attemptText}: executed ${targetText} onInteract${distanceText}, status success.`
+            ));
+        } else if (trace.status === 'error') {
+            const errorReason = trace.bindingTrace?.bindings.find((entry) => entry.status === 'error')?.reason
+                ?? trace.message
+                ?? 'runtime error';
+            wrap.appendChild(this.makeLabel(`Last attempt ${attemptText}: error ${errorReason}.`));
+        } else if (trace.status === 'skipped') {
+            const skipReason = trace.bindingTrace?.bindings.find((entry) => entry.status === 'skipped')?.reason
+                ?? trace.message
+                ?? 'skipped';
+            wrap.appendChild(this.makeLabel(`Last attempt ${attemptText}: skipped ${skipReason}.`));
+        } else if (trace.status === 'no_bindings') {
+            wrap.appendChild(this.makeLabel(`Last attempt ${attemptText}: no onInteract object bindings found.`));
+        } else if (trace.status === 'no_player') {
+            wrap.appendChild(this.makeLabel(`Last attempt ${attemptText}: player position unavailable.`));
+        } else {
+            wrap.appendChild(this.makeLabel(`Last attempt ${attemptText}: ${trace.message}`));
+        }
+
+        if (selectedTargetId && selectedTargetId !== selectedObjectId) {
+            wrap.appendChild(this.makeLabel(`Last target id: ${selectedTargetId} (different from selected object).`));
+        }
+        if (trace.message && trace.message.trim().length > 0) {
+            wrap.appendChild(this.makeLabel(`Trace: ${trace.message}`));
+        }
+
+        const candidateSummary = candidateList
+            .slice(0, 4)
+            .map((candidate) => {
+                const targetId = typeof candidate?.targetId === 'string' ? candidate.targetId : '(unknown)';
+                const distance = Number.isFinite(candidate?.distancePx) ? `${candidate.distancePx}px` : '?';
+                const inRangeText = candidate?.inRange ? 'in-range' : 'out-of-range';
+                return `${targetId} ${distance} ${inRangeText}`;
+            });
+        if (candidateSummary.length > 0) {
+            wrap.appendChild(this.makeLabel(`Candidates: ${candidateSummary.join(', ')}`));
+        }
+
         return wrap;
     }
 

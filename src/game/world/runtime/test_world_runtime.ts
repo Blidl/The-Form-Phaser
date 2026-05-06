@@ -124,6 +124,35 @@ export interface TestWorldEditorObjectSummary {
     };
 }
 
+export type ObjectInteractionTraceStatus =
+    | 'idle'
+    | 'no_bindings'
+    | 'no_player'
+    | 'no_target_in_range'
+    | 'executed'
+    | 'skipped'
+    | 'error';
+
+export interface ObjectInteractionCandidateTrace {
+    targetId: string;
+    distancePx?: number;
+    hasFocusPoint: boolean;
+    inRange: boolean;
+}
+
+export interface ObjectInteractionTrace {
+    attempted: boolean;
+    attemptId: number;
+    status: ObjectInteractionTraceStatus;
+    selectedTargetId?: string;
+    selectedDistancePx?: number;
+    radiusPx: number;
+    candidateCount: number;
+    candidates: ObjectInteractionCandidateTrace[];
+    bindingTrace?: LogicBindingEventTrace;
+    message: string;
+}
+
 export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: () => void;
@@ -166,6 +195,7 @@ export interface TestWorldRuntime {
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
     getWorldOnStartLogicTrace: () => LogicWorldOnStartTrace | null;
     getRuntimeWorldFlagsSnapshot: () => Record<string, boolean>;
+    getLastObjectInteractionTrace: () => ObjectInteractionTrace;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     replaceConfig: (
@@ -310,6 +340,42 @@ const NPC_CARRY_GRACE_MAX_UPWARD_VELOCITY = -40;
 const OBJECT_LOGIC_INTERACTION_SLOT = 'onInteract';
 const OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX = 96;
 
+const createIdleObjectInteractionTrace = (): ObjectInteractionTrace => ({
+    attempted: false,
+    attemptId: 0,
+    status: 'idle',
+    radiusPx: OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+    candidateCount: 0,
+    candidates: [],
+    message: 'No interaction attempted yet.'
+});
+
+const cloneObjectInteractionTrace = (
+    trace: ObjectInteractionTrace
+): ObjectInteractionTrace => JSON.parse(JSON.stringify(trace)) as ObjectInteractionTrace;
+
+const clamp = (value: number, min: number, max: number): number => {
+    return Math.min(max, Math.max(min, value));
+};
+
+const roundDistance = (distancePx: number): number => Math.round(distancePx * 100) / 100;
+
+const getDistanceToObjectBounds = (
+    playerX: number,
+    playerY: number,
+    bounds: TestWorldEditorBounds
+): number => {
+    const halfWidth = Math.max(0, Math.abs(bounds.width) * 0.5);
+    const halfHeight = Math.max(0, Math.abs(bounds.height) * 0.5);
+    const left = bounds.x - halfWidth;
+    const right = bounds.x + halfWidth;
+    const top = bounds.y - halfHeight;
+    const bottom = bounds.y + halfHeight;
+    const nearestX = clamp(playerX, left, right);
+    const nearestY = clamp(playerY, top, bottom);
+    return Math.hypot(playerX - nearestX, playerY - nearestY);
+};
+
 const createCutsceneActorSequenceFromRef = (
     actorId: string,
     sequenceRef: string,
@@ -348,7 +414,8 @@ export const createTestWorldRuntime = (
     const worldOnStartTraceConfig = cloneTestWorldConfig(currentConfig);
     let hasExecutedWorldOnStartLogicTrace = false;
     let lastWorldOnStartLogicTrace: LogicWorldOnStartTrace | null = null;
-    let lastObjectInteractionTrace: LogicBindingEventTrace | null = null;
+    let lastObjectInteractionTrace: ObjectInteractionTrace = createIdleObjectInteractionTrace();
+    let objectInteractionAttemptId = 0;
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let editorDebugViewActive = false;
     let instance = buildWorldInstance(
@@ -481,7 +548,7 @@ export const createTestWorldRuntime = (
             ?? null;
     };
 
-    const resolveNearestObjectInteractionTargetId = (): string | null => {
+    const collectObjectInteractionCandidateIds = (): string[] => {
         const candidateIds = new Set(
             currentConfig.logic.bindings
                 .filter((binding) => (
@@ -492,49 +559,149 @@ export const createTestWorldRuntime = (
                 ))
                 .map((binding) => binding.targetId!.trim())
         );
-        if (candidateIds.size <= 0) {
-            return null;
-        }
+        return [...candidateIds];
+    };
 
-        let nearestTargetId: string | null = null;
-        let nearestDistancePx = Number.POSITIVE_INFINITY;
-        for (const targetId of candidateIds) {
-            const targetPoint = instance.focusObjectPoint(targetId);
-            if (!targetPoint) {
-                continue;
-            }
-            const distancePx = Math.hypot(
-                player.arcadeBodyObject.x - targetPoint.x,
-                player.arcadeBodyObject.y - targetPoint.y
-            );
-            if (distancePx > OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX) {
-                continue;
-            }
-            if (distancePx >= nearestDistancePx) {
-                continue;
-            }
-            nearestDistancePx = distancePx;
-            nearestTargetId = targetId;
+    const resolveInteractionTargetBounds = (targetId: string): TestWorldEditorBounds | null => {
+        const directHandle = instance.getEditorHandle(targetId);
+        if (directHandle) {
+            return directHandle.getBounds();
         }
-
-        return nearestTargetId;
+        const fallbackHandle = instance.getEditorHandles().find((entry) => entry.rootId === targetId) ?? null;
+        return fallbackHandle?.getBounds() ?? null;
     };
 
     const tryTriggerObjectLogicInteraction = (): boolean => {
-        const targetId = resolveNearestObjectInteractionTargetId();
-        if (!targetId) {
+        objectInteractionAttemptId += 1;
+        const attemptId = objectInteractionAttemptId;
+        const candidateIds = collectObjectInteractionCandidateIds();
+        if (candidateIds.length <= 0) {
+            lastObjectInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: 'no_bindings',
+                radiusPx: OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: 0,
+                candidates: [],
+                message: 'No object interaction candidates were found for onInteract.'
+            };
             return false;
         }
-        lastObjectInteractionTrace = executeLogicBindingsForEvent(
+
+        const playerX = player.arcadeBodyObject.x;
+        const playerY = player.arcadeBodyObject.y;
+        if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) {
+            lastObjectInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: 'no_player',
+                radiusPx: OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: candidateIds.length,
+                candidates: candidateIds.map((targetId) => ({
+                    targetId,
+                    hasFocusPoint: false,
+                    inRange: false
+                })),
+                message: 'Player position is unavailable for object interaction.'
+            };
+            return false;
+        }
+
+        let selectedTargetId: string | null = null;
+        let selectedDistancePx = Number.POSITIVE_INFINITY;
+        const candidates: ObjectInteractionCandidateTrace[] = [];
+
+        for (const targetId of candidateIds) {
+            const bounds = resolveInteractionTargetBounds(targetId);
+            if (!bounds) {
+                candidates.push({
+                    targetId,
+                    hasFocusPoint: false,
+                    inRange: false
+                });
+                continue;
+            }
+
+            const distancePx = getDistanceToObjectBounds(playerX, playerY, bounds);
+            const inRange = distancePx <= OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX;
+            candidates.push({
+                targetId,
+                distancePx: roundDistance(distancePx),
+                hasFocusPoint: true,
+                inRange
+            });
+            if (!inRange || distancePx >= selectedDistancePx) {
+                continue;
+            }
+            selectedDistancePx = distancePx;
+            selectedTargetId = targetId;
+        }
+
+        if (!selectedTargetId) {
+            const nearestCandidate = candidates
+                .filter((candidate) => typeof candidate.distancePx === 'number')
+                .sort((left, right) => (left.distancePx as number) - (right.distancePx as number))[0];
+            const nearestSummary = nearestCandidate
+                ? ` nearest ${nearestCandidate.targetId} distance ${nearestCandidate.distancePx}px`
+                : ' no candidate with focus point';
+            lastObjectInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: 'no_target_in_range',
+                radiusPx: OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: candidateIds.length,
+                candidates,
+                message: `No interaction target in range.${nearestSummary}; radius ${OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX}px.`
+            };
+            return false;
+        }
+
+        const bindingTrace = executeLogicBindingsForEvent(
             currentConfig,
             {
                 targetType: 'object',
-                targetId,
+                targetId: selectedTargetId,
                 slot: OBJECT_LOGIC_INTERACTION_SLOT
             },
             createLogicScriptRuntimeContext()
         );
-        return lastObjectInteractionTrace.bindings.length > 0;
+        if (bindingTrace.bindings.length <= 0) {
+            lastObjectInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: 'skipped',
+                selectedTargetId,
+                selectedDistancePx: roundDistance(selectedDistancePx),
+                radiusPx: OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: candidateIds.length,
+                candidates,
+                bindingTrace,
+                message: `Target ${selectedTargetId} had no matching onInteract binding at execution time.`
+            };
+            return false;
+        }
+
+        const interactionStatus: ObjectInteractionTraceStatus = bindingTrace.status === 'success'
+            ? 'executed'
+            : bindingTrace.status;
+        const statusMessage = interactionStatus === 'executed'
+            ? `Executed onInteract for ${selectedTargetId}.`
+            : interactionStatus === 'skipped'
+                ? `Interaction skipped for ${selectedTargetId}.`
+                : `Interaction execution error for ${selectedTargetId}.`;
+        lastObjectInteractionTrace = {
+            attempted: true,
+            attemptId,
+            status: interactionStatus,
+            selectedTargetId,
+            selectedDistancePx: roundDistance(selectedDistancePx),
+            radiusPx: OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+            candidateCount: candidateIds.length,
+            candidates,
+            bindingTrace,
+            message: statusMessage
+        };
+        return true;
     };
 
     return {
@@ -606,6 +773,9 @@ export const createTestWorldRuntime = (
         getRuntimeWorldFlagsSnapshot: (): Record<string, boolean> => ({
             ...getWorldFlagsDebugSnapshot()
         }),
+        getLastObjectInteractionTrace: (): ObjectInteractionTrace => {
+            return cloneObjectInteractionTrace(lastObjectInteractionTrace);
+        },
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
             currentConfig = normalizeRuntimeSetConfig(config, currentConfig);

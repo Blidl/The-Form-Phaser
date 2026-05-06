@@ -48,6 +48,7 @@ export interface LegacyObjectSource {
     getRuntimeConfig?: () => unknown;
     getWorldOnStartLogicTrace?: () => unknown;
     getRuntimeWorldFlagsSnapshot?: () => Record<string, boolean>;
+    getLastObjectInteractionTrace?: () => unknown;
     saveRuntimeConfig?: () => {
         success: boolean;
         source: 'runtimeConfig' | 'legacySave' | 'exportJson' | 'localStorage';
@@ -241,6 +242,14 @@ export class LegacyObjectAdapter {
             return null;
         }
         return { ...snapshot };
+    }
+
+    public getLastObjectInteractionTrace(): unknown | null {
+        const trace = this.source.getLastObjectInteractionTrace?.();
+        if (!trace || typeof trace !== 'object') {
+            return null;
+        }
+        return JSON.parse(JSON.stringify(trace));
     }
 
     public saveRuntimeConfig(): {
