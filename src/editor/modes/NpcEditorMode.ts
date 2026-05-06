@@ -30,6 +30,8 @@ export class NpcEditorMode implements EditorMode {
     private npcLogicBindingCreateScriptRefId: string | null = null;
     private npcLogicBindingCreateEnabledDraft = true;
     private npcLogicBindingCreateError: string | null = null;
+    private readonly npcLogicBindingEnabledDraftById = new Map<string, boolean>();
+    private readonly npcLogicBindingErrorById = new Map<string, string>();
 
     public constructor(options: NpcEditorModeOptions) {
         this.legacyObjectAdapter = options.legacyObjectAdapter;
@@ -151,6 +153,7 @@ export class NpcEditorMode implements EditorMode {
 
             const bindings = this.listNpcBindings(selectedNpc.id);
             const scriptRefs = this.logicAuthoringService.listScriptRefs();
+            this.syncNpcLogicBindingEditState(bindings);
             this.syncNpcLogicBindingCreateState(selectedNpc.id, scriptRefs);
             const hasOnInteractBinding = bindings.some((entry) => entry.slot === NPC_LOGIC_BINDING_DEFAULT_SLOT);
             const isCreateOpen = this.npcLogicBindingCreateFormNpcId === selectedNpc.id;
@@ -163,6 +166,11 @@ export class NpcEditorMode implements EditorMode {
                 bindingsList.style.gap = '8px';
 
                 bindings.forEach((binding) => {
+                    const currentEnabled = binding.enabled !== false;
+                    const enabledDraft = this.npcLogicBindingEnabledDraftById.get(binding.id) ?? currentEnabled;
+                    const canApplyEnabled = enabledDraft !== currentEnabled;
+                    const inlineError = this.npcLogicBindingErrorById.get(binding.id);
+
                     const card = document.createElement('div');
                     card.style.border = '1px solid #7a7a7a';
                     card.style.background = '#e8e8e8';
@@ -172,6 +180,61 @@ export class NpcEditorMode implements EditorMode {
                     card.appendChild(this.makeKeyValueLine('scriptId', binding.scriptId));
                     card.appendChild(this.makeKeyValueLine('status', binding.enabled === false ? 'disabled' : 'enabled'));
                     card.appendChild(this.makeKeyValueLine('runtime', 'not supported for NPC slots yet'));
+
+                    const enabledRow = document.createElement('label');
+                    enabledRow.style.display = 'flex';
+                    enabledRow.style.alignItems = 'center';
+                    enabledRow.style.gap = '6px';
+                    enabledRow.style.marginTop = '6px';
+                    enabledRow.style.marginBottom = '6px';
+
+                    const enabledCheckbox = document.createElement('input');
+                    enabledCheckbox.type = 'checkbox';
+                    enabledCheckbox.checked = enabledDraft;
+                    this.bindEditorInputKeyboardGuards(enabledCheckbox);
+                    enabledCheckbox.addEventListener('change', () => {
+                        this.npcLogicBindingEnabledDraftById.set(binding.id, enabledCheckbox.checked);
+                        this.npcLogicBindingErrorById.delete(binding.id);
+                        this.onUiChanged();
+                    });
+                    enabledRow.appendChild(enabledCheckbox);
+
+                    const enabledText = document.createElement('span');
+                    enabledText.textContent = 'Enabled';
+                    enabledRow.appendChild(enabledText);
+                    card.appendChild(enabledRow);
+
+                    if (inlineError) {
+                        const errorLine = this.makeInfoLine(inlineError);
+                        errorLine.style.color = '#b00020';
+                        errorLine.style.marginBottom = '6px';
+                        card.appendChild(errorLine);
+                    }
+
+                    const actionsRow = document.createElement('div');
+                    actionsRow.style.display = 'flex';
+                    actionsRow.style.gap = '6px';
+
+                    const applyButton = document.createElement('button');
+                    applyButton.type = 'button';
+                    applyButton.textContent = 'Apply';
+                    applyButton.disabled = !canApplyEnabled;
+                    this.bindEditorInputKeyboardGuards(applyButton);
+                    applyButton.addEventListener('click', () => {
+                        this.updateNpcBindingEnabled(binding.id);
+                    });
+                    actionsRow.appendChild(applyButton);
+
+                    const deleteButton = document.createElement('button');
+                    deleteButton.type = 'button';
+                    deleteButton.textContent = 'Delete';
+                    this.bindEditorInputKeyboardGuards(deleteButton);
+                    deleteButton.addEventListener('click', () => {
+                        this.deleteNpcBinding(binding.id);
+                    });
+                    actionsRow.appendChild(deleteButton);
+
+                    card.appendChild(actionsRow);
                     bindingsList.appendChild(card);
                 });
 
@@ -377,6 +440,25 @@ export class NpcEditorMode implements EditorMode {
         this.npcLogicBindingCreateError = null;
     }
 
+    private syncNpcLogicBindingEditState(bindings: readonly TestWorldLogicBindingConfig[]): void {
+        const bindingIds = new Set(bindings.map((entry) => entry.id));
+        for (const bindingId of this.npcLogicBindingEnabledDraftById.keys()) {
+            if (!bindingIds.has(bindingId)) {
+                this.npcLogicBindingEnabledDraftById.delete(bindingId);
+            }
+        }
+        for (const bindingId of this.npcLogicBindingErrorById.keys()) {
+            if (!bindingIds.has(bindingId)) {
+                this.npcLogicBindingErrorById.delete(bindingId);
+            }
+        }
+        bindings.forEach((binding) => {
+            if (!this.npcLogicBindingEnabledDraftById.has(binding.id)) {
+                this.npcLogicBindingEnabledDraftById.set(binding.id, binding.enabled !== false);
+            }
+        });
+    }
+
     private syncNpcLogicBindingCreateState(
         selectedNpcId: string,
         scriptRefs: readonly TestWorldLogicScriptRefConfig[]
@@ -460,6 +542,40 @@ export class NpcEditorMode implements EditorMode {
         }
 
         this.resetNpcLogicBindingCreateForm();
+        this.onUiChanged();
+    }
+
+    private updateNpcBindingEnabled(bindingId: string): void {
+        const binding = this.logicAuthoringService.getBinding(bindingId);
+        if (!binding) {
+            this.npcLogicBindingErrorById.set(bindingId, 'Logic binding not found.');
+            this.onUiChanged();
+            return;
+        }
+
+        const nextEnabled = this.npcLogicBindingEnabledDraftById.get(bindingId) ?? (binding.enabled !== false);
+        const result = this.logicAuthoringService.updateBinding(bindingId, { enabled: nextEnabled });
+        if (!result.success) {
+            this.npcLogicBindingErrorById.set(bindingId, result.reason ?? 'Failed to update logic binding.');
+            this.onUiChanged();
+            return;
+        }
+
+        this.npcLogicBindingErrorById.delete(bindingId);
+        this.npcLogicBindingEnabledDraftById.set(bindingId, nextEnabled);
+        this.onUiChanged();
+    }
+
+    private deleteNpcBinding(bindingId: string): void {
+        const result = this.logicAuthoringService.deleteBinding(bindingId);
+        if (!result.success) {
+            this.npcLogicBindingErrorById.set(bindingId, result.reason ?? 'Failed to delete logic binding.');
+            this.onUiChanged();
+            return;
+        }
+
+        this.npcLogicBindingEnabledDraftById.delete(bindingId);
+        this.npcLogicBindingErrorById.delete(bindingId);
         this.onUiChanged();
     }
 
