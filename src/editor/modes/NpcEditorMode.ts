@@ -4,7 +4,8 @@ import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService'
 import type { EditorPanel } from '../ui/EditorPanel';
 import type {
     TestWorldConfig,
-    TestWorldLogicBindingConfig
+    TestWorldLogicBindingConfig,
+    TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
 import type { TestNpcInstanceConfig } from '../../game/npc/npc_types';
 
@@ -12,6 +13,8 @@ interface NpcEditorModeOptions {
     legacyObjectAdapter: LegacyObjectAdapter | null;
     onUiChanged: () => void;
 }
+
+const NPC_LOGIC_BINDING_DEFAULT_SLOT = 'onInteract';
 
 export class NpcEditorMode implements EditorMode {
     public readonly id = 'npc';
@@ -22,6 +25,11 @@ export class NpcEditorMode implements EditorMode {
     private readonly onUiChanged: () => void;
     private selectedNpcId: string | null = null;
     private lastSnapshotSignature: string | null = null;
+    private npcLogicBindingCreateFormNpcId: string | null = null;
+    private npcLogicBindingCreateSlotDraft = NPC_LOGIC_BINDING_DEFAULT_SLOT;
+    private npcLogicBindingCreateScriptRefId: string | null = null;
+    private npcLogicBindingCreateEnabledDraft = true;
+    private npcLogicBindingCreateError: string | null = null;
 
     public constructor(options: NpcEditorModeOptions) {
         this.legacyObjectAdapter = options.legacyObjectAdapter;
@@ -142,29 +150,163 @@ export class NpcEditorMode implements EditorMode {
             container.appendChild(this.makeSectionTitle('Logic Actions'));
 
             const bindings = this.listNpcBindings(selectedNpc.id);
+            const scriptRefs = this.logicAuthoringService.listScriptRefs();
+            this.syncNpcLogicBindingCreateState(selectedNpc.id, scriptRefs);
+            const hasOnInteractBinding = bindings.some((entry) => entry.slot === NPC_LOGIC_BINDING_DEFAULT_SLOT);
+            const isCreateOpen = this.npcLogicBindingCreateFormNpcId === selectedNpc.id;
+
             if (bindings.length <= 0) {
                 container.appendChild(this.makeInfoLine('No logic bindings for this NPC.'));
+            } else {
+                const bindingsList = document.createElement('div');
+                bindingsList.style.display = 'grid';
+                bindingsList.style.gap = '8px';
+
+                bindings.forEach((binding) => {
+                    const card = document.createElement('div');
+                    card.style.border = '1px solid #7a7a7a';
+                    card.style.background = '#e8e8e8';
+                    card.style.padding = '6px';
+                    card.appendChild(this.makeKeyValueLine('id', binding.id));
+                    card.appendChild(this.makeKeyValueLine('slot', binding.slot));
+                    card.appendChild(this.makeKeyValueLine('scriptId', binding.scriptId));
+                    card.appendChild(this.makeKeyValueLine('status', binding.enabled === false ? 'disabled' : 'enabled'));
+                    card.appendChild(this.makeKeyValueLine('runtime', 'not supported for NPC slots yet'));
+                    bindingsList.appendChild(card);
+                });
+
+                container.appendChild(bindingsList);
+            }
+
+            const addButton = document.createElement('button');
+            addButton.type = 'button';
+            addButton.textContent = 'Add NPC Binding';
+            addButton.style.marginTop = '4px';
+            addButton.disabled = hasOnInteractBinding;
+            this.bindEditorInputKeyboardGuards(addButton);
+            addButton.addEventListener('click', () => {
+                if (hasOnInteractBinding) {
+                    return;
+                }
+                this.startNpcLogicBindingCreateForm(selectedNpc.id, scriptRefs);
+                this.onUiChanged();
+            });
+            container.appendChild(addButton);
+
+            if (hasOnInteractBinding) {
+                container.appendChild(this.makeInfoLine('This NPC already has an onInteract binding.'));
+            }
+
+            if (!isCreateOpen) {
                 return;
             }
 
-            const bindingsList = document.createElement('div');
-            bindingsList.style.display = 'grid';
-            bindingsList.style.gap = '8px';
+            const form = document.createElement('div');
+            form.style.border = '1px solid #8b8b8b';
+            form.style.background = '#ececec';
+            form.style.padding = '6px';
+            form.style.marginTop = '6px';
 
-            bindings.forEach((binding) => {
-                const card = document.createElement('div');
-                card.style.border = '1px solid #7a7a7a';
-                card.style.background = '#e8e8e8';
-                card.style.padding = '6px';
-                card.appendChild(this.makeKeyValueLine('id', binding.id));
-                card.appendChild(this.makeKeyValueLine('slot', binding.slot));
-                card.appendChild(this.makeKeyValueLine('scriptId', binding.scriptId));
-                card.appendChild(this.makeKeyValueLine('status', binding.enabled === false ? 'disabled' : 'enabled'));
-                card.appendChild(this.makeKeyValueLine('runtime', 'not supported for NPC slots yet'));
-                bindingsList.appendChild(card);
+            const slotLabel = this.makeInfoLine('Slot');
+            slotLabel.style.marginBottom = '2px';
+            form.appendChild(slotLabel);
+
+            const slotSelect = document.createElement('select');
+            slotSelect.style.display = 'block';
+            slotSelect.style.width = '100%';
+            slotSelect.style.boxSizing = 'border-box';
+            slotSelect.style.marginBottom = '6px';
+            slotSelect.appendChild(new Option(NPC_LOGIC_BINDING_DEFAULT_SLOT, NPC_LOGIC_BINDING_DEFAULT_SLOT));
+            slotSelect.value = this.npcLogicBindingCreateSlotDraft;
+            this.bindEditorInputKeyboardGuards(slotSelect);
+            slotSelect.addEventListener('change', () => {
+                this.npcLogicBindingCreateSlotDraft = slotSelect.value;
+                this.npcLogicBindingCreateError = null;
             });
+            form.appendChild(slotSelect);
 
-            container.appendChild(bindingsList);
+            const scriptLabel = this.makeInfoLine('Script');
+            scriptLabel.style.marginBottom = '2px';
+            form.appendChild(scriptLabel);
+
+            const scriptSelect = document.createElement('select');
+            scriptSelect.style.display = 'block';
+            scriptSelect.style.width = '100%';
+            scriptSelect.style.boxSizing = 'border-box';
+            scriptSelect.style.marginBottom = '6px';
+            scriptSelect.disabled = scriptRefs.length <= 0;
+            scriptRefs.forEach((scriptRef) => {
+                scriptSelect.appendChild(new Option(this.formatNpcLogicScriptRefOptionLabel(scriptRef), scriptRef.id));
+            });
+            const resolvedScriptRefId = this.resolveNpcLogicBindingSelectedScriptRefId(scriptRefs);
+            if (resolvedScriptRefId) {
+                scriptSelect.value = resolvedScriptRefId;
+            }
+            this.bindEditorInputKeyboardGuards(scriptSelect);
+            scriptSelect.addEventListener('change', () => {
+                this.npcLogicBindingCreateScriptRefId = scriptSelect.value.trim() || null;
+                this.npcLogicBindingCreateError = null;
+            });
+            form.appendChild(scriptSelect);
+
+            const enabledRow = document.createElement('label');
+            enabledRow.style.display = 'flex';
+            enabledRow.style.alignItems = 'center';
+            enabledRow.style.gap = '6px';
+            enabledRow.style.marginBottom = '6px';
+
+            const enabledCheckbox = document.createElement('input');
+            enabledCheckbox.type = 'checkbox';
+            enabledCheckbox.checked = this.npcLogicBindingCreateEnabledDraft;
+            this.bindEditorInputKeyboardGuards(enabledCheckbox);
+            enabledCheckbox.addEventListener('change', () => {
+                this.npcLogicBindingCreateEnabledDraft = enabledCheckbox.checked;
+                this.npcLogicBindingCreateError = null;
+            });
+            enabledRow.appendChild(enabledCheckbox);
+
+            const enabledText = document.createElement('span');
+            enabledText.textContent = 'Enabled';
+            enabledRow.appendChild(enabledText);
+            form.appendChild(enabledRow);
+
+            if (scriptRefs.length <= 0) {
+                form.appendChild(this.makeInfoLine('Add a script ref in Logic tab first.'));
+            }
+
+            if (this.npcLogicBindingCreateError) {
+                const errorLine = this.makeInfoLine(this.npcLogicBindingCreateError);
+                errorLine.style.color = '#b00020';
+                errorLine.style.marginBottom = '6px';
+                form.appendChild(errorLine);
+            }
+
+            const actionRow = document.createElement('div');
+            actionRow.style.display = 'flex';
+            actionRow.style.gap = '6px';
+
+            const createButton = document.createElement('button');
+            createButton.type = 'button';
+            createButton.textContent = 'Create';
+            createButton.disabled = hasOnInteractBinding || scriptRefs.length <= 0 || !resolvedScriptRefId;
+            this.bindEditorInputKeyboardGuards(createButton);
+            createButton.addEventListener('click', () => {
+                this.createNpcLogicBinding(selectedNpc.id);
+            });
+            actionRow.appendChild(createButton);
+
+            const cancelButton = document.createElement('button');
+            cancelButton.type = 'button';
+            cancelButton.textContent = 'Cancel';
+            this.bindEditorInputKeyboardGuards(cancelButton);
+            cancelButton.addEventListener('click', () => {
+                this.resetNpcLogicBindingCreateForm();
+                this.onUiChanged();
+            });
+            actionRow.appendChild(cancelButton);
+
+            form.appendChild(actionRow);
+            container.appendChild(form);
         });
     }
 
@@ -208,11 +350,126 @@ export class NpcEditorMode implements EditorMode {
         try {
             return JSON.stringify({
                 npcs: runtimeConfig.npcs,
-                logicBindings: runtimeConfig.logic?.bindings ?? []
+                logicBindings: runtimeConfig.logic?.bindings ?? [],
+                logicScriptRefs: runtimeConfig.logic?.scriptRefs ?? []
             });
         } catch {
             return String(runtimeConfig.npcs.length);
         }
+    }
+
+    private startNpcLogicBindingCreateForm(
+        npcId: string,
+        scriptRefs: readonly TestWorldLogicScriptRefConfig[]
+    ): void {
+        this.npcLogicBindingCreateFormNpcId = npcId;
+        this.npcLogicBindingCreateSlotDraft = NPC_LOGIC_BINDING_DEFAULT_SLOT;
+        this.npcLogicBindingCreateScriptRefId = scriptRefs[0]?.id ?? null;
+        this.npcLogicBindingCreateEnabledDraft = true;
+        this.npcLogicBindingCreateError = null;
+    }
+
+    private resetNpcLogicBindingCreateForm(): void {
+        this.npcLogicBindingCreateFormNpcId = null;
+        this.npcLogicBindingCreateSlotDraft = NPC_LOGIC_BINDING_DEFAULT_SLOT;
+        this.npcLogicBindingCreateScriptRefId = null;
+        this.npcLogicBindingCreateEnabledDraft = true;
+        this.npcLogicBindingCreateError = null;
+    }
+
+    private syncNpcLogicBindingCreateState(
+        selectedNpcId: string,
+        scriptRefs: readonly TestWorldLogicScriptRefConfig[]
+    ): void {
+        if (this.npcLogicBindingCreateFormNpcId && this.npcLogicBindingCreateFormNpcId !== selectedNpcId) {
+            this.resetNpcLogicBindingCreateForm();
+            return;
+        }
+        if (this.npcLogicBindingCreateFormNpcId !== selectedNpcId) {
+            return;
+        }
+        this.npcLogicBindingCreateSlotDraft = NPC_LOGIC_BINDING_DEFAULT_SLOT;
+        this.npcLogicBindingCreateScriptRefId = this.resolveNpcLogicBindingSelectedScriptRefId(scriptRefs);
+    }
+
+    private resolveNpcLogicBindingSelectedScriptRefId(
+        scriptRefs: readonly TestWorldLogicScriptRefConfig[]
+    ): string | null {
+        const current = this.npcLogicBindingCreateScriptRefId?.trim() ?? '';
+        if (current && scriptRefs.some((entry) => entry.id === current)) {
+            return current;
+        }
+        return scriptRefs[0]?.id ?? null;
+    }
+
+    private formatNpcLogicScriptRefOptionLabel(scriptRef: TestWorldLogicScriptRefConfig): string {
+        const displayName = scriptRef.displayName?.trim();
+        if (displayName) {
+            return `${displayName} (${scriptRef.id})`;
+        }
+        const path = scriptRef.path?.trim();
+        if (path) {
+            return `${scriptRef.id} (${path})`;
+        }
+        return scriptRef.id;
+    }
+
+    private createNpcLogicBinding(npcId: string): void {
+        const slot = this.npcLogicBindingCreateSlotDraft.trim() || NPC_LOGIC_BINDING_DEFAULT_SLOT;
+        const selectedBindings = this.logicAuthoringService.listBindingsForTarget('npc', npcId);
+        const hasOnInteractBinding = selectedBindings.some((entry) => entry.slot === slot);
+        if (hasOnInteractBinding) {
+            this.npcLogicBindingCreateError = 'This NPC already has an onInteract binding.';
+            this.onUiChanged();
+            return;
+        }
+
+        const scriptRefs = this.logicAuthoringService.listScriptRefs();
+        if (scriptRefs.length <= 0) {
+            this.npcLogicBindingCreateError = 'Add a script ref in Logic tab first.';
+            this.onUiChanged();
+            return;
+        }
+
+        const scriptRefId = this.resolveNpcLogicBindingSelectedScriptRefId(scriptRefs);
+        if (!scriptRefId) {
+            this.npcLogicBindingCreateError = 'Select a script ref.';
+            this.onUiChanged();
+            return;
+        }
+
+        try {
+            const result = this.logicAuthoringService.createBinding({
+                targetType: 'npc',
+                targetId: npcId,
+                slot,
+                scriptId: scriptRefId,
+                enabled: this.npcLogicBindingCreateEnabledDraft
+            });
+            if (!result.success) {
+                this.npcLogicBindingCreateError = result.reason ?? 'Failed to create logic binding.';
+                this.onUiChanged();
+                return;
+            }
+        } catch (error) {
+            this.npcLogicBindingCreateError = error instanceof Error
+                ? error.message
+                : 'Failed to create logic binding.';
+            this.onUiChanged();
+            return;
+        }
+
+        this.resetNpcLogicBindingCreateForm();
+        this.onUiChanged();
+    }
+
+    private bindEditorInputKeyboardGuards(input: HTMLElement): void {
+        const stopKeyboardEvent = (event: Event): void => {
+            event.stopPropagation();
+        };
+        input.addEventListener('keydown', stopKeyboardEvent);
+        input.addEventListener('keyup', stopKeyboardEvent);
+        input.addEventListener('keypress', stopKeyboardEvent);
     }
 
     private makeSectionTitle(text: string): HTMLDivElement {
