@@ -18,6 +18,18 @@ docs/
   09_MVP_ROADMAP_AND_CODEX_TASKS.md
   10_ACCEPTANCE_CHECKLIST.md
   11_OPEN_DECISIONS.md
+  finalization_tdd/
+    00_INDEX.md
+    01_CORE_TDD.md
+    02_LEVEL_TDD.md
+    03_PLAYER_TDD.md
+    04_OBJECTS_TDD.md
+    05_BACKGROUND_TDD.md
+    06_LOGIC_TDD.md
+    07_NPC_TDD.md
+    08_CUTSCENES_TDD.md
+    09_VALIDATION_QA_TDD.md
+    10_RELEASE_DEFINITION_TDD.md
   HANDOFF_PROMPT_FOR_CODEX.md
   UI_MOCKUPS_INDEX.md
 
@@ -56,3 +68,13 @@ Editor не является отдельной игрой и не создае�
 3. Реализовывать маленькими вертикальными срезами.
 4. Не разрешать giant rewrite.
 5. Не принимать UI, который не соответствует макетам в `assets/mockups_raw/`.
+
+## TDD для доведения фичи до финала
+
+Пошаговые технические дизайн-документы лежат в:
+
+```txt
+docs/finalization_tdd/
+```
+
+Начинать с `docs/finalization_tdd/00_INDEX.md`, затем брать конкретный TDD по текущему этапу.
