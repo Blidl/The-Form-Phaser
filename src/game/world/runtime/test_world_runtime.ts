@@ -68,7 +68,12 @@ import {
     getTestNpcScriptedSequenceDefinition
 } from '../../npc/npc_scripted_sequences';
 import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
-import { getWorldFlag, resetWorldFlags, setWorldFlag } from '../../events/test_world_flags';
+import {
+    getWorldFlag,
+    getWorldFlagsDebugSnapshot,
+    resetWorldFlags,
+    setWorldFlag
+} from '../../events/test_world_flags';
 import {
     executeMatchingWorldLogicRules,
     type TestWorldLogicEvent
@@ -154,6 +159,7 @@ export interface TestWorldRuntime {
     getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
     getWorldOnStartLogicTrace: () => LogicWorldOnStartTrace | null;
+    getRuntimeWorldFlagsSnapshot: () => Record<string, boolean>;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     replaceConfig: (
@@ -516,6 +522,9 @@ export const createTestWorldRuntime = (
             }
             return cloneWorldOnStartLogicTrace(lastWorldOnStartLogicTrace);
         },
+        getRuntimeWorldFlagsSnapshot: (): Record<string, boolean> => ({
+            ...getWorldFlagsDebugSnapshot()
+        }),
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
             currentConfig = normalizeRuntimeSetConfig(config, currentConfig);

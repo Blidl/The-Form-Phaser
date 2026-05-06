@@ -48,6 +48,7 @@ export const createAuthoringObjectBridgeSource = (
         getLevelDisplayName: () => worldRuntime.getLevelId(),
         getRuntimeConfig: () => worldRuntime.getConfig(),
         getWorldOnStartLogicTrace: () => worldRuntime.getWorldOnStartLogicTrace(),
+        getRuntimeWorldFlagsSnapshot: () => worldRuntime.getRuntimeWorldFlagsSnapshot(),
         saveRuntimeConfig: () => {
             const levelId = worldRuntime.getLevelId();
             const config = worldRuntime.getConfig();

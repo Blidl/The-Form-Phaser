@@ -389,6 +389,7 @@ export class LogicEditorMode implements EditorMode {
         const selectedBinding = this.syncSelectedBinding(snapshot);
         const selectedExternalScript = this.syncSelectedExternalScript(getAllLogicScriptAssets());
         const runtimeWorldOnStartTrace = this.getRuntimeWorldOnStartLogicTrace();
+        const runtimeWorldFlagsSnapshot = this.getRuntimeWorldFlagsSnapshot();
 
         panel.setCustomContent('Logic Bindings', (container) => {
             if (!snapshot) {
@@ -402,6 +403,7 @@ export class LogicEditorMode implements EditorMode {
                 bindings: snapshot.bindings,
                 previewResult: this.externalScriptPreviewResult,
                 runtimeWorldOnStartTrace,
+                runtimeWorldFlagsSnapshot,
                 onPlayPreview: () => {
                     if (!selectedExternalScript) {
                         return;
@@ -529,10 +531,12 @@ export class LogicEditorMode implements EditorMode {
         }
         try {
             const runtimeConfig = this.getCurrentRuntimeConfig();
+            const runtimeWorldFlagsSnapshot = this.getRuntimeWorldFlagsSnapshot();
             return JSON.stringify({
                 scripts: snapshot.scripts,
                 bindings: snapshot.bindings,
-                scriptRefs: runtimeConfig?.logic?.scriptRefs ?? []
+                scriptRefs: runtimeConfig?.logic?.scriptRefs ?? [],
+                runtimeWorldFlagsSnapshot
             });
         } catch {
             return `${snapshot.scripts.length}|${snapshot.bindings.length}`;
@@ -627,6 +631,17 @@ export class LogicEditorMode implements EditorMode {
             return null;
         }
         return trace;
+    }
+
+    private getRuntimeWorldFlagsSnapshot(): Record<string, boolean> {
+        const snapshot = this.legacyObjectAdapter?.getRuntimeWorldFlagsSnapshot();
+        if (!snapshot || typeof snapshot !== 'object') {
+            return {};
+        }
+        const normalizedEntries = Object.entries(snapshot)
+            .filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean')
+            .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
+        return Object.fromEntries(normalizedEntries);
     }
 
     private getCurrentRuntimeConfig(): TestWorldConfig | null {

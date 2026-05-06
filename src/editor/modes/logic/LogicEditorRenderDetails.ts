@@ -12,6 +12,7 @@ export interface RenderScriptDetailsContext {
     bindings: LogicSnapshot['bindings'];
     previewResult: LogicScriptExecutionResult | null;
     runtimeWorldOnStartTrace: LogicWorldOnStartTrace | null;
+    runtimeWorldFlagsSnapshot: Record<string, boolean>;
     onPlayPreview: () => void;
     onStopPreview: () => void;
 }
@@ -26,6 +27,7 @@ export function renderScriptDetailsSection(
         bindings,
         previewResult,
         runtimeWorldOnStartTrace,
+        runtimeWorldFlagsSnapshot,
         onPlayPreview,
         onStopPreview
     } = context;
@@ -185,11 +187,33 @@ export function renderScriptDetailsSection(
         container.appendChild(traceBox);
     };
 
+    const renderRuntimeWorldFlagsSection = (): void => {
+        container.appendChild(dom.makeSectionTitle('Runtime World Flags'));
+
+        const flagsBox = document.createElement('div');
+        flagsBox.style.border = '1px solid #8b8b8b';
+        flagsBox.style.background = '#ececec';
+        flagsBox.style.padding = '6px';
+        flagsBox.style.marginBottom = '8px';
+
+        const flagEntries = Object.entries(runtimeWorldFlagsSnapshot);
+        if (flagEntries.length <= 0) {
+            flagsBox.appendChild(dom.makeInfoLine('No runtime world flags set.'));
+        } else {
+            flagEntries.forEach(([key, value]) => {
+                flagsBox.appendChild(dom.makeInfoLine(`${key}: ${String(value)}`));
+            });
+        }
+        flagsBox.appendChild(dom.makeInfoLine('Runtime flags are live state and are not saved/exported.'));
+        container.appendChild(flagsBox);
+    };
+
     container.appendChild(dom.makeSectionTitle('Script Edit'));
     if (!selectedExternalScript) {
         container.appendChild(dom.makeInfoLine('Select an external script asset to inspect.'));
         renderPreviewSection();
         renderRuntimeOnStartTraceSection();
+        renderRuntimeWorldFlagsSection();
         container.appendChild(dom.makeSpacer(8));
         return;
     }
@@ -257,5 +281,6 @@ export function renderScriptDetailsSection(
 
     renderPreviewSection();
     renderRuntimeOnStartTraceSection();
+    renderRuntimeWorldFlagsSection();
     container.appendChild(dom.makeSpacer(8));
 }
