@@ -16,6 +16,8 @@ export interface RenderExternalScriptsContext {
         scriptId?: string;
         commandId?: string;
         path?: string;
+        cutsceneId?: string;
+        missingParticipantId?: string;
     }[];
     isInitialExternalScriptsLoading: boolean;
     selectedExternalScriptId: string | null;
@@ -174,6 +176,12 @@ export function renderExternalScriptsSection(
             }
             if (diagnostic.path) {
                 warningBox.appendChild(dom.makeInfoLine(`path: ${diagnostic.path}`));
+            }
+            if (diagnostic.cutsceneId) {
+                warningBox.appendChild(dom.makeInfoLine(`cutsceneId: ${diagnostic.cutsceneId}`));
+            }
+            if (diagnostic.missingParticipantId) {
+                warningBox.appendChild(dom.makeInfoLine(`missingParticipantId: ${diagnostic.missingParticipantId}`));
             }
         });
         container.appendChild(warningBox);

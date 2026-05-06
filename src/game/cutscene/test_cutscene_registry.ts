@@ -71,6 +71,44 @@ const cloneDefinitions = (
     return definitions.map(cloneDefinition);
 };
 
+const collectRequiredSceneParticipantIds = (
+    definition: TestCutsceneDefinition
+): readonly string[] => {
+    const participantIds: string[] = [];
+    const seenParticipantIds = new Set<string>();
+    const addParticipantId = (value: unknown): void => {
+        if (typeof value !== 'string') {
+            return;
+        }
+        const participantId = value.trim();
+        if (participantId.length <= 0 || seenParticipantIds.has(participantId)) {
+            return;
+        }
+        seenParticipantIds.add(participantId);
+        participantIds.push(participantId);
+    };
+
+    definition.steps.forEach((step) => {
+        if (step.kind === 'camera_focus_actor') {
+            addParticipantId(step.actorId);
+            return;
+        }
+        if (step.kind === 'actor_sequence_ref') {
+            addParticipantId(step.actorId);
+            return;
+        }
+        if (step.kind === 'set_emotion') {
+            addParticipantId(step.actorId);
+            return;
+        }
+        if (step.kind === 'spawn_vfx') {
+            addParticipantId(step.actorId);
+        }
+    });
+
+    return [...participantIds];
+};
+
 export const validateTestCutsceneId = (value: string): string | null => {
     const trimmed = value.trim();
     if (trimmed.length === 0) {
@@ -406,4 +444,20 @@ export const getTestCutsceneRefs = (): readonly string[] => {
 
 export const isTestCutsceneRef = (cutsceneRef: string): boolean => {
     return cutsceneMap.has(cutsceneRef);
+};
+
+export const collectTestCutsceneRequiredSceneParticipantIds = (
+    definition: TestCutsceneDefinition
+): readonly string[] => {
+    return collectRequiredSceneParticipantIds(definition);
+};
+
+export const getTestCutsceneRequiredSceneParticipantIds = (
+    cutsceneRef: string
+): readonly string[] => {
+    const cutsceneDefinition = cutsceneMap.get(cutsceneRef);
+    if (!cutsceneDefinition) {
+        return [];
+    }
+    return collectRequiredSceneParticipantIds(cutsceneDefinition);
 };

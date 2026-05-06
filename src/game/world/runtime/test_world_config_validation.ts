@@ -104,7 +104,8 @@ export type TestWorldLogicDiagnosticCode =
     | 'invalid_logic_binding_target'
     | 'unknown_logic_command_type'
     | 'invalid_logic_command_params'
-    | 'invalid_logic_command_ref';
+    | 'invalid_logic_command_ref'
+    | 'missing_logic_command_cutscene_scene_participant_dependency';
 
 export interface TestWorldLogicDiagnostic {
     id: string;
@@ -115,6 +116,8 @@ export interface TestWorldLogicDiagnostic {
     commandId?: string;
     bindingId?: string;
     path?: string;
+    cutsceneId?: string;
+    missingParticipantId?: string;
 }
 
 const asNumber = (value: unknown, fallback: number): number => {

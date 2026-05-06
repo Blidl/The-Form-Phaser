@@ -5,7 +5,10 @@ import type {
     TestWorldLogicScriptConfig
 } from './test_world_config';
 import { collectTestWorldLogicDiagnostics, type TestWorldLogicDiagnostic } from './test_world_config_validation';
-import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
+import {
+    getTestCutsceneRequiredSceneParticipantIds,
+    isTestCutsceneRef
+} from '../../cutscene/test_cutscene_registry';
 
 const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
     'object.move',
@@ -291,6 +294,29 @@ const getStartCutsceneCommandCutsceneId = (params: unknown): string | null => {
     return rawParams.cutsceneId.trim();
 };
 
+const collectKnownLevelSceneParticipantIds = (config: TestWorldConfig): Set<string> => {
+    const participantIds = new Set<string>(['player']);
+    config.npcs.forEach((entry) => {
+        const npcId = typeof entry.id === 'string' ? entry.id.trim() : '';
+        if (npcId.length > 0) {
+            participantIds.add(npcId);
+        }
+    });
+    return participantIds;
+};
+
+const collectReferencedScriptRefIds = (config: TestWorldConfig): Set<string> => {
+    const referencedScriptRefIds = new Set<string>();
+    const scriptRefs = Array.isArray(config.logic?.scriptRefs) ? config.logic.scriptRefs : [];
+    scriptRefs.forEach((entry) => {
+        const scriptRefId = typeof entry.id === 'string' ? entry.id.trim() : '';
+        if (scriptRefId.length > 0) {
+            referencedScriptRefIds.add(scriptRefId);
+        }
+    });
+    return referencedScriptRefIds;
+};
+
 export const getLogicScriptRegistryVersion = (): number => {
     return registryState.version;
 };
@@ -437,7 +463,11 @@ export const ensureExternalLogicScriptsLoaded = async (): Promise<LogicScriptReg
     return initialExternalLogicScriptsLoadPromise;
 };
 
-export const collectLogicScriptAssetDiagnostics = (): TestWorldLogicDiagnostic[] => {
+export const collectLogicScriptAssetDiagnostics = (
+    options?: {
+        config?: TestWorldConfig;
+    }
+): TestWorldLogicDiagnostic[] => {
     const diagnostics: TestWorldLogicDiagnostic[] = [];
     let diagnosticIndex = 1;
     const nextDiagnosticId = (code: TestWorldLogicDiagnostic['code']): string => {
@@ -445,8 +475,16 @@ export const collectLogicScriptAssetDiagnostics = (): TestWorldLogicDiagnostic[]
         diagnosticIndex += 1;
         return id;
     };
+    const activeConfig = options?.config;
+    const knownSceneParticipantIds = activeConfig
+        ? collectKnownLevelSceneParticipantIds(activeConfig)
+        : null;
+    const referencedScriptRefIds = activeConfig
+        ? collectReferencedScriptRefIds(activeConfig)
+        : null;
 
     registryState.assets.forEach((script) => {
+        const shouldCheckCutsceneSceneParticipantDependencies = referencedScriptRefIds?.has(script.id) ?? false;
         script.commands.forEach((command, commandIndex) => {
             const commandType = command.type.trim();
             const path = `logicScripts.${script.id}.commands[${commandIndex}]`;
@@ -516,6 +554,30 @@ export const collectLogicScriptAssetDiagnostics = (): TestWorldLogicDiagnostic[]
                         commandId,
                         path: `${path}.params.cutsceneId`
                     });
+                    return;
+                }
+
+                if (
+                    shouldCheckCutsceneSceneParticipantDependencies
+                    && knownSceneParticipantIds
+                ) {
+                    const requiredParticipantIds = getTestCutsceneRequiredSceneParticipantIds(cutsceneId);
+                    requiredParticipantIds.forEach((participantId) => {
+                        if (participantId === 'player' || knownSceneParticipantIds.has(participantId)) {
+                            return;
+                        }
+                        diagnostics.push({
+                            id: nextDiagnosticId('missing_logic_command_cutscene_scene_participant_dependency'),
+                            severity: 'error',
+                            code: 'missing_logic_command_cutscene_scene_participant_dependency',
+                            message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" starts cutscene "${cutsceneId}", but required scene participant "${participantId}" is missing from this level.`,
+                            scriptId: script.id,
+                            commandId,
+                            path: `${path}.params.cutsceneId`,
+                            cutsceneId,
+                            missingParticipantId: participantId
+                        });
+                    });
                 }
             }
         });
@@ -530,7 +592,7 @@ export const collectTestWorldLogicDiagnosticsWithRegistry = (
     const levelDiagnostics = collectTestWorldLogicDiagnostics(config, {
         availableExternalScriptIds: registryState.ids
     });
-    const assetDiagnostics = collectLogicScriptAssetDiagnostics();
+    const assetDiagnostics = collectLogicScriptAssetDiagnostics({ config });
     return [
         ...levelDiagnostics,
         ...assetDiagnostics

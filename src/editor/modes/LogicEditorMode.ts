@@ -549,6 +549,8 @@ export class LogicEditorMode implements EditorMode {
         scriptId?: string;
         commandId?: string;
         path?: string;
+        cutsceneId?: string;
+        missingParticipantId?: string;
     }[] {
         const runtimeConfig = this.getCurrentRuntimeConfig();
         if (!runtimeConfig) {
@@ -559,7 +561,9 @@ export class LogicEditorMode implements EditorMode {
             message: entry.message,
             scriptId: entry.scriptId,
             commandId: entry.commandId,
-            path: entry.path
+            path: entry.path,
+            cutsceneId: entry.cutsceneId,
+            missingParticipantId: entry.missingParticipantId
         }));
         if (
             this.hasRequestedInitialExternalScriptReload
