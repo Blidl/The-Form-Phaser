@@ -35,6 +35,7 @@ export interface LogicScriptStateChange {
 
 export interface LogicScriptWorldOnStartExecutionContext {
     setWorldFlag: (key: string, value: boolean) => void;
+    startCutscene?: (cutsceneId: string) => boolean;
 }
 
 export type LogicBindingRuntimeStatus =
@@ -340,6 +341,79 @@ export const executeLogicScriptForWorldOnStart = (
                     type: command.type,
                     status: 'success',
                     message: `set_world_flag "${key}" = ${value}`
+                });
+                continue;
+            }
+
+            if (command.type === 'start_cutscene') {
+                const params = command.params;
+                const hasObjectParams =
+                    typeof params === 'object' &&
+                    params !== null &&
+                    !Array.isArray(params);
+                const cutsceneId = hasObjectParams
+                    ? (params as { cutsceneId?: unknown }).cutsceneId
+                    : undefined;
+                if (!isNonEmptyString(cutsceneId)) {
+                    commandResults.push({
+                        commandId: command.id,
+                        type: command.type,
+                        status: 'error',
+                        message: 'invalid start_cutscene params (requires non-empty cutsceneId)'
+                    });
+                    return {
+                        scriptId: script.id,
+                        status: 'error',
+                        commands: commandResults
+                    };
+                }
+
+                if (!context.startCutscene) {
+                    commandResults.push({
+                        commandId: command.id,
+                        type: command.type,
+                        status: 'skipped',
+                        message: `start_cutscene "${cutsceneId}" deferred: callback unavailable`
+                    });
+                    continue;
+                }
+
+                let accepted = false;
+                try {
+                    accepted = context.startCutscene(cutsceneId);
+                } catch (error) {
+                    commandResults.push({
+                        commandId: command.id,
+                        type: command.type,
+                        status: 'error',
+                        message: `start_cutscene "${cutsceneId}" failed: ${asErrorMessage(error)}`
+                    });
+                    return {
+                        scriptId: script.id,
+                        status: 'error',
+                        commands: commandResults
+                    };
+                }
+
+                if (!accepted) {
+                    commandResults.push({
+                        commandId: command.id,
+                        type: command.type,
+                        status: 'error',
+                        message: `start_cutscene "${cutsceneId}" rejected`
+                    });
+                    return {
+                        scriptId: script.id,
+                        status: 'error',
+                        commands: commandResults
+                    };
+                }
+
+                commandResults.push({
+                    commandId: command.id,
+                    type: command.type,
+                    status: 'success',
+                    message: `start_cutscene "${cutsceneId}" requested`
                 });
                 continue;
             }

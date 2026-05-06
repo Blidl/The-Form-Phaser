@@ -11,6 +11,7 @@ import {
 
 export interface WorldOnStartLogicRuntimeContext {
     setWorldFlag: (key: string, value: boolean) => void;
+    startCutscene?: (cutsceneId: string) => boolean;
 }
 
 export const createWorldOnStartLogicStartupTrace = async (

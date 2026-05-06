@@ -358,6 +358,17 @@ export const createTestWorldRuntime = (
         void createWorldOnStartLogicStartupTrace(worldOnStartTraceConfig, {
             setWorldFlag: (key, value) => {
                 setWorldFlag(key, value);
+            },
+            startCutscene: (cutsceneRef) => {
+                const normalizedCutsceneRef = cutsceneRef.trim();
+                if (normalizedCutsceneRef.length <= 0 || !isTestCutsceneRef(normalizedCutsceneRef)) {
+                    return false;
+                }
+                scene.events.emit('pf:npc_interaction_cutscene_request', {
+                    actorId: 'world_on_start_logic_runtime',
+                    cutsceneRef: normalizedCutsceneRef
+                });
+                return true;
             }
         })
             .then((trace) => {
