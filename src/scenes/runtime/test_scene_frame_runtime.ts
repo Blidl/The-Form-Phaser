@@ -92,7 +92,10 @@ export const createTestSceneFrameRuntime = (
             worldRuntime.syncPlayerCollisionMode();
             worldRuntime.updateNpcInteractionTarget();
             if (!textInputFocused && !cutsceneRuntime.isInputLocked() && temporaryInteractionKey && Input.Keyboard.JustDown(temporaryInteractionKey)) {
-                worldRuntime.tryTriggerNpcInteraction();
+                const handledByObjectLogic = worldRuntime.tryTriggerObjectLogicInteraction();
+                if (!handledByObjectLogic) {
+                    worldRuntime.tryTriggerNpcInteraction();
+                }
             }
             if (worldRuntime.consumeFinishReached()) {
                 const nextLevelId = worldRuntime.getNextLevelId();

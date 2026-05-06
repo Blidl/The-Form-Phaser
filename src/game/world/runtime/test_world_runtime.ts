@@ -82,7 +82,12 @@ import type {
     DebugEventType,
     EventDebugRecordInput
 } from '../../debug/event_debug_types';
-import type { LogicWorldOnStartTrace } from './logic_script_runtime';
+import {
+    executeLogicBindingsForEvent,
+    type LogicBindingEventTrace,
+    type LogicScriptWorldOnStartExecutionContext,
+    type LogicWorldOnStartTrace
+} from './logic_script_runtime';
 import {
     cloneWorldOnStartLogicTrace,
     createWorldOnStartLogicStartupTrace
@@ -124,6 +129,7 @@ export interface TestWorldRuntime {
     updateMovingPlatforms: () => void;
     updateNpcs: (deltaMs: number) => void;
     updateNpcInteractionTarget: () => void;
+    tryTriggerObjectLogicInteraction: () => boolean;
     tryTriggerNpcInteraction: () => void;
     syncNpcTriangleSupportSurfaces: () => void;
     postPlayerTickUpdate: () => void;
@@ -301,6 +307,8 @@ const NPC_CARRY_TOP_GAP_TOLERANCE_DOWN_PX = 10;
 const NPC_CARRY_MIN_OVERLAP_X_PX = 4;
 const NPC_CARRY_SUPPORT_GRACE_FRAMES = 3;
 const NPC_CARRY_GRACE_MAX_UPWARD_VELOCITY = -40;
+const OBJECT_LOGIC_INTERACTION_SLOT = 'onInteract';
+const OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX = 96;
 
 const createCutsceneActorSequenceFromRef = (
     actorId: string,
@@ -340,6 +348,7 @@ export const createTestWorldRuntime = (
     const worldOnStartTraceConfig = cloneTestWorldConfig(currentConfig);
     let hasExecutedWorldOnStartLogicTrace = false;
     let lastWorldOnStartLogicTrace: LogicWorldOnStartTrace | null = null;
+    let lastObjectInteractionTrace: LogicBindingEventTrace | null = null;
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let editorDebugViewActive = false;
     let instance = buildWorldInstance(
@@ -351,26 +360,28 @@ export const createTestWorldRuntime = (
         forwardedEventDebugSink
     );
 
+    const createLogicScriptRuntimeContext = (): LogicScriptWorldOnStartExecutionContext => ({
+        setWorldFlag: (key, value) => {
+            setWorldFlag(key, value);
+        },
+        startCutscene: (cutsceneRef) => {
+            const normalizedCutsceneRef = cutsceneRef.trim();
+            if (normalizedCutsceneRef.length <= 0 || !isTestCutsceneRef(normalizedCutsceneRef)) {
+                return false;
+            }
+            scene.events.emit('pf:npc_interaction_cutscene_request', {
+                actorId: 'world_on_start_logic_runtime',
+                cutsceneRef: normalizedCutsceneRef
+            });
+            return true;
+        }
+    });
+
     const executeWorldOnStartLogicTraceOnce = (): void => {
         if (hasExecutedWorldOnStartLogicTrace) {
             return;
         }
-        void createWorldOnStartLogicStartupTrace(worldOnStartTraceConfig, {
-            setWorldFlag: (key, value) => {
-                setWorldFlag(key, value);
-            },
-            startCutscene: (cutsceneRef) => {
-                const normalizedCutsceneRef = cutsceneRef.trim();
-                if (normalizedCutsceneRef.length <= 0 || !isTestCutsceneRef(normalizedCutsceneRef)) {
-                    return false;
-                }
-                scene.events.emit('pf:npc_interaction_cutscene_request', {
-                    actorId: 'world_on_start_logic_runtime',
-                    cutsceneRef: normalizedCutsceneRef
-                });
-                return true;
-            }
-        })
+        void createWorldOnStartLogicStartupTrace(worldOnStartTraceConfig, createLogicScriptRuntimeContext())
             .then((trace) => {
                 if (hasExecutedWorldOnStartLogicTrace) {
                     return;
@@ -470,6 +481,62 @@ export const createTestWorldRuntime = (
             ?? null;
     };
 
+    const resolveNearestObjectInteractionTargetId = (): string | null => {
+        const candidateIds = new Set(
+            currentConfig.logic.bindings
+                .filter((binding) => (
+                    binding.targetType === 'object'
+                    && binding.slot.trim() === OBJECT_LOGIC_INTERACTION_SLOT
+                    && typeof binding.targetId === 'string'
+                    && binding.targetId.trim().length > 0
+                ))
+                .map((binding) => binding.targetId!.trim())
+        );
+        if (candidateIds.size <= 0) {
+            return null;
+        }
+
+        let nearestTargetId: string | null = null;
+        let nearestDistancePx = Number.POSITIVE_INFINITY;
+        for (const targetId of candidateIds) {
+            const targetPoint = instance.focusObjectPoint(targetId);
+            if (!targetPoint) {
+                continue;
+            }
+            const distancePx = Math.hypot(
+                player.arcadeBodyObject.x - targetPoint.x,
+                player.arcadeBodyObject.y - targetPoint.y
+            );
+            if (distancePx > OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX) {
+                continue;
+            }
+            if (distancePx >= nearestDistancePx) {
+                continue;
+            }
+            nearestDistancePx = distancePx;
+            nearestTargetId = targetId;
+        }
+
+        return nearestTargetId;
+    };
+
+    const tryTriggerObjectLogicInteraction = (): boolean => {
+        const targetId = resolveNearestObjectInteractionTargetId();
+        if (!targetId) {
+            return false;
+        }
+        lastObjectInteractionTrace = executeLogicBindingsForEvent(
+            currentConfig,
+            {
+                targetType: 'object',
+                targetId,
+                slot: OBJECT_LOGIC_INTERACTION_SLOT
+            },
+            createLogicScriptRuntimeContext()
+        );
+        return lastObjectInteractionTrace.bindings.length > 0;
+    };
+
     return {
         get hazards(): readonly HazardObject[] {
             return instance.hazards;
@@ -482,6 +549,9 @@ export const createTestWorldRuntime = (
         },
         updateNpcInteractionTarget: (): void => {
             instance.updateNpcInteractionTarget();
+        },
+        tryTriggerObjectLogicInteraction: (): boolean => {
+            return tryTriggerObjectLogicInteraction();
         },
         tryTriggerNpcInteraction: (): void => {
             instance.tryTriggerNpcInteraction();
