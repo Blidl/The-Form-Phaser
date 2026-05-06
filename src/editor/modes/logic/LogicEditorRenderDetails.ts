@@ -10,6 +10,15 @@ export interface RenderScriptDetailsContext {
     dom: LogicEditorDomHelpers;
     selectedExternalScript: TestWorldLogicScriptConfig | null;
     bindings: LogicSnapshot['bindings'];
+    selectedScriptDiagnostics: {
+        code: string;
+        message: string;
+        scriptId?: string;
+        commandId?: string;
+        path?: string;
+        cutsceneId?: string;
+        missingParticipantId?: string;
+    }[];
     previewResult: LogicScriptExecutionResult | null;
     runtimeWorldOnStartTrace: LogicWorldOnStartTrace | null;
     runtimeWorldFlagsSnapshot: Record<string, boolean>;
@@ -25,6 +34,7 @@ export function renderScriptDetailsSection(
         dom,
         selectedExternalScript,
         bindings,
+        selectedScriptDiagnostics,
         previewResult,
         runtimeWorldOnStartTrace,
         runtimeWorldFlagsSnapshot,
@@ -208,9 +218,50 @@ export function renderScriptDetailsSection(
         container.appendChild(flagsBox);
     };
 
+    const renderScriptDiagnosticsSection = (): void => {
+        container.appendChild(dom.makeSectionTitle('Script Diagnostics'));
+
+        if (!selectedExternalScript) {
+            container.appendChild(dom.makeInfoLine('Select an external script asset to inspect diagnostics.'));
+            return;
+        }
+
+        const diagnosticsBox = document.createElement('div');
+        diagnosticsBox.style.border = '1px solid #c98a00';
+        diagnosticsBox.style.background = '#fff4d1';
+        diagnosticsBox.style.padding = '6px';
+        diagnosticsBox.style.marginBottom = '8px';
+        diagnosticsBox.style.wordBreak = 'break-word';
+
+        if (selectedScriptDiagnostics.length <= 0) {
+            diagnosticsBox.appendChild(dom.makeInfoLine('No diagnostics for selected script.'));
+            container.appendChild(diagnosticsBox);
+            return;
+        }
+
+        diagnosticsBox.appendChild(dom.makeInfoLine(`Diagnostics: ${selectedScriptDiagnostics.length}`));
+        selectedScriptDiagnostics.forEach((diagnostic) => {
+            diagnosticsBox.appendChild(dom.makeInfoLine(`[${diagnostic.code}] ${diagnostic.message}`));
+            if (diagnostic.commandId) {
+                diagnosticsBox.appendChild(dom.makeInfoLine(`command: ${diagnostic.commandId}`));
+            }
+            if (diagnostic.cutsceneId) {
+                diagnosticsBox.appendChild(dom.makeInfoLine(`cutsceneId: ${diagnostic.cutsceneId}`));
+            }
+            if (diagnostic.missingParticipantId) {
+                diagnosticsBox.appendChild(dom.makeInfoLine(`missingParticipantId: ${diagnostic.missingParticipantId}`));
+            }
+            if (diagnostic.path) {
+                diagnosticsBox.appendChild(dom.makeInfoLine(`path: ${diagnostic.path}`));
+            }
+        });
+        container.appendChild(diagnosticsBox);
+    };
+
     container.appendChild(dom.makeSectionTitle('Script Edit'));
     if (!selectedExternalScript) {
         container.appendChild(dom.makeInfoLine('Select an external script asset to inspect.'));
+        renderScriptDiagnosticsSection();
         renderPreviewSection();
         renderRuntimeOnStartTraceSection();
         renderRuntimeWorldFlagsSection();
@@ -231,6 +282,8 @@ export function renderScriptDetailsSection(
     }
     scriptEditBox.appendChild(dom.makeInfoLine('IDE/source file: logic_scripts.json'));
     container.appendChild(scriptEditBox);
+
+    renderScriptDiagnosticsSection();
 
     container.appendChild(dom.makeSectionTitle('Instructions'));
     const instructionsBox = document.createElement('div');

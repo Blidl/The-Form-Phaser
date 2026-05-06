@@ -388,6 +388,10 @@ export class LogicEditorMode implements EditorMode {
         const snapshot = this.logicAuthoringService.getSnapshot();
         const selectedBinding = this.syncSelectedBinding(snapshot);
         const selectedExternalScript = this.syncSelectedExternalScript(getAllLogicScriptAssets());
+        const diagnostics = this.collectRegistryDiagnostics();
+        const selectedScriptDiagnostics = this.selectedExternalScriptId
+            ? diagnostics.filter((diagnostic) => diagnostic.scriptId === this.selectedExternalScriptId)
+            : [];
         const runtimeWorldOnStartTrace = this.getRuntimeWorldOnStartLogicTrace();
         const runtimeWorldFlagsSnapshot = this.getRuntimeWorldFlagsSnapshot();
 
@@ -401,6 +405,7 @@ export class LogicEditorMode implements EditorMode {
                 dom: this.dom,
                 selectedExternalScript,
                 bindings: snapshot.bindings,
+                selectedScriptDiagnostics,
                 previewResult: this.externalScriptPreviewResult,
                 runtimeWorldOnStartTrace,
                 runtimeWorldFlagsSnapshot,
