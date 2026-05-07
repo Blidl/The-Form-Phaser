@@ -1,5 +1,5 @@
 import type { LogicSnapshot } from '../../logic-authoring/LogicAuthoringTypes';
-import type { TestWorldLogicScriptConfig } from '../../../game/world/runtime/test_world_config';
+import type { TestWorldConfig, TestWorldLogicScriptConfig } from '../../../game/world/runtime/test_world_config';
 import type {
     LogicScriptExecutionResult,
     LogicWorldOnStartTrace
@@ -9,6 +9,10 @@ import {
     getLogicCommandDefinition
 } from '../../../game/world/runtime/logic_command_registry';
 import type { LogicEditorDomHelpers } from './LogicEditorDom';
+import {
+    buildReferenceGraph,
+    getScriptUsers
+} from '../../data/ReferenceGraphService';
 
 export interface RenderScriptDetailsContext {
     dom: LogicEditorDomHelpers;
@@ -28,6 +32,9 @@ export interface RenderScriptDetailsContext {
     runtimeWorldFlagsSnapshot: Record<string, boolean>;
     onPlayPreview: () => void;
     onStopPreview: () => void;
+    // Added for ReferenceGraph
+    runtimeConfig: TestWorldConfig | null;
+    externalAssets: TestWorldLogicScriptConfig[];
 }
 
 export function renderScriptDetailsSection(
@@ -43,7 +50,9 @@ export function renderScriptDetailsSection(
         runtimeWorldOnStartTrace,
         runtimeWorldFlagsSnapshot,
         onPlayPreview,
-        onStopPreview
+        onStopPreview,
+        runtimeConfig,
+        externalAssets
     } = context;
 
     const renderPreviewSection = (): void => {
@@ -333,27 +342,71 @@ export function renderScriptDetailsSection(
     usersBox.style.padding = '6px';
     usersBox.style.marginBottom = '8px';
     dom.applyCardWrap(usersBox);
-    const scriptUsers = bindings.filter(
-        (binding) => binding.scriptId === selectedExternalScript.id
-    );
-    if (scriptUsers.length <= 0) {
-        usersBox.appendChild(dom.makeInfoLine('No level bindings use this script yet.'));
+
+    if (runtimeConfig && selectedExternalScript) {
+        // Build reference graph
+        const graph = buildReferenceGraph(runtimeConfig, externalAssets);
+        // Get users for the selected script
+        const scriptUsers = getScriptUsers(graph, selectedExternalScript.id);
+
+        if (scriptUsers.length <= 0) {
+            usersBox.appendChild(dom.makeInfoLine('No script users found.'));
+        } else {
+            scriptUsers.forEach((user) => {
+                const userBox = document.createElement('div');
+                userBox.style.border = '1px solid #8b8b8b';
+                userBox.style.background = '#d9d9d9';
+                userBox.style.padding = '4px';
+                userBox.style.marginBottom = '4px';
+                dom.applyCardWrap(userBox);
+
+                switch (user.kind) {
+                    case 'logic_script_ref':
+                        userBox.appendChild(dom.makeInfoLine(`Level script ref: ${user.pathInConfig ?? 'logic.scriptRefs[?]'}`));
+                        break;
+                    case 'logic_binding':
+                        userBox.appendChild(dom.makeInfoLine(`Binding: ${user.targetType ?? ''}/${user.targetId ?? '-'}/${user.slot ?? ''}`));
+                        userBox.appendChild(dom.makeInfoLine(`  ID: ${user.bindingId ?? '-'}`));
+                        userBox.appendChild(dom.makeInfoLine(`  Status: ${user.enabled ? 'enabled' : 'disabled'}`));
+                        userBox.appendChild(dom.makeInfoLine(`  Path: ${user.pathInConfig ?? 'logic.bindings[?]'}`));
+                        break;
+                    case 'surface_behavior':
+                        let fieldText = user.field ?? '';
+                        if (user.field === 'actions' && user.actionIndex !== undefined) {
+                            fieldText += `[${user.actionIndex}]`;
+                        }
+                        userBox.appendChild(dom.makeInfoLine(`Surface behavior: ${user.surfaceId ?? ''}.behaviorScripts.${fieldText}`));
+                        userBox.appendChild(dom.makeInfoLine(`  Path: ${user.pathInConfig ?? 'surfaces[?].behaviorScripts.?'}`));
+                        break;
+                }
+                usersBox.appendChild(userBox);
+            });
+        }
     } else {
-        scriptUsers.forEach((binding) => {
-            const bindingUserBox = document.createElement('div');
-            bindingUserBox.style.border = '1px solid #8b8b8b';
-            bindingUserBox.style.background = '#d9d9d9';
-            bindingUserBox.style.padding = '4px';
-            bindingUserBox.style.marginBottom = '4px';
-            dom.applyCardWrap(bindingUserBox);
-            bindingUserBox.appendChild(dom.makeInfoLine(`binding id: ${binding.id}`));
-            bindingUserBox.appendChild(dom.makeInfoLine(`targetType: ${binding.targetType}`));
-            bindingUserBox.appendChild(dom.makeInfoLine(`targetId: ${binding.targetId ?? '-'}`));
-            bindingUserBox.appendChild(dom.makeInfoLine(`slot: ${binding.slot}`));
-            bindingUserBox.appendChild(dom.makeInfoLine(`status: ${binding.enabled ? 'enabled' : 'disabled'}`));
-            usersBox.appendChild(bindingUserBox);
-        });
+        // Fallback to original behavior if we can't build the graph
+        const scriptUsers = bindings.filter(
+            (binding) => binding.scriptId === selectedExternalScript.id
+        );
+        if (scriptUsers.length <= 0) {
+            usersBox.appendChild(dom.makeInfoLine('No level bindings use this script yet.'));
+        } else {
+            scriptUsers.forEach((binding) => {
+                const bindingUserBox = document.createElement('div');
+                bindingUserBox.style.border = '1px solid #8b8b8b';
+                bindingUserBox.style.background = '#d9d9d9';
+                bindingUserBox.style.padding = '4px';
+                bindingUserBox.style.marginBottom = '4px';
+                dom.applyCardWrap(bindingUserBox);
+                bindingUserBox.appendChild(dom.makeInfoLine(`binding id: ${binding.id}`));
+                bindingUserBox.appendChild(dom.makeInfoLine(`targetType: ${binding.targetType}`));
+                bindingUserBox.appendChild(dom.makeInfoLine(`targetId: ${binding.targetId ?? '-'}`));
+                bindingUserBox.appendChild(dom.makeInfoLine(`slot: ${binding.slot}`));
+                bindingUserBox.appendChild(dom.makeInfoLine(`status: ${binding.enabled ? 'enabled' : 'disabled'}`));
+                usersBox.appendChild(bindingUserBox);
+            });
+        }
     }
+
     container.appendChild(usersBox);
 
     renderPreviewSection();

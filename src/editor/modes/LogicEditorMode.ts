@@ -425,7 +425,10 @@ export class LogicEditorMode implements EditorMode {
                 onStopPreview: () => {
                     this.clearExternalScriptPreviewResult();
                     this.onUiChanged();
-                }
+                },
+                // Added for ReferenceGraph
+                runtimeConfig: this.getCurrentRuntimeConfig(),
+                externalAssets: getAllLogicScriptAssets()
             });
 
             renderBindingsSection(container, {
