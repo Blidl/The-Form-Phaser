@@ -18,7 +18,10 @@ import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
 import { ObjectAuthoringService, type UpdateObjectVisualPatch } from '../object-authoring/ObjectAuthoringService';
 import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService';
 import { objectDiag } from '../debug/ObjectEditorDiagnostics';
+import { getAllLogicScriptAssets } from '../../game/world/runtime/logic_script_registry';
 import type {
+    TestWorldBehaviorScriptsConfig,
+    TestWorldConfig,
     TestWorldLogicBindingConfig,
     TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
@@ -98,6 +101,16 @@ interface ObjectClipboardData {
     settings: EditorObjectData['settings'];
     actions: EditorObjectData['actions'];
     editor?: EditorObjectData['editor'];
+}
+type BehaviorScriptField = 'move' | 'rotate' | 'defaultAction';
+type BehaviorScriptFieldLabel = 'Move' | 'Rotate' | 'Default Action';
+interface BehaviorScriptOption {
+    id: string;
+    label: string;
+}
+interface RuntimeBehaviorBindingTarget {
+    runtimeType: 'surface';
+    behaviorScripts: TestWorldBehaviorScriptsConfig | null;
 }
 const KNOWN_RUNTIME_OBJECT_TYPES = new Set<string>([
     'platform_default',
@@ -780,13 +793,8 @@ export class ObjectsEditorMode implements EditorMode {
             container.appendChild(this.makeLabel(`Collision: ${selectedObject.settings.collision}`));
             container.appendChild(this.makeSpacer());
 
-            container.appendChild(this.makeSectionTitle('Actions'));
-            container.appendChild(this.makeLabel(`Move: ${selectedObject.actions.moveScriptId ?? '-'}`));
-            container.appendChild(this.makeLabel(`Rotate: ${selectedObject.actions.rotateScriptId ?? '-'}`));
-            container.appendChild(this.makeLabel(`Default Action: ${selectedObject.actions.defaultActionId ?? '-'}`));
-            container.appendChild(
-                this.makeLabel(`Action 1: ${selectedObject.actions.actionScriptIds[0] ?? '-'}`)
-            );
+            container.appendChild(this.makeSectionTitle('Behavior Scripts'));
+            container.appendChild(this.makeBehaviorScriptsSection(selectedObject));
             container.appendChild(this.makeSpacer());
             container.appendChild(this.makeSectionTitle('Logic Actions'));
             container.appendChild(this.makeObjectLogicActionsView(selectedObject, objectLogicBindings));
@@ -2899,6 +2907,164 @@ export class ObjectsEditorMode implements EditorMode {
         }));
 
         return wrap;
+    }
+
+    private makeBehaviorScriptsSection(selectedObject: EditorObjectData): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'grid';
+        wrap.style.gap = '6px';
+
+        const target = this.resolveBehaviorBindingTarget(selectedObject);
+        if (!target) {
+            wrap.appendChild(this.makeLabel('Behavior script assignment is available for default platforms/surfaces only in this XS. Moving platforms use legacy axis/travelDistance/speed runtime behavior and are not assignable here yet.'));
+            return wrap;
+        }
+
+        wrap.appendChild(this.makeLabel('Authoring-only: runtime execution is not implemented yet.'));
+
+        const options = this.listBehaviorScriptOptions();
+        const optionIds = new Set(options.map((entry) => entry.id));
+        const behaviorScripts = target.behaviorScripts ?? {};
+        wrap.appendChild(this.makeBehaviorScriptSelectRow(selectedObject, 'Move', 'move', behaviorScripts.move, options));
+        wrap.appendChild(this.makeBehaviorScriptSelectRow(selectedObject, 'Rotate', 'rotate', behaviorScripts.rotate, options));
+        wrap.appendChild(this.makeBehaviorScriptSelectRow(selectedObject, 'Default Action', 'defaultAction', behaviorScripts.defaultAction, options));
+
+        const missingAssignments: string[] = [];
+        if (behaviorScripts.move && !optionIds.has(behaviorScripts.move)) {
+            missingAssignments.push(`Move: ${behaviorScripts.move}`);
+        }
+        if (behaviorScripts.rotate && !optionIds.has(behaviorScripts.rotate)) {
+            missingAssignments.push(`Rotate: ${behaviorScripts.rotate}`);
+        }
+        if (behaviorScripts.defaultAction && !optionIds.has(behaviorScripts.defaultAction)) {
+            missingAssignments.push(`Default Action: ${behaviorScripts.defaultAction}`);
+        }
+        if (missingAssignments.length > 0) {
+            const warning = this.makeLabel(`Missing script assets: ${missingAssignments.join(', ')}`);
+            warning.style.color = '#b00020';
+            wrap.appendChild(warning);
+        }
+
+        const actionsValues = Array.isArray(behaviorScripts.actions) ? behaviorScripts.actions : [];
+        wrap.appendChild(this.makeLabel(`Actions list (read-only): ${actionsValues.length > 0 ? actionsValues.join(', ') : '-'}`));
+        wrap.appendChild(this.makeLabel('Actions list editing is deferred in this XS to keep risk low.'));
+        wrap.appendChild(this.makeLabel('Category diagnostics for behavior script assignments are deferred in this XS.'));
+        return wrap;
+    }
+
+    private makeBehaviorScriptSelectRow(
+        selectedObject: EditorObjectData,
+        label: BehaviorScriptFieldLabel,
+        field: BehaviorScriptField,
+        value: string | undefined,
+        options: readonly BehaviorScriptOption[]
+    ): HTMLDivElement {
+        const row = document.createElement('div');
+        row.style.display = 'flex';
+        row.style.gap = '6px';
+        row.style.alignItems = 'center';
+
+        const text = document.createElement('div');
+        text.textContent = `${label}:`;
+        text.style.minWidth = '92px';
+        row.appendChild(text);
+
+        const select = document.createElement('select');
+        select.style.flex = '1';
+        select.style.boxSizing = 'border-box';
+        select.style.border = '1px solid #5f5f5f';
+        select.style.padding = '2px 4px';
+        select.appendChild(new Option('(none)', ''));
+        options.forEach((entry) => {
+            select.appendChild(new Option(entry.label, entry.id));
+        });
+        if (value && !options.some((entry) => entry.id === value)) {
+            select.appendChild(new Option(`(missing) ${value}`, value));
+        }
+        select.value = value ?? '';
+        select.disabled = this.isObjectLocked(selectedObject);
+        this.bindEditorInputKeyboardGuards(select);
+        select.addEventListener('change', () => {
+            const nextValue = select.value.trim();
+            const committed = this.commitSelectedBehaviorScriptField(field, nextValue.length > 0 ? nextValue : null);
+            if (!committed) {
+                const refreshed = this.resolveBehaviorBindingTarget(selectedObject)?.behaviorScripts ?? {};
+                select.value = (refreshed[field] ?? '');
+                return;
+            }
+            this.onUiChanged();
+        });
+        row.appendChild(select);
+
+        const clearButton = document.createElement('button');
+        clearButton.type = 'button';
+        clearButton.textContent = 'Clear';
+        clearButton.style.padding = '2px 6px';
+        clearButton.style.border = '1px solid #5f5f5f';
+        clearButton.style.background = '#d9d9d9';
+        clearButton.disabled = this.isObjectLocked(selectedObject) || !value;
+        this.bindEditorInputKeyboardGuards(clearButton);
+        clearButton.addEventListener('click', () => {
+            if (this.commitSelectedBehaviorScriptField(field, null)) {
+                this.onUiChanged();
+            }
+        });
+        row.appendChild(clearButton);
+
+        return row;
+    }
+
+    private listBehaviorScriptOptions(): BehaviorScriptOption[] {
+        const externalAssets = getAllLogicScriptAssets();
+        if (externalAssets.length > 0) {
+            return externalAssets.map((entry) => ({
+                id: entry.id,
+                label: `${entry.name} (${entry.id}) [${entry.category}]`
+            }));
+        }
+        const scriptRefs = this.logicAuthoringService.listScriptRefs();
+        return scriptRefs.map((entry) => ({
+            id: entry.id,
+            label: this.formatObjectLogicScriptRefOptionLabel(entry)
+        }));
+    }
+
+    private resolveBehaviorBindingTarget(selectedObject: EditorObjectData): RuntimeBehaviorBindingTarget | null {
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
+        if (!runtimeConfig) {
+            return null;
+        }
+        const runtimeType = this.resolveObjectType(selectedObject.settings.type)?.runtimeType;
+        if (runtimeType === 'surface') {
+            const surface = runtimeConfig.surfaces.find((entry) => entry.id === selectedObject.id);
+            return surface ? { runtimeType, behaviorScripts: surface.behaviorScripts ?? null } : null;
+        }
+        return null;
+    }
+
+    private commitSelectedBehaviorScriptField(
+        field: BehaviorScriptField,
+        nextValue: string | null
+    ): boolean {
+        const selectedId = this.selectedObjectId;
+        if (!selectedId || !this.legacyObjectAdapter?.hasRuntimeLink(selectedId)) {
+            return false;
+        }
+        const patchKeyByField: Record<BehaviorScriptField, 'behaviorScriptsMove' | 'behaviorScriptsRotate' | 'behaviorScriptsDefaultAction'> = {
+            move: 'behaviorScriptsMove',
+            rotate: 'behaviorScriptsRotate',
+            defaultAction: 'behaviorScriptsDefaultAction'
+        };
+        const applied = this.legacyObjectAdapter.patchRuntimeObjectFields(selectedId, {
+            [patchKeyByField[field]]: nextValue
+        });
+        if (!applied) {
+            return false;
+        }
+        this.refreshLiveObjects('behavior-scripts-update');
+        this.syncViewsFromStore();
+        this.syncSelectionOutline();
+        return true;
     }
 
     private makeObjectLogicActionsView(

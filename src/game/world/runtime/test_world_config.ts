@@ -110,6 +110,13 @@ export interface TestWorldPlayerSpawnConfig extends TestWorldEditorLockable {
     strokeColor?: number;
 }
 
+export interface TestWorldBehaviorScriptsConfig {
+    move?: string;
+    rotate?: string;
+    defaultAction?: string;
+    actions?: string[];
+}
+
 export interface TestWorldSurfaceConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {
     id: string;
     x: number;
@@ -120,6 +127,7 @@ export interface TestWorldSurfaceConfig extends TestWorldEditorLockable, TestWor
     strokeColor: number;
     alpha?: number;
     collisionMode?: 'solid' | 'visual_only';
+    behaviorScripts?: TestWorldBehaviorScriptsConfig;
 }
 
 export interface TestWorldHazardConfig extends TestWorldEditorLockable, TestWorldVisualOrderConfig {

@@ -6,6 +6,7 @@ import { isTestNpcScriptedSequenceRef } from '../../npc/npc_scripted_sequences';
 import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
 import type {
     TestWorldFinishConfig,
+    type TestWorldBehaviorScriptsConfig,
     TestWorldCheckpointConfig,
     TestWorldConfig,
     TestWorldDragBoxConfig,
@@ -134,6 +135,125 @@ const patchVisualOrderFields = (
     if ('onlyDebugView' in patch && typeof patch.onlyDebugView === 'boolean') {
         (target as TestWorldVisualOrderConfig).onlyDebugView = patch.onlyDebugView;
     }
+};
+
+const cloneBehaviorScripts = (
+    behaviorScripts: TestWorldBehaviorScriptsConfig | undefined
+): TestWorldBehaviorScriptsConfig | undefined => {
+    if (!behaviorScripts) {
+        return undefined;
+    }
+    return {
+        move: behaviorScripts.move,
+        rotate: behaviorScripts.rotate,
+        defaultAction: behaviorScripts.defaultAction,
+        actions: behaviorScripts.actions ? [...behaviorScripts.actions] : undefined
+    };
+};
+
+const trimOptionalPatchString = (value: unknown): string | undefined => {
+    if (typeof value !== 'string') {
+        return undefined;
+    }
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : undefined;
+};
+
+const patchBehaviorScripts = (
+    target: { behaviorScripts?: TestWorldBehaviorScriptsConfig },
+    patch: Record<string, unknown>
+): void => {
+    const current = cloneBehaviorScripts(target.behaviorScripts) ?? {};
+    let changed = false;
+
+    const applyOptionalStringPatch = (
+        patchKey: 'behaviorScriptsMove' | 'behaviorScriptsRotate' | 'behaviorScriptsDefaultAction',
+        targetKey: 'move' | 'rotate' | 'defaultAction'
+    ): void => {
+        if (!(patchKey in patch)) {
+            return;
+        }
+        changed = true;
+        const rawValue = patch[patchKey];
+        if (rawValue === null || rawValue === '' || rawValue === undefined) {
+            delete current[targetKey];
+            return;
+        }
+        const nextValue = trimOptionalPatchString(rawValue);
+        if (nextValue) {
+            current[targetKey] = nextValue;
+        } else {
+            delete current[targetKey];
+        }
+    };
+
+    applyOptionalStringPatch('behaviorScriptsMove', 'move');
+    applyOptionalStringPatch('behaviorScriptsRotate', 'rotate');
+    applyOptionalStringPatch('behaviorScriptsDefaultAction', 'defaultAction');
+
+    if ('behaviorScriptsActions' in patch) {
+        changed = true;
+        const rawActions = patch.behaviorScriptsActions;
+        if (rawActions === null || rawActions === undefined) {
+            delete current.actions;
+        } else if (Array.isArray(rawActions)) {
+            const normalized = rawActions
+                .filter((entry): entry is string => typeof entry === 'string')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry.length > 0);
+            current.actions = normalized.length > 0 ? normalized : undefined;
+        }
+    }
+
+    const nestedBehaviorPatch = patch.behaviorScripts;
+    if (nestedBehaviorPatch && typeof nestedBehaviorPatch === 'object' && !Array.isArray(nestedBehaviorPatch)) {
+        changed = true;
+        const nested = nestedBehaviorPatch as Record<string, unknown>;
+        if ('move' in nested) {
+            const next = trimOptionalPatchString(nested.move);
+            if (next) {
+                current.move = next;
+            } else {
+                delete current.move;
+            }
+        }
+        if ('rotate' in nested) {
+            const next = trimOptionalPatchString(nested.rotate);
+            if (next) {
+                current.rotate = next;
+            } else {
+                delete current.rotate;
+            }
+        }
+        if ('defaultAction' in nested) {
+            const next = trimOptionalPatchString(nested.defaultAction);
+            if (next) {
+                current.defaultAction = next;
+            } else {
+                delete current.defaultAction;
+            }
+        }
+        if ('actions' in nested) {
+            if (Array.isArray(nested.actions)) {
+                const normalized = nested.actions
+                    .filter((entry): entry is string => typeof entry === 'string')
+                    .map((entry) => entry.trim())
+                    .filter((entry) => entry.length > 0);
+                current.actions = normalized.length > 0 ? normalized : undefined;
+            } else if (nested.actions === null || nested.actions === undefined) {
+                delete current.actions;
+            }
+        }
+    }
+
+    if (!changed) {
+        return;
+    }
+    if (!current.move && !current.rotate && !current.defaultAction && (!current.actions || current.actions.length <= 0)) {
+        target.behaviorScripts = undefined;
+        return;
+    }
+    target.behaviorScripts = current;
 };
 
 const createRectHandle = <TConfig>(
@@ -268,7 +388,11 @@ const surfaceAdapter: TestWorldEditorAdapter<TestWorldSurfaceConfig> = {
         fillColor: 0xb0bec5,
         strokeColor: 0xeceff1
     }),
-    duplicate: (config, id) => ({ ...config, id }),
+    duplicate: (config, id) => ({
+        ...config,
+        id,
+        behaviorScripts: cloneBehaviorScripts(config.behaviorScripts)
+    }),
     getId: (config) => config.id,
     setId: (config, id) => {
         config.id = id;
@@ -306,6 +430,7 @@ const surfaceAdapter: TestWorldEditorAdapter<TestWorldSurfaceConfig> = {
         if (patch.collisionMode === 'solid' || patch.collisionMode === 'visual_only') {
             config.collisionMode = patch.collisionMode;
         }
+        patchBehaviorScripts(config, patch);
         patchVisualOrderFields(config, patch);
     },
     patchColors: (config, patch) => {
@@ -316,7 +441,10 @@ const surfaceAdapter: TestWorldEditorAdapter<TestWorldSurfaceConfig> = {
             config.strokeColor = patch.strokeColor;
         }
     },
-    serialize: (config) => ({ ...config })
+    serialize: (config) => ({
+        ...config,
+        behaviorScripts: cloneBehaviorScripts(config.behaviorScripts)
+    })
 };
 
 const hazardAdapter: TestWorldEditorAdapter<TestWorldHazardConfig> = {

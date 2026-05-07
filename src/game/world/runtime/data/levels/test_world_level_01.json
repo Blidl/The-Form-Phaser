@@ -158,6 +158,9 @@
       "strokeColor": 13621468,
       "alpha": 1,
       "collisionMode": "solid",
+      "behaviorScripts": {
+        "move": "external_demo_noop"
+      },
       "editorLocked": false,
       "onlyDebugView": false
     },

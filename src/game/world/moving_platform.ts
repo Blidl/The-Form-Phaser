@@ -86,7 +86,8 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
                 direction = 1;
                 body.setVelocity(config.speed, 0);
             }
-            matterBody.pfCarryDeltaX = platform.x - previousX;
+            const realizedDeltaX = platform.x - previousX;
+            matterBody.pfCarryDeltaX = Math.abs(realizedDeltaX) > 0 ? realizedDeltaX : (body.velocity.x * deltaSec);
             matterBody.pfCarryDeltaY = 0;
             scene.matter.body.setPosition(matterBody, { x: platform.x, y: platform.y });
             return;
@@ -104,8 +105,9 @@ export const createMovingPlatform = (scene: Scene, config: MovingPlatformConfig)
             direction = 1;
             body.setVelocity(0, config.speed);
         }
+        const realizedDeltaY = platform.y - previousY;
         matterBody.pfCarryDeltaX = 0;
-        matterBody.pfCarryDeltaY = platform.y - previousY;
+        matterBody.pfCarryDeltaY = Math.abs(realizedDeltaY) > 0 ? realizedDeltaY : (body.velocity.y * deltaSec);
         scene.matter.body.setPosition(matterBody, { x: platform.x, y: platform.y });
     };
 

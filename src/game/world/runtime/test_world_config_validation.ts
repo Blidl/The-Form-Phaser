@@ -29,6 +29,7 @@ import {
     type TestWorldMovingPlatformMotionState,
     type TestWorldMovingPlatformConfig,
     type TestWorldPlayerSpawnConfig,
+    type TestWorldBehaviorScriptsConfig,
     type TestWorldSurfaceConfig,
     type TestWorldTriggerCommandConfig,
     type TestWorldTriangleFlightBreakWallConfig,
@@ -1420,6 +1421,37 @@ const normalizeBackground = (
     };
 };
 
+const normalizeBehaviorScripts = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldBehaviorScriptsConfig | undefined
+): TestWorldBehaviorScriptsConfig | undefined => {
+    if (!raw && !fallback) {
+        return undefined;
+    }
+    const source = raw ?? {};
+    const move = asOptionalString(source.move) ?? fallback?.move;
+    const rotate = asOptionalString(source.rotate) ?? fallback?.rotate;
+    const defaultAction = asOptionalString(source.defaultAction) ?? fallback?.defaultAction;
+    const rawActions = Array.isArray(source.actions)
+        ? source.actions
+        : fallback?.actions;
+    const actions = rawActions
+        ?.filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter((entry) => entry.length > 0);
+
+    if (!move && !rotate && !defaultAction && (!actions || actions.length <= 0)) {
+        return undefined;
+    }
+
+    return {
+        move: move ?? undefined,
+        rotate: rotate ?? undefined,
+        defaultAction: defaultAction ?? undefined,
+        actions: actions && actions.length > 0 ? actions : undefined
+    };
+};
+
 const normalizeSurface = (
     raw: Record<string, unknown> | null,
     fallback: TestWorldSurfaceConfig,
@@ -1436,6 +1468,7 @@ const normalizeSurface = (
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor) ?? fallback.strokeColor,
         alpha: clampAlpha(raw?.alpha, fallback.alpha ?? 1),
         collisionMode: raw?.collisionMode === 'visual_only' ? 'visual_only' : 'solid',
+        behaviorScripts: normalizeBehaviorScripts(asObject(raw?.behaviorScripts), fallback.behaviorScripts),
         editorLocked: asBoolean(raw?.editorLocked, false),
         ...normalizeVisualOrder(raw, fallback)
     };
