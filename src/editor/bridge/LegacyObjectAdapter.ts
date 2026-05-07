@@ -51,6 +51,7 @@ export interface LegacyObjectSource {
     getLastObjectInteractionTrace?: () => unknown;
     getLastNpcInteractionTrace?: () => unknown;
     getLastCutsceneLogicTrace?: () => unknown;
+    getSurfaceMoveRuntimeDebugSnapshot?: () => unknown;
     getGameplayTimeState?: () => { stopped: boolean; speed: number };
     setGameplayStopped?: (stopped: boolean) => void;
     setGameplaySpeed?: (speed: number) => void;
@@ -79,6 +80,7 @@ export interface LegacyObjectSource {
     patchObjectDebugVisibility?: (rootId: string, onlyDebugView: boolean) => boolean;
     setObjectLocked?: (rootId: string, locked: boolean) => boolean;
     setEditorDebugViewActive?: (active: boolean) => void;
+    setSurfaceMoveRuntimeEditingActive?: (rootId: string, active: boolean) => boolean;
     createObject: (type: string, worldX: number, worldY: number) => string | null;
     removeObject?: (id: string) => boolean;
 }
@@ -271,6 +273,14 @@ export class LegacyObjectAdapter {
             return null;
         }
         return JSON.parse(JSON.stringify(trace));
+    }
+
+    public getSurfaceMoveRuntimeDebugSnapshot(): unknown | null {
+        const snapshot = this.source.getSurfaceMoveRuntimeDebugSnapshot?.();
+        if (!snapshot || typeof snapshot !== 'object') {
+            return null;
+        }
+        return JSON.parse(JSON.stringify(snapshot));
     }
 
     public getGameplayTimeState(): { stopped: boolean; speed: number } | null {
@@ -614,6 +624,14 @@ export class LegacyObjectAdapter {
 
     public setEditorDebugViewActive(active: boolean): void {
         this.source.setEditorDebugViewActive?.(active);
+    }
+
+    public setSurfaceMoveRuntimeEditingActive(editorObjectId: string, active: boolean): boolean {
+        const link = this.linksByEditorObjectId.get(editorObjectId);
+        if (!link || !this.source.setSurfaceMoveRuntimeEditingActive) {
+            return false;
+        }
+        return this.source.setSurfaceMoveRuntimeEditingActive(link.legacyId, active);
     }
 
     private resolveEditorTypeId(legacyType: string): string {

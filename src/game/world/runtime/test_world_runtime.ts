@@ -96,6 +96,18 @@ import {
     normalizeRuntimeReplaceConfig,
     normalizeRuntimeSetConfig
 } from './test_world_runtime_rebuild';
+import {
+    ensureExternalLogicScriptsLoaded,
+    getLogicScriptAsset,
+    reloadExternalLogicScripts
+} from './logic_script_registry';
+import {
+    getPlatformMovePingPongParams,
+    PLATFORM_MOVE_PING_PONG_COMMAND_TYPE,
+    summarizePlatformMovePingPongContract,
+    type PlatformMovePingPongAxis,
+    type PlatformMovePingPongStart
+} from './platform_command_registry';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -191,6 +203,39 @@ export interface CutsceneLogicTrace {
     message: string;
 }
 
+export interface SurfaceMoveRuntimeDebugEntry {
+    surfaceId: string;
+    assignedScriptId: string | null;
+    scriptFound: boolean;
+    scriptCategory: string | null;
+    commandType: string | null;
+    paramsValid: boolean | null;
+    resolved: boolean;
+    moverActive: boolean;
+    currentX: number;
+    currentY: number;
+    originX: number;
+    originY: number;
+    direction: -1 | 0 | 1;
+    velocityX: number;
+    velocityY: number;
+    lastDeltaX: number;
+    lastDeltaY: number;
+    lastCarryDeltaX: number;
+    lastCarryDeltaY: number;
+    blockedReason: string | null;
+    updateVisitCount: number;
+    visitedThisFrame: boolean;
+}
+
+export interface SurfaceMoveRuntimeDebugSnapshot {
+    discoveredAssignments: number;
+    resolvedAssignments: number;
+    moverStateCount: number;
+    moversVisitedThisFrame: number;
+    surfaces: SurfaceMoveRuntimeDebugEntry[];
+}
+
 export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: (deltaMs: number) => void;
@@ -238,6 +283,7 @@ export interface TestWorldRuntime {
     getLastObjectInteractionTrace: () => ObjectInteractionTrace;
     getLastNpcInteractionTrace: () => NpcInteractionTrace;
     getLastCutsceneLogicTrace: () => CutsceneLogicTrace | null;
+    getSurfaceMoveRuntimeDebugSnapshot: () => SurfaceMoveRuntimeDebugSnapshot;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     replaceConfig: (
@@ -252,6 +298,7 @@ export interface TestWorldRuntime {
     patchObjectColors: (rootId: string, patch: Record<string, unknown>) => boolean;
     patchObjectDebugVisibility: (rootId: string, onlyDebugView: boolean) => boolean;
     setEditorDebugViewActive: (active: boolean) => void;
+    setSurfaceMoveRuntimeEditingActive: (surfaceId: string, active: boolean) => boolean;
     setObjectLocked: (rootId: string, locked: boolean) => boolean;
     createObject: (type: TestWorldEditorObjectType, worldX: number, worldY: number) => string | null;
     duplicateObject: (rootId: string) => string | null;
@@ -326,6 +373,8 @@ interface BuiltWorldInstance {
     };
     getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
+    activatePendingSurfaceMovers: () => number;
+    getSurfaceMoveRuntimeDebugSnapshot: () => SurfaceMoveRuntimeDebugSnapshot;
     getEditorHandles: () => readonly TestWorldEditorHandle[];
     getEditorObjects: () => readonly TestWorldEditorObjectSummary[];
     getEditorHandle: (id: string) => TestWorldEditorHandle | null;
@@ -334,6 +383,7 @@ interface BuiltWorldInstance {
     patchObjectColors: (rootId: string, patch: Record<string, unknown>) => boolean;
     patchObjectDebugVisibility: (rootId: string, onlyDebugView: boolean) => boolean;
     setEditorDebugViewActive: (active: boolean) => void;
+    setSurfaceMoveRuntimeEditingActive: (surfaceId: string, active: boolean) => boolean;
     setObjectLocked: (rootId: string, locked: boolean) => boolean;
     focusObjectPoint: (targetId: string) => { x: number; y: number } | null;
     destroy: () => void;
@@ -370,6 +420,80 @@ const captureCreatedDisplayObjects = <T>(
 
 const isSurfaceSolid = (config: TestWorldSurfaceConfig): boolean => {
     return (config.collisionMode ?? 'solid') === 'solid';
+};
+
+type SurfaceMoveMatterBody = MatterJS.BodyType & {
+    pfCarryDeltaX?: number;
+    pfCarryDeltaY?: number;
+};
+
+interface SurfaceMoveRuntimeAssignment {
+    surfaceId: string;
+    axis: PlatformMovePingPongAxis;
+    distance: number;
+    speed: number;
+    start: PlatformMovePingPongStart;
+}
+
+interface SurfaceMoveRuntimeState {
+    assignment: SurfaceMoveRuntimeAssignment;
+    surface: Phaser.GameObjects.Rectangle;
+    matterBody: SurfaceMoveMatterBody;
+    mode: PlatformMovePingPongStart;
+    direction: 1 | -1;
+    runOnceCompleted: boolean;
+    originX: number;
+    originY: number;
+    lastDeltaX: number;
+    lastDeltaY: number;
+    lastCarryDeltaX: number;
+    lastCarryDeltaY: number;
+    updateVisitCount: number;
+    lastVisitedFrame: number;
+}
+
+const resolveSurfaceMoveRuntimeAssignment = (
+    surfaceConfig: TestWorldSurfaceConfig
+): SurfaceMoveRuntimeAssignment | null => {
+    const scriptId = typeof surfaceConfig.behaviorScripts?.move === 'string'
+        ? surfaceConfig.behaviorScripts.move.trim()
+        : '';
+    if (scriptId.length <= 0) {
+        return null;
+    }
+
+    const script = getLogicScriptAsset(scriptId);
+    if (!script || script.category !== 'platform.move') {
+        return null;
+    }
+    const summary = summarizePlatformMovePingPongContract(script.commands);
+    if (!summary.hasExactlyOneValidCommand) {
+        return null;
+    }
+
+    const command = script.commands[0];
+    if (!command || command.type.trim() !== PLATFORM_MOVE_PING_PONG_COMMAND_TYPE) {
+        return null;
+    }
+    const params = getPlatformMovePingPongParams(command.params);
+    if (!params) {
+        return null;
+    }
+
+    return {
+        surfaceId: surfaceConfig.id,
+        axis: params.axis,
+        distance: params.distance,
+        speed: params.speed,
+        start: params.start
+    };
+};
+
+const hasAssignedSurfaceMoveScript = (surfaceConfig: TestWorldSurfaceConfig): boolean => {
+    const scriptId = typeof surfaceConfig.behaviorScripts?.move === 'string'
+        ? surfaceConfig.behaviorScripts.move.trim()
+        : '';
+    return scriptId.length > 0;
 };
 
 const NPC_ARCADE_CARRY_SOURCE_DATA_KEY = 'pf_npc_arcade_carry_source';
@@ -533,6 +657,37 @@ export const createTestWorldRuntime = (
 
     executeWorldOnStartLogicTraceOnce();
 
+    const tryBootstrapSurfaceMoveRuntimeAfterScriptLoad = (): void => {
+        const hasMoveAssignments = currentConfig.surfaces.some((surfaceConfig) => hasAssignedSurfaceMoveScript(surfaceConfig));
+        if (!hasMoveAssignments) {
+            return;
+        }
+        const hasResolvableAssignmentsNow = currentConfig.surfaces.some(
+            (surfaceConfig) => resolveSurfaceMoveRuntimeAssignment(surfaceConfig) !== null
+        );
+        if (hasResolvableAssignmentsNow) {
+            instance.activatePendingSurfaceMovers();
+            return;
+        }
+
+        void ensureExternalLogicScriptsLoaded()
+            .then((preloadResult) => {
+                if (preloadResult.success) {
+                    return preloadResult;
+                }
+                return reloadExternalLogicScripts();
+            })
+            .then((reloadResult) => {
+                if (!reloadResult.success) {
+                    return;
+                }
+                instance.activatePendingSurfaceMovers();
+            })
+            .catch(() => {
+                // Keep runtime safe and static when script preload fails.
+            });
+    };
+
     const rebuildFromCurrentConfig = (): void => {
         instance.destroy();
         instance = buildWorldInstance(
@@ -545,6 +700,8 @@ export const createTestWorldRuntime = (
         );
         instance.setEditorDebugViewActive(editorDebugViewActive);
     };
+
+    tryBootstrapSurfaceMoveRuntimeAfterScriptLoad();
 
     const removeByRootId = (rootId: string): boolean => {
         if (rootId === 'player_spawn') {
@@ -1033,6 +1190,9 @@ export const createTestWorldRuntime = (
             }
             return cloneCutsceneLogicTrace(lastCutsceneLogicTrace);
         },
+        getSurfaceMoveRuntimeDebugSnapshot: (): SurfaceMoveRuntimeDebugSnapshot => {
+            return instance.getSurfaceMoveRuntimeDebugSnapshot();
+        },
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
             currentConfig = normalizeRuntimeSetConfig(config, currentConfig);
@@ -1068,6 +1228,9 @@ export const createTestWorldRuntime = (
         setEditorDebugViewActive: (active: boolean): void => {
             editorDebugViewActive = active;
             instance.setEditorDebugViewActive(active);
+        },
+        setSurfaceMoveRuntimeEditingActive: (surfaceId: string, active: boolean): boolean => {
+            return instance.setSurfaceMoveRuntimeEditingActive(surfaceId, active);
         },
         setObjectLocked: (rootId: string, locked: boolean): boolean => {
             return instance.setObjectLocked(rootId, locked);
@@ -1246,6 +1409,12 @@ const buildWorldInstance = (
     const triangleFlightBreakWalls: TriangleFlightBreakWallObject[] = [];
     const trianglePickups: TriangleFlightPickupObject[] = [];
     const surfaces = new Map<string, Phaser.GameObjects.Rectangle>();
+    const surfaceMoveAssignmentsById = new Map<string, SurfaceMoveRuntimeAssignment>();
+    const movingSurfaceStatesById = new Map<string, SurfaceMoveRuntimeState>();
+    const surfaceMoveEditingActiveIds = new Set<string>();
+    const pendingSurfaceMoveScriptLoadIds = new Set<string>();
+    let surfaceMoveUpdateFrame = 0;
+    let surfaceMoveVisitedThisFrame = 0;
     const checkpointsById = new Map<string, CheckpointObject>();
     const movingPlatformsById = new Map<string, MovingPlatformObject>();
     const dragBoxesById = new Map<string, DraggableBoxObject>();
@@ -1270,12 +1439,44 @@ const buildWorldInstance = (
     const consumedWorldRuleOnceKeys = new Set<string>();
     const MAX_WORLD_LOGIC_DISPATCH_DEPTH = 8;
     let worldLogicDispatchDepth = 0;
-    const surfaceOutlineRenderer = createTestWorldSurfaceOutlineRenderer(scene, config.surfaces);
+    const surfaceOutlineRenderer = createTestWorldSurfaceOutlineRenderer(scene, config.surfaces, {
+        resolveRuntimeBounds: (surfaceId) => {
+            const surface = surfaces.get(surfaceId);
+            if (!surface) {
+                return null;
+            }
+            return {
+                x: surface.x,
+                y: surface.y,
+                width: surface.width,
+                height: surface.height
+            };
+        }
+    });
 
     const addCleanup = (cleanupFn: () => void): void => {
         cleanup.push(cleanupFn);
     };
     addCleanup(() => surfaceOutlineRenderer.destroy());
+
+    config.surfaces.forEach((surfaceConfig) => {
+        const assignment = resolveSurfaceMoveRuntimeAssignment(surfaceConfig);
+        if (assignment) {
+            surfaceMoveAssignmentsById.set(surfaceConfig.id, assignment);
+        }
+    });
+
+    const resolveAndStoreSurfaceMoveAssignment = (
+        surfaceConfig: TestWorldSurfaceConfig
+    ): SurfaceMoveRuntimeAssignment | null => {
+        const assignment = resolveSurfaceMoveRuntimeAssignment(surfaceConfig);
+        if (assignment) {
+            surfaceMoveAssignmentsById.set(surfaceConfig.id, assignment);
+            return assignment;
+        }
+        surfaceMoveAssignmentsById.delete(surfaceConfig.id);
+        return null;
+    };
 
     const dispatchWorldLogicEvent = (event: TestWorldLogicEvent): boolean => {
         if (!event || typeof event !== 'object' || typeof event.kind !== 'string') {
@@ -1653,6 +1854,17 @@ const buildWorldInstance = (
                     if ((binding.type === 'dragBox' || binding.type === 'npc') && definition.part === 'main') {
                         return containsBoundsPoint(getLiveHandleBounds(binding, definition, configObject), worldX, worldY);
                     }
+                    if (binding.type === 'surface' && definition.part === 'main') {
+                        const runtimeSurface = surfaces.get(binding.rootId);
+                        if (runtimeSurface) {
+                            return containsBoundsPoint({
+                                x: runtimeSurface.x,
+                                y: runtimeSurface.y,
+                                width: runtimeSurface.width,
+                                height: runtimeSurface.height
+                            }, worldX, worldY);
+                        }
+                    }
 
                     return definition.containsPoint(configObject, worldX, worldY);
                 }
@@ -1729,14 +1941,377 @@ const buildWorldInstance = (
         );
     }
 
+    const stopMovingSurface = (runtimeState: SurfaceMoveRuntimeState): void => {
+        const body = runtimeState.surface.body as Physics.Arcade.Body | undefined;
+        body?.setVelocity(0, 0);
+        runtimeState.matterBody.pfCarryDeltaX = 0;
+        runtimeState.matterBody.pfCarryDeltaY = 0;
+        runtimeState.lastDeltaX = 0;
+        runtimeState.lastDeltaY = 0;
+        runtimeState.lastCarryDeltaX = 0;
+        runtimeState.lastCarryDeltaY = 0;
+        scene.matter.body.setPosition(runtimeState.matterBody, {
+            x: runtimeState.surface.x,
+            y: runtimeState.surface.y
+        });
+    };
+
+    const createSurfaceMoveRuntimeStateIfResolvable = (
+        surfaceConfig: TestWorldSurfaceConfig
+    ): boolean => {
+        if (movingSurfaceStatesById.has(surfaceConfig.id)) {
+            return false;
+        }
+        const assignment = resolveAndStoreSurfaceMoveAssignment(surfaceConfig);
+        if (!assignment) {
+            return false;
+        }
+        const surface = surfaces.get(surfaceConfig.id);
+        if (!surface) {
+            return false;
+        }
+        const body = surface.body as Physics.Arcade.Body | undefined;
+        if (!(body instanceof Physics.Arcade.Body)) {
+            return false;
+        }
+        const matterBody = surface.getData('pf_matter_body') as SurfaceMoveMatterBody | null;
+        if (!matterBody) {
+            return false;
+        }
+        const runtimeState: SurfaceMoveRuntimeState = {
+            assignment,
+            surface,
+            matterBody,
+            mode: assignment.start,
+            direction: 1,
+            runOnceCompleted: false,
+            originX: surfaceConfig.x,
+            originY: surfaceConfig.y,
+            lastDeltaX: 0,
+            lastDeltaY: 0,
+            lastCarryDeltaX: 0,
+            lastCarryDeltaY: 0,
+            updateVisitCount: 0,
+            lastVisitedFrame: 0
+        };
+        movingSurfaceStatesById.set(surfaceConfig.id, runtimeState);
+        stopMovingSurface(runtimeState);
+        return true;
+    };
+
+    const reconcileSurfaceMoveRuntimeState = (
+        surfaceConfig: TestWorldSurfaceConfig
+    ): boolean => {
+        const surface = surfaces.get(surfaceConfig.id);
+        if (!surface) {
+            movingSurfaceStatesById.delete(surfaceConfig.id);
+            surfaceMoveAssignmentsById.delete(surfaceConfig.id);
+            return false;
+        }
+
+        const assignment = resolveAndStoreSurfaceMoveAssignment(surfaceConfig);
+        const runtimeState = movingSurfaceStatesById.get(surfaceConfig.id);
+
+        if (!assignment) {
+            if (runtimeState) {
+                stopMovingSurface(runtimeState);
+                movingSurfaceStatesById.delete(surfaceConfig.id);
+            }
+            return false;
+        }
+
+        const matterBody = surface.getData('pf_matter_body') as SurfaceMoveMatterBody | null;
+        if (!matterBody || !(surface.body instanceof Physics.Arcade.Body)) {
+            if (runtimeState) {
+                movingSurfaceStatesById.delete(surfaceConfig.id);
+            }
+            return false;
+        }
+
+        if (runtimeState) {
+            runtimeState.assignment = assignment;
+            runtimeState.matterBody = matterBody;
+            runtimeState.mode = assignment.start;
+            runtimeState.direction = 1;
+            runtimeState.runOnceCompleted = false;
+            runtimeState.originX = surfaceConfig.x;
+            runtimeState.originY = surfaceConfig.y;
+            stopMovingSurface(runtimeState);
+            return true;
+        }
+
+        return createSurfaceMoveRuntimeStateIfResolvable(surfaceConfig);
+    };
+
+    const setSurfaceMoveRuntimeEditingActive = (
+        surfaceId: string,
+        active: boolean
+    ): boolean => {
+        const surfaceConfig = config.surfaces.find((entry) => entry.id === surfaceId) ?? null;
+        if (!surfaceConfig) {
+            return false;
+        }
+        if (active) {
+            surfaceMoveEditingActiveIds.add(surfaceId);
+            const runtimeState = movingSurfaceStatesById.get(surfaceId);
+            if (runtimeState) {
+                stopMovingSurface(runtimeState);
+            }
+            surfaceOutlineRenderer.refresh();
+            return true;
+        }
+        surfaceMoveEditingActiveIds.delete(surfaceId);
+        const resolved = reconcileSurfaceMoveRuntimeState(surfaceConfig);
+        if (!resolved && hasAssignedSurfaceMoveScript(surfaceConfig)) {
+            requestSurfaceMoveRuntimeStateReconcileAfterScriptLoad(surfaceConfig);
+        }
+        actorContactRuntime.rebuildColliders();
+        rebuildDragBoxWorldColliders();
+        surfaceOutlineRenderer.refresh();
+        return true;
+    };
+
+    const requestSurfaceMoveRuntimeStateReconcileAfterScriptLoad = (
+        surfaceConfig: TestWorldSurfaceConfig
+    ): void => {
+        const surfaceId = surfaceConfig.id;
+        if (pendingSurfaceMoveScriptLoadIds.has(surfaceId)) {
+            return;
+        }
+        pendingSurfaceMoveScriptLoadIds.add(surfaceId);
+        void ensureExternalLogicScriptsLoaded()
+            .then((preloadResult) => {
+                if (preloadResult.success) {
+                    return preloadResult;
+                }
+                return reloadExternalLogicScripts();
+            })
+            .then((loadResult) => {
+                if (!loadResult.success) {
+                    return;
+                }
+                const activeSurfaceConfig = config.surfaces.find((entry) => entry.id === surfaceId) ?? null;
+                if (!activeSurfaceConfig || !hasAssignedSurfaceMoveScript(activeSurfaceConfig)) {
+                    return;
+                }
+                reconcileSurfaceMoveRuntimeState(activeSurfaceConfig);
+                actorContactRuntime.rebuildColliders();
+                rebuildDragBoxWorldColliders();
+                surfaceOutlineRenderer.refresh();
+            })
+            .catch(() => {
+                // Keep runtime safe/static if script load fails.
+            })
+            .finally(() => {
+                pendingSurfaceMoveScriptLoadIds.delete(surfaceId);
+            });
+    };
+
+    const activatePendingSurfaceMovers = (): number => {
+        let createdCount = 0;
+        config.surfaces.forEach((surfaceConfig) => {
+            if (!hasAssignedSurfaceMoveScript(surfaceConfig) || movingSurfaceStatesById.has(surfaceConfig.id)) {
+                return;
+            }
+            if (reconcileSurfaceMoveRuntimeState(surfaceConfig)) {
+                createdCount += 1;
+            }
+        });
+        if (createdCount > 0) {
+            actorContactRuntime.rebuildColliders();
+            rebuildDragBoxWorldColliders();
+        }
+        return createdCount;
+    };
+
+    const updateMovingSurfaceStates = (deltaMs: number): void => {
+        activatePendingSurfaceMovers();
+        surfaceMoveUpdateFrame += 1;
+        surfaceMoveVisitedThisFrame = 0;
+        const safeDeltaMs = Number.isFinite(deltaMs) && deltaMs > 0 ? deltaMs : 0;
+        const deltaSec = safeDeltaMs / 1000;
+        movingSurfaceStatesById.forEach((runtimeState) => {
+            const body = runtimeState.surface.body as Physics.Arcade.Body | undefined;
+            if (!body) {
+                runtimeState.lastDeltaX = 0;
+                runtimeState.lastDeltaY = 0;
+                runtimeState.lastCarryDeltaX = 0;
+                runtimeState.lastCarryDeltaY = 0;
+                return;
+            }
+            runtimeState.updateVisitCount += 1;
+            runtimeState.lastVisitedFrame = surfaceMoveUpdateFrame;
+            surfaceMoveVisitedThisFrame += 1;
+
+            if (surfaceMoveEditingActiveIds.has(runtimeState.assignment.surfaceId)) {
+                stopMovingSurface(runtimeState);
+                return;
+            }
+
+            if (deltaSec <= 0 || runtimeState.mode === 'stopped' || runtimeState.runOnceCompleted) {
+                stopMovingSurface(runtimeState);
+                return;
+            }
+
+            const previousX = runtimeState.surface.x;
+            const previousY = runtimeState.surface.y;
+            const axis = runtimeState.assignment.axis;
+            const speed = runtimeState.assignment.speed;
+            const distance = runtimeState.assignment.distance;
+            const signedSpeed = speed * runtimeState.direction;
+
+            if (axis === 'horizontal') {
+                body.setVelocity(signedSpeed, 0);
+                const offset = runtimeState.surface.x - runtimeState.originX;
+                if (runtimeState.direction > 0) {
+                    if (offset >= distance) {
+                        runtimeState.surface.x = runtimeState.originX + distance;
+                        if (runtimeState.mode === 'run_once') {
+                            runtimeState.runOnceCompleted = true;
+                            runtimeState.mode = 'stopped';
+                            stopMovingSurface(runtimeState);
+                        } else {
+                            runtimeState.direction = -1;
+                            body.setVelocity(-speed, 0);
+                        }
+                    }
+                } else if (offset <= -distance) {
+                    runtimeState.surface.x = runtimeState.originX - distance;
+                    runtimeState.direction = 1;
+                    body.setVelocity(speed, 0);
+                }
+            } else {
+                body.setVelocity(0, signedSpeed);
+                const offset = runtimeState.surface.y - runtimeState.originY;
+                if (runtimeState.direction > 0) {
+                    if (offset >= distance) {
+                        runtimeState.surface.y = runtimeState.originY + distance;
+                        if (runtimeState.mode === 'run_once') {
+                            runtimeState.runOnceCompleted = true;
+                            runtimeState.mode = 'stopped';
+                            stopMovingSurface(runtimeState);
+                        } else {
+                            runtimeState.direction = -1;
+                            body.setVelocity(0, -speed);
+                        }
+                    }
+                } else if (offset <= -distance) {
+                    runtimeState.surface.y = runtimeState.originY - distance;
+                    runtimeState.direction = 1;
+                    body.setVelocity(0, speed);
+                }
+            }
+
+            const realizedDeltaX = runtimeState.surface.x - previousX;
+            const realizedDeltaY = runtimeState.surface.y - previousY;
+            const carryDeltaX = Math.abs(realizedDeltaX) > 0 ? realizedDeltaX : (body.velocity.x * deltaSec);
+            const carryDeltaY = Math.abs(realizedDeltaY) > 0 ? realizedDeltaY : (body.velocity.y * deltaSec);
+            runtimeState.lastDeltaX = realizedDeltaX;
+            runtimeState.lastDeltaY = realizedDeltaY;
+            runtimeState.lastCarryDeltaX = carryDeltaX;
+            runtimeState.lastCarryDeltaY = carryDeltaY;
+            runtimeState.matterBody.pfCarryDeltaX = carryDeltaX;
+            runtimeState.matterBody.pfCarryDeltaY = carryDeltaY;
+            scene.matter.body.setPosition(runtimeState.matterBody, {
+                x: runtimeState.surface.x,
+                y: runtimeState.surface.y
+            });
+        });
+        if (movingSurfaceStatesById.size > 0) {
+            surfaceOutlineRenderer.refresh();
+        }
+    };
+
+    const getSurfaceMoveRuntimeDebugSnapshot = (): SurfaceMoveRuntimeDebugSnapshot => {
+        const surfacesSnapshot: SurfaceMoveRuntimeDebugEntry[] = config.surfaces.map((surfaceConfig) => {
+            const assignedScriptId = typeof surfaceConfig.behaviorScripts?.move === 'string'
+                ? surfaceConfig.behaviorScripts.move.trim()
+                : '';
+            const normalizedAssignedScriptId = assignedScriptId.length > 0 ? assignedScriptId : null;
+            const script = normalizedAssignedScriptId ? getLogicScriptAsset(normalizedAssignedScriptId) : null;
+            const command = script?.commands[0];
+            const commandType = command?.type.trim() ?? null;
+            const paramsValid = command && commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE
+                ? getPlatformMovePingPongParams(command.params) !== null
+                : null;
+            const resolvedAssignment = surfaceMoveAssignmentsById.get(surfaceConfig.id) ?? null;
+            const runtimeState = movingSurfaceStatesById.get(surfaceConfig.id) ?? null;
+            const editingActive = surfaceMoveEditingActiveIds.has(surfaceConfig.id);
+            const surface = surfaces.get(surfaceConfig.id) ?? null;
+            const body = surface?.body as Physics.Arcade.Body | Physics.Arcade.StaticBody | undefined;
+            const moverActive = !editingActive
+                && runtimeState !== null
+                && runtimeState.mode !== 'stopped'
+                && !runtimeState.runOnceCompleted;
+            let blockedReason: string | null = null;
+            if (!normalizedAssignedScriptId) {
+                blockedReason = 'no_move_assignment';
+            } else if (!script) {
+                blockedReason = 'missing_script_asset';
+            } else if (script.category !== 'platform.move') {
+                blockedReason = `script_category_mismatch:${script.category}`;
+            } else if (!resolvedAssignment) {
+                blockedReason = 'assignment_not_resolved';
+            } else if (!surface) {
+                blockedReason = 'surface_runtime_missing';
+            } else if (!(body instanceof Physics.Arcade.Body)) {
+                blockedReason = 'surface_body_not_dynamic';
+            } else if (!runtimeState) {
+                blockedReason = 'mover_state_missing';
+            } else if (editingActive) {
+                blockedReason = 'editor_edit_active';
+            } else if (runtimeState.mode === 'stopped' || runtimeState.runOnceCompleted) {
+                blockedReason = runtimeState.runOnceCompleted ? 'run_once_completed' : 'mover_stopped';
+            }
+            return {
+                surfaceId: surfaceConfig.id,
+                assignedScriptId: normalizedAssignedScriptId,
+                scriptFound: script !== null,
+                scriptCategory: script?.category ?? null,
+                commandType,
+                paramsValid,
+                resolved: resolvedAssignment !== null,
+                moverActive,
+                currentX: surface?.x ?? surfaceConfig.x,
+                currentY: surface?.y ?? surfaceConfig.y,
+                originX: runtimeState?.originX ?? surfaceConfig.x,
+                originY: runtimeState?.originY ?? surfaceConfig.y,
+                direction: runtimeState?.direction ?? 0,
+                velocityX: body instanceof Physics.Arcade.Body ? body.velocity.x : 0,
+                velocityY: body instanceof Physics.Arcade.Body ? body.velocity.y : 0,
+                lastDeltaX: runtimeState?.lastDeltaX ?? 0,
+                lastDeltaY: runtimeState?.lastDeltaY ?? 0,
+                lastCarryDeltaX: runtimeState?.lastCarryDeltaX ?? 0,
+                lastCarryDeltaY: runtimeState?.lastCarryDeltaY ?? 0,
+                blockedReason,
+                updateVisitCount: runtimeState?.updateVisitCount ?? 0,
+                visitedThisFrame: runtimeState ? runtimeState.lastVisitedFrame === surfaceMoveUpdateFrame : false
+            };
+        });
+        const discoveredAssignments = config.surfaces.filter((surfaceConfig) => hasAssignedSurfaceMoveScript(surfaceConfig)).length;
+        return {
+            discoveredAssignments,
+            resolvedAssignments: surfaceMoveAssignmentsById.size,
+            moverStateCount: movingSurfaceStatesById.size,
+            moversVisitedThisFrame: surfaceMoveVisitedThisFrame,
+            surfaces: surfacesSnapshot
+        };
+    };
+
     config.surfaces.forEach((surfaceConfig) => {
+        const surfaceMoveAssignment = surfaceMoveAssignmentsById.get(surfaceConfig.id) ?? null;
         const surface = createSurface(scene, surfaceConfig);
         surfaces.set(surfaceConfig.id, surface);
+        if (surfaceMoveAssignment) {
+            createSurfaceMoveRuntimeStateIfResolvable(surfaceConfig);
+        }
         addCleanup(() => {
             const matterBody = surface.getData('pf_matter_body') as MatterJS.BodyType | undefined;
             if (matterBody) {
                 scene.matter.world.remove(matterBody);
             }
+            surfaceMoveEditingActiveIds.delete(surfaceConfig.id);
+            movingSurfaceStatesById.delete(surfaceConfig.id);
             surface.destroy();
         });
         addBinding(
@@ -1751,6 +2326,11 @@ const buildWorldInstance = (
                 },
                 refresh: () => {
                     syncSurfaceObject(scene, surface, surfaceConfig);
+                    const runtimeState = movingSurfaceStatesById.get(surfaceConfig.id);
+                    if (runtimeState) {
+                        runtimeState.originX = surfaceConfig.x;
+                        runtimeState.originY = surfaceConfig.y;
+                    }
                     surfaceOutlineRenderer.refresh();
                     actorContactRuntime.rebuildColliders();
                     rebuildDragBoxWorldColliders();
@@ -1759,6 +2339,10 @@ const buildWorldInstance = (
                     TEST_WORLD_EDITOR_ADAPTERS.surface.patchFields(surfaceConfig, patch);
                     replaceSurfaceMatterBody(scene, surface, surfaceConfig);
                     syncSurfaceObject(scene, surface, surfaceConfig);
+                    const resolved = reconcileSurfaceMoveRuntimeState(surfaceConfig);
+                    if (!resolved && hasAssignedSurfaceMoveScript(surfaceConfig)) {
+                        requestSurfaceMoveRuntimeStateReconcileAfterScriptLoad(surfaceConfig);
+                    }
                     surfaceOutlineRenderer.refresh();
                     actorContactRuntime.rebuildColliders();
                     rebuildDragBoxWorldColliders();
@@ -2312,6 +2896,7 @@ const buildWorldInstance = (
         hazards,
         updateMovingPlatforms: (deltaMs: number): void => {
             movingPlatformRuntime.update(deltaMs);
+            updateMovingSurfaceStates(deltaMs);
             dragBoxes.forEach((dragBox) => {
                 dragBox.update(player);
             });
@@ -2522,6 +3107,12 @@ const buildWorldInstance = (
         getNpcCameraFocusObject: (actorId: string): GameObjects.Container | null => {
             return npcRuntime.getVisualObject(actorId);
         },
+        activatePendingSurfaceMovers: (): number => {
+            return activatePendingSurfaceMovers();
+        },
+        getSurfaceMoveRuntimeDebugSnapshot: (): SurfaceMoveRuntimeDebugSnapshot => {
+            return JSON.parse(JSON.stringify(getSurfaceMoveRuntimeDebugSnapshot())) as SurfaceMoveRuntimeDebugSnapshot;
+        },
         getEditorHandles: (): readonly TestWorldEditorHandle[] => {
             return [...handleMap.values()].filter((handle) => {
                 if (handle.type !== 'triangleFlightBreakWall') {
@@ -2605,13 +3196,23 @@ const buildWorldInstance = (
             if (!binding || binding.isLocked()) {
                 return false;
             }
-            binding.patchFields({ onlyDebugView });
+            const configRef = getConfigReference(config, binding.type, rootId) as Record<string, unknown> | null;
+            if (configRef) {
+                const previousOnlyDebugView = configRef.onlyDebugView;
+                if (previousOnlyDebugView === onlyDebugView) {
+                    return true;
+                }
+                configRef.onlyDebugView = onlyDebugView;
+            }
             refreshVisualDepths();
             return true;
         },
         setEditorDebugViewActive: (active: boolean): void => {
             editorDebugViewActive = active;
             refreshVisualDepths();
+        },
+        setSurfaceMoveRuntimeEditingActive: (surfaceId: string, active: boolean): boolean => {
+            return setSurfaceMoveRuntimeEditingActive(surfaceId, active);
         },
         setObjectLocked: (rootId: string, locked: boolean): boolean => {
             const binding = bindings.get(rootId);
@@ -2735,8 +3336,10 @@ const replaceSurfaceMatterBody = (
         surface.setData('pf_matter_body', null);
         return;
     }
-    const matterBody = scene.matter.add.rectangle(config.x, config.y, config.width, config.height, { isStatic: true });
+    const matterBody = scene.matter.add.rectangle(config.x, config.y, config.width, config.height, { isStatic: true }) as SurfaceMoveMatterBody;
     markMatterBodyAsPlatformSurface(matterBody);
+    matterBody.pfCarryDeltaX = 0;
+    matterBody.pfCarryDeltaY = 0;
     markAsPlatformSurface(surface);
     surface.setData('pf_matter_body', matterBody);
 };
@@ -2750,8 +3353,16 @@ const syncSurfaceObject = (
     const alpha = config.alpha ?? (isSurfaceSolid(config) ? 1 : 0.45);
     surface.setFillStyle(config.fillColor, alpha);
     surface.setStrokeStyle(0, config.strokeColor, 0);
-    const body = surface.body as Physics.Arcade.StaticBody | undefined;
-    if (body) {
+    const body = surface.body as Physics.Arcade.StaticBody | Physics.Arcade.Body | undefined;
+    if (body instanceof Physics.Arcade.Body) {
+        body.enable = isSurfaceSolid(config);
+        body.setImmovable(true);
+        body.setAllowGravity(false);
+        body.pushable = false;
+        if (body.enable) {
+            body.updateFromGameObject();
+        }
+    } else if (body) {
         body.enable = isSurfaceSolid(config);
         if (body.enable) {
             body.updateFromGameObject();
@@ -2858,15 +3469,27 @@ const createPlayerSpawnMarker = (scene: Scene, config: TestWorldPlayerSpawnConfi
     };
 };
 
-const createSurface = (scene: Scene, config: TestWorldSurfaceConfig): Phaser.GameObjects.Rectangle => {
+const createSurface = (
+    scene: Scene,
+    config: TestWorldSurfaceConfig
+): Phaser.GameObjects.Rectangle => {
     const surface = scene.add.rectangle(config.x, config.y, config.width, config.height, config.fillColor)
         .setName(config.id)
         .setDepth(4200);
 
-    scene.physics.add.existing(surface, true);
+    // Use a stable dynamic immovable Arcade body for every surface to keep
+    // live move assignment idempotent and avoid runtime body mode swaps.
+    scene.physics.add.existing(surface, false);
+    if (surface.body instanceof Physics.Arcade.Body) {
+        surface.body.setImmovable(true);
+        surface.body.setAllowGravity(false);
+        surface.body.pushable = false;
+    }
     if (isSurfaceSolid(config)) {
-        const matterBody = scene.matter.add.rectangle(surface.x, surface.y, surface.width, surface.height, { isStatic: true });
+        const matterBody = scene.matter.add.rectangle(surface.x, surface.y, surface.width, surface.height, { isStatic: true }) as SurfaceMoveMatterBody;
         markMatterBodyAsPlatformSurface(matterBody);
+        matterBody.pfCarryDeltaX = 0;
+        matterBody.pfCarryDeltaY = 0;
         markAsPlatformSurface(surface);
         surface.setData('pf_matter_body', matterBody);
     } else {

@@ -30,7 +30,10 @@ import type {
     TestWorldLogicScriptConfig,
     TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
-import type { ObjectInteractionTrace } from '../../game/world/runtime/test_world_runtime';
+import type {
+    ObjectInteractionTrace,
+    SurfaceMoveRuntimeDebugSnapshot
+} from '../../game/world/runtime/test_world_runtime';
 
 interface ObjectsEditorModeOptions {
     scene: Phaser.Scene;
@@ -123,6 +126,15 @@ interface RuntimeBehaviorBindingTarget {
     runtimeType: 'surface';
     behaviorScripts: TestWorldBehaviorScriptsConfig | null;
 }
+
+type SurfaceMoveRuntimeDebugEntryView = SurfaceMoveRuntimeDebugSnapshot['surfaces'][number];
+interface SurfaceMoveRuntimeDebugLabelsView {
+    objectId: string;
+    statusLabel: HTMLDivElement;
+    assignmentScopeLabel: HTMLDivElement;
+    surfaceLabel: HTMLDivElement;
+    poseLabel: HTMLDivElement;
+}
 const KNOWN_RUNTIME_OBJECT_TYPES = new Set<string>([
     'platform_default',
     'drag_box',
@@ -161,6 +173,7 @@ export class ObjectsEditorMode implements EditorMode {
     private selectedObjectId: string | null = null;
     private draggingObjectId: string | null = null;
     private resizeDragState: ResizeDragState | null = null;
+    private surfaceMoveEditObjectId: string | null = null;
     private dragOffsetX = 0;
     private dragOffsetY = 0;
     private searchValue = '';
@@ -192,6 +205,8 @@ export class ObjectsEditorMode implements EditorMode {
     private objectLogicBindingCreateError: string | null = null;
     private readonly objectLogicBindingEnabledDrafts = new Map<string, boolean>();
     private readonly objectLogicBindingMutationErrors = new Map<string, string>();
+    private readonly lastAppliedRuntimeDebugVisibilityByObjectId = new Map<string, boolean>();
+    private liveSurfaceMoveDebugLabels: SurfaceMoveRuntimeDebugLabelsView | null = null;
     private context: EditorModeRuntimeContext = {
         mouseWorldX: null,
         mouseWorldY: null,
@@ -245,8 +260,10 @@ export class ObjectsEditorMode implements EditorMode {
     }
 
     public exit(): void {
+        this.endSurfaceMoveAuthoringEdit('exit');
         this.draggingObjectId = null;
         this.resizeDragState = null;
+        this.liveSurfaceMoveDebugLabels = null;
         this.closeColorPalette();
         this.selectionOutline.setVisible(false);
         this.setSceneCursor('default');
@@ -265,6 +282,7 @@ export class ObjectsEditorMode implements EditorMode {
         }
         this.syncViewsFromStore();
         this.syncSelectionOutline();
+        this.refreshSurfaceMoveRuntimeDebugLabels();
     }
 
     public onRuntimeConfigImported(): void {
@@ -295,6 +313,13 @@ export class ObjectsEditorMode implements EditorMode {
                 this.selectedObjectId = selected.id;
                 this.selectedTypeId = null;
                 if (this.isObjectLocked(selected)) {
+                    this.resizeDragState = null;
+                    this.draggingObjectId = null;
+                    this.syncSelectionOutline();
+                    this.onUiChanged();
+                    return;
+                }
+                if (!this.beginSurfaceMoveAuthoringEdit(selected.id)) {
                     this.resizeDragState = null;
                     this.draggingObjectId = null;
                     this.syncSelectionOutline();
@@ -356,9 +381,13 @@ export class ObjectsEditorMode implements EditorMode {
             this.selectedTypeId = null;
             const object = this.getActiveObjects().find((item) => item.id === hitObjectId);
             if (object && !this.isObjectLocked(object)) {
-                this.draggingObjectId = hitObjectId;
-                this.dragOffsetX = event.worldX - object.bounds.x;
-                this.dragOffsetY = event.worldY - object.bounds.y;
+                if (this.beginSurfaceMoveAuthoringEdit(object.id)) {
+                    this.draggingObjectId = hitObjectId;
+                    this.dragOffsetX = event.worldX - object.bounds.x;
+                    this.dragOffsetY = event.worldY - object.bounds.y;
+                } else {
+                    this.draggingObjectId = null;
+                }
             }
             this.syncSelectionOutline();
             objectDiag('[ObjectSelect:mouse]', {
@@ -408,10 +437,12 @@ export class ObjectsEditorMode implements EditorMode {
         }
         const current = this.getActiveObjects().find((item) => item.id === this.draggingObjectId) ?? null;
         if (!current) {
+            this.endSurfaceMoveAuthoringEdit('drag-object-missing');
             this.draggingObjectId = null;
             return;
         }
         if (this.isObjectLocked(current)) {
+            this.endSurfaceMoveAuthoringEdit('drag-locked');
             this.draggingObjectId = null;
             return;
         }
@@ -442,6 +473,7 @@ export class ObjectsEditorMode implements EditorMode {
                     finalBounds: finalObject ? { ...finalObject.bounds } : null
                 });
             }
+            this.endSurfaceMoveAuthoringEdit('pointer-up');
             this.resizeDragState = null;
             this.draggingObjectId = null;
             this.activePointerButton = null;
@@ -745,6 +777,7 @@ export class ObjectsEditorMode implements EditorMode {
     }
 
     public renderRightInspector(panel: EditorPanel): void {
+        this.liveSurfaceMoveDebugLabels = null;
         const activeLevel = this.projectStore.getActiveLevel();
         const objects = this.getActiveObjects();
 
@@ -2474,15 +2507,52 @@ export class ObjectsEditorMode implements EditorMode {
             this.selectionOutline.setVisible(false);
             return;
         }
+        const moveRuntimeDebug = this.getSurfaceMoveRuntimeDebugEntry(selected.id);
         const isLocked = this.isObjectLocked(selected);
         this.selectionOutline.setVisible(true);
+        const runtimeActive = moveRuntimeDebug?.moverActive === true;
+        const liveBounds = runtimeActive
+            ? {
+                x: moveRuntimeDebug.currentX - (selected.bounds.width * 0.5),
+                y: moveRuntimeDebug.currentY - (selected.bounds.height * 0.5),
+                width: selected.bounds.width,
+                height: selected.bounds.height
+            }
+            : selected.bounds;
         this.selectionOutline.lineStyle(2, isLocked ? 0xff5555 : 0xffff00, 1);
         this.selectionOutline.strokeRect(
-            selected.bounds.x,
-            selected.bounds.y,
-            selected.bounds.width,
-            selected.bounds.height
+            liveBounds.x,
+            liveBounds.y,
+            liveBounds.width,
+            liveBounds.height
         );
+        if (runtimeActive) {
+            this.selectionOutline.lineStyle(1, 0x00bcd4, 1);
+            this.selectionOutline.strokeRect(
+                selected.bounds.x,
+                selected.bounds.y,
+                selected.bounds.width,
+                selected.bounds.height
+            );
+            const originX = moveRuntimeDebug.originX;
+            const originY = moveRuntimeDebug.originY;
+            this.selectionOutline.lineStyle(1, 0x00bcd4, 1);
+            this.selectionOutline.strokeLineShape(new Phaser.Geom.Line(originX - 10, originY, originX + 10, originY));
+            this.selectionOutline.strokeLineShape(new Phaser.Geom.Line(originX, originY - 10, originX, originY + 10));
+            if (isLocked) {
+                return;
+            }
+            this.selectionOutline.fillStyle(0x00bcd4, 1);
+            for (const point of this.getResizeHandlePoints(selected.bounds)) {
+                this.selectionOutline.fillRect(
+                    point.x - (RESIZE_HANDLE_SIZE * 0.5),
+                    point.y - (RESIZE_HANDLE_SIZE * 0.5),
+                    RESIZE_HANDLE_SIZE,
+                    RESIZE_HANDLE_SIZE
+                );
+            }
+            return;
+        }
         if (isLocked) {
             return;
         }
@@ -2577,14 +2647,28 @@ export class ObjectsEditorMode implements EditorMode {
         }
         const activeLevel = this.projectStore.getActiveLevel();
         const objects = this.projectStore.listObjects(activeLevel.id);
+        const activeObjectIds = new Set(objects.map((entry) => entry.id));
+        Array.from(this.lastAppliedRuntimeDebugVisibilityByObjectId.keys()).forEach((objectId) => {
+            if (!activeObjectIds.has(objectId)) {
+                this.lastAppliedRuntimeDebugVisibilityByObjectId.delete(objectId);
+            }
+        });
         objects.forEach((objectData) => {
             if (!this.legacyObjectAdapter?.hasRuntimeLink(objectData.id)) {
                 return;
             }
-            this.legacyObjectAdapter.patchRuntimeObjectDebugVisibility(
+            const nextOnlyDebugView = objectData.visual.onlyDebugView;
+            const previousOnlyDebugView = this.lastAppliedRuntimeDebugVisibilityByObjectId.get(objectData.id);
+            if (previousOnlyDebugView === nextOnlyDebugView) {
+                return;
+            }
+            const applied = this.legacyObjectAdapter.patchRuntimeObjectDebugVisibility(
                 objectData.id,
-                objectData.visual.onlyDebugView
+                nextOnlyDebugView
             );
+            if (applied) {
+                this.lastAppliedRuntimeDebugVisibilityByObjectId.set(objectData.id, nextOnlyDebugView);
+            }
         });
     }
 
@@ -2625,6 +2709,9 @@ export class ObjectsEditorMode implements EditorMode {
     private clearTransientStateForObject(objectId: string | null): void {
         if (!objectId) {
             return;
+        }
+        if (this.surfaceMoveEditObjectId === objectId) {
+            this.endSurfaceMoveAuthoringEdit('clear-transient');
         }
         if (this.selectedObjectId === objectId) {
             this.selectedObjectId = null;
@@ -2743,11 +2830,13 @@ export class ObjectsEditorMode implements EditorMode {
         }
         const current = this.getActiveObjects().find((item) => item.id === drag.objectId);
         if (!current) {
+            this.endSurfaceMoveAuthoringEdit('resize-object-missing');
             this.resizeDragState = null;
             this.setSceneCursor('default');
             return;
         }
         if (this.isObjectLocked(current)) {
+            this.endSurfaceMoveAuthoringEdit('resize-locked');
             this.resizeDragState = null;
             this.setSceneCursor('default');
             return;
@@ -2948,7 +3037,8 @@ export class ObjectsEditorMode implements EditorMode {
             return wrap;
         }
 
-        wrap.appendChild(this.makeLabel('Authoring-only: runtime execution is not implemented yet.'));
+        wrap.appendChild(this.makeLabel('Move runtime v1: gameplay executes platform_move_ping_pong. Rotate/Default Action/Actions remain authoring-only in this XS.'));
+        wrap.appendChild(this.makeLabel('Move runtime source: active runtime config (includes loaded Draft overrides, if any).'));
 
         const externalAssets = getAllLogicScriptAssets();
         const scriptById = new Map(externalAssets.map((entry) => [entry.id, entry] as const));
@@ -3006,6 +3096,30 @@ export class ObjectsEditorMode implements EditorMode {
             const warning = this.makeLabel(`Behavior diagnostics: ${diagnostics.join(' | ')}`);
             warning.style.color = '#b00020';
             wrap.appendChild(warning);
+        }
+
+        const moveRuntimeDebug = this.getSurfaceMoveRuntimeDebugEntry(selectedObject.id);
+        if (moveRuntimeDebug) {
+            const statusLabel = this.makeLabel(this.formatSurfaceMoveRuntimeStatusLine(moveRuntimeDebug));
+            const assignmentScopeLabel = this.makeLabel(this.formatSurfaceMoveRuntimeAssignmentScopeLine(selectedObject.id));
+            const surfaceLabel = this.makeLabel(this.formatSurfaceMoveRuntimeSurfaceLine(moveRuntimeDebug));
+            const poseLabel = this.makeLabel(this.formatSurfaceMoveRuntimePoseLine(moveRuntimeDebug));
+            wrap.appendChild(statusLabel);
+            wrap.appendChild(assignmentScopeLabel);
+            wrap.appendChild(surfaceLabel);
+            wrap.appendChild(poseLabel);
+            if (moveRuntimeDebug.moverActive) {
+                const note = this.makeLabel('Authoring edit note: drag/resize edits canonical authoring bounds. Move runtime is paused for this surface during the edit and resumes from the updated origin on release.');
+                note.style.color = '#0d47a1';
+                wrap.appendChild(note);
+            }
+            this.liveSurfaceMoveDebugLabels = {
+                objectId: selectedObject.id,
+                statusLabel,
+                assignmentScopeLabel,
+                surfaceLabel,
+                poseLabel
+            };
         }
 
         wrap.appendChild(this.makeLabel(`Actions list (read-only): ${actionsValues.length > 0 ? actionsValues.join(', ') : '-'}`));
@@ -3148,6 +3262,146 @@ export class ObjectsEditorMode implements EditorMode {
             return surface ? { runtimeType, behaviorScripts: surface.behaviorScripts ?? null } : null;
         }
         return null;
+    }
+
+    private getSurfaceMoveRuntimeDebugSnapshot(): SurfaceMoveRuntimeDebugSnapshot | null {
+        const snapshot = this.legacyObjectAdapter?.getSurfaceMoveRuntimeDebugSnapshot() as SurfaceMoveRuntimeDebugSnapshot | null;
+        if (!snapshot || typeof snapshot !== 'object') {
+            return null;
+        }
+        if (!Array.isArray(snapshot.surfaces)) {
+            return null;
+        }
+        return snapshot;
+    }
+
+    private formatSurfaceMoveRuntimeStatusLine(entry: {
+        discoveredAssignments: number;
+        resolvedAssignments: number;
+        moverStateCount: number;
+        moversVisitedThisFrame: number;
+    }): string {
+        return `Move runtime status: discovered=${entry.discoveredAssignments} resolved=${entry.resolvedAssignments} movers=${entry.moverStateCount} visitedThisFrame=${entry.moversVisitedThisFrame}`;
+    }
+
+    private formatSurfaceMoveRuntimeAssignmentScopeLine(selectedObjectId: string): string {
+        const snapshot = this.getSurfaceMoveRuntimeDebugSnapshot();
+        if (!snapshot) {
+            return 'Move assignments in active runtime config: -';
+        }
+        const assignedSurfaceIds = snapshot.surfaces
+            .filter((entry) => entry.assignedScriptId)
+            .map((entry) => entry.surfaceId);
+        const joined = assignedSurfaceIds.length > 0 ? assignedSurfaceIds.join(', ') : '-';
+        const selectedMarked = assignedSurfaceIds.includes(selectedObjectId) ? '' : ` (selected ${selectedObjectId} not assigned)`;
+        return `Move assignments in active runtime config: ${joined}${selectedMarked}`;
+    }
+
+    private formatSurfaceMoveRuntimeSurfaceLine(entry: SurfaceMoveRuntimeDebugEntryView): string {
+        return `Move surface ${entry.surfaceId}: assigned=${entry.assignedScriptId ?? '-'} found=${entry.scriptFound ? 'yes' : 'no'} category=${entry.scriptCategory ?? '-'} command=${entry.commandType ?? '-'} paramsValid=${entry.paramsValid === null ? '-' : (entry.paramsValid ? 'yes' : 'no')} resolved=${entry.resolved ? 'yes' : 'no'} active=${entry.moverActive ? 'yes' : 'no'}`;
+    }
+
+    private formatSurfaceMoveRuntimePoseLine(entry: SurfaceMoveRuntimeDebugEntryView): string {
+        return `Move pose: pos=(${entry.currentX.toFixed(2)}, ${entry.currentY.toFixed(2)}) origin=(${entry.originX.toFixed(2)}, ${entry.originY.toFixed(2)}) dir=${entry.direction} vel=(${entry.velocityX.toFixed(2)}, ${entry.velocityY.toFixed(2)}) delta=(${entry.lastDeltaX.toFixed(2)}, ${entry.lastDeltaY.toFixed(2)}) carry=(${entry.lastCarryDeltaX.toFixed(2)}, ${entry.lastCarryDeltaY.toFixed(2)}) visits=${entry.updateVisitCount} visitedThisFrame=${entry.visitedThisFrame ? 'yes' : 'no'} blocked=${entry.blockedReason ?? '-'}`;
+    }
+
+    private refreshSurfaceMoveRuntimeDebugLabels(): void {
+        const labels = this.liveSurfaceMoveDebugLabels;
+        if (!labels) {
+            return;
+        }
+        if (
+            !labels.statusLabel.isConnected
+            || !labels.assignmentScopeLabel.isConnected
+            || !labels.surfaceLabel.isConnected
+            || !labels.poseLabel.isConnected
+        ) {
+            this.liveSurfaceMoveDebugLabels = null;
+            return;
+        }
+        if (this.selectedObjectId !== labels.objectId) {
+            return;
+        }
+        const entry = this.getSurfaceMoveRuntimeDebugEntry(labels.objectId);
+        if (!entry) {
+            return;
+        }
+        labels.statusLabel.textContent = this.formatSurfaceMoveRuntimeStatusLine(entry);
+        labels.assignmentScopeLabel.textContent = this.formatSurfaceMoveRuntimeAssignmentScopeLine(labels.objectId);
+        labels.surfaceLabel.textContent = this.formatSurfaceMoveRuntimeSurfaceLine(entry);
+        labels.poseLabel.textContent = this.formatSurfaceMoveRuntimePoseLine(entry);
+    }
+
+    private isActiveRuntimeMovingSurface(objectId: string): boolean {
+        const entry = this.getSurfaceMoveRuntimeDebugEntry(objectId);
+        return entry?.moverActive === true;
+    }
+
+    private shouldUseSurfaceMoveEditSession(objectId: string): boolean {
+        const entry = this.getSurfaceMoveRuntimeDebugEntry(objectId);
+        return !!entry?.assignedScriptId;
+    }
+
+    private beginSurfaceMoveAuthoringEdit(objectId: string): boolean {
+        if (!this.shouldUseSurfaceMoveEditSession(objectId)) {
+            return true;
+        }
+        if (this.surfaceMoveEditObjectId === objectId) {
+            return true;
+        }
+        if (this.surfaceMoveEditObjectId && this.surfaceMoveEditObjectId !== objectId) {
+            this.endSurfaceMoveAuthoringEdit('switch-object');
+        }
+        if (!this.legacyObjectAdapter?.hasRuntimeLink(objectId)) {
+            return true;
+        }
+        const wasActive = this.isActiveRuntimeMovingSurface(objectId);
+        const applied = this.legacyObjectAdapter.setSurfaceMoveRuntimeEditingActive(objectId, true);
+        if (!applied) {
+            return !wasActive;
+        }
+        this.surfaceMoveEditObjectId = objectId;
+        this.refreshLiveObjects('surface-move-edit-start');
+        this.syncViewsFromStore();
+        this.syncSelectionOutline();
+        this.refreshSurfaceMoveRuntimeDebugLabels();
+        return true;
+    }
+
+    private endSurfaceMoveAuthoringEdit(reason: string): void {
+        const objectId = this.surfaceMoveEditObjectId;
+        if (!objectId) {
+            return;
+        }
+        this.surfaceMoveEditObjectId = null;
+        this.legacyObjectAdapter?.setSurfaceMoveRuntimeEditingActive(objectId, false);
+        this.refreshLiveObjects(`surface-move-edit-end:${reason}`);
+        this.syncViewsFromStore();
+        this.syncSelectionOutline();
+        this.refreshSurfaceMoveRuntimeDebugLabels();
+    }
+
+    private getSurfaceMoveRuntimeDebugEntry(selectedObjectId: string): (SurfaceMoveRuntimeDebugEntryView & {
+        discoveredAssignments: number;
+        resolvedAssignments: number;
+        moverStateCount: number;
+        moversVisitedThisFrame: number;
+    }) | null {
+        const snapshot = this.getSurfaceMoveRuntimeDebugSnapshot();
+        if (!snapshot) {
+            return null;
+        }
+        const entry = snapshot.surfaces.find((candidate) => candidate.surfaceId === selectedObjectId);
+        if (!entry) {
+            return null;
+        }
+        return {
+            ...entry,
+            discoveredAssignments: snapshot.discoveredAssignments,
+            resolvedAssignments: snapshot.resolvedAssignments,
+            moverStateCount: snapshot.moverStateCount,
+            moversVisitedThisFrame: snapshot.moversVisitedThisFrame
+        };
     }
 
     private commitSelectedBehaviorScriptField(

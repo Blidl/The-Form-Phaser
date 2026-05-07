@@ -12,6 +12,17 @@ export interface TestWorldSurfaceOutlineRenderer {
     destroy: () => void;
 }
 
+interface RuntimeSurfaceBounds {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+interface TestWorldSurfaceOutlineRendererOptions {
+    resolveRuntimeBounds?: (surfaceId: string) => RuntimeSurfaceBounds | null;
+}
+
 const OUTLINE_THICKNESS_PX = 2;
 const EDGE_EPSILON = 0.001;
 
@@ -59,11 +70,18 @@ const isClose = (left: number, right: number): boolean => {
     return Math.abs(left - right) <= EDGE_EPSILON;
 };
 
-const createTestWorldSurfaceBounds = (surface: TestWorldSurfaceConfig) => {
-    const left = surface.x - (surface.width * 0.5);
-    const right = surface.x + (surface.width * 0.5);
-    const top = surface.y - (surface.height * 0.5);
-    const bottom = surface.y + (surface.height * 0.5);
+const createTestWorldSurfaceBounds = (
+    surface: TestWorldSurfaceConfig,
+    runtimeBounds: RuntimeSurfaceBounds | null = null
+) => {
+    const centerX = runtimeBounds?.x ?? surface.x;
+    const centerY = runtimeBounds?.y ?? surface.y;
+    const width = runtimeBounds?.width ?? surface.width;
+    const height = runtimeBounds?.height ?? surface.height;
+    const left = centerX - (width * 0.5);
+    const right = centerX + (width * 0.5);
+    const top = centerY - (height * 0.5);
+    const bottom = centerY + (height * 0.5);
     return { left, right, top, bottom };
 };
 
@@ -73,7 +91,8 @@ const isSolidSurface = (surface: TestWorldSurfaceConfig): boolean => {
 
 export const createTestWorldSurfaceOutlineRenderer = (
     scene: Scene,
-    surfaces: readonly TestWorldSurfaceConfig[]
+    surfaces: readonly TestWorldSurfaceConfig[],
+    options?: TestWorldSurfaceOutlineRendererOptions
 ): TestWorldSurfaceOutlineRenderer => {
     const graphicsByGroup = new Map<string, Phaser.GameObjects.Graphics>([
         ['layer_1', scene.add.graphics().setDepth(3595)],
@@ -91,7 +110,10 @@ export const createTestWorldSurfaceOutlineRenderer = (
 
         const outlinedSurfaces = surfaces.map((surface) => ({
             surface,
-            bounds: createTestWorldSurfaceBounds(surface)
+            bounds: createTestWorldSurfaceBounds(
+                surface,
+                options?.resolveRuntimeBounds?.(surface.id) ?? null
+            )
         }));
 
         outlinedSurfaces.forEach(({ surface, bounds }) => {

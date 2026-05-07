@@ -55,6 +55,7 @@ export const createAuthoringObjectBridgeSource = (
         getLastObjectInteractionTrace: () => worldRuntime.getLastObjectInteractionTrace(),
         getLastNpcInteractionTrace: () => worldRuntime.getLastNpcInteractionTrace(),
         getLastCutsceneLogicTrace: () => worldRuntime.getLastCutsceneLogicTrace(),
+        getSurfaceMoveRuntimeDebugSnapshot: () => worldRuntime.getSurfaceMoveRuntimeDebugSnapshot(),
         getGameplayTimeState: () => {
             const snapshot = options?.gameplayTimeController?.getSnapshot();
             return snapshot
@@ -198,6 +199,9 @@ export const createAuthoringObjectBridgeSource = (
         },
         setEditorDebugViewActive: (active) => {
             worldRuntime.setEditorDebugViewActive(active);
+        },
+        setSurfaceMoveRuntimeEditingActive: (rootId, active) => {
+            return worldRuntime.setSurfaceMoveRuntimeEditingActive(rootId, active);
         },
         createObject: (type, worldX, worldY) => {
             if (!isCreatableLegacyType(type)) {

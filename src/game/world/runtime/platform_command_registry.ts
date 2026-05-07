@@ -9,8 +9,15 @@ export const PLATFORM_MOVE_PING_PONG_COMMAND_TYPE = 'platform_move_ping_pong';
 const PLATFORM_MOVE_PING_PONG_AXIS_VALUES = ['horizontal', 'vertical'] as const;
 const PLATFORM_MOVE_PING_PONG_START_VALUES = ['running_loop', 'stopped', 'run_once'] as const;
 
-type PlatformMovePingPongAxis = (typeof PLATFORM_MOVE_PING_PONG_AXIS_VALUES)[number];
-type PlatformMovePingPongStart = (typeof PLATFORM_MOVE_PING_PONG_START_VALUES)[number];
+export type PlatformMovePingPongAxis = (typeof PLATFORM_MOVE_PING_PONG_AXIS_VALUES)[number];
+export type PlatformMovePingPongStart = (typeof PLATFORM_MOVE_PING_PONG_START_VALUES)[number];
+
+export interface PlatformMovePingPongParams {
+    axis: PlatformMovePingPongAxis;
+    distance: number;
+    speed: number;
+    start: PlatformMovePingPongStart;
+}
 
 const isPlatformMovePingPongAxis = (value: unknown): value is PlatformMovePingPongAxis => {
     return value === 'horizontal' || value === 'vertical';
@@ -69,20 +76,42 @@ export const validatePlatformMovePingPongParams = (params: unknown): LogicComman
     return { valid: true };
 };
 
+export const getPlatformMovePingPongParams = (params: unknown): PlatformMovePingPongParams | null => {
+    const validation = validatePlatformMovePingPongParams(params);
+    if (!validation.valid) {
+        return null;
+    }
+    const raw = asObject(params) as {
+        axis: PlatformMovePingPongAxis;
+        distance: number;
+        speed: number;
+        start?: PlatformMovePingPongStart;
+    };
+    return {
+        axis: raw.axis,
+        distance: raw.distance,
+        speed: raw.speed,
+        start: raw.start ?? 'running_loop'
+    };
+};
+
 const formatNumberValue = (value: unknown, fallback: string): string => {
     return typeof value === 'number' && Number.isFinite(value) ? String(value) : fallback;
 };
 
 const getPlatformMovePingPongDisplay = (command: TestWorldLogicScriptCommandConfig): string => {
+    const resolved = getPlatformMovePingPongParams(command.params);
     const raw = asObject(command.params);
-    const axis = isPlatformMovePingPongAxis(raw?.axis) ? raw.axis : '<invalid-axis>';
-    const distance = formatNumberValue(raw?.distance, '<invalid-distance>');
-    const speed = formatNumberValue(raw?.speed, '<invalid-speed>');
-    const start = raw?.start === undefined
-        ? 'running_loop'
-        : isPlatformMovePingPongStart(raw.start)
-            ? raw.start
-            : '<invalid-start>';
+    const axis = resolved?.axis ?? (isPlatformMovePingPongAxis(raw?.axis) ? raw.axis : '<invalid-axis>');
+    const distance = resolved ? String(resolved.distance) : formatNumberValue(raw?.distance, '<invalid-distance>');
+    const speed = resolved ? String(resolved.speed) : formatNumberValue(raw?.speed, '<invalid-speed>');
+    const start = resolved
+        ? resolved.start
+        : raw?.start === undefined
+            ? 'running_loop'
+            : isPlatformMovePingPongStart(raw.start)
+                ? raw.start
+                : '<invalid-start>';
     return `${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE} axis=${axis} distance=${distance} speed=${speed} start=${start}`;
 };
 
@@ -132,7 +161,7 @@ export const PLATFORM_LOGIC_COMMAND_DEFINITIONS: readonly LogicCommandDefinition
     {
         type: PLATFORM_MOVE_PING_PONG_COMMAND_TYPE,
         label: 'Platform Move Ping-Pong',
-        description: 'Authoring contract for ping-pong surface movement. Runtime movement is not implemented in this XS.',
+        description: 'Runtime v1 for surface/default platform ping-pong movement (gameplay only).',
         domain: 'platform',
         supportedAssignmentKinds: ['platform'],
         supportedScriptCategories: ['platform.move'],
@@ -168,10 +197,10 @@ export const PLATFORM_LOGIC_COMMAND_DEFINITIONS: readonly LogicCommandDefinition
                 nonEmpty: true
             }
         ],
-        runtimeSupported: false,
+        runtimeSupported: true,
         previewSupported: false,
         previewBehaviorNote: 'platform_move_ping_pong is a platform behavior command; runtime movement preview is not simulated.',
-        runtimeSupportedSlots: [],
+        runtimeSupportedSlots: ['surface.behaviorScripts.move'],
         validateParams: validatePlatformMovePingPongParams,
         formatDisplay: getPlatformMovePingPongDisplay
     }
