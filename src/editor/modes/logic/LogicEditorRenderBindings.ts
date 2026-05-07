@@ -25,6 +25,7 @@ const isRuntimeSupportedBindingSlot = (binding: TestWorldLogicBindingConfig): bo
     const slot = binding.slot.trim();
     return (binding.targetType === 'world' && slot === 'onStart')
         || (binding.targetType === 'object' && slot === 'onInteract')
+        || (binding.targetType === 'npc' && slot === 'onInteract')
         || (binding.targetType === 'cutscene' && slot === 'onFinish');
 };
 
@@ -48,7 +49,7 @@ export function renderBindingsSection(
     } = context;
 
     container.appendChild(dom.makeSectionTitle('Bindings'));
-    container.appendChild(dom.makeInfoLine('Runtime-supported slots: world/onStart, object/onInteract, and cutscene/onFinish.'));
+    container.appendChild(dom.makeInfoLine('Runtime-supported slots: world/onStart, object/onInteract, npc/onInteract, and cutscene/onFinish.'));
     if (bindings.length <= 0) {
         container.appendChild(dom.makeInfoLine('No logic bindings yet.'));
         return;

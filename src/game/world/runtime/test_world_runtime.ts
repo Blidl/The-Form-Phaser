@@ -153,6 +153,35 @@ export interface ObjectInteractionTrace {
     message: string;
 }
 
+export type NpcInteractionTraceStatus =
+    | 'idle'
+    | 'no_bindings'
+    | 'no_player'
+    | 'no_target_in_range'
+    | 'executed'
+    | 'skipped'
+    | 'error';
+
+export interface NpcInteractionCandidateTrace {
+    targetId: string;
+    distancePx?: number;
+    hasFocusPoint: boolean;
+    inRange: boolean;
+}
+
+export interface NpcInteractionTrace {
+    attempted: boolean;
+    attemptId: number;
+    status: NpcInteractionTraceStatus;
+    selectedTargetId?: string;
+    selectedDistancePx?: number;
+    radiusPx: number;
+    candidateCount: number;
+    candidates: NpcInteractionCandidateTrace[];
+    bindingTrace?: LogicBindingEventTrace;
+    message: string;
+}
+
 export interface CutsceneLogicTrace {
     attemptId: number;
     cutsceneId: string;
@@ -168,6 +197,7 @@ export interface TestWorldRuntime {
     updateNpcs: (deltaMs: number) => void;
     updateNpcInteractionTarget: () => void;
     tryTriggerObjectLogicInteraction: () => boolean;
+    tryTriggerNpcLogicInteraction: () => boolean;
     tryTriggerNpcInteraction: () => void;
     syncNpcTriangleSupportSurfaces: () => void;
     postPlayerTickUpdate: () => void;
@@ -206,6 +236,7 @@ export interface TestWorldRuntime {
     getWorldOnStartLogicTrace: () => LogicWorldOnStartTrace | null;
     getRuntimeWorldFlagsSnapshot: () => Record<string, boolean>;
     getLastObjectInteractionTrace: () => ObjectInteractionTrace;
+    getLastNpcInteractionTrace: () => NpcInteractionTrace;
     getLastCutsceneLogicTrace: () => CutsceneLogicTrace | null;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
@@ -349,7 +380,9 @@ const NPC_CARRY_MIN_OVERLAP_X_PX = 4;
 const NPC_CARRY_SUPPORT_GRACE_FRAMES = 3;
 const NPC_CARRY_GRACE_MAX_UPWARD_VELOCITY = -40;
 const OBJECT_LOGIC_INTERACTION_SLOT = 'onInteract';
+const NPC_LOGIC_INTERACTION_SLOT = 'onInteract';
 const OBJECT_LOGIC_INTERACTION_MAX_DISTANCE_PX = 96;
+const NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX = 96;
 const CUTSCENE_LOGIC_ON_FINISH_SLOT = 'onFinish';
 
 const createIdleObjectInteractionTrace = (): ObjectInteractionTrace => ({
@@ -365,6 +398,20 @@ const createIdleObjectInteractionTrace = (): ObjectInteractionTrace => ({
 const cloneObjectInteractionTrace = (
     trace: ObjectInteractionTrace
 ): ObjectInteractionTrace => JSON.parse(JSON.stringify(trace)) as ObjectInteractionTrace;
+
+const createIdleNpcInteractionTrace = (): NpcInteractionTrace => ({
+    attempted: false,
+    attemptId: 0,
+    status: 'idle',
+    radiusPx: NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+    candidateCount: 0,
+    candidates: [],
+    message: 'No interaction attempted yet.'
+});
+
+const cloneNpcInteractionTrace = (
+    trace: NpcInteractionTrace
+): NpcInteractionTrace => JSON.parse(JSON.stringify(trace)) as NpcInteractionTrace;
 
 const cloneCutsceneLogicTrace = (
     trace: CutsceneLogicTrace
@@ -431,8 +478,10 @@ export const createTestWorldRuntime = (
     let hasExecutedWorldOnStartLogicTrace = false;
     let lastWorldOnStartLogicTrace: LogicWorldOnStartTrace | null = null;
     let lastObjectInteractionTrace: ObjectInteractionTrace = createIdleObjectInteractionTrace();
+    let lastNpcInteractionTrace: NpcInteractionTrace = createIdleNpcInteractionTrace();
     let lastCutsceneLogicTrace: CutsceneLogicTrace | null = null;
     let objectInteractionAttemptId = 0;
+    let npcInteractionAttemptId = 0;
     let cutsceneLogicAttemptId = 0;
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let editorDebugViewActive = false;
@@ -572,6 +621,20 @@ export const createTestWorldRuntime = (
                 .filter((binding) => (
                     binding.targetType === 'object'
                     && binding.slot.trim() === OBJECT_LOGIC_INTERACTION_SLOT
+                    && typeof binding.targetId === 'string'
+                    && binding.targetId.trim().length > 0
+                ))
+                .map((binding) => binding.targetId!.trim())
+        );
+        return [...candidateIds];
+    };
+
+    const collectNpcInteractionCandidateIds = (): string[] => {
+        const candidateIds = new Set(
+            currentConfig.logic.bindings
+                .filter((binding) => (
+                    binding.targetType === 'npc'
+                    && binding.slot.trim() === NPC_LOGIC_INTERACTION_SLOT
                     && typeof binding.targetId === 'string'
                     && binding.targetId.trim().length > 0
                 ))
@@ -722,6 +785,139 @@ export const createTestWorldRuntime = (
         return true;
     };
 
+    const tryTriggerNpcLogicInteraction = (): boolean => {
+        npcInteractionAttemptId += 1;
+        const attemptId = npcInteractionAttemptId;
+        const candidateIds = collectNpcInteractionCandidateIds();
+        if (candidateIds.length <= 0) {
+            lastNpcInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: 'no_bindings',
+                radiusPx: NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: 0,
+                candidates: [],
+                message: 'No NPC interaction candidates were found for onInteract.'
+            };
+            return false;
+        }
+
+        const playerX = player.arcadeBodyObject.x;
+        const playerY = player.arcadeBodyObject.y;
+        if (!Number.isFinite(playerX) || !Number.isFinite(playerY)) {
+            lastNpcInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: 'no_player',
+                radiusPx: NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: candidateIds.length,
+                candidates: candidateIds.map((targetId) => ({
+                    targetId,
+                    hasFocusPoint: false,
+                    inRange: false
+                })),
+                message: 'Player position is unavailable for NPC interaction.'
+            };
+            return false;
+        }
+
+        let selectedTargetId: string | null = null;
+        let selectedDistancePx = Number.POSITIVE_INFINITY;
+        const candidates: NpcInteractionCandidateTrace[] = [];
+
+        for (const targetId of candidateIds) {
+            const bounds = resolveInteractionTargetBounds(targetId);
+            if (!bounds) {
+                candidates.push({
+                    targetId,
+                    hasFocusPoint: false,
+                    inRange: false
+                });
+                continue;
+            }
+
+            const distancePx = getDistanceToObjectBounds(playerX, playerY, bounds);
+            const inRange = distancePx <= NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX;
+            candidates.push({
+                targetId,
+                distancePx: roundDistance(distancePx),
+                hasFocusPoint: true,
+                inRange
+            });
+            if (!inRange || distancePx >= selectedDistancePx) {
+                continue;
+            }
+            selectedDistancePx = distancePx;
+            selectedTargetId = targetId;
+        }
+
+        if (!selectedTargetId) {
+            const nearestCandidate = candidates
+                .filter((candidate) => typeof candidate.distancePx === 'number')
+                .sort((left, right) => (left.distancePx as number) - (right.distancePx as number))[0];
+            const nearestSummary = nearestCandidate
+                ? ` nearest ${nearestCandidate.targetId} distance ${nearestCandidate.distancePx}px`
+                : ' no candidate with focus point';
+            lastNpcInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: 'no_target_in_range',
+                radiusPx: NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: candidateIds.length,
+                candidates,
+                message: `No NPC interaction target in range.${nearestSummary}; radius ${NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX}px.`
+            };
+            return false;
+        }
+
+        const bindingTrace = executeLogicBindingsForEvent(
+            currentConfig,
+            {
+                targetType: 'npc',
+                targetId: selectedTargetId,
+                slot: NPC_LOGIC_INTERACTION_SLOT
+            },
+            createLogicScriptRuntimeContext()
+        );
+        if (bindingTrace.bindings.length <= 0) {
+            lastNpcInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: 'skipped',
+                selectedTargetId,
+                selectedDistancePx: roundDistance(selectedDistancePx),
+                radiusPx: NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: candidateIds.length,
+                candidates,
+                bindingTrace,
+                message: `Target ${selectedTargetId} had no matching onInteract binding at execution time.`
+            };
+            return false;
+        }
+
+        const interactionStatus: NpcInteractionTraceStatus = bindingTrace.status === 'success'
+            ? 'executed'
+            : bindingTrace.status;
+        const statusMessage = interactionStatus === 'executed'
+            ? `Executed npc/onInteract for ${selectedTargetId}.`
+            : interactionStatus === 'skipped'
+                ? `NPC interaction skipped for ${selectedTargetId}.`
+                : `NPC interaction execution error for ${selectedTargetId}.`;
+        lastNpcInteractionTrace = {
+            attempted: true,
+            attemptId,
+            status: interactionStatus,
+            selectedTargetId,
+            selectedDistancePx: roundDistance(selectedDistancePx),
+            radiusPx: NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+            candidateCount: candidateIds.length,
+            candidates,
+            bindingTrace,
+            message: statusMessage
+        };
+        return true;
+    };
+
     const executeCutsceneLogicOnFinish = (cutsceneId: string): LogicBindingEventTrace => {
         const normalizedCutsceneId = cutsceneId.trim();
         const bindingTrace = executeLogicBindingsForEvent(
@@ -767,6 +963,9 @@ export const createTestWorldRuntime = (
         },
         tryTriggerObjectLogicInteraction: (): boolean => {
             return tryTriggerObjectLogicInteraction();
+        },
+        tryTriggerNpcLogicInteraction: (): boolean => {
+            return tryTriggerNpcLogicInteraction();
         },
         tryTriggerNpcInteraction: (): void => {
             instance.tryTriggerNpcInteraction();
@@ -824,6 +1023,9 @@ export const createTestWorldRuntime = (
         }),
         getLastObjectInteractionTrace: (): ObjectInteractionTrace => {
             return cloneObjectInteractionTrace(lastObjectInteractionTrace);
+        },
+        getLastNpcInteractionTrace: (): NpcInteractionTrace => {
+            return cloneNpcInteractionTrace(lastNpcInteractionTrace);
         },
         getLastCutsceneLogicTrace: (): CutsceneLogicTrace | null => {
             if (!lastCutsceneLogicTrace) {

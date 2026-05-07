@@ -98,7 +98,10 @@ export const createTestSceneFrameRuntime = (
             if (!gameplayStopped && !textInputFocused && !cutsceneRuntime.isInputLocked() && temporaryInteractionKey && Input.Keyboard.JustDown(temporaryInteractionKey)) {
                 const handledByObjectLogic = worldRuntime.tryTriggerObjectLogicInteraction();
                 if (!handledByObjectLogic) {
-                    worldRuntime.tryTriggerNpcInteraction();
+                    const handledByNpcLogic = worldRuntime.tryTriggerNpcLogicInteraction();
+                    if (!handledByNpcLogic) {
+                        worldRuntime.tryTriggerNpcInteraction();
+                    }
                 }
             }
             if (worldRuntime.consumeFinishReached()) {

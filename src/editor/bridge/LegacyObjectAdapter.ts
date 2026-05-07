@@ -49,6 +49,7 @@ export interface LegacyObjectSource {
     getWorldOnStartLogicTrace?: () => unknown;
     getRuntimeWorldFlagsSnapshot?: () => Record<string, boolean>;
     getLastObjectInteractionTrace?: () => unknown;
+    getLastNpcInteractionTrace?: () => unknown;
     getLastCutsceneLogicTrace?: () => unknown;
     getGameplayTimeState?: () => { stopped: boolean; speed: number };
     setGameplayStopped?: (stopped: boolean) => void;
@@ -250,6 +251,14 @@ export class LegacyObjectAdapter {
 
     public getLastObjectInteractionTrace(): unknown | null {
         const trace = this.source.getLastObjectInteractionTrace?.();
+        if (!trace || typeof trace !== 'object') {
+            return null;
+        }
+        return JSON.parse(JSON.stringify(trace));
+    }
+
+    public getLastNpcInteractionTrace(): unknown | null {
+        const trace = this.source.getLastNpcInteractionTrace?.();
         if (!trace || typeof trace !== 'object') {
             return null;
         }

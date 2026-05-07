@@ -8,6 +8,7 @@ import type {
     TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
 import type { TestNpcInstanceConfig } from '../../game/npc/npc_types';
+import type { NpcInteractionTrace } from '../../game/world/runtime/test_world_runtime';
 
 interface NpcEditorModeOptions {
     legacyObjectAdapter: LegacyObjectAdapter | null;
@@ -150,6 +151,9 @@ export class NpcEditorMode implements EditorMode {
 
             container.appendChild(this.makeSpacer(10));
             container.appendChild(this.makeSectionTitle('Logic Actions'));
+            container.appendChild(this.makeInfoLine('Runtime execution: press I in gameplay to trigger npc/onInteract when no closer object binding handled input.'));
+            container.appendChild(this.makeNpcInteractionTraceView(selectedNpc.id));
+            container.appendChild(this.makeSpacer(8));
 
             const bindings = this.listNpcBindings(selectedNpc.id);
             const scriptRefs = this.logicAuthoringService.listScriptRefs();
@@ -179,7 +183,12 @@ export class NpcEditorMode implements EditorMode {
                     card.appendChild(this.makeKeyValueLine('slot', binding.slot));
                     card.appendChild(this.makeKeyValueLine('scriptId', binding.scriptId));
                     card.appendChild(this.makeKeyValueLine('status', binding.enabled === false ? 'disabled' : 'enabled'));
-                    card.appendChild(this.makeKeyValueLine('runtime', 'not supported for NPC slots yet'));
+                    card.appendChild(this.makeKeyValueLine(
+                        'runtime',
+                        binding.slot.trim() === NPC_LOGIC_BINDING_DEFAULT_SLOT
+                            ? 'npc/onInteract (I key) is runtime-supported'
+                            : 'unsupported runtime slot (supported: npc/onInteract only)'
+                    ));
 
                     const enabledRow = document.createElement('label');
                     enabledRow.style.display = 'flex';
@@ -391,6 +400,66 @@ export class NpcEditorMode implements EditorMode {
 
     private listNpcBindings(npcId: string): TestWorldLogicBindingConfig[] {
         return this.logicAuthoringService.listBindingsForTarget('npc', npcId);
+    }
+
+    private getRuntimeNpcInteractionTrace(): NpcInteractionTrace | null {
+        const trace = this.legacyObjectAdapter?.getLastNpcInteractionTrace() as NpcInteractionTrace | null;
+        if (!trace || typeof trace !== 'object' || typeof trace.status !== 'string') {
+            return null;
+        }
+        return trace;
+    }
+
+    private makeNpcInteractionTraceView(selectedNpcId: string): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.border = '1px solid #8b8b8b';
+        wrap.style.background = '#ececec';
+        wrap.style.padding = '6px';
+        wrap.style.marginBottom = '6px';
+        const trace = this.getRuntimeNpcInteractionTrace();
+        if (!trace || !trace.attempted || trace.status === 'idle') {
+            wrap.appendChild(this.makeInfoLine('No NPC logic interaction attempted yet.'));
+            return wrap;
+        }
+        const attemptText = Number.isFinite(trace.attemptId) ? `#${trace.attemptId}` : '(unknown)';
+        const selectedTargetId = typeof trace.selectedTargetId === 'string' ? trace.selectedTargetId : null;
+        wrap.appendChild(this.makeInfoLine(`Last attempt ${attemptText}: status ${trace.status}.`));
+        if (selectedTargetId) {
+            wrap.appendChild(this.makeInfoLine(`targetType: npc`));
+            wrap.appendChild(this.makeInfoLine(`targetId: ${selectedTargetId}`));
+            wrap.appendChild(this.makeInfoLine(`slot: onInteract`));
+            if (selectedTargetId !== selectedNpcId) {
+                wrap.appendChild(this.makeInfoLine(`Last target differs from selected NPC (${selectedNpcId}).`));
+            }
+        }
+        if (trace.message?.trim()) {
+            wrap.appendChild(this.makeInfoLine(`Trace: ${trace.message}`));
+        }
+        if (trace.bindingTrace && Array.isArray(trace.bindingTrace.bindings)) {
+            wrap.appendChild(this.makeInfoLine('Binding results:'));
+            trace.bindingTrace.bindings.forEach((binding) => {
+                wrap.appendChild(this.makeInfoLine(`- binding id: ${binding.bindingId}`));
+                wrap.appendChild(this.makeInfoLine(`  scriptId: ${binding.scriptId}`));
+                wrap.appendChild(this.makeInfoLine(`  status: ${binding.status}`));
+                if (binding.reason?.trim()) {
+                    wrap.appendChild(this.makeInfoLine(`  reason: ${binding.reason}`));
+                }
+                const commandCount = Array.isArray(binding.commands) ? binding.commands.length : 0;
+                if (commandCount <= 0) {
+                    wrap.appendChild(this.makeInfoLine('  Command results: none'));
+                    return;
+                }
+                binding.commands.forEach((command) => {
+                    wrap.appendChild(this.makeInfoLine(`  - command id: ${command.commandId}`));
+                    wrap.appendChild(this.makeInfoLine(`    type: ${command.type}`));
+                    wrap.appendChild(this.makeInfoLine(`    status: ${command.status}`));
+                    if (command.message?.trim()) {
+                        wrap.appendChild(this.makeInfoLine(`    message: ${command.message}`));
+                    }
+                });
+            });
+        }
+        return wrap;
     }
 
     private syncSelectedNpc(npcs: TestNpcInstanceConfig[]): TestNpcInstanceConfig | null {

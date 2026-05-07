@@ -134,7 +134,7 @@ const LOGIC_COMMAND_DEFINITIONS: readonly LogicCommandDefinition[] = [
         runtimeSupported: true,
         previewSupported: true,
         previewBehaviorNote: 'Executes immediately and succeeds.',
-        runtimeSupportedSlots: ['world/onStart', 'object/onInteract', 'cutscene/onFinish'],
+        runtimeSupportedSlots: ['world/onStart', 'object/onInteract', 'npc/onInteract', 'cutscene/onFinish'],
         validateParams: validateNoopParams,
         formatDisplay: () => 'noop'
     },
@@ -163,7 +163,7 @@ const LOGIC_COMMAND_DEFINITIONS: readonly LogicCommandDefinition[] = [
         runtimeSupported: true,
         previewSupported: true,
         previewBehaviorNote: 'Applies to preview-only sandbox world flags.',
-        runtimeSupportedSlots: ['world/onStart', 'object/onInteract', 'cutscene/onFinish'],
+        runtimeSupportedSlots: ['world/onStart', 'object/onInteract', 'npc/onInteract', 'cutscene/onFinish'],
         validateParams: validateSetWorldFlagParams,
         formatDisplay: getSetWorldFlagDisplay
     },
@@ -186,7 +186,7 @@ const LOGIC_COMMAND_DEFINITIONS: readonly LogicCommandDefinition[] = [
         runtimeSupported: true,
         previewSupported: true,
         previewBehaviorNote: 'Deferred/skipped in preview; no cutscene is started.',
-        runtimeSupportedSlots: ['world/onStart', 'object/onInteract', 'cutscene/onFinish'],
+        runtimeSupportedSlots: ['world/onStart', 'object/onInteract', 'npc/onInteract', 'cutscene/onFinish'],
         validateParams: validateStartCutsceneParams,
         formatDisplay: getStartCutsceneDisplay
     }

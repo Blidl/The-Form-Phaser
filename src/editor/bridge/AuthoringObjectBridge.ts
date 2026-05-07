@@ -53,6 +53,7 @@ export const createAuthoringObjectBridgeSource = (
         getWorldOnStartLogicTrace: () => worldRuntime.getWorldOnStartLogicTrace(),
         getRuntimeWorldFlagsSnapshot: () => worldRuntime.getRuntimeWorldFlagsSnapshot(),
         getLastObjectInteractionTrace: () => worldRuntime.getLastObjectInteractionTrace(),
+        getLastNpcInteractionTrace: () => worldRuntime.getLastNpcInteractionTrace(),
         getLastCutsceneLogicTrace: () => worldRuntime.getLastCutsceneLogicTrace(),
         getGameplayTimeState: () => {
             const snapshot = options?.gameplayTimeController?.getSnapshot();

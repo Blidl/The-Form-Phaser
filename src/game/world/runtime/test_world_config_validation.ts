@@ -127,6 +127,7 @@ export interface TestWorldLogicDiagnostic {
 const isRuntimeSupportedLogicBindingSlot = (targetType: string, slot: string): boolean => {
     return (targetType === 'world' && slot === 'onStart')
         || (targetType === 'object' && slot === 'onInteract')
+        || (targetType === 'npc' && slot === 'onInteract')
         || (targetType === 'cutscene' && slot === 'onFinish');
 };
 
@@ -141,10 +142,13 @@ const getUnsupportedRuntimeBindingSlotMessage = (
     if (targetType === 'world') {
         return `Binding "${bindingLabel}" targets world slot "${slot}", but runtime currently supports only world/onStart.`;
     }
+    if (targetType === 'npc') {
+        return `Binding "${bindingLabel}" targets npc slot "${slot}", but runtime currently supports only npc/onInteract.`;
+    }
     if (targetType === 'cutscene') {
         return `Binding "${bindingLabel}" targets cutscene slot "${slot}", but runtime currently supports only cutscene/onFinish.`;
     }
-    return `Binding "${bindingLabel}" targets ${targetType} slot "${slot}", but runtime currently supports only world/onStart, object/onInteract, and cutscene/onFinish.`;
+    return `Binding "${bindingLabel}" targets ${targetType} slot "${slot}", but runtime currently supports only world/onStart, object/onInteract, npc/onInteract, and cutscene/onFinish.`;
 };
 
 const asNumber = (value: unknown, fallback: number): number => {

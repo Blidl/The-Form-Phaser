@@ -168,7 +168,7 @@ export function renderExternalScriptsSection(
         warningBox.style.marginBottom = '6px';
         warningBox.style.wordBreak = 'break-word';
         warningBox.appendChild(dom.makeInfoLine(`Diagnostics: ${diagnostics.length}`));
-        warningBox.appendChild(dom.makeInfoLine('Includes unsupported runtime slot checks (world/onStart, object/onInteract).'));
+        warningBox.appendChild(dom.makeInfoLine('Includes unsupported runtime slot checks (world/onStart, object/onInteract, npc/onInteract, cutscene/onFinish).'));
         diagnostics.forEach((diagnostic) => {
             warningBox.appendChild(dom.makeInfoLine(`[${diagnostic.code}] ${diagnostic.message}`));
             if (diagnostic.scriptId) {
