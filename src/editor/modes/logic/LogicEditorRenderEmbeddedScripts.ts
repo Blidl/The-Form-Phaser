@@ -55,6 +55,7 @@ export function renderEmbeddedScriptsSection(
 
     container.appendChild(dom.makeSpacer(8));
     container.appendChild(dom.makeSectionTitle('Embedded Level Scripts (transitional)'));
+    container.appendChild(dom.makeInfoLine('Transitional level script metadata flow. Command content authoring remains in project files.'));
     const createButton = document.createElement('button');
     createButton.type = 'button';
     createButton.textContent = '+ New Script';
@@ -173,9 +174,9 @@ export function renderEmbeddedScriptsSection(
     }
 
     container.appendChild(dom.makeSpacer(8));
-    container.appendChild(dom.makeSectionTitle('Script Details'));
+    container.appendChild(dom.makeSectionTitle('Script Metadata'));
     if (!selectedScript || !selectedScriptDraft) {
-        container.appendChild(dom.makeInfoLine('Select a script to edit metadata.'));
+        container.appendChild(dom.makeInfoLine('Select a script to inspect metadata.'));
         return;
     }
 

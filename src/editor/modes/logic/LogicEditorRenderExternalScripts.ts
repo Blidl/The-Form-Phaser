@@ -120,7 +120,8 @@ export function renderExternalScriptsSection(
 
     container.appendChild(dom.makeSectionTitle('External Script Assets'));
     container.appendChild(dom.makeInfoLine('External scripts are loaded from src/game/world/runtime/data/logic_scripts.json.'));
-    container.appendChild(dom.makeInfoLine('Authoring in this panel references those assets and level script refs.'));
+    container.appendChild(dom.makeInfoLine('Script content is authored in IDE/project files and inspected here as read-only.'));
+    container.appendChild(dom.makeInfoLine('This panel is for references/bindings authoring, diagnostics, and preview flows.'));
     const summaryRow = document.createElement('div');
     summaryRow.style.display = 'flex';
     summaryRow.style.alignItems = 'center';

@@ -75,8 +75,8 @@ export function renderBindingsSection(
         const isRuntimeSupported = isRuntimeSupportedBindingSlot(binding);
         bindingBox.appendChild(dom.makeInfoLine(
             isRuntimeSupported
-                ? 'runtime support: supported'
-                : 'runtime support: unsupported slot (see diagnostics)'
+                ? 'slot support: supported runtime slot'
+                : 'slot support: unsupported runtime slot (see diagnostics)'
         ));
         container.appendChild(bindingBox);
     });

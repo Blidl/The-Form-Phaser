@@ -264,7 +264,7 @@ export function renderScriptDetailsSection(
         container.appendChild(diagnosticsBox);
     };
 
-    container.appendChild(dom.makeSectionTitle('Script Edit'));
+    container.appendChild(dom.makeSectionTitle('Script Inspector'));
     if (!selectedExternalScript) {
         container.appendChild(dom.makeInfoLine('Select an external script asset to inspect.'));
         renderScriptDiagnosticsSection();
@@ -275,19 +275,20 @@ export function renderScriptDetailsSection(
         return;
     }
 
-    const scriptEditBox = document.createElement('div');
-    scriptEditBox.style.border = '1px solid #8b8b8b';
-    scriptEditBox.style.background = '#ececec';
-    scriptEditBox.style.padding = '6px';
-    scriptEditBox.style.marginBottom = '8px';
-    scriptEditBox.appendChild(dom.makeInfoLine(`Name: ${selectedExternalScript.name}`));
-    scriptEditBox.appendChild(dom.makeInfoLine(`ID: ${selectedExternalScript.id}`));
-    scriptEditBox.appendChild(dom.makeInfoLine(`Category: ${selectedExternalScript.category}`));
+    const scriptInspectorBox = document.createElement('div');
+    scriptInspectorBox.style.border = '1px solid #8b8b8b';
+    scriptInspectorBox.style.background = '#ececec';
+    scriptInspectorBox.style.padding = '6px';
+    scriptInspectorBox.style.marginBottom = '8px';
+    scriptInspectorBox.appendChild(dom.makeInfoLine(`Name: ${selectedExternalScript.name}`));
+    scriptInspectorBox.appendChild(dom.makeInfoLine(`ID: ${selectedExternalScript.id}`));
+    scriptInspectorBox.appendChild(dom.makeInfoLine(`Category: ${selectedExternalScript.category}`));
     if (selectedExternalScript.editor?.locked) {
-        scriptEditBox.appendChild(dom.makeInfoLine('Locked: true'));
+        scriptInspectorBox.appendChild(dom.makeInfoLine('Locked: true'));
     }
-    scriptEditBox.appendChild(dom.makeInfoLine('IDE/source file: logic_scripts.json'));
-    container.appendChild(scriptEditBox);
+    scriptInspectorBox.appendChild(dom.makeInfoLine('Script content is read-only in browser.'));
+    scriptInspectorBox.appendChild(dom.makeInfoLine('Author script content in IDE/project file: src/game/world/runtime/data/logic_scripts.json'));
+    container.appendChild(scriptInspectorBox);
 
     renderScriptDiagnosticsSection();
 
