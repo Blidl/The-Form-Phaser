@@ -104,10 +104,16 @@ interface ObjectClipboardData {
 }
 type BehaviorScriptField = 'move' | 'rotate' | 'defaultAction';
 type BehaviorScriptFieldLabel = 'Move' | 'Rotate' | 'Default Action';
+type BehaviorScriptCategory = 'platform.move' | 'platform.rotate' | 'platform.defaultAction' | 'platform.action';
 interface BehaviorScriptOption {
     id: string;
     label: string;
 }
+const BEHAVIOR_SCRIPT_CATEGORY_BY_FIELD: Readonly<Record<BehaviorScriptField, BehaviorScriptCategory>> = {
+    move: 'platform.move',
+    rotate: 'platform.rotate',
+    defaultAction: 'platform.defaultAction'
+};
 interface RuntimeBehaviorBindingTarget {
     runtimeType: 'surface';
     behaviorScripts: TestWorldBehaviorScriptsConfig | null;
@@ -2922,33 +2928,66 @@ export class ObjectsEditorMode implements EditorMode {
 
         wrap.appendChild(this.makeLabel('Authoring-only: runtime execution is not implemented yet.'));
 
-        const options = this.listBehaviorScriptOptions();
-        const optionIds = new Set(options.map((entry) => entry.id));
+        const externalAssets = getAllLogicScriptAssets();
+        const scriptById = new Map(externalAssets.map((entry) => [entry.id, entry] as const));
+        const moveOptions = this.listBehaviorScriptOptions('platform.move');
+        const rotateOptions = this.listBehaviorScriptOptions('platform.rotate');
+        const defaultActionOptions = this.listBehaviorScriptOptions('platform.defaultAction');
         const behaviorScripts = target.behaviorScripts ?? {};
-        wrap.appendChild(this.makeBehaviorScriptSelectRow(selectedObject, 'Move', 'move', behaviorScripts.move, options));
-        wrap.appendChild(this.makeBehaviorScriptSelectRow(selectedObject, 'Rotate', 'rotate', behaviorScripts.rotate, options));
-        wrap.appendChild(this.makeBehaviorScriptSelectRow(selectedObject, 'Default Action', 'defaultAction', behaviorScripts.defaultAction, options));
+        wrap.appendChild(this.makeBehaviorScriptSelectRow(
+            selectedObject,
+            'Move',
+            'move',
+            behaviorScripts.move,
+            moveOptions,
+            scriptById
+        ));
+        wrap.appendChild(this.makeBehaviorScriptSelectRow(
+            selectedObject,
+            'Rotate',
+            'rotate',
+            behaviorScripts.rotate,
+            rotateOptions,
+            scriptById
+        ));
+        wrap.appendChild(this.makeBehaviorScriptSelectRow(
+            selectedObject,
+            'Default Action',
+            'defaultAction',
+            behaviorScripts.defaultAction,
+            defaultActionOptions,
+            scriptById
+        ));
 
-        const missingAssignments: string[] = [];
-        if (behaviorScripts.move && !optionIds.has(behaviorScripts.move)) {
-            missingAssignments.push(`Move: ${behaviorScripts.move}`);
-        }
-        if (behaviorScripts.rotate && !optionIds.has(behaviorScripts.rotate)) {
-            missingAssignments.push(`Rotate: ${behaviorScripts.rotate}`);
-        }
-        if (behaviorScripts.defaultAction && !optionIds.has(behaviorScripts.defaultAction)) {
-            missingAssignments.push(`Default Action: ${behaviorScripts.defaultAction}`);
-        }
-        if (missingAssignments.length > 0) {
-            const warning = this.makeLabel(`Missing script assets: ${missingAssignments.join(', ')}`);
+        const diagnostics: string[] = [];
+        this.appendBehaviorScriptFieldDiagnostic(diagnostics, scriptById, behaviorScripts.move, 'Move', 'move');
+        this.appendBehaviorScriptFieldDiagnostic(diagnostics, scriptById, behaviorScripts.rotate, 'Rotate', 'rotate');
+        this.appendBehaviorScriptFieldDiagnostic(diagnostics, scriptById, behaviorScripts.defaultAction, 'Default Action', 'defaultAction');
+
+        const actionsValues = Array.isArray(behaviorScripts.actions) ? behaviorScripts.actions : [];
+        actionsValues.forEach((scriptId, index) => {
+            const normalizedId = typeof scriptId === 'string' ? scriptId.trim() : '';
+            if (normalizedId.length <= 0) {
+                return;
+            }
+            const script = scriptById.get(normalizedId);
+            if (!script) {
+                diagnostics.push(`Actions[${index}] missing script asset: ${normalizedId}`);
+                return;
+            }
+            if (script.category !== 'platform.action') {
+                diagnostics.push(`Actions[${index}] category mismatch: expected platform.action, got ${script.category} (${normalizedId})`);
+            }
+        });
+
+        if (diagnostics.length > 0) {
+            const warning = this.makeLabel(`Behavior diagnostics: ${diagnostics.join(' | ')}`);
             warning.style.color = '#b00020';
             wrap.appendChild(warning);
         }
 
-        const actionsValues = Array.isArray(behaviorScripts.actions) ? behaviorScripts.actions : [];
         wrap.appendChild(this.makeLabel(`Actions list (read-only): ${actionsValues.length > 0 ? actionsValues.join(', ') : '-'}`));
         wrap.appendChild(this.makeLabel('Actions list editing is deferred in this XS to keep risk low.'));
-        wrap.appendChild(this.makeLabel('Category diagnostics for behavior script assignments are deferred in this XS.'));
         return wrap;
     }
 
@@ -2957,7 +2996,8 @@ export class ObjectsEditorMode implements EditorMode {
         label: BehaviorScriptFieldLabel,
         field: BehaviorScriptField,
         value: string | undefined,
-        options: readonly BehaviorScriptOption[]
+        options: readonly BehaviorScriptOption[],
+        scriptById: ReadonlyMap<string, { category: string }>
     ): HTMLDivElement {
         const row = document.createElement('div');
         row.style.display = 'flex';
@@ -2979,7 +3019,14 @@ export class ObjectsEditorMode implements EditorMode {
             select.appendChild(new Option(entry.label, entry.id));
         });
         if (value && !options.some((entry) => entry.id === value)) {
-            select.appendChild(new Option(`(missing) ${value}`, value));
+            const expectedCategory = BEHAVIOR_SCRIPT_CATEGORY_BY_FIELD[field];
+            const script = scriptById.get(value);
+            const optionLabel = !script
+                ? `(missing) ${value}`
+                : script.category !== expectedCategory
+                    ? `(invalid category: expected ${expectedCategory}, got ${script.category}) ${value}`
+                    : `(assigned) ${value}`;
+            select.appendChild(new Option(optionLabel, value));
         }
         select.value = value ?? '';
         select.disabled = this.isObjectLocked(selectedObject);
@@ -3014,19 +3061,36 @@ export class ObjectsEditorMode implements EditorMode {
         return row;
     }
 
-    private listBehaviorScriptOptions(): BehaviorScriptOption[] {
+    private listBehaviorScriptOptions(expectedCategory: BehaviorScriptCategory): BehaviorScriptOption[] {
         const externalAssets = getAllLogicScriptAssets();
-        if (externalAssets.length > 0) {
-            return externalAssets.map((entry) => ({
+        return externalAssets
+            .filter((entry) => entry.category === expectedCategory)
+            .map((entry) => ({
                 id: entry.id,
-                label: `${entry.name} (${entry.id}) [${entry.category}]`
+                label: `${entry.name} (${entry.id})`
             }));
+    }
+
+    private appendBehaviorScriptFieldDiagnostic(
+        diagnostics: string[],
+        scriptById: ReadonlyMap<string, { category: string }>,
+        value: string | undefined,
+        fieldLabel: BehaviorScriptFieldLabel,
+        field: BehaviorScriptField
+    ): void {
+        const scriptId = value?.trim() ?? '';
+        if (scriptId.length <= 0) {
+            return;
         }
-        const scriptRefs = this.logicAuthoringService.listScriptRefs();
-        return scriptRefs.map((entry) => ({
-            id: entry.id,
-            label: this.formatObjectLogicScriptRefOptionLabel(entry)
-        }));
+        const script = scriptById.get(scriptId);
+        if (!script) {
+            diagnostics.push(`${fieldLabel} missing script asset: ${scriptId}`);
+            return;
+        }
+        const expectedCategory = BEHAVIOR_SCRIPT_CATEGORY_BY_FIELD[field];
+        if (script.category !== expectedCategory) {
+            diagnostics.push(`${fieldLabel} category mismatch: expected ${expectedCategory}, got ${script.category} (${scriptId})`);
+        }
     }
 
     private resolveBehaviorBindingTarget(selectedObject: EditorObjectData): RuntimeBehaviorBindingTarget | null {

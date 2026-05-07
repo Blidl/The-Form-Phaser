@@ -44,6 +44,36 @@
         "rawLines": [],
         "locked": false
       }
+    },
+    {
+      "id": "external_demo_platform_move",
+      "name": "External Demo Platform Move",
+      "category": "platform.move",
+      "commands": [],
+      "editor": {
+        "rawLines": [],
+        "locked": false
+      }
+    },
+    {
+      "id": "external_demo_platform_rotate",
+      "name": "External Demo Platform Rotate",
+      "category": "platform.rotate",
+      "commands": [],
+      "editor": {
+        "rawLines": [],
+        "locked": false
+      }
+    },
+    {
+      "id": "external_demo_platform_default_action",
+      "name": "External Demo Platform Default Action",
+      "category": "platform.defaultAction",
+      "commands": [],
+      "editor": {
+        "rawLines": [],
+        "locked": false
+      }
     }
   ]
 }

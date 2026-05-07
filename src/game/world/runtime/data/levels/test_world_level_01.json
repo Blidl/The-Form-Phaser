@@ -159,7 +159,9 @@
       "alpha": 1,
       "collisionMode": "solid",
       "behaviorScripts": {
-        "move": "external_demo_noop"
+        "move": "external_demo_platform_move",
+        "rotate": "external_demo_platform_rotate",
+        "defaultAction": "external_demo_platform_default_action"
       },
       "editorLocked": false,
       "onlyDebugView": false
