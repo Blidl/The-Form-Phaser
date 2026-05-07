@@ -21,7 +21,9 @@ import { objectDiag } from '../debug/ObjectEditorDiagnostics';
 import { getAllLogicScriptAssets } from '../../game/world/runtime/logic_script_registry';
 import {
     PLATFORM_MOVE_PING_PONG_COMMAND_TYPE,
-    summarizePlatformMovePingPongContract
+    PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE,
+    summarizePlatformMovePingPongContract,
+    summarizePlatformRotateConstantContract
 } from '../../game/world/runtime/platform_command_registry';
 import type {
     TestWorldBehaviorScriptsConfig,
@@ -3247,6 +3249,18 @@ export class ObjectsEditorMode implements EditorMode {
             }
             if (!summary.hasExactlyOneValidCommand) {
                 diagnostics.push(`${fieldLabel} script contract invalid: expected exactly one valid ${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE} command (${scriptId})`);
+            }
+            return;
+        }
+
+        if (field === 'rotate') {
+            const summary = summarizePlatformRotateConstantContract(script.commands);
+            if (summary.commandCount <= 0) {
+                diagnostics.push(`${fieldLabel} assigned script is empty: expected exactly one ${PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE} command (${scriptId})`);
+                return;
+            }
+            if (!summary.hasExactlyOneValidCommand) {
+                diagnostics.push(`${fieldLabel} script contract invalid: expected exactly one valid ${PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE} command (${scriptId})`);
             }
         }
     }

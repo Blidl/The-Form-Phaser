@@ -16,7 +16,9 @@ import {
 } from './logic_command_registry';
 import {
     PLATFORM_MOVE_PING_PONG_COMMAND_TYPE,
-    summarizePlatformMovePingPongContract
+    PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE,
+    summarizePlatformMovePingPongContract,
+    summarizePlatformRotateConstantContract
 } from './platform_command_registry';
 
 const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
@@ -461,7 +463,9 @@ export const collectLogicScriptAssetDiagnostics = (
     registryState.assets.forEach((script) => {
         const shouldCheckCutsceneSceneParticipantDependencies = referencedScriptRefIds?.has(script.id) ?? false;
         const isPlatformMoveScript = script.category === 'platform.move';
+        const isPlatformRotateScript = script.category === 'platform.rotate';
         let platformMovePingPongCount = 0;
+        let platformRotateConstantCount = 0;
         script.commands.forEach((command, commandIndex) => {
             const commandType = command.type.trim();
             const path = `logicScripts.${script.id}.commands[${commandIndex}]`;
@@ -493,6 +497,19 @@ export const collectLogicScriptAssetDiagnostics = (
                 return;
             }
 
+            if (isPlatformRotateScript && commandType !== PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_category'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_category',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is not valid for category "platform.rotate"; expected "${PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE}".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`
+                });
+                return;
+            }
+
             if (!isPlatformMoveScript && commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE) {
                 diagnostics.push({
                     id: nextDiagnosticId('invalid_logic_command_category'),
@@ -506,8 +523,24 @@ export const collectLogicScriptAssetDiagnostics = (
                 return;
             }
 
+            if (!isPlatformRotateScript && commandType === PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_category'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_category',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is only valid for category "platform.rotate".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`
+                });
+                return;
+            }
+
             if (commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE) {
                 platformMovePingPongCount += 1;
+            }
+            if (commandType === PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE) {
+                platformRotateConstantCount += 1;
             }
 
             const paramsValidation = validateKnownLogicCommandParams(command);
@@ -518,6 +551,8 @@ export const collectLogicScriptAssetDiagnostics = (
                         ? ' (requires non-empty cutsceneId)'
                         : commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE
                             ? ' (requires axis, distance > 0, speed > 0, optional start)'
+                        : commandType === PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE
+                            ? ' (requires angularSpeedDeg > 0, optional direction/start)'
                         : '';
                 diagnostics.push({
                     id: nextDiagnosticId('invalid_logic_command_params'),
@@ -533,7 +568,7 @@ export const collectLogicScriptAssetDiagnostics = (
                 return;
             }
 
-            if (isPlatformMoveScript) {
+            if (isPlatformMoveScript || isPlatformRotateScript) {
                 return;
             }
 
@@ -600,6 +635,17 @@ export const collectLogicScriptAssetDiagnostics = (
                 path: `logicScripts.${script.id}.commands`
             });
         }
+
+        if (isPlatformRotateScript && platformRotateConstantCount > 1) {
+            diagnostics.push({
+                id: nextDiagnosticId('invalid_platform_rotate_script_contract'),
+                severity: 'error',
+                code: 'invalid_platform_rotate_script_contract',
+                message: `Script "${script.id}" contains ${platformRotateConstantCount} "${PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE}" commands. Exactly one is supported in this XS.`,
+                scriptId: script.id,
+                path: `logicScripts.${script.id}.commands`
+            });
+        }
     });
 
     if (activeConfig) {
@@ -658,6 +704,63 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Surface "${surface.id}" move behavior script "${assignedMoveScriptId}" must contain exactly one valid "${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE}" command.`,
                     scriptId: script.id,
                     path
+                });
+            }
+
+            const assignedRotateScriptId = typeof surface.behaviorScripts?.rotate === 'string'
+                ? surface.behaviorScripts.rotate.trim()
+                : '';
+            if (assignedRotateScriptId.length <= 0) {
+                return;
+            }
+
+            const rotatePath = `surfaces[${surfaceIndex}].behaviorScripts.rotate`;
+            const rotateScript = registryState.byId.get(assignedRotateScriptId);
+            if (!rotateScript) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `Surface "${surface.id}" rotate behavior script "${assignedRotateScriptId}" is assigned but missing from external script assets.`,
+                    scriptId: assignedRotateScriptId,
+                    path: rotatePath
+                });
+                return;
+            }
+
+            if (rotateScript.category !== 'platform.rotate') {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `Surface "${surface.id}" rotate behavior script "${assignedRotateScriptId}" has category "${rotateScript.category}", expected "platform.rotate".`,
+                    scriptId: rotateScript.id,
+                    path: rotatePath
+                });
+                return;
+            }
+
+            const rotateSummary = summarizePlatformRotateConstantContract(rotateScript.commands);
+            if (rotateSummary.commandCount <= 0) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'warning',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `Surface "${surface.id}" rotate behavior script "${assignedRotateScriptId}" is empty. Assign exactly one "${PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE}" command (runtime rotation remains deferred in this XS).`,
+                    scriptId: rotateScript.id,
+                    path: rotatePath
+                });
+                return;
+            }
+
+            if (!rotateSummary.hasExactlyOneValidCommand) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `Surface "${surface.id}" rotate behavior script "${assignedRotateScriptId}" must contain exactly one valid "${PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE}" command (runtime rotation remains deferred in this XS).`,
+                    scriptId: rotateScript.id,
+                    path: rotatePath
                 });
             }
         });

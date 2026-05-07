@@ -70,7 +70,17 @@
       "id": "external_demo_platform_rotate",
       "name": "External Demo Platform Rotate",
       "category": "platform.rotate",
-      "commands": [],
+      "commands": [
+        {
+          "id": "cmd_platform_rotate_constant_demo",
+          "type": "platform_rotate_constant",
+          "params": {
+            "angularSpeedDeg": 45,
+            "direction": "clockwise",
+            "start": "running_loop"
+          }
+        }
+      ],
       "editor": {
         "rawLines": [],
         "locked": false

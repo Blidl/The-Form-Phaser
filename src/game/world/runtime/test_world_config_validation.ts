@@ -113,6 +113,7 @@ export type TestWorldLogicDiagnosticCode =
     | 'invalid_logic_command_params'
     | 'invalid_logic_command_ref'
     | 'invalid_platform_move_script_contract'
+    | 'invalid_platform_rotate_script_contract'
     | 'invalid_surface_behavior_script_assignment'
     | 'missing_logic_command_cutscene_scene_participant_dependency';
 
