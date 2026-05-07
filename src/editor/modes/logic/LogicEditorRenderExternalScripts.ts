@@ -126,6 +126,7 @@ export function renderExternalScriptsSection(
     summaryRow.style.display = 'flex';
     summaryRow.style.alignItems = 'center';
     summaryRow.style.gap = '8px';
+    dom.applyRowWrap(summaryRow);
     summaryRow.style.marginBottom = '4px';
     summaryRow.appendChild(dom.makeInfoLine(`External assets: ${externalAssets.length}`));
     const reloadScriptsButton = document.createElement('button');
@@ -166,7 +167,7 @@ export function renderExternalScriptsSection(
         warningBox.style.background = '#fff4d1';
         warningBox.style.padding = '6px';
         warningBox.style.marginBottom = '6px';
-        warningBox.style.wordBreak = 'break-word';
+        dom.applyCardWrap(warningBox);
         warningBox.appendChild(dom.makeInfoLine(`Diagnostics: ${diagnostics.length}`));
         warningBox.appendChild(dom.makeInfoLine('Includes unsupported runtime slot checks (world/onStart, object/onInteract, npc/onInteract, cutscene/onFinish).'));
         diagnostics.forEach((diagnostic) => {
@@ -246,7 +247,7 @@ export function renderExternalScriptsSection(
         scriptRefBox.style.background = '#d9d9d9';
         scriptRefBox.style.padding = '6px';
         scriptRefBox.style.marginBottom = '6px';
-        scriptRefBox.style.wordBreak = 'break-word';
+        dom.applyCardWrap(scriptRefBox);
         scriptRefBox.appendChild(dom.makeInfoLine(`id: ${scriptRef.id}`));
         scriptRefBox.appendChild(dom.makeInfoLine(`displayName: ${displayName}`));
         scriptRefBox.appendChild(dom.makeInfoLine(`path: ${path}`));
@@ -364,7 +365,7 @@ function createExternalScriptRow(context: ExternalScriptRowContext): HTMLDivElem
     scriptBox.style.background = isSelectedExternalScript ? '#c9dbf1' : '#d9d9d9';
     scriptBox.style.padding = '6px';
     scriptBox.style.marginBottom = '6px';
-    scriptBox.style.wordBreak = 'break-word';
+    dom.applyCardWrap(scriptBox);
     scriptBox.style.cursor = 'pointer';
     scriptBox.addEventListener('click', () => {
         onSelectExternalScript(script.id);

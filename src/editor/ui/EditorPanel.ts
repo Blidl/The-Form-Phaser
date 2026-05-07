@@ -28,6 +28,7 @@ export class EditorPanel {
         this.root.style.fontFamily = 'Tahoma, Verdana, sans-serif';
         this.root.style.pointerEvents = 'auto';
         this.root.style.overflowY = 'auto';
+        this.root.style.overflowX = 'hidden';
         this.root.style.zIndex = `${options.zIndex ?? 4100}`;
         if (options.side === 'left') {
             this.root.style.left = '0';
@@ -44,6 +45,7 @@ export class EditorPanel {
         this.content.style.fontSize = '13px';
         this.content.style.lineHeight = '1.4';
         this.content.style.color = '#222';
+        this.content.style.minWidth = '0';
 
         this.root.append(this.title, this.content);
         options.parent.appendChild(this.root);

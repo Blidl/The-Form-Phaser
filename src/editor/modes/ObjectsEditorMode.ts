@@ -670,17 +670,33 @@ export class ObjectsEditorMode implements EditorMode {
                 rows.forEach((obj) => {
                     const row = document.createElement('div');
                     row.style.display = 'flex';
+                    row.style.minWidth = '0';
                     row.style.gap = '4px';
                     row.style.marginBottom = '4px';
 
                     const selectButton = document.createElement('button');
                     selectButton.type = 'button';
-                    selectButton.textContent = `${obj.name} (${obj.id})`;
                     selectButton.style.flex = '1';
+                    selectButton.style.minWidth = '0';
                     selectButton.style.textAlign = 'left';
                     selectButton.style.padding = '4px 6px';
                     selectButton.style.border = '1px solid #5f5f5f';
                     selectButton.style.background = this.selectedObjectId === obj.id ? '#70de63' : '#d9d9d9';
+                    selectButton.style.whiteSpace = 'normal';
+                    selectButton.style.overflowWrap = 'anywhere';
+                    selectButton.style.wordBreak = 'break-word';
+                    const nameLine = document.createElement('div');
+                    nameLine.textContent = obj.name;
+                    nameLine.style.fontWeight = 'bold';
+                    nameLine.style.overflowWrap = 'anywhere';
+                    nameLine.style.wordBreak = 'break-word';
+                    const idLine = document.createElement('div');
+                    idLine.textContent = obj.id;
+                    idLine.style.fontSize = '11px';
+                    idLine.style.opacity = '0.8';
+                    idLine.style.overflowWrap = 'anywhere';
+                    idLine.style.wordBreak = 'break-word';
+                    selectButton.append(nameLine, idLine);
                     selectButton.addEventListener('click', () => {
                         this.objectsListScrollTop = listContainer.scrollTop;
                         this.selectedObjectId = obj.id;
@@ -2919,6 +2935,7 @@ export class ObjectsEditorMode implements EditorMode {
         const wrap = document.createElement('div');
         wrap.style.display = 'grid';
         wrap.style.gap = '6px';
+        wrap.style.minWidth = '0';
 
         const target = this.resolveBehaviorBindingTarget(selectedObject);
         if (!target) {
@@ -3000,17 +3017,26 @@ export class ObjectsEditorMode implements EditorMode {
         scriptById: ReadonlyMap<string, { category: string }>
     ): HTMLDivElement {
         const row = document.createElement('div');
-        row.style.display = 'flex';
+        row.style.display = 'grid';
         row.style.gap = '6px';
-        row.style.alignItems = 'center';
 
         const text = document.createElement('div');
         text.textContent = `${label}:`;
-        text.style.minWidth = '92px';
+        text.style.fontWeight = 'bold';
+        text.style.overflowWrap = 'anywhere';
+        text.style.wordBreak = 'break-word';
         row.appendChild(text);
+
+        const controlsRow = document.createElement('div');
+        controlsRow.style.display = 'flex';
+        controlsRow.style.alignItems = 'center';
+        controlsRow.style.gap = '6px';
+        controlsRow.style.flexWrap = 'wrap';
+        controlsRow.style.minWidth = '0';
 
         const select = document.createElement('select');
         select.style.flex = '1';
+        select.style.minWidth = '0';
         select.style.boxSizing = 'border-box';
         select.style.border = '1px solid #5f5f5f';
         select.style.padding = '2px 4px';
@@ -3041,7 +3067,7 @@ export class ObjectsEditorMode implements EditorMode {
             }
             this.onUiChanged();
         });
-        row.appendChild(select);
+        controlsRow.appendChild(select);
 
         const clearButton = document.createElement('button');
         clearButton.type = 'button';
@@ -3056,7 +3082,8 @@ export class ObjectsEditorMode implements EditorMode {
                 this.onUiChanged();
             }
         });
-        row.appendChild(clearButton);
+        controlsRow.appendChild(clearButton);
+        row.appendChild(controlsRow);
 
         return row;
     }
@@ -3176,6 +3203,9 @@ export class ObjectsEditorMode implements EditorMode {
         form.style.background = '#ececec';
         form.style.padding = '6px';
         form.style.marginTop = '6px';
+        form.style.minWidth = '0';
+        form.style.overflowWrap = 'anywhere';
+        form.style.wordBreak = 'break-word';
 
         const slotLabel = this.makeLabel('Slot');
         slotLabel.style.marginBottom = '2px';
@@ -3254,6 +3284,8 @@ export class ObjectsEditorMode implements EditorMode {
         const actionRow = document.createElement('div');
         actionRow.style.display = 'flex';
         actionRow.style.gap = '6px';
+        actionRow.style.flexWrap = 'wrap';
+        actionRow.style.minWidth = '0';
 
         const createButton = document.createElement('button');
         createButton.type = 'button';
@@ -3282,6 +3314,7 @@ export class ObjectsEditorMode implements EditorMode {
 
     private makeLogicActionsAuthoringView(bindings: TestWorldLogicBindingConfig[]): HTMLDivElement {
         const wrap = document.createElement('div');
+        wrap.style.minWidth = '0';
         if (bindings.length <= 0) {
             wrap.appendChild(this.makeLabel('No logic bindings for this object.'));
             return wrap;
@@ -3342,6 +3375,8 @@ export class ObjectsEditorMode implements EditorMode {
             const actionRow = document.createElement('div');
             actionRow.style.display = 'flex';
             actionRow.style.gap = '6px';
+            actionRow.style.flexWrap = 'wrap';
+            actionRow.style.minWidth = '0';
 
             const applyButton = document.createElement('button');
             applyButton.type = 'button';
@@ -3384,6 +3419,9 @@ export class ObjectsEditorMode implements EditorMode {
         wrap.style.background = '#ececec';
         wrap.style.padding = '6px';
         wrap.style.marginBottom = '6px';
+        wrap.style.minWidth = '0';
+        wrap.style.overflowWrap = 'anywhere';
+        wrap.style.wordBreak = 'break-word';
 
         const trace = this.getRuntimeObjectInteractionTrace();
         if (!trace || !trace.attempted || trace.status === 'idle') {
@@ -3792,6 +3830,9 @@ export class ObjectsEditorMode implements EditorMode {
         const label = document.createElement('div');
         label.textContent = text;
         label.style.marginBottom = '4px';
+        label.style.minWidth = '0';
+        label.style.overflowWrap = 'anywhere';
+        label.style.wordBreak = 'break-word';
         return label;
     }
 

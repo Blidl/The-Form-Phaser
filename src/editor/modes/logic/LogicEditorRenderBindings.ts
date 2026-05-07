@@ -62,7 +62,7 @@ export function renderBindingsSection(
         bindingBox.style.background = isSelected ? '#c9dbf1' : '#d9d9d9';
         bindingBox.style.padding = '6px';
         bindingBox.style.marginBottom = '6px';
-        bindingBox.style.wordBreak = 'break-word';
+        dom.applyCardWrap(bindingBox);
         bindingBox.style.cursor = 'pointer';
         bindingBox.addEventListener('click', () => {
             onSelectBinding(binding);
@@ -93,6 +93,7 @@ export function renderBindingsSection(
     detailsBox.style.border = '1px solid #8b8b8b';
     detailsBox.style.background = '#ececec';
     detailsBox.style.padding = '6px';
+    dom.applyCardWrap(detailsBox);
 
     detailsBox.appendChild(dom.makeInfoLine(`id: ${selectedBinding.id}`));
     detailsBox.appendChild(dom.makeInfoLine(`targetType: ${selectedBinding.targetType}`));
@@ -147,6 +148,7 @@ export function renderBindingsSection(
     const actionsRow = document.createElement('div');
     actionsRow.style.display = 'flex';
     actionsRow.style.gap = '6px';
+    dom.applyRowWrap(actionsRow);
 
     const applyButton = document.createElement('button');
     applyButton.type = 'button';

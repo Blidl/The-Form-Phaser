@@ -21,6 +21,9 @@ import {
     reloadExternalLogicScripts
 } from '../../game/world/runtime/logic_script_registry';
 import {
+    applyCardWrap,
+    applyRowWrap,
+    applyWrapText,
     bindEditorInputKeyboardGuards,
     makeInfoLine,
     makeSectionTitle,
@@ -67,6 +70,9 @@ export class LogicEditorMode implements EditorMode {
         makeSectionTitle,
         makeInfoLine,
         makeSpacer,
+        applyWrapText,
+        applyCardWrap,
+        applyRowWrap,
         bindEditorInputKeyboardGuards
     };
     private lastSnapshotSignature: string | null = null;

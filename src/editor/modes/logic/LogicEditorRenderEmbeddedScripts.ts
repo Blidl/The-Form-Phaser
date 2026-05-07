@@ -84,6 +84,7 @@ export function renderEmbeddedScriptsSection(
         formBox.style.background = '#d9d9d9';
         formBox.style.padding = '6px';
         formBox.style.marginBottom = '6px';
+        dom.applyCardWrap(formBox);
 
         const nameLabel = dom.makeInfoLine('Name');
         nameLabel.style.marginBottom = '2px';
@@ -123,6 +124,7 @@ export function renderEmbeddedScriptsSection(
         const actionsRow = document.createElement('div');
         actionsRow.style.display = 'flex';
         actionsRow.style.gap = '6px';
+        dom.applyRowWrap(actionsRow);
 
         const createFormButton = document.createElement('button');
         createFormButton.type = 'button';
@@ -153,7 +155,7 @@ export function renderEmbeddedScriptsSection(
             scriptBox.style.background = script.id === selectedScriptId ? '#c9dbf1' : '#d9d9d9';
             scriptBox.style.padding = '6px';
             scriptBox.style.marginBottom = '6px';
-            scriptBox.style.wordBreak = 'break-word';
+            dom.applyCardWrap(scriptBox);
             scriptBox.style.cursor = 'pointer';
             if (script.id === selectedScriptId) {
                 scriptBox.style.border = '1px solid #53759b';
@@ -184,6 +186,7 @@ export function renderEmbeddedScriptsSection(
     detailsBox.style.border = '1px solid #8b8b8b';
     detailsBox.style.background = '#d9d9d9';
     detailsBox.style.padding = '6px';
+    dom.applyCardWrap(detailsBox);
 
     detailsBox.appendChild(dom.makeInfoLine(`id: ${selectedScript.id}`));
     detailsBox.appendChild(dom.makeInfoLine(`command count: ${selectedScript.commands.length}`));
@@ -258,6 +261,7 @@ export function renderEmbeddedScriptsSection(
     const actionsRow = document.createElement('div');
     actionsRow.style.display = 'flex';
     actionsRow.style.gap = '6px';
+    dom.applyRowWrap(actionsRow);
 
     const applyButton = document.createElement('button');
     applyButton.type = 'button';

@@ -770,14 +770,21 @@ export class BackgroundEditorMode implements EditorMode {
         row.style.display = 'flex';
         row.style.flexDirection = 'column';
         row.style.gap = '2px';
+        row.style.minWidth = '0';
+        row.style.overflowWrap = 'anywhere';
+        row.style.wordBreak = 'break-word';
 
         const title = document.createElement('div');
         title.textContent = entry.name?.trim() || entry.id;
+        title.style.overflowWrap = 'anywhere';
+        title.style.wordBreak = 'break-word';
         row.appendChild(title);
 
         const detail = document.createElement('div');
         detail.style.fontSize = '11px';
         detail.style.color = '#555';
+        detail.style.overflowWrap = 'anywhere';
+        detail.style.wordBreak = 'break-word';
         const markers: string[] = [];
         if (entry.editor?.locked) {
             markers.push('Locked');
@@ -1047,6 +1054,9 @@ export class BackgroundEditorMode implements EditorMode {
     private makeLine(text: string): HTMLDivElement {
         const line = document.createElement('div');
         line.textContent = text;
+        line.style.minWidth = '0';
+        line.style.overflowWrap = 'anywhere';
+        line.style.wordBreak = 'break-word';
         return line;
     }
 

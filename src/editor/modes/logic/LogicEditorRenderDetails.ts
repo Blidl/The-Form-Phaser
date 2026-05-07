@@ -54,12 +54,14 @@ export function renderScriptDetailsSection(
         previewBox.style.background = '#ececec';
         previewBox.style.padding = '6px';
         previewBox.style.marginBottom = '8px';
+        dom.applyCardWrap(previewBox);
 
         const controlsRow = document.createElement('div');
         controlsRow.style.display = 'flex';
         controlsRow.style.flexWrap = 'wrap';
         controlsRow.style.gap = '6px';
         controlsRow.style.marginBottom = '6px';
+        controlsRow.style.minWidth = '0';
 
         const createControlButton = (
             label: string,
@@ -151,6 +153,7 @@ export function renderScriptDetailsSection(
         traceBox.style.background = '#ececec';
         traceBox.style.padding = '6px';
         traceBox.style.marginBottom = '8px';
+        dom.applyCardWrap(traceBox);
 
         traceBox.appendChild(dom.makeInfoLine('Runtime support: world/onStart executes once after world runtime init.'));
 
@@ -173,7 +176,7 @@ export function renderScriptDetailsSection(
             bindingBox.style.background = '#d9d9d9';
             bindingBox.style.padding = '4px';
             bindingBox.style.marginTop = '4px';
-            bindingBox.style.wordBreak = 'break-word';
+            dom.applyCardWrap(bindingBox);
             bindingBox.appendChild(dom.makeInfoLine(`binding id: ${bindingTrace.bindingId}`));
             bindingBox.appendChild(dom.makeInfoLine(`script id: ${bindingTrace.scriptId}`));
             bindingBox.appendChild(dom.makeInfoLine(`targetType: ${bindingTrace.targetType}`));
@@ -211,6 +214,7 @@ export function renderScriptDetailsSection(
         flagsBox.style.background = '#ececec';
         flagsBox.style.padding = '6px';
         flagsBox.style.marginBottom = '8px';
+        dom.applyCardWrap(flagsBox);
 
         const flagEntries = Object.entries(runtimeWorldFlagsSnapshot);
         if (flagEntries.length <= 0) {
@@ -237,7 +241,7 @@ export function renderScriptDetailsSection(
         diagnosticsBox.style.background = '#fff4d1';
         diagnosticsBox.style.padding = '6px';
         diagnosticsBox.style.marginBottom = '8px';
-        diagnosticsBox.style.wordBreak = 'break-word';
+        dom.applyCardWrap(diagnosticsBox);
 
         if (selectedScriptDiagnostics.length <= 0) {
             diagnosticsBox.appendChild(dom.makeInfoLine('No diagnostics for selected script.'));
@@ -280,6 +284,7 @@ export function renderScriptDetailsSection(
     scriptInspectorBox.style.background = '#ececec';
     scriptInspectorBox.style.padding = '6px';
     scriptInspectorBox.style.marginBottom = '8px';
+    dom.applyCardWrap(scriptInspectorBox);
     scriptInspectorBox.appendChild(dom.makeInfoLine(`Name: ${selectedExternalScript.name}`));
     scriptInspectorBox.appendChild(dom.makeInfoLine(`ID: ${selectedExternalScript.id}`));
     scriptInspectorBox.appendChild(dom.makeInfoLine(`Category: ${selectedExternalScript.category}`));
@@ -298,6 +303,7 @@ export function renderScriptDetailsSection(
     instructionsBox.style.background = '#ececec';
     instructionsBox.style.padding = '6px';
     instructionsBox.style.marginBottom = '8px';
+    dom.applyCardWrap(instructionsBox);
     if (selectedExternalScript.commands.length <= 0) {
         instructionsBox.appendChild(dom.makeInfoLine('No instructions/commands in this script.'));
     } else {
@@ -326,6 +332,7 @@ export function renderScriptDetailsSection(
     usersBox.style.background = '#ececec';
     usersBox.style.padding = '6px';
     usersBox.style.marginBottom = '8px';
+    dom.applyCardWrap(usersBox);
     const scriptUsers = bindings.filter(
         (binding) => binding.scriptId === selectedExternalScript.id
     );
@@ -338,7 +345,7 @@ export function renderScriptDetailsSection(
             bindingUserBox.style.background = '#d9d9d9';
             bindingUserBox.style.padding = '4px';
             bindingUserBox.style.marginBottom = '4px';
-            bindingUserBox.style.wordBreak = 'break-word';
+            dom.applyCardWrap(bindingUserBox);
             bindingUserBox.appendChild(dom.makeInfoLine(`binding id: ${binding.id}`));
             bindingUserBox.appendChild(dom.makeInfoLine(`targetType: ${binding.targetType}`));
             bindingUserBox.appendChild(dom.makeInfoLine(`targetId: ${binding.targetId ?? '-'}`));

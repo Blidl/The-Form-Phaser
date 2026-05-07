@@ -88,9 +88,14 @@ export class NpcEditorMode implements EditorMode {
                 button.style.background = npc.id === this.selectedNpcId ? '#9ec9ff' : '#e8e8e8';
                 button.style.fontFamily = 'inherit';
                 button.style.fontSize = '12px';
+                button.style.whiteSpace = 'normal';
+                button.style.overflowWrap = 'anywhere';
+                button.style.wordBreak = 'break-word';
 
                 const idLine = document.createElement('div');
                 idLine.style.fontWeight = 'bold';
+                idLine.style.overflowWrap = 'anywhere';
+                idLine.style.wordBreak = 'break-word';
                 idLine.textContent = npc.id;
 
                 const profileLine = document.createElement('div');
@@ -179,6 +184,9 @@ export class NpcEditorMode implements EditorMode {
                     card.style.border = '1px solid #7a7a7a';
                     card.style.background = '#e8e8e8';
                     card.style.padding = '6px';
+                    card.style.minWidth = '0';
+                    card.style.overflowWrap = 'anywhere';
+                    card.style.wordBreak = 'break-word';
                     card.appendChild(this.makeKeyValueLine('id', binding.id));
                     card.appendChild(this.makeKeyValueLine('slot', binding.slot));
                     card.appendChild(this.makeKeyValueLine('scriptId', binding.scriptId));
@@ -223,6 +231,8 @@ export class NpcEditorMode implements EditorMode {
                     const actionsRow = document.createElement('div');
                     actionsRow.style.display = 'flex';
                     actionsRow.style.gap = '6px';
+                    actionsRow.style.flexWrap = 'wrap';
+                    actionsRow.style.minWidth = '0';
 
                     const applyButton = document.createElement('button');
                     applyButton.type = 'button';
@@ -278,6 +288,9 @@ export class NpcEditorMode implements EditorMode {
             form.style.background = '#ececec';
             form.style.padding = '6px';
             form.style.marginTop = '6px';
+            form.style.minWidth = '0';
+            form.style.overflowWrap = 'anywhere';
+            form.style.wordBreak = 'break-word';
 
             const slotLabel = this.makeInfoLine('Slot');
             slotLabel.style.marginBottom = '2px';
@@ -356,6 +369,8 @@ export class NpcEditorMode implements EditorMode {
             const actionRow = document.createElement('div');
             actionRow.style.display = 'flex';
             actionRow.style.gap = '6px';
+            actionRow.style.flexWrap = 'wrap';
+            actionRow.style.minWidth = '0';
 
             const createButton = document.createElement('button');
             createButton.type = 'button';
@@ -416,6 +431,9 @@ export class NpcEditorMode implements EditorMode {
         wrap.style.background = '#ececec';
         wrap.style.padding = '6px';
         wrap.style.marginBottom = '6px';
+        wrap.style.minWidth = '0';
+        wrap.style.overflowWrap = 'anywhere';
+        wrap.style.wordBreak = 'break-word';
         const trace = this.getRuntimeNpcInteractionTrace();
         if (!trace || !trace.attempted || trace.status === 'idle') {
             wrap.appendChild(this.makeInfoLine('No NPC logic interaction attempted yet.'));
@@ -668,6 +686,9 @@ export class NpcEditorMode implements EditorMode {
     private makeInfoLine(text: string): HTMLDivElement {
         const element = document.createElement('div');
         element.textContent = text;
+        element.style.minWidth = '0';
+        element.style.overflowWrap = 'anywhere';
+        element.style.wordBreak = 'break-word';
         return element;
     }
 
@@ -675,12 +696,19 @@ export class NpcEditorMode implements EditorMode {
         const element = document.createElement('div');
         element.style.display = 'flex';
         element.style.gap = '6px';
+        element.style.flexWrap = 'wrap';
+        element.style.minWidth = '0';
 
         const keyNode = document.createElement('span');
         keyNode.style.fontWeight = 'bold';
+        keyNode.style.flexShrink = '0';
         keyNode.textContent = `${key}:`;
 
         const valueNode = document.createElement('span');
+        valueNode.style.flex = '1 1 120px';
+        valueNode.style.minWidth = '0';
+        valueNode.style.overflowWrap = 'anywhere';
+        valueNode.style.wordBreak = 'break-word';
         valueNode.textContent = value;
 
         element.append(keyNode, valueNode);

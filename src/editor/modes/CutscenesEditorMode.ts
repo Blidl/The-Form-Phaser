@@ -84,9 +84,14 @@ export class CutscenesEditorMode implements EditorMode {
                 card.style.padding = '6px';
                 card.style.display = 'grid';
                 card.style.gap = '6px';
+                card.style.minWidth = '0';
+                card.style.overflowWrap = 'anywhere';
+                card.style.wordBreak = 'break-word';
 
                 const idLine = document.createElement('div');
                 idLine.style.fontWeight = 'bold';
+                idLine.style.overflowWrap = 'anywhere';
+                idLine.style.wordBreak = 'break-word';
                 idLine.textContent = cutscene.id;
                 card.appendChild(idLine);
 
@@ -161,6 +166,9 @@ export class CutscenesEditorMode implements EditorMode {
                     card.style.padding = '6px';
                     card.style.display = 'grid';
                     card.style.gap = '6px';
+                    card.style.minWidth = '0';
+                    card.style.overflowWrap = 'anywhere';
+                    card.style.wordBreak = 'break-word';
                     card.appendChild(this.makeKeyValueLine('id', binding.id));
                     card.appendChild(this.makeKeyValueLine('slot', binding.slot));
                     card.appendChild(this.makeKeyValueLine('scriptId', binding.scriptId));
@@ -305,6 +313,9 @@ export class CutscenesEditorMode implements EditorMode {
                 form.style.marginTop = '6px';
                 form.style.display = 'grid';
                 form.style.gap = '6px';
+                form.style.minWidth = '0';
+                form.style.overflowWrap = 'anywhere';
+                form.style.wordBreak = 'break-word';
 
                 form.appendChild(this.makeKeyValueLine('slot', CutscenesEditorMode.CUTSCENE_BINDING_SLOT));
 
@@ -510,6 +521,9 @@ export class CutscenesEditorMode implements EditorMode {
         wrap.style.padding = '6px';
         wrap.style.display = 'grid';
         wrap.style.gap = '4px';
+        wrap.style.minWidth = '0';
+        wrap.style.overflowWrap = 'anywhere';
+        wrap.style.wordBreak = 'break-word';
 
         const trace = this.getRuntimeCutsceneLogicTrace();
         if (!trace) {
@@ -580,6 +594,9 @@ export class CutscenesEditorMode implements EditorMode {
     private makeInfoLine(text: string): HTMLDivElement {
         const element = document.createElement('div');
         element.textContent = text;
+        element.style.minWidth = '0';
+        element.style.overflowWrap = 'anywhere';
+        element.style.wordBreak = 'break-word';
         return element;
     }
 
@@ -587,12 +604,19 @@ export class CutscenesEditorMode implements EditorMode {
         const element = document.createElement('div');
         element.style.display = 'flex';
         element.style.gap = '6px';
+        element.style.flexWrap = 'wrap';
+        element.style.minWidth = '0';
 
         const keyNode = document.createElement('span');
         keyNode.style.fontWeight = 'bold';
+        keyNode.style.flexShrink = '0';
         keyNode.textContent = `${key}:`;
 
         const valueNode = document.createElement('span');
+        valueNode.style.flex = '1 1 120px';
+        valueNode.style.minWidth = '0';
+        valueNode.style.overflowWrap = 'anywhere';
+        valueNode.style.wordBreak = 'break-word';
         valueNode.textContent = value;
 
         element.append(keyNode, valueNode);
