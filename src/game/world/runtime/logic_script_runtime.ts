@@ -1,4 +1,8 @@
 import { getLogicScriptAsset } from './logic_script_registry';
+import {
+    getSetWorldFlagCommandParams,
+    getStartCutsceneCommandIdFromParams
+} from './logic_command_registry';
 import type {
     TestWorldConfig,
     TestWorldLogicBindingConfig,
@@ -174,14 +178,6 @@ interface ExecuteLogicScriptPreviewSandboxOptions {
     initialWorldFlags?: Record<string, boolean>;
 }
 
-const isNonEmptyString = (value: unknown): value is string => {
-    return typeof value === 'string' && value.trim().length > 0;
-};
-
-const isBoolean = (value: unknown): value is boolean => {
-    return typeof value === 'boolean';
-};
-
 export const executeLogicScriptPreviewSandbox = (
     script: TestWorldLogicScriptConfig,
     options?: ExecuteLogicScriptPreviewSandboxOptions
@@ -216,9 +212,8 @@ export const executeLogicScriptPreviewSandbox = (
             }
 
             if (command.type === 'set_world_flag') {
-                const key = command.params?.key;
-                const value = command.params?.value;
-                if (!isNonEmptyString(key) || !isBoolean(value)) {
+                const flagParams = getSetWorldFlagCommandParams(command.params);
+                if (!flagParams) {
                     commandResults.push({
                         commandId: command.id,
                         type: command.type,
@@ -233,6 +228,7 @@ export const executeLogicScriptPreviewSandbox = (
                         stateChanges
                     };
                 }
+                const { key, value } = flagParams;
 
                 const from = sandboxWorldFlags[key];
                 sandboxWorldFlags[key] = value;
@@ -252,15 +248,8 @@ export const executeLogicScriptPreviewSandbox = (
             }
 
             if (command.type === 'start_cutscene') {
-                const params = command.params;
-                const hasObjectParams =
-                    typeof params === 'object' &&
-                    params !== null &&
-                    !Array.isArray(params);
-                const cutsceneId = hasObjectParams
-                    ? (params as { cutsceneId?: unknown }).cutsceneId
-                    : undefined;
-                if (!isNonEmptyString(cutsceneId)) {
+                const cutsceneId = getStartCutsceneCommandIdFromParams(command.params);
+                if (!cutsceneId) {
                     commandResults.push({
                         commandId: command.id,
                         type: command.type,
@@ -347,9 +336,8 @@ export const executeLogicScriptForWorldOnStart = (
             }
 
             if (command.type === 'set_world_flag') {
-                const key = command.params?.key;
-                const value = command.params?.value;
-                if (!isNonEmptyString(key) || !isBoolean(value)) {
+                const flagParams = getSetWorldFlagCommandParams(command.params);
+                if (!flagParams) {
                     commandResults.push({
                         commandId: command.id,
                         type: command.type,
@@ -362,6 +350,7 @@ export const executeLogicScriptForWorldOnStart = (
                         commands: commandResults
                     };
                 }
+                const { key, value } = flagParams;
                 context.setWorldFlag(key, value);
                 commandResults.push({
                     commandId: command.id,
@@ -373,15 +362,8 @@ export const executeLogicScriptForWorldOnStart = (
             }
 
             if (command.type === 'start_cutscene') {
-                const params = command.params;
-                const hasObjectParams =
-                    typeof params === 'object' &&
-                    params !== null &&
-                    !Array.isArray(params);
-                const cutsceneId = hasObjectParams
-                    ? (params as { cutsceneId?: unknown }).cutsceneId
-                    : undefined;
-                if (!isNonEmptyString(cutsceneId)) {
+                const cutsceneId = getStartCutsceneCommandIdFromParams(command.params);
+                if (!cutsceneId) {
                     commandResults.push({
                         commandId: command.id,
                         type: command.type,

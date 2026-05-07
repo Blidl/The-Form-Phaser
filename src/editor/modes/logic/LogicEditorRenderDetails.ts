@@ -4,6 +4,10 @@ import type {
     LogicScriptExecutionResult,
     LogicWorldOnStartTrace
 } from '../../../game/world/runtime/logic_script_runtime';
+import {
+    formatLogicCommandForDisplay,
+    getLogicCommandDefinition
+} from '../../../game/world/runtime/logic_command_registry';
 import type { LogicEditorDomHelpers } from './LogicEditorDom';
 
 export interface RenderScriptDetailsContext {
@@ -297,10 +301,20 @@ export function renderScriptDetailsSection(
         instructionsBox.appendChild(dom.makeInfoLine('No instructions/commands in this script.'));
     } else {
         selectedExternalScript.commands.forEach((command, index) => {
-            const commandParams = command.params ?? {};
+            const commandDefinition = getLogicCommandDefinition(command.type);
+            const label = commandDefinition?.label ?? command.type;
+            const runtimeSupport = commandDefinition?.runtimeSupported
+                ? `runtime: ${commandDefinition.runtimeSupportedSlots.join(', ')}`
+                : 'runtime: unsupported';
+            const previewSupport = commandDefinition?.previewSupported
+                ? `preview: ${commandDefinition.previewBehaviorNote}`
+                : 'preview: unsupported';
             instructionsBox.appendChild(dom.makeInfoLine(
-                `${index + 1}. ${command.type} ${JSON.stringify(commandParams)}`
+                `${index + 1}. ${label} (${command.type})`
             ));
+            instructionsBox.appendChild(dom.makeInfoLine(`   ${formatLogicCommandForDisplay(command)}`));
+            instructionsBox.appendChild(dom.makeInfoLine(`   ${runtimeSupport}`));
+            instructionsBox.appendChild(dom.makeInfoLine(`   ${previewSupport}`));
         });
     }
     container.appendChild(instructionsBox);

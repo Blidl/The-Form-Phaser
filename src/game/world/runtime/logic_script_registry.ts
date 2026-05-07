@@ -9,6 +9,11 @@ import {
     getTestCutsceneRequiredSceneParticipantIds,
     isTestCutsceneRef
 } from '../../cutscene/test_cutscene_registry';
+import {
+    getStartCutsceneCommandIdFromParams,
+    isKnownLogicCommandType,
+    validateKnownLogicCommandParams
+} from './logic_command_registry';
 
 const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
     'object.move',
@@ -23,11 +28,6 @@ const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
     'cutscene.other',
     'trigger.action',
     'world.rule'
-]);
-const SUPPORTED_LOGIC_COMMAND_TYPES = new Set<string>([
-    'noop',
-    'set_world_flag',
-    'start_cutscene'
 ]);
 const EMPTY_LOGIC_SCRIPT_REGISTRY: { scripts: unknown[] } = { scripts: [] };
 type LogicScriptRegistryReloadResult = {
@@ -60,10 +60,6 @@ const asOptionalString = (value: unknown): string | null => {
     }
     const trimmed = value.trim();
     return trimmed.length > 0 ? trimmed : null;
-};
-
-const isNonEmptyString = (value: unknown): value is string => {
-    return typeof value === 'string' && value.trim().length > 0;
 };
 
 const cloneParamsObject = (params: Record<string, unknown>): Record<string, unknown> => {
@@ -265,35 +261,6 @@ export const resolveLogicScriptAssetIds = (
     };
 };
 
-const isValidNoopCommandParams = (params: unknown): boolean => {
-    if (params === undefined) {
-        return true;
-    }
-    return asObject(params) !== null;
-};
-
-const isValidSetWorldFlagParams = (params: unknown): boolean => {
-    const rawParams = asObject(params);
-    if (!rawParams) {
-        return false;
-    }
-    if (!isNonEmptyString(rawParams.key)) {
-        return false;
-    }
-    return typeof rawParams.value === 'boolean';
-};
-
-const getStartCutsceneCommandCutsceneId = (params: unknown): string | null => {
-    const rawParams = asObject(params);
-    if (!rawParams) {
-        return null;
-    }
-    if (!isNonEmptyString(rawParams.cutsceneId)) {
-        return null;
-    }
-    return rawParams.cutsceneId.trim();
-};
-
 const collectKnownLevelSceneParticipantIds = (config: TestWorldConfig): Set<string> => {
     const participantIds = new Set<string>(['player']);
     config.npcs.forEach((entry) => {
@@ -490,7 +457,7 @@ export const collectLogicScriptAssetDiagnostics = (
             const path = `logicScripts.${script.id}.commands[${commandIndex}]`;
             const commandId = command.id.trim() || undefined;
 
-            if (!SUPPORTED_LOGIC_COMMAND_TYPES.has(commandType)) {
+            if (!isKnownLogicCommandType(commandType)) {
                 diagnostics.push({
                     id: nextDiagnosticId('unknown_logic_command_type'),
                     severity: 'error',
@@ -503,34 +470,29 @@ export const collectLogicScriptAssetDiagnostics = (
                 return;
             }
 
-            if (commandType === 'noop' && !isValidNoopCommandParams(command.params)) {
+            const paramsValidation = validateKnownLogicCommandParams(command);
+            if (paramsValidation && !paramsValidation.valid) {
+                const paramsMessage = commandType === 'set_world_flag'
+                    ? ' (requires non-empty key and boolean value)'
+                    : commandType === 'start_cutscene'
+                        ? ' (requires non-empty cutsceneId)'
+                        : '';
                 diagnostics.push({
                     id: nextDiagnosticId('invalid_logic_command_params'),
                     severity: 'error',
                     code: 'invalid_logic_command_params',
-                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has invalid params for "${commandType}".`,
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has invalid params for "${commandType}"${paramsMessage}.`,
                     scriptId: script.id,
                     commandId,
-                    path: `${path}.params`
-                });
-                return;
-            }
-
-            if (commandType === 'set_world_flag' && !isValidSetWorldFlagParams(command.params)) {
-                diagnostics.push({
-                    id: nextDiagnosticId('invalid_logic_command_params'),
-                    severity: 'error',
-                    code: 'invalid_logic_command_params',
-                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has invalid params for "${commandType}" (requires non-empty key and boolean value).`,
-                    scriptId: script.id,
-                    commandId,
-                    path: `${path}.params`
+                    path: paramsValidation.fieldPath
+                        ? `${path}.${paramsValidation.fieldPath}`
+                        : `${path}.params`
                 });
                 return;
             }
 
             if (commandType === 'start_cutscene') {
-                const cutsceneId = getStartCutsceneCommandCutsceneId(command.params);
+                const cutsceneId = getStartCutsceneCommandIdFromParams(command.params);
                 if (!cutsceneId) {
                     diagnostics.push({
                         id: nextDiagnosticId('invalid_logic_command_params'),

@@ -9,6 +9,41 @@
         "rawLines": [],
         "locked": false
       }
+    },
+    {
+      "id": "external_demo_noop",
+      "name": "External Demo Noop",
+      "category": "world.rule",
+      "commands": [
+        {
+          "id": "cmd_noop_01",
+          "type": "noop",
+          "params": {}
+        }
+      ],
+      "editor": {
+        "rawLines": [],
+        "locked": false
+      }
+    },
+    {
+      "id": "external_demo_flag",
+      "name": "External Demo Flag",
+      "category": "world.rule",
+      "commands": [
+        {
+          "id": "cmd_set_flag_01",
+          "type": "set_world_flag",
+          "params": {
+            "key": "demo_registry_flag",
+            "value": true
+          }
+        }
+      ],
+      "editor": {
+        "rawLines": [],
+        "locked": false
+      }
     }
   ]
 }
