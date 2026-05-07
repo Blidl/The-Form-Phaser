@@ -109,8 +109,11 @@ export type TestWorldLogicDiagnosticCode =
     | 'invalid_logic_binding_target'
     | 'unsupported_logic_binding_runtime_slot'
     | 'unknown_logic_command_type'
+    | 'invalid_logic_command_category'
     | 'invalid_logic_command_params'
     | 'invalid_logic_command_ref'
+    | 'invalid_platform_move_script_contract'
+    | 'invalid_surface_behavior_script_assignment'
     | 'missing_logic_command_cutscene_scene_participant_dependency';
 
 export interface TestWorldLogicDiagnostic {

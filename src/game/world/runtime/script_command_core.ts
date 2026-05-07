@@ -1,4 +1,7 @@
-import type { TestWorldLogicScriptCommandConfig } from './test_world_config';
+import type {
+    TestWorldLogicScriptCategory,
+    TestWorldLogicScriptCommandConfig
+} from './test_world_config';
 
 export type LogicCommandDomain =
     | 'event'
@@ -19,7 +22,7 @@ export interface LogicCommandParamSpecEntry {
     key: string;
     description: string;
     required: boolean;
-    expectedType: 'string' | 'boolean';
+    expectedType: 'string' | 'boolean' | 'number';
     nonEmpty?: boolean;
 }
 
@@ -29,6 +32,7 @@ export interface LogicCommandDefinition {
     description: string;
     domain: LogicCommandDomain;
     supportedAssignmentKinds?: readonly LogicCommandAssignmentKind[];
+    supportedScriptCategories?: readonly TestWorldLogicScriptCategory[];
     eventRuntimeSupported?: boolean;
     readOnlyDisplay: {
         summaryTemplate: string;

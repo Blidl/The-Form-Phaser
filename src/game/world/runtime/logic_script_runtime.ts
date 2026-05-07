@@ -1,5 +1,6 @@
 import { getLogicScriptAsset } from './logic_script_registry';
 import {
+    getLogicCommandDefinition,
     getSetWorldFlagCommandParams,
     getStartCutsceneCommandIdFromParams
 } from './logic_command_registry';
@@ -269,6 +270,17 @@ export const executeLogicScriptPreviewSandbox = (
                     type: command.type,
                     status: 'skipped',
                     message: `start_cutscene "${cutsceneId}" deferred in preview`
+                });
+                continue;
+            }
+
+            const commandDefinition = getLogicCommandDefinition(command.type);
+            if (commandDefinition && !commandDefinition.previewSupported) {
+                commandResults.push({
+                    commandId: command.id,
+                    type: command.type,
+                    status: 'skipped',
+                    message: commandDefinition.previewBehaviorNote
                 });
                 continue;
             }

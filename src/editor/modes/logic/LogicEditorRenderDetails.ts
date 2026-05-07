@@ -313,7 +313,7 @@ export function renderScriptDetailsSection(
             const runtimeSupport = commandDefinition?.runtimeSupported
                 ? `runtime: ${commandDefinition.runtimeSupportedSlots.join(', ')}`
                 : 'runtime: unsupported';
-            const previewSupport = commandDefinition?.previewSupported
+            const previewSupport = commandDefinition
                 ? `preview: ${commandDefinition.previewBehaviorNote}`
                 : 'preview: unsupported';
             instructionsBox.appendChild(dom.makeInfoLine(

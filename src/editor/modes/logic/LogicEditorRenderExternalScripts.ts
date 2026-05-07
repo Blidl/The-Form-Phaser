@@ -62,6 +62,16 @@ const SCRIPT_GROUPS: ScriptGroupConfig[] = [
         ]
     },
     {
+        title: 'Platform Scripts',
+        emptyLine: 'No platform scripts found.',
+        categories: [
+            { label: 'Move', category: 'platform.move' },
+            { label: 'Rotate', category: 'platform.rotate' },
+            { label: 'Default Action', category: 'platform.defaultAction' },
+            { label: 'Action', category: 'platform.action' }
+        ]
+    },
+    {
         title: 'NPC Scripts',
         emptyLine: 'No NPC scripts found.',
         categories: [

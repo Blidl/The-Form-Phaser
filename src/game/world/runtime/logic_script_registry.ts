@@ -14,6 +14,10 @@ import {
     isKnownLogicCommandType,
     validateKnownLogicCommandParams
 } from './logic_command_registry';
+import {
+    PLATFORM_MOVE_PING_PONG_COMMAND_TYPE,
+    summarizePlatformMovePingPongContract
+} from './platform_command_registry';
 
 const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
     'object.move',
@@ -456,6 +460,8 @@ export const collectLogicScriptAssetDiagnostics = (
 
     registryState.assets.forEach((script) => {
         const shouldCheckCutsceneSceneParticipantDependencies = referencedScriptRefIds?.has(script.id) ?? false;
+        const isPlatformMoveScript = script.category === 'platform.move';
+        let platformMovePingPongCount = 0;
         script.commands.forEach((command, commandIndex) => {
             const commandType = command.type.trim();
             const path = `logicScripts.${script.id}.commands[${commandIndex}]`;
@@ -474,12 +480,44 @@ export const collectLogicScriptAssetDiagnostics = (
                 return;
             }
 
+            if (isPlatformMoveScript && commandType !== PLATFORM_MOVE_PING_PONG_COMMAND_TYPE) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_category'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_category',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is not valid for category "platform.move"; expected "${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE}".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`
+                });
+                return;
+            }
+
+            if (!isPlatformMoveScript && commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_category'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_category',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is only valid for category "platform.move".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`
+                });
+                return;
+            }
+
+            if (commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE) {
+                platformMovePingPongCount += 1;
+            }
+
             const paramsValidation = validateKnownLogicCommandParams(command);
             if (paramsValidation && !paramsValidation.valid) {
                 const paramsMessage = commandType === 'set_world_flag'
                     ? ' (requires non-empty key and boolean value)'
                     : commandType === 'start_cutscene'
                         ? ' (requires non-empty cutsceneId)'
+                        : commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE
+                            ? ' (requires axis, distance > 0, speed > 0, optional start)'
                         : '';
                 diagnostics.push({
                     id: nextDiagnosticId('invalid_logic_command_params'),
@@ -492,6 +530,10 @@ export const collectLogicScriptAssetDiagnostics = (
                         ? `${path}.${paramsValidation.fieldPath}`
                         : `${path}.params`
                 });
+                return;
+            }
+
+            if (isPlatformMoveScript) {
                 return;
             }
 
@@ -547,7 +589,79 @@ export const collectLogicScriptAssetDiagnostics = (
                 }
             }
         });
+
+        if (isPlatformMoveScript && platformMovePingPongCount > 1) {
+            diagnostics.push({
+                id: nextDiagnosticId('invalid_platform_move_script_contract'),
+                severity: 'error',
+                code: 'invalid_platform_move_script_contract',
+                message: `Script "${script.id}" contains ${platformMovePingPongCount} "${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE}" commands. Exactly one is supported in this XS.`,
+                scriptId: script.id,
+                path: `logicScripts.${script.id}.commands`
+            });
+        }
     });
+
+    if (activeConfig) {
+        activeConfig.surfaces.forEach((surface, surfaceIndex) => {
+            const assignedMoveScriptId = typeof surface.behaviorScripts?.move === 'string'
+                ? surface.behaviorScripts.move.trim()
+                : '';
+            if (assignedMoveScriptId.length <= 0) {
+                return;
+            }
+
+            const path = `surfaces[${surfaceIndex}].behaviorScripts.move`;
+            const script = registryState.byId.get(assignedMoveScriptId);
+            if (!script) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `Surface "${surface.id}" move behavior script "${assignedMoveScriptId}" is assigned but missing from external script assets.`,
+                    scriptId: assignedMoveScriptId,
+                    path
+                });
+                return;
+            }
+
+            if (script.category !== 'platform.move') {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `Surface "${surface.id}" move behavior script "${assignedMoveScriptId}" has category "${script.category}", expected "platform.move".`,
+                    scriptId: script.id,
+                    path
+                });
+                return;
+            }
+
+            const summary = summarizePlatformMovePingPongContract(script.commands);
+            if (summary.commandCount <= 0) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'warning',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `Surface "${surface.id}" move behavior script "${assignedMoveScriptId}" is empty. Assign exactly one "${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE}" command.`,
+                    scriptId: script.id,
+                    path
+                });
+                return;
+            }
+
+            if (!summary.hasExactlyOneValidCommand) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `Surface "${surface.id}" move behavior script "${assignedMoveScriptId}" must contain exactly one valid "${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE}" command.`,
+                    scriptId: script.id,
+                    path
+                });
+            }
+        });
+    }
 
     return diagnostics;
 };

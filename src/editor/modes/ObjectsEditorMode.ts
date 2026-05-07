@@ -19,10 +19,15 @@ import { ObjectAuthoringService, type UpdateObjectVisualPatch } from '../object-
 import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService';
 import { objectDiag } from '../debug/ObjectEditorDiagnostics';
 import { getAllLogicScriptAssets } from '../../game/world/runtime/logic_script_registry';
+import {
+    PLATFORM_MOVE_PING_PONG_COMMAND_TYPE,
+    summarizePlatformMovePingPongContract
+} from '../../game/world/runtime/platform_command_registry';
 import type {
     TestWorldBehaviorScriptsConfig,
     TestWorldConfig,
     TestWorldLogicBindingConfig,
+    TestWorldLogicScriptConfig,
     TestWorldLogicScriptRefConfig
 } from '../../game/world/runtime/test_world_config';
 import type { ObjectInteractionTrace } from '../../game/world/runtime/test_world_runtime';
@@ -3014,7 +3019,7 @@ export class ObjectsEditorMode implements EditorMode {
         field: BehaviorScriptField,
         value: string | undefined,
         options: readonly BehaviorScriptOption[],
-        scriptById: ReadonlyMap<string, { category: string }>
+        scriptById: ReadonlyMap<string, TestWorldLogicScriptConfig>
     ): HTMLDivElement {
         const row = document.createElement('div');
         row.style.display = 'grid';
@@ -3100,7 +3105,7 @@ export class ObjectsEditorMode implements EditorMode {
 
     private appendBehaviorScriptFieldDiagnostic(
         diagnostics: string[],
-        scriptById: ReadonlyMap<string, { category: string }>,
+        scriptById: ReadonlyMap<string, TestWorldLogicScriptConfig>,
         value: string | undefined,
         fieldLabel: BehaviorScriptFieldLabel,
         field: BehaviorScriptField
@@ -3117,6 +3122,18 @@ export class ObjectsEditorMode implements EditorMode {
         const expectedCategory = BEHAVIOR_SCRIPT_CATEGORY_BY_FIELD[field];
         if (script.category !== expectedCategory) {
             diagnostics.push(`${fieldLabel} category mismatch: expected ${expectedCategory}, got ${script.category} (${scriptId})`);
+            return;
+        }
+
+        if (field === 'move') {
+            const summary = summarizePlatformMovePingPongContract(script.commands);
+            if (summary.commandCount <= 0) {
+                diagnostics.push(`${fieldLabel} assigned script is empty: expected exactly one ${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE} command (${scriptId})`);
+                return;
+            }
+            if (!summary.hasExactlyOneValidCommand) {
+                diagnostics.push(`${fieldLabel} script contract invalid: expected exactly one valid ${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE} command (${scriptId})`);
+            }
         }
     }
 
