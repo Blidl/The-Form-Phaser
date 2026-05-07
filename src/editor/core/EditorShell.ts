@@ -34,6 +34,7 @@ import {
     toggleObjectEditorDiagnostics
 } from '../debug/ObjectEditorDiagnostics';
 import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
+import type { GameplayTimeController } from '../../scenes/runtime/gameplay_time_controller';
 
 interface EditorShellOptions {
     scene: Scene;
@@ -41,6 +42,7 @@ interface EditorShellOptions {
     followTarget: Phaser.GameObjects.GameObject;
     hostElement?: HTMLElement;
     legacyObjectSource?: LegacyObjectSource;
+    gameplayTimeController: GameplayTimeController;
 }
 
 const TOP_BAR_HEIGHT = 36;
@@ -117,6 +119,7 @@ export class EditorShell {
     private readonly diagPanelCounts: HTMLDivElement;
     private readonly diagPanelSelected: HTMLDivElement;
     private readonly diagPanelLastEvent: HTMLDivElement;
+    private readonly gameplayTimeController: GameplayTimeController;
     private diagPanelClosedTemporarily = false;
     private lastDiagEvent = '-';
     private saveStatusMessage: string | null = null;
@@ -127,6 +130,7 @@ export class EditorShell {
     public constructor(options: EditorShellOptions) {
         this.scene = options.scene;
         this.camera = options.camera;
+        this.gameplayTimeController = options.gameplayTimeController;
         this.state = createInitialEditorState();
         this.projectStore = new ProjectStore();
         const legacyObjectAdapter = options.legacyObjectSource
@@ -176,6 +180,14 @@ export class EditorShell {
             },
             onReloadRequested: () => {
                 window.location.reload();
+            },
+            onStopToggled: (stopped) => {
+                this.gameplayTimeController.setStopped(stopped);
+                this.syncGameplayTimeUi();
+            },
+            onSpeedChanged: (speed) => {
+                this.gameplayTimeController.setSpeed(speed);
+                this.syncGameplayTimeUi();
             }
         });
         this.topTabs.setDiagnosticsEnabled(isObjectEditorDiagnosticsEnabled());
@@ -290,6 +302,7 @@ export class EditorShell {
         this.refreshDiagnosticsUi();
 
         this.topTabs.setActiveTab(this.state.activeModeId);
+        this.syncGameplayTimeUi();
         this.refreshSaveUi();
         this.renderActiveModeInspectors();
     }
@@ -415,6 +428,7 @@ export class EditorShell {
         this.topTabs.setMouseWorldPosition(mouseWorld.x, mouseWorld.y);
         this.captureRuntimeConfigSignature();
         this.refreshSaveUi();
+        this.syncGameplayTimeUi();
         this.modes[this.state.activeModeId].update?.(this.createModeContext());
         this.refreshDiagnosticsUi();
     }
@@ -547,6 +561,11 @@ export class EditorShell {
         const dirty = this.isDirty();
         const resolvedStatus = dirty ? 'Unsaved' : this.saveStatusMessage;
         this.topTabs.setSaveState(dirty, resolvedStatus, this.saveNoteMessage);
+    }
+
+    private syncGameplayTimeUi(): void {
+        const snapshot = this.gameplayTimeController.getSnapshot();
+        this.topTabs.setGameplayTimeState(snapshot.stopped, snapshot.speed);
     }
 
     private handleSaveRequested(): void {

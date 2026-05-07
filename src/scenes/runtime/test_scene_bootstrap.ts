@@ -64,6 +64,10 @@ import {
 } from './test_cutscene_runtime';
 import { createEditorPlugin, type EditorPlugin } from '../../editor/EditorPlugin';
 import { createAuthoringObjectBridgeSource } from '../../editor/bridge/AuthoringObjectBridge';
+import {
+    createGameplayTimeController,
+    type GameplayTimeController
+} from './gameplay_time_controller';
 
 export interface TestSceneBootstrapRuntime {
     player: PfPlayer;
@@ -78,6 +82,7 @@ export interface TestSceneBootstrapRuntime {
     tuningRuntime: PlayerTuningRuntime;
     tuningPanelRuntime: PlayerTuningPanelRuntime;
     editorPlugin: EditorPlugin;
+    gameplayTimeController: GameplayTimeController;
 }
 
 export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, editorOpen: boolean = false): TestSceneBootstrapRuntime => {
@@ -138,7 +143,6 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
     const debugModel: PlayerDebugModel = player;
 
     const respawnRuntime = createPlayerRespawnRuntime({
-        scene,
         player: worldActor,
         initialRespawnPoint
     });
@@ -216,14 +220,17 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         },
         (source) => cutsceneRuntime.requestNormalCameraOwnership(source)
     );
+    const gameplayTimeController = createGameplayTimeController(scene);
     const editorPlugin = createEditorPlugin({
         scene,
         followTarget: player.arcadeBodyObject,
         legacyObjectSource: createAuthoringObjectBridgeSource(worldRuntime, {
             onRuntimeConfigApplied: (config) => {
                 backgroundRuntime.applyConfig(config);
-            }
-        })
+            },
+            gameplayTimeController
+        }),
+        gameplayTimeController
     });
     const devHelperRuntime = createTestDevHelperRuntime({
         scene,
@@ -295,6 +302,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         devHelperRuntime,
         tuningRuntime,
         tuningPanelRuntime,
-        editorPlugin
+        editorPlugin,
+        gameplayTimeController
     };
 };

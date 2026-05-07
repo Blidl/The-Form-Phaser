@@ -164,7 +164,7 @@ export interface CutsceneLogicTrace {
 
 export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
-    updateMovingPlatforms: () => void;
+    updateMovingPlatforms: (deltaMs: number) => void;
     updateNpcs: (deltaMs: number) => void;
     updateNpcInteractionTarget: () => void;
     tryTriggerObjectLogicInteraction: () => boolean;
@@ -261,7 +261,7 @@ interface RuntimeBinding {
 
 interface BuiltWorldInstance {
     hazards: HazardObject[];
-    updateMovingPlatforms: () => void;
+    updateMovingPlatforms: (deltaMs: number) => void;
     updateNpcs: (deltaMs: number) => void;
     updateNpcInteractionTarget: () => void;
     tryTriggerNpcInteraction: () => void;
@@ -756,8 +756,8 @@ export const createTestWorldRuntime = (
         get hazards(): readonly HazardObject[] {
             return instance.hazards;
         },
-        updateMovingPlatforms: (): void => {
-            instance.updateMovingPlatforms();
+        updateMovingPlatforms: (deltaMs: number): void => {
+            instance.updateMovingPlatforms(deltaMs);
         },
         updateNpcs: (deltaMs: number): void => {
             instance.updateNpcs(deltaMs);
@@ -2108,8 +2108,8 @@ const buildWorldInstance = (
 
     return {
         hazards,
-        updateMovingPlatforms: (): void => {
-            movingPlatformRuntime.update();
+        updateMovingPlatforms: (deltaMs: number): void => {
+            movingPlatformRuntime.update(deltaMs);
             dragBoxes.forEach((dragBox) => {
                 dragBox.update(player);
             });

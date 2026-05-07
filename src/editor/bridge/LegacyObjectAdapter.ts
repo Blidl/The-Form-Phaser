@@ -50,6 +50,9 @@ export interface LegacyObjectSource {
     getRuntimeWorldFlagsSnapshot?: () => Record<string, boolean>;
     getLastObjectInteractionTrace?: () => unknown;
     getLastCutsceneLogicTrace?: () => unknown;
+    getGameplayTimeState?: () => { stopped: boolean; speed: number };
+    setGameplayStopped?: (stopped: boolean) => void;
+    setGameplaySpeed?: (speed: number) => void;
     saveRuntimeConfig?: () => {
         success: boolean;
         source: 'runtimeConfig' | 'legacySave' | 'exportJson' | 'localStorage';
@@ -259,6 +262,28 @@ export class LegacyObjectAdapter {
             return null;
         }
         return JSON.parse(JSON.stringify(trace));
+    }
+
+    public getGameplayTimeState(): { stopped: boolean; speed: number } | null {
+        const state = this.source.getGameplayTimeState?.();
+        if (!state || typeof state !== 'object') {
+            return null;
+        }
+        if (typeof state.stopped !== 'boolean' || typeof state.speed !== 'number' || !Number.isFinite(state.speed)) {
+            return null;
+        }
+        return {
+            stopped: state.stopped,
+            speed: state.speed
+        };
+    }
+
+    public setGameplayStopped(stopped: boolean): void {
+        this.source.setGameplayStopped?.(stopped);
+    }
+
+    public setGameplaySpeed(speed: number): void {
+        this.source.setGameplaySpeed?.(speed);
     }
 
     public saveRuntimeConfig(): {

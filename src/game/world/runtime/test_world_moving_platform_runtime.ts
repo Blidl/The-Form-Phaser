@@ -10,7 +10,7 @@ interface MovingPlatformRuntimeState {
 }
 
 export interface TestWorldMovingPlatformRuntimeController {
-    update: () => void;
+    update: (deltaMs: number) => void;
     setMotionState: (platformId: string, mode: TestWorldMovingPlatformMotionState) => void;
     getMotionState: (platformId: string) => TestWorldMovingPlatformMotionState | null;
 }
@@ -69,7 +69,7 @@ export const createTestWorldMovingPlatformRuntimeController = (
     };
 
     return {
-        update: (): void => {
+        update: (deltaMs: number): void => {
             params.platformConfigs.forEach((platformConfig) => {
                 const platform = params.getPlatform(platformConfig.id);
                 const runtimeState = stateByPlatformId.get(platformConfig.id);
@@ -83,7 +83,7 @@ export const createTestWorldMovingPlatformRuntimeController = (
                     return;
                 }
 
-                platform.update();
+                platform.update(deltaMs);
 
                 if (runtimeState.mode !== 'run_once') {
                     return;

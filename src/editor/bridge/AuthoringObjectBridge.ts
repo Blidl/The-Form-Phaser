@@ -2,6 +2,7 @@ import type { TestWorldRuntime } from '../../game/world/runtime/test_world_runti
 import type { LegacyObjectSource } from './LegacyObjectAdapter';
 import { saveTestWorldEditorDraft } from '../../game/world/runtime/test_world_editor_storage';
 import type { TestWorldConfig } from '../../game/world/runtime/test_world_config';
+import type { GameplayTimeController } from '../../scenes/runtime/gameplay_time_controller';
 
 const isCreatableLegacyType = (type: string): boolean => {
     return type === 'surface'
@@ -28,7 +29,9 @@ interface ImportRuntimeConfigOptions {
 
 export const createAuthoringObjectBridgeSource = (
     worldRuntime: TestWorldRuntime,
-    options?: CreateAuthoringObjectBridgeSourceOptions
+    options?: CreateAuthoringObjectBridgeSourceOptions & {
+        gameplayTimeController?: GameplayTimeController;
+    }
 ): LegacyObjectSource => {
     let importInProgress = false;
 
@@ -51,6 +54,18 @@ export const createAuthoringObjectBridgeSource = (
         getRuntimeWorldFlagsSnapshot: () => worldRuntime.getRuntimeWorldFlagsSnapshot(),
         getLastObjectInteractionTrace: () => worldRuntime.getLastObjectInteractionTrace(),
         getLastCutsceneLogicTrace: () => worldRuntime.getLastCutsceneLogicTrace(),
+        getGameplayTimeState: () => {
+            const snapshot = options?.gameplayTimeController?.getSnapshot();
+            return snapshot
+                ? { stopped: snapshot.stopped, speed: snapshot.speed }
+                : { stopped: false, speed: 1 };
+        },
+        setGameplayStopped: (stopped) => {
+            options?.gameplayTimeController?.setStopped(stopped);
+        },
+        setGameplaySpeed: (speed) => {
+            options?.gameplayTimeController?.setSpeed(speed);
+        },
         saveRuntimeConfig: () => {
             const levelId = worldRuntime.getLevelId();
             const config = worldRuntime.getConfig();

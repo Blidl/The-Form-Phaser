@@ -17,6 +17,7 @@ import { openEndScreen, openPauseMenu, startLevelScene } from '../demo_flow';
 import { isEditorTextInputFocused, relaxKeyboardCapture } from '../../shared/dom_input_focus';
 import type { TestCutsceneRuntime } from './test_cutscene_runtime';
 import type { EditorPlugin } from '../../editor/EditorPlugin';
+import type { GameplayTimeController } from './gameplay_time_controller';
 
 export interface TestSceneFrameRuntime {
     update: (deltaMs: number) => void;
@@ -36,12 +37,13 @@ interface CreateTestSceneFrameRuntimeParams {
     devHelperRuntime: TestDevHelperRuntime;
     tuningRuntime: PlayerTuningRuntime;
     tuningPanelRuntime: PlayerTuningPanelRuntime;
+    gameplayTimeController: GameplayTimeController;
 }
 
 export const createTestSceneFrameRuntime = (
     params: CreateTestSceneFrameRuntimeParams
 ): TestSceneFrameRuntime => {
-    const { scene, player, playerInputKeys, worldRuntime, respawnRuntime, hudRuntime, debugRuntime, cutsceneRuntime, editorRuntime, editorPlugin, devHelperRuntime, tuningPanelRuntime } = params;
+    const { scene, player, playerInputKeys, worldRuntime, respawnRuntime, hudRuntime, debugRuntime, cutsceneRuntime, editorRuntime, editorPlugin, devHelperRuntime, tuningPanelRuntime, gameplayTimeController } = params;
     const pauseKey = scene.input.keyboard?.addKey(Input.Keyboard.KeyCodes.ESC);
     const temporaryInteractionKey = scene.input.keyboard?.addKey(Input.Keyboard.KeyCodes.I);
     if (scene.input.keyboard) {
@@ -50,11 +52,13 @@ export const createTestSceneFrameRuntime = (
 
     return {
         update: (deltaMs: number): void => {
+            const effectiveGameplayDeltaMs = gameplayTimeController.getEffectiveGameplayDeltaMs(deltaMs);
+            const gameplayStopped = gameplayTimeController.getSnapshot().effectiveScale <= 0;
             const textInputFocused = isEditorTextInputFocused();
             if (devHelperRuntime.update()) {
                 return;
             }
-            cutsceneRuntime.update(deltaMs);
+            cutsceneRuntime.update(effectiveGameplayDeltaMs);
             editorPlugin.update(deltaMs);
             editorRuntime.update(deltaMs);
             tuningPanelRuntime.update(deltaMs);
@@ -63,7 +67,7 @@ export const createTestSceneFrameRuntime = (
             }
             if (editorRuntime.isActive()) {
                 worldRuntime.updateNpcInteractionTarget();
-                worldRuntime.updateNpcs(deltaMs);
+                worldRuntime.updateNpcs(effectiveGameplayDeltaMs);
                 debugRuntime.update();
                 hudRuntime.update();
                 return;
@@ -75,8 +79,8 @@ export const createTestSceneFrameRuntime = (
                 return;
             }
 
-            worldRuntime.updateMovingPlatforms();
-            worldRuntime.updateNpcs(deltaMs);
+            worldRuntime.updateMovingPlatforms(effectiveGameplayDeltaMs);
+            worldRuntime.updateNpcs(effectiveGameplayDeltaMs);
             worldRuntime.syncNpcTriangleSupportSurfaces();
             worldRuntime.syncPlayerCollisionMode();
 
@@ -87,11 +91,11 @@ export const createTestSceneFrameRuntime = (
                 : pollPlayerInputSnapshot(playerInputKeys);
             const windInfluenceX = worldRuntime.resolveWindInfluenceX(player.arcadeBodyObject);
 
-            player.tick(deltaMs, input, windInfluenceX);
+            player.tick(effectiveGameplayDeltaMs, input, windInfluenceX);
             worldRuntime.postPlayerTickUpdate();
             worldRuntime.syncPlayerCollisionMode();
             worldRuntime.updateNpcInteractionTarget();
-            if (!textInputFocused && !cutsceneRuntime.isInputLocked() && temporaryInteractionKey && Input.Keyboard.JustDown(temporaryInteractionKey)) {
+            if (!gameplayStopped && !textInputFocused && !cutsceneRuntime.isInputLocked() && temporaryInteractionKey && Input.Keyboard.JustDown(temporaryInteractionKey)) {
                 const handledByObjectLogic = worldRuntime.tryTriggerObjectLogicInteraction();
                 if (!handledByObjectLogic) {
                     worldRuntime.tryTriggerNpcInteraction();
@@ -106,6 +110,7 @@ export const createTestSceneFrameRuntime = (
                 openEndScreen(scene);
                 return;
             }
+            respawnRuntime.update(effectiveGameplayDeltaMs);
             respawnRuntime.evaluateHazardOverlap(worldRuntime.hazards);
             debugRuntime.update();
             hudRuntime.update();

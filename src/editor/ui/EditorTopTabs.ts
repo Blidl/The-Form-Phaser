@@ -10,6 +10,8 @@ interface EditorTopTabsOptions {
     onExportJsonRequested?: () => void;
     onImportJsonRequested?: () => void;
     onReloadRequested?: () => void;
+    onStopToggled?: (stopped: boolean) => void;
+    onSpeedChanged?: (speed: number) => void;
     zIndex?: number;
 }
 
@@ -26,6 +28,10 @@ export class EditorTopTabs {
     private readonly saveStateLabel: HTMLDivElement;
     private readonly saveStatusLabel: HTMLDivElement;
     private readonly saveNoteLabel: HTMLDivElement;
+    private readonly stopCheckbox: HTMLInputElement;
+    private readonly speedInput: HTMLInputElement;
+    private speedInputFocused = false;
+    private gameplaySpeedValue = 1;
 
     public constructor(options: EditorTopTabsOptions) {
         this.root = document.createElement('div');
@@ -80,19 +86,49 @@ export class EditorTopTabs {
         stopLabel.style.display = 'inline-flex';
         stopLabel.style.alignItems = 'center';
         stopLabel.style.gap = '4px';
-        const stopCheckbox = document.createElement('input');
-        stopCheckbox.type = 'checkbox';
-        stopCheckbox.disabled = true;
-        stopLabel.append(stopCheckbox, document.createTextNode('Stop game'));
+        this.stopCheckbox = document.createElement('input');
+        this.stopCheckbox.type = 'checkbox';
+        this.stopCheckbox.addEventListener('change', () => {
+            options.onStopToggled?.(this.stopCheckbox.checked);
+        });
+        stopLabel.append(this.stopCheckbox, document.createTextNode('Stop game'));
 
-        const speedInput = document.createElement('input');
-        speedInput.type = 'text';
-        speedInput.value = '1.0';
-        speedInput.disabled = true;
-        speedInput.style.width = '36px';
-        speedInput.style.height = '20px';
-        speedInput.style.border = '1px solid #707070';
-        speedInput.style.background = '#dcdcdc';
+        this.speedInput = document.createElement('input');
+        this.speedInput.type = 'text';
+        this.speedInput.value = '1.0';
+        this.speedInput.style.width = '36px';
+        this.speedInput.style.height = '20px';
+        this.speedInput.style.border = '1px solid #707070';
+        this.speedInput.style.background = '#dcdcdc';
+        const stopKeyboardEvent = (event: Event): void => {
+            event.stopPropagation();
+        };
+        this.speedInput.addEventListener('keydown', stopKeyboardEvent);
+        this.speedInput.addEventListener('keyup', stopKeyboardEvent);
+        this.speedInput.addEventListener('keypress', stopKeyboardEvent);
+        this.speedInput.addEventListener('focus', () => {
+            this.speedInputFocused = true;
+        });
+        const commitSpeed = (): void => {
+            const parsed = Number.parseFloat(this.speedInput.value.trim());
+            if (!Number.isFinite(parsed)) {
+                this.speedInput.value = this.formatSpeedValue(this.gameplaySpeedValue);
+                return;
+            }
+            options.onSpeedChanged?.(parsed);
+        };
+        this.speedInput.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                commitSpeed();
+                this.speedInput.blur();
+            }
+        });
+        this.speedInput.addEventListener('change', commitSpeed);
+        this.speedInput.addEventListener('blur', () => {
+            this.speedInputFocused = false;
+            commitSpeed();
+        });
 
         const speedLabel = document.createElement('span');
         speedLabel.textContent = 'Game speed';
@@ -186,7 +222,7 @@ export class EditorTopTabs {
 
         controls.append(
             stopLabel,
-            speedInput,
+            this.speedInput,
             speedLabel,
             this.mouseCoordsLabel,
             this.saveStateLabel,
@@ -235,7 +271,19 @@ export class EditorTopTabs {
         this.saveNoteLabel.textContent = noteMessage ?? '';
     }
 
+    public setGameplayTimeState(stopped: boolean, speed: number): void {
+        this.stopCheckbox.checked = stopped;
+        this.gameplaySpeedValue = speed;
+        if (!this.speedInputFocused) {
+            this.speedInput.value = this.formatSpeedValue(speed);
+        }
+    }
+
     public destroy(): void {
         this.root.remove();
+    }
+
+    private formatSpeedValue(speed: number): string {
+        return speed.toFixed(2).replace(/\.?0+$/, '');
     }
 }
