@@ -1,100 +1,10 @@
 {
-  "scripts": [
-    {
-      "id": "external_demo_world_start",
-      "name": "External Demo World Start",
-      "category": "world.rule",
-      "commands": [],
-      "editor": {
-        "rawLines": [],
-        "locked": false
-      }
-    },
-    {
-      "id": "external_demo_noop",
-      "name": "External Demo Noop",
-      "category": "world.rule",
-      "commands": [
-        {
-          "id": "cmd_noop_01",
-          "type": "noop",
-          "params": {}
-        }
-      ],
-      "editor": {
-        "rawLines": [],
-        "locked": false
-      }
-    },
-    {
-      "id": "external_demo_flag",
-      "name": "External Demo Flag",
-      "category": "world.rule",
-      "commands": [
-        {
-          "id": "cmd_set_flag_01",
-          "type": "set_world_flag",
-          "params": {
-            "key": "demo_registry_flag",
-            "value": true
-          }
-        }
-      ],
-      "editor": {
-        "rawLines": [],
-        "locked": false
-      }
-    },
-    {
-      "id": "external_demo_platform_move",
-      "name": "External Demo Platform Move",
-      "category": "platform.move",
-      "commands": [
-        {
-          "id": "cmd_platform_move_ping_pong_demo",
-          "type": "platform_move_ping_pong",
-          "params": {
-            "axis": "horizontal",
-            "distance": 160,
-            "speed": 80,
-            "start": "running_loop"
-          }
-        }
-      ],
-      "editor": {
-        "rawLines": [],
-        "locked": false
-      }
-    },
-    {
-      "id": "external_demo_platform_rotate",
-      "name": "External Demo Platform Rotate",
-      "category": "platform.rotate",
-      "commands": [
-        {
-          "id": "cmd_platform_rotate_constant_demo",
-          "type": "platform_rotate_constant",
-          "params": {
-            "angularSpeedDeg": 45,
-            "direction": "clockwise",
-            "start": "running_loop"
-          }
-        }
-      ],
-      "editor": {
-        "rawLines": [],
-        "locked": false
-      }
-    },
-    {
-      "id": "external_demo_platform_default_action",
-      "name": "External Demo Platform Default Action",
-      "category": "platform.defaultAction",
-      "commands": [],
-      "editor": {
-        "rawLines": [],
-        "locked": false
-      }
-    }
+  "scriptFiles": [
+    "scripts/world/external_demo_world_start.json",
+    "scripts/world/external_demo_noop.json",
+    "scripts/world/external_demo_flag.json",
+    "scripts/platform/external_demo_platform_move.json",
+    "scripts/platform/external_demo_platform_rotate.json",
+    "scripts/platform/external_demo_platform_default_action.json"
   ]
 }

@@ -1,0 +1,10 @@
+{
+  "id": "external_demo_platform_default_action",
+  "name": "External Demo Platform Default Action",
+  "category": "platform.defaultAction",
+  "commands": [],
+  "editor": {
+    "rawLines": [],
+    "locked": false
+  }
+}

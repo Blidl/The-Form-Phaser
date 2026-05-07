@@ -4,6 +4,7 @@ import type {
     TestWorldLogicScriptCommandConfig,
     TestWorldLogicScriptConfig
 } from './test_world_config';
+import logicScriptsRegistryJson from './data/logic_scripts.json';
 import { collectTestWorldLogicDiagnostics, type TestWorldLogicDiagnostic } from './test_world_config_validation';
 import {
     getTestCutsceneRequiredSceneParticipantIds,
@@ -20,6 +21,11 @@ import {
     summarizePlatformMovePingPongContract,
     summarizePlatformRotateConstantContract
 } from './platform_command_registry';
+
+const BUNDLED_LOGIC_SCRIPT_FILE_MODULES = import.meta.glob('./data/scripts/**/*.json', {
+    eager: true,
+    import: 'default'
+}) as Record<string, unknown>;
 
 const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
     'object.move',
@@ -40,11 +46,17 @@ const LOGIC_SCRIPT_CATEGORIES = new Set<TestWorldLogicScriptCategory>([
     'world.rule'
 ]);
 const EMPTY_LOGIC_SCRIPT_REGISTRY: { scripts: unknown[] } = { scripts: [] };
+const LOGIC_SCRIPT_REGISTRY_MANIFEST_PATH = 'src/game/world/runtime/data/logic_scripts.json';
+const LOGIC_SCRIPT_REGISTRY_DATA_PREFIX = './data/';
 type LogicScriptRegistryReloadResult = {
     success: boolean;
     version: number;
     assetCount: number;
     message: string;
+};
+
+type NormalizeLogicScriptAssetsOptions = {
+    scriptFileLookup?: ReadonlyMap<string, unknown>;
 };
 
 interface LogicScriptRegistryState {
@@ -56,6 +68,7 @@ interface LogicScriptRegistryState {
     lastReloadedAt: number;
     lastError?: string;
     lastRawRegistry: unknown;
+    loadDiagnostics: TestWorldLogicDiagnostic[];
 }
 
 const asObject = (value: unknown): Record<string, unknown> | null => {
@@ -163,30 +176,186 @@ const normalizeLogicScript = (value: unknown): TestWorldLogicScriptConfig | null
     };
 };
 
-const normalizeLogicScriptAssets = (rawRegistry: unknown): {
+const cloneLogicScriptDiagnostic = (diagnostic: TestWorldLogicDiagnostic): TestWorldLogicDiagnostic => ({
+    ...diagnostic
+});
+
+const normalizeManifestScriptPath = (value: string): string => {
+    const forwardSlashes = value.replaceAll('\\', '/').trim();
+    const withoutLeading = forwardSlashes.replace(/^\.\/+/, '').replace(/^\/+/, '');
+    return withoutLeading;
+};
+
+const toManifestScriptPathFromGlobKey = (globKey: string): string => {
+    const normalized = normalizeManifestScriptPath(globKey);
+    return normalized.startsWith('data/')
+        ? normalized.slice('data/'.length)
+        : normalized;
+};
+
+const buildBundledScriptFileLookup = (modules: Record<string, unknown>): ReadonlyMap<string, unknown> => {
+    const lookup = new Map<string, unknown>();
+    Object.entries(modules).forEach(([key, moduleValue]) => {
+        lookup.set(toManifestScriptPathFromGlobKey(key), moduleValue);
+    });
+    return lookup;
+};
+
+const BUNDLED_LOGIC_SCRIPT_FILE_LOOKUP = buildBundledScriptFileLookup(BUNDLED_LOGIC_SCRIPT_FILE_MODULES);
+
+const createRegistryLoadDiagnostic = (
+    index: number,
+    options: {
+        severity?: TestWorldLogicDiagnostic['severity'];
+        code: TestWorldLogicDiagnostic['code'];
+        message: string;
+        path?: string;
+        scriptId?: string;
+    }
+): TestWorldLogicDiagnostic => {
+    return {
+        id: `registry_manifest_${index}`,
+        severity: options.severity ?? 'error',
+        code: options.code,
+        message: options.message,
+        path: options.path,
+        scriptId: options.scriptId
+    };
+};
+
+const normalizeLogicScriptAssets = (
+    rawRegistry: unknown,
+    options?: NormalizeLogicScriptAssetsOptions
+): {
     assets: TestWorldLogicScriptConfig[];
+    diagnostics: TestWorldLogicDiagnostic[];
     error: string | null;
 } => {
     const rawRoot = asObject(rawRegistry);
-    if (!rawRoot || !Array.isArray(rawRoot.scripts)) {
+    if (!rawRoot) {
         return {
             assets: [],
-            error: 'Registry payload must be an object with a scripts array.'
+            diagnostics: [],
+            error: 'Registry payload must be an object.'
         };
+    }
+
+    const diagnostics: TestWorldLogicDiagnostic[] = [];
+    const hasManifestShape = Array.isArray(rawRoot.scriptFiles);
+    const hasLegacyShape = Array.isArray(rawRoot.scripts);
+
+    if (!hasManifestShape && !hasLegacyShape) {
+        return {
+            assets: [],
+            diagnostics,
+            error: 'Registry payload must be an object with a scripts or scriptFiles array.'
+        };
+    }
+
+    if (hasManifestShape && hasLegacyShape) {
+        diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
+            severity: 'warning',
+            code: 'duplicate_logic_script_ref',
+            message: `External logic script registry has both scriptFiles and scripts arrays. scriptFiles from ${LOGIC_SCRIPT_REGISTRY_MANIFEST_PATH} is preferred.`,
+            path: 'logic_scripts.json'
+        }));
+    }
+
+    const rawScriptEntries: unknown[] = [];
+
+    if (hasManifestShape) {
+        const scriptFileLookup = options?.scriptFileLookup;
+        if (!scriptFileLookup) {
+            return {
+                assets: [],
+                diagnostics,
+                error: `Manifest payload requires a script file lookup for ${LOGIC_SCRIPT_REGISTRY_MANIFEST_PATH}.`
+            };
+        }
+
+        const usedManifestPaths = new Set<string>();
+        rawRoot.scriptFiles.forEach((entry, entryIndex) => {
+            const scriptPath = asOptionalString(entry);
+            const diagnosticPath = `logic_scripts.json.scriptFiles[${entryIndex}]`;
+            if (!scriptPath) {
+                diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
+                    code: 'missing_logic_script_asset',
+                    message: `Manifest entry at index ${entryIndex} must be a non-empty script file path.`,
+                    path: diagnosticPath
+                }));
+                return;
+            }
+
+            const manifestPath = normalizeManifestScriptPath(scriptPath);
+            if (manifestPath.length <= 0) {
+                diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
+                    code: 'missing_logic_script_asset',
+                    message: `Manifest entry "${scriptPath}" is not a valid script file path.`,
+                    path: diagnosticPath
+                }));
+                return;
+            }
+
+            if (usedManifestPaths.has(manifestPath)) {
+                diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
+                    severity: 'warning',
+                    code: 'duplicate_logic_script_ref',
+                    message: `Manifest contains duplicate script file path "${manifestPath}".`,
+                    path: diagnosticPath
+                }));
+                return;
+            }
+            usedManifestPaths.add(manifestPath);
+
+            const rawScript = scriptFileLookup.get(manifestPath);
+            if (rawScript === undefined) {
+                diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
+                    code: 'missing_logic_script_asset',
+                    message: `Manifest path "${manifestPath}" does not resolve to a bundled script JSON module under ${LOGIC_SCRIPT_REGISTRY_DATA_PREFIX}scripts/.`,
+                    path: diagnosticPath
+                }));
+                return;
+            }
+            rawScriptEntries.push(rawScript);
+        });
+    } else if (hasLegacyShape) {
+        rawScriptEntries.push(...rawRoot.scripts);
     }
 
     const usedIds = new Set<string>();
     const normalized: TestWorldLogicScriptConfig[] = [];
-    rawRoot.scripts.forEach((entry) => {
+    rawScriptEntries.forEach((entry, entryIndex) => {
         const script = normalizeLogicScript(entry);
-        if (!script || usedIds.has(script.id)) {
+        if (!script) {
+            diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
+                code: 'missing_logic_script_asset',
+                message: `External script asset at index ${entryIndex} has invalid shape.`,
+                path: hasManifestShape
+                    ? `logic_scripts.json.scriptFiles[${entryIndex}]`
+                    : `logic_scripts.json.scripts[${entryIndex}]`
+            }));
             return;
         }
+
+        if (usedIds.has(script.id)) {
+            diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
+                code: 'duplicate_logic_script_id',
+                message: `Duplicate external script id "${script.id}" detected while loading ${LOGIC_SCRIPT_REGISTRY_MANIFEST_PATH}.`,
+                scriptId: script.id,
+                path: hasManifestShape
+                    ? `logic_scripts.json.scriptFiles[${entryIndex}]`
+                    : `logic_scripts.json.scripts[${entryIndex}]`
+            }));
+            return;
+        }
+
         usedIds.add(script.id);
         normalized.push(cloneLogicScriptAsset(script));
     });
+
     return {
         assets: normalized,
+        diagnostics,
         error: null
     };
 };
@@ -198,11 +367,16 @@ const registryState: LogicScriptRegistryState = {
     version: 0,
     source: 'init',
     lastReloadedAt: Date.now(),
-    lastRawRegistry: EMPTY_LOGIC_SCRIPT_REGISTRY
+    lastRawRegistry: EMPTY_LOGIC_SCRIPT_REGISTRY,
+    loadDiagnostics: []
 };
 
-const commitLogicScriptRegistry = (rawRegistry: unknown, source: string): void => {
-    const normalized = normalizeLogicScriptAssets(rawRegistry);
+const commitLogicScriptRegistry = (
+    rawRegistry: unknown,
+    source: string,
+    options?: NormalizeLogicScriptAssetsOptions
+): void => {
+    const normalized = normalizeLogicScriptAssets(rawRegistry, options);
     if (normalized.error) {
         registryState.source = source;
         registryState.lastError = normalized.error;
@@ -216,6 +390,7 @@ const commitLogicScriptRegistry = (rawRegistry: unknown, source: string): void =
     );
     registryState.ids = nextAssets.map((entry) => entry.id);
     registryState.lastRawRegistry = rawRegistry;
+    registryState.loadDiagnostics = normalized.diagnostics.map((entry) => cloneLogicScriptDiagnostic(entry));
     registryState.version += 1;
     registryState.source = source;
     registryState.lastReloadedAt = Date.now();
@@ -223,6 +398,9 @@ const commitLogicScriptRegistry = (rawRegistry: unknown, source: string): void =
 };
 
 commitLogicScriptRegistry(EMPTY_LOGIC_SCRIPT_REGISTRY, 'module_init_fallback');
+commitLogicScriptRegistry(logicScriptsRegistryJson, 'module_init_manifest', {
+    scriptFileLookup: BUNDLED_LOGIC_SCRIPT_FILE_LOOKUP
+});
 let hasLoadedExternalLogicScripts = false;
 let initialExternalLogicScriptsLoadPromise: Promise<LogicScriptRegistryReloadResult> | null = null;
 
@@ -343,7 +521,9 @@ export const reloadExternalLogicScripts = async (): Promise<LogicScriptRegistryR
             }
 
             const previousVersion = registryState.version;
-            commitLogicScriptRegistry(responsePayload, 'dev-fetch');
+            commitLogicScriptRegistry(responsePayload, 'dev-fetch', {
+                scriptFileLookup: BUNDLED_LOGIC_SCRIPT_FILE_LOOKUP
+            });
             if (registryState.version === previousVersion && registryState.lastError) {
                 return {
                     success: false,
@@ -373,7 +553,9 @@ export const reloadExternalLogicScripts = async (): Promise<LogicScriptRegistryR
     }
 
     const previousVersion = registryState.version;
-    commitLogicScriptRegistry(registryState.lastRawRegistry, 'manual_reload');
+    commitLogicScriptRegistry(registryState.lastRawRegistry, 'manual_reload', {
+        scriptFileLookup: BUNDLED_LOGIC_SCRIPT_FILE_LOOKUP
+    });
     if (registryState.version === previousVersion && registryState.lastError) {
         return {
             success: false,
@@ -459,6 +641,8 @@ export const collectLogicScriptAssetDiagnostics = (
     const referencedScriptRefIds = activeConfig
         ? collectReferencedScriptRefIds(activeConfig)
         : null;
+
+    diagnostics.push(...registryState.loadDiagnostics.map((entry) => cloneLogicScriptDiagnostic(entry)));
 
     registryState.assets.forEach((script) => {
         const shouldCheckCutsceneSceneParticipantDependencies = referencedScriptRefIds?.has(script.id) ?? false;
@@ -551,9 +735,9 @@ export const collectLogicScriptAssetDiagnostics = (
                         ? ' (requires non-empty cutsceneId)'
                         : commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE
                             ? ' (requires axis, distance > 0, speed > 0, optional start)'
-                        : commandType === PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE
-                            ? ' (requires angularSpeedDeg > 0, optional direction/start)'
-                        : '';
+                            : commandType === PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE
+                                ? ' (requires angularSpeedDeg > 0, optional direction/start)'
+                                : '';
                 diagnostics.push({
                     id: nextDiagnosticId('invalid_logic_command_params'),
                     severity: 'error',

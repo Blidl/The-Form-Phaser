@@ -13,9 +13,26 @@ const logicScriptsJsonPath = path.join(
     'src/game/world/runtime/data/logic_scripts.json'
 );
 const logicScriptsJsonRelativeSuffix = '/src/game/world/runtime/data/logic_scripts.json';
+const logicScriptsDataDirectoryPath = path.join(
+    projectRoot,
+    'src/game/world/runtime/data'
+);
+const logicScriptsDirectoryPath = path.join(
+    logicScriptsDataDirectoryPath,
+    'scripts'
+);
+const logicScriptsDirectoryRelativePrefix = '/src/game/world/runtime/data/scripts/';
 
 const toPosixPath = (value) => {
     return value.replaceAll('\\', '/');
+};
+
+const normalizeManifestScriptPath = (value) => {
+    return value.replaceAll('\\', '/').trim().replace(/^\.\/+/, '').replace(/^\/+/, '');
+};
+
+const toJsonErrorMessage = (error, fallback) => {
+    return error instanceof Error ? error.message : fallback;
 };
 
 const isValidSnapshotPayload = (value) => {
@@ -103,16 +120,50 @@ export default defineConfig({
                 try {
                     const rawJson = await fs.readFile(logicScriptsJsonPath, 'utf8');
                     const payload = JSON.parse(rawJson);
+                    const payloadRoot = typeof payload === 'object' && payload !== null
+                        ? payload
+                        : null;
+                    const hasManifestShape = payloadRoot && Array.isArray(payloadRoot.scriptFiles);
+                    if (!hasManifestShape) {
+                        res.statusCode = 200;
+                        res.setHeader('Content-Type', 'application/json');
+                        res.end(JSON.stringify(payload));
+                        return;
+                    }
+
+                    const scriptFiles = payloadRoot.scriptFiles;
+                    const scripts = [];
+                    const usedPaths = new Set();
+                    for (let index = 0; index < scriptFiles.length; index += 1) {
+                        const rawPath = scriptFiles[index];
+                        if (typeof rawPath !== 'string' || rawPath.trim().length <= 0) {
+                            throw new Error(`logic_scripts.json scriptFiles[${index}] must be a non-empty string path.`);
+                        }
+                        const scriptPath = normalizeManifestScriptPath(rawPath);
+                        if (usedPaths.has(scriptPath)) {
+                            throw new Error(`logic_scripts.json scriptFiles has duplicate path "${scriptPath}".`);
+                        }
+                        usedPaths.add(scriptPath);
+                        const absoluteScriptPath = path.resolve(logicScriptsDataDirectoryPath, scriptPath);
+                        const normalizedAbsoluteScriptPath = path.normalize(absoluteScriptPath);
+                        const normalizedScriptsDirectoryPath = path.normalize(logicScriptsDirectoryPath);
+                        if (
+                            normalizedAbsoluteScriptPath !== normalizedScriptsDirectoryPath
+                            && !normalizedAbsoluteScriptPath.startsWith(`${normalizedScriptsDirectoryPath}${path.sep}`)
+                        ) {
+                            throw new Error(`logic_scripts.json scriptFiles path "${scriptPath}" must stay under src/game/world/runtime/data/scripts/.`);
+                        }
+                        const rawScriptJson = await fs.readFile(normalizedAbsoluteScriptPath, 'utf8');
+                        scripts.push(JSON.parse(rawScriptJson));
+                    }
                     res.statusCode = 200;
                     res.setHeader('Content-Type', 'application/json');
-                    res.end(JSON.stringify(payload));
+                    res.end(JSON.stringify({ scripts }));
                 } catch (error) {
                     res.statusCode = 500;
                     res.setHeader('Content-Type', 'application/json');
                     res.end(JSON.stringify({
-                        message: error instanceof Error
-                            ? error.message
-                            : 'failed to load logic scripts'
+                        message: toJsonErrorMessage(error, 'failed to load logic scripts')
                     }));
                 }
             });
@@ -124,11 +175,12 @@ export default defineConfig({
             const normalizedTargetPath = toPosixPath(logicScriptsJsonPath);
             const isLogicScriptsJsonChange = normalizedFilePath === normalizedTargetPath
                 || normalizedFilePath.endsWith(logicScriptsJsonRelativeSuffix);
-            if (!isLogicScriptsJsonChange) {
+            const isLogicScriptAssetFileChange = normalizedFilePath.includes(logicScriptsDirectoryRelativePrefix);
+            if (!isLogicScriptsJsonChange && !isLogicScriptAssetFileChange) {
                 return;
             }
             context.server.config.logger.info(
-                'logic_scripts.json changed; use Logic tab Reload Scripts.',
+                'logic script assets changed; use Logic tab Reload Scripts.',
                 { timestamp: true }
             );
             return [];

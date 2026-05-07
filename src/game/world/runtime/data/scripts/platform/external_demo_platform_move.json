@@ -1,0 +1,21 @@
+{
+  "id": "external_demo_platform_move",
+  "name": "External Demo Platform Move",
+  "category": "platform.move",
+  "commands": [
+    {
+      "id": "cmd_platform_move_ping_pong_demo",
+      "type": "platform_move_ping_pong",
+      "params": {
+        "axis": "horizontal",
+        "distance": 160,
+        "speed": 80,
+        "start": "running_loop"
+      }
+    }
+  ],
+  "editor": {
+    "rawLines": [],
+    "locked": false
+  }
+}

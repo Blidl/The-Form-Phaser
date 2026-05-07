@@ -292,7 +292,7 @@ export function renderScriptDetailsSection(
         scriptInspectorBox.appendChild(dom.makeInfoLine('Locked: true'));
     }
     scriptInspectorBox.appendChild(dom.makeInfoLine('Script content is read-only in browser.'));
-    scriptInspectorBox.appendChild(dom.makeInfoLine('Author script content in IDE/project file: src/game/world/runtime/data/logic_scripts.json'));
+    scriptInspectorBox.appendChild(dom.makeInfoLine('Author script content in IDE/project files under src/game/world/runtime/data/scripts/ (manifest: src/game/world/runtime/data/logic_scripts.json).'));
     container.appendChild(scriptInspectorBox);
 
     renderScriptDiagnosticsSection();

@@ -129,7 +129,8 @@ export function renderExternalScriptsSection(
     } = context;
 
     container.appendChild(dom.makeSectionTitle('External Script Assets'));
-    container.appendChild(dom.makeInfoLine('External scripts are loaded from src/game/world/runtime/data/logic_scripts.json.'));
+    container.appendChild(dom.makeInfoLine('External scripts are loaded via manifest: src/game/world/runtime/data/logic_scripts.json.'));
+    container.appendChild(dom.makeInfoLine('Manifest entries point to script files under src/game/world/runtime/data/scripts/.'));
     container.appendChild(dom.makeInfoLine('Script content is authored in IDE/project files and inspected here as read-only.'));
     container.appendChild(dom.makeInfoLine('This panel is for references/bindings authoring, diagnostics, and preview flows.'));
     const summaryRow = document.createElement('div');
@@ -204,7 +205,7 @@ export function renderExternalScriptsSection(
 
     if (externalAssets.length <= 0) {
         container.appendChild(dom.makeInfoLine('No external script assets found.'));
-        container.appendChild(dom.makeInfoLine('Add scripts in src/game/world/runtime/data/logic_scripts.json and reload.'));
+        container.appendChild(dom.makeInfoLine('Add script files under src/game/world/runtime/data/scripts/ and register them in logic_scripts.json, then reload.'));
     }
 
     SCRIPT_GROUPS.forEach((group) => {

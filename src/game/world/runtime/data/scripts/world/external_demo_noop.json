@@ -1,0 +1,16 @@
+{
+  "id": "external_demo_noop",
+  "name": "External Demo Noop",
+  "category": "world.rule",
+  "commands": [
+    {
+      "id": "cmd_noop_01",
+      "type": "noop",
+      "params": {}
+    }
+  ],
+  "editor": {
+    "rawLines": [],
+    "locked": false
+  }
+}
