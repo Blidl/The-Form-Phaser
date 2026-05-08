@@ -1,0 +1,66 @@
+{
+  "tabs": {
+    "Level": {
+      "textSample": "LevelPlayerObjectsBackgroundNPCCutscenesLogicStop gameGame speedx: -, y: -SavedSaveClear DraftExport JSONImport JSONReload PageDiag OFFLevel InspectorCampaign/Level Manifest v1.Runtime level meta.id: test-world-02Campaign/source level id (active): test-world-02ProjectStore level id (mirror): level_001Runtime level in manifest: yesManifest initialLevelId: test-world-02Manifest order: test-world-01 -> test-world-02Runtime current nextLevelId: nullManifest level nextLevelId: nullDiagnostics: 0Level PropertiesRuntime meta.id: test-world-02ProjectStore mirror id: level_001Current runtime nextLevelId: null (end screen)Manifest levels: test-world-01, test-world-02Level sizeWidthHeight Next level(end screen)test-world-01test-world-02Jump to leveltest-world-01test-world-02LoadSwitching level reloads runtime state. Save Draft first to keep unsaved changes.No campaign manifest diagnostics.Object DiagnosticsRun scenario, then click Copy and paste logs into chat.Open browser console with F12 to see live logs.ClearCopySnapshotClose",
+      "hasPlaceholder": false
+    },
+    "Player": {
+      "textSample": "LevelPlayerObjectsBackgroundNPCCutscenesLogicStop gameGame speedx: -, y: -SavedSaveClear DraftExport JSONImport JSONReload PageDiag OFFLevel InspectorCampaign/Level Manifest v1.Runtime level meta.id: test-world-02Campaign/source level id (active): test-world-02ProjectStore level id (mirror): level_001Runtime level in manifest: yesManifest initialLevelId: test-world-02Manifest order: test-world-01 -> test-world-02Runtime current nextLevelId: nullManifest level nextLevelId: nullDiagnostics: 0Level PropertiesRuntime meta.id: test-world-02ProjectStore mirror id: level_001Current runtime nextLevelId: null (end screen)Manifest levels: test-world-01, test-world-02Level sizeWidthHeight Next level(end screen)test-world-01test-world-02Jump to leveltest-world-01test-world-02LoadSwitching level reloads runtime state. Save Draft first to keep unsaved changes.No campaign manifest diagnostics.Object DiagnosticsRun scenario, then click Copy and paste logs into chat.Open browser console with F12 to see live logs.ClearCopySnapshotClose",
+      "hasPlaceholder": false
+    },
+    "Objects": {
+      "textSample": "LevelPlayerObjectsBackgroundNPCCutscenesLogicStop gameGame speedx: -, y: -SavedSaveClear DraftExport JSONImport JSONReload PageDiag OFFLevel InspectorCampaign/Level Manifest v1.Runtime level meta.id: test-world-02Campaign/source level id (active): test-world-02ProjectStore level id (mirror): level_001Runtime level in manifest: yesManifest initialLevelId: test-world-02Manifest order: test-world-01 -> test-world-02Runtime current nextLevelId: nullManifest level nextLevelId: nullDiagnostics: 0Level PropertiesRuntime meta.id: test-world-02ProjectStore mirror id: level_001Current runtime nextLevelId: null (end screen)Manifest levels: test-world-01, test-world-02Level sizeWidthHeight Next level(end screen)test-world-01test-world-02Jump to leveltest-world-01test-world-02LoadSwitching level reloads runtime state. Save Draft first to keep unsaved changes.No campaign manifest diagnostics.Object DiagnosticsRun scenario, then click Copy and paste logs into chat.Open browser console with F12 to see live logs.ClearCopySnapshotClose",
+      "hasPlaceholder": false
+    },
+    "Background": {
+      "textSample": "LevelPlayerObjectsBackgroundNPCCutscenesLogicStop gameGame speedx: -, y: -SavedSaveClear DraftExport JSONImport JSONReload PageDiag OFFLevel InspectorCampaign/Level Manifest v1.Runtime level meta.id: test-world-02Campaign/source level id (active): test-world-02ProjectStore level id (mirror): level_001Runtime level in manifest: yesManifest initialLevelId: test-world-02Manifest order: test-world-01 -> test-world-02Runtime current nextLevelId: nullManifest level nextLevelId: nullDiagnostics: 0Level PropertiesRuntime meta.id: test-world-02ProjectStore mirror id: level_001Current runtime nextLevelId: null (end screen)Manifest levels: test-world-01, test-world-02Level sizeWidthHeight Next level(end screen)test-world-01test-world-02Jump to leveltest-world-01test-world-02LoadSwitching level reloads runtime state. Save Draft first to keep unsaved changes.No campaign manifest diagnostics.Object DiagnosticsRun scenario, then click Copy and paste logs into chat.Open browser console with F12 to see live logs.ClearCopySnapshotClose",
+      "hasPlaceholder": false
+    },
+    "NPC": {
+      "textSample": "LevelPlayerObjectsBackgroundNPCCutscenesLogicStop gameGame speedx: -, y: -SavedSaveClear DraftExport JSONImport JSONReload PageDiag OFFLevel InspectorCampaign/Level Manifest v1.Runtime level meta.id: test-world-02Campaign/source level id (active): test-world-02ProjectStore level id (mirror): level_001Runtime level in manifest: yesManifest initialLevelId: test-world-02Manifest order: test-world-01 -> test-world-02Runtime current nextLevelId: nullManifest level nextLevelId: nullDiagnostics: 0Level PropertiesRuntime meta.id: test-world-02ProjectStore mirror id: level_001Current runtime nextLevelId: null (end screen)Manifest levels: test-world-01, test-world-02Level sizeWidthHeight Next level(end screen)test-world-01test-world-02Jump to leveltest-world-01test-world-02LoadSwitching level reloads runtime state. Save Draft first to keep unsaved changes.No campaign manifest diagnostics.Object DiagnosticsRun scenario, then click Copy and paste logs into chat.Open browser console with F12 to see live logs.ClearCopySnapshotClose",
+      "hasPlaceholder": false
+    },
+    "Cutscenes": {
+      "textSample": "LevelPlayerObjectsBackgroundNPCCutscenesLogicStop gameGame speedx: -, y: -SavedSaveClear DraftExport JSONImport JSONReload PageDiag OFFLevel InspectorCampaign/Level Manifest v1.Runtime level meta.id: test-world-02Campaign/source level id (active): test-world-02ProjectStore level id (mirror): level_001Runtime level in manifest: yesManifest initialLevelId: test-world-02Manifest order: test-world-01 -> test-world-02Runtime current nextLevelId: nullManifest level nextLevelId: nullDiagnostics: 0Level PropertiesRuntime meta.id: test-world-02ProjectStore mirror id: level_001Current runtime nextLevelId: null (end screen)Manifest levels: test-world-01, test-world-02Level sizeWidthHeight Next level(end screen)test-world-01test-world-02Jump to leveltest-world-01test-world-02LoadSwitching level reloads runtime state. Save Draft first to keep unsaved changes.No campaign manifest diagnostics.Object DiagnosticsRun scenario, then click Copy and paste logs into chat.Open browser console with F12 to see live logs.ClearCopySnapshotClose",
+      "hasPlaceholder": false
+    },
+    "Logic": {
+      "textSample": "LevelPlayerObjectsBackgroundNPCCutscenesLogicStop gameGame speedx: -, y: -SavedSaveClear DraftExport JSONImport JSONReload PageDiag OFFLevel InspectorCampaign/Level Manifest v1.Runtime level meta.id: test-world-02Campaign/source level id (active): test-world-02ProjectStore level id (mirror): level_001Runtime level in manifest: yesManifest initialLevelId: test-world-02Manifest order: test-world-01 -> test-world-02Runtime current nextLevelId: nullManifest level nextLevelId: nullDiagnostics: 0Level PropertiesRuntime meta.id: test-world-02ProjectStore mirror id: level_001Current runtime nextLevelId: null (end screen)Manifest levels: test-world-01, test-world-02Level sizeWidthHeight Next level(end screen)test-world-01test-world-02Jump to leveltest-world-01test-world-02LoadSwitching level reloads runtime state. Save Draft first to keep unsaved changes.No campaign manifest diagnostics.Object DiagnosticsRun scenario, then click Copy and paste logs into chat.Open browser console with F12 to see live logs.ClearCopySnapshotClose",
+      "hasPlaceholder": false
+    }
+  },
+  "messages": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "log",
+      "text": "%c %c %c %c %c Phaser v3.90.0 (WebGL | Web Audio) %c https://phaser.io/v390 background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x184401f5cc00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x184401f5cc00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x184401f5cc00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x184401f5cc00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+    },
+    {
+      "type": "info",
+      "text": "[editor] Logic subtab rendered: triggers"
+    }
+  ]
+}

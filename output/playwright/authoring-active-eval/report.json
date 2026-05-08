@@ -1,0 +1,91 @@
+{
+  "tabs": {
+    "Level": {
+      "display": "block",
+      "textSample": "Level\nPlayer\nObjects\nBackground\nNPC\nCutscenes\nLogic\nStop game\nGame speed\nx: 0, y: 192\nSaved\nNo draft\nSave\nClear Draft\nExport JSON\nImport JSON\nReload Page\nDiag OFF\nLevel Inspector\nCampaign/Level Manifest v1.\nRuntime level meta.id: test-world-02\nCampaign/source level id (active): test-world-02\nProjectStore level id (mirror): level_001\nRuntime level in manifest: yes\nManifest initialLevelId: test-world-02\nManifest order: test-world-01 -> test-world-02\nRuntime current nextLevelId: null\nManifest level nextLevelId: null\nDiagnostics: 0\nLevel Properties\nRuntime meta.id: test-world-02\nProjectStore mirror id: level_001\nCurrent runtime nextLevelId: null (end screen)\nManifest levels: test-world-01, test-world-02\nLevel size\nWidth\nHeight\nNext level\n(end screen)\ntest-world-01\ntest-world-02\nJump to level\ntest-world-01\ntest-world-02\nLoad\nSwitching level reloads runtime state. Save Draft first to keep unsaved changes.\nNo campaign manifest diagnostics.",
+      "activeGreenButtons": [
+        "Level"
+      ],
+      "hasPlaceholder": false
+    },
+    "Player": {
+      "display": "block",
+      "textSample": "Level\nPlayer\nObjects\nBackground\nNPC\nCutscenes\nLogic\nStop game\nGame speed\nx: 0, y: 192\nSaved\nNo draft\nSave\nClear Draft\nExport JSON\nImport JSON\nReload Page\nDiag OFF\nPlayer Inspector\nPlayer mode placeholder (MVP Step 1).\nFuture: form tuning categories and presets.\nPlayer Properties\nPlaceholder for movement/system settings.\nNo gameplay tuning persistence in this step.",
+      "activeGreenButtons": [
+        "Player"
+      ],
+      "hasPlaceholder": true
+    },
+    "Objects": {
+      "display": "block",
+      "textSample": "Level\nPlayer\nObjects\nBackground\nNPC\nCutscenes\nLogic\nStop game\nGame speed\nx: 0, y: 192\nUnsaved\nUnsaved\nSave\nClear Draft\nExport JSON\nImport JSON\nReload Page\nDiag OFF\nObjects\nGrid On\n8\n16\n32\n64\nPlatforms\nSpecial\nObjects\nPlatforms\nPlatform DefaultMoving PlatformTrigger Platform\nObjects list (test-world-02) 5 / 5\nground\nground\nFocus\nleft_wall\nleft_wall\nFocus\nright_wall\nright_wall\nFocus\nmid_platform\nmid_platform\nFocus\nfinish_platform\nfinish_platform\nFocus\nObject Properties\nActive level: test-world-02 (test-world-02)\nObject count: 7\nLogic Actions\nSelect an object to inspect logic actions.",
+      "activeGreenButtons": [
+        "Objects",
+        "Platforms"
+      ],
+      "hasPlaceholder": false
+    },
+    "Background": {
+      "display": "block",
+      "textSample": "Level\nPlayer\nObjects\nBackground\nNPC\nCutscenes\nLogic\nStop game\nGame speed\nx: 0, y: 192\nUnsaved\nUnsaved\nSave\nClear Draft\nExport JSON\nImport JSON\nReload Page\nDiag OFF\nBackground\nLevel ID: test-world-02\nLevel: Test World 02\nLayers\nStatic\nParallax 1\nParallax 2\nBackground Objects\nNo background objects in this layer.\nAsset Presets\nSolid\nTrees and Bushes\nHuge Clouds\nGenie Picture\nAdd Selected Asset\nApply To Selected\nBackground Properties\nGlobal Background\nColor\nLayer Settings: Static\nStatic layer has no parallax scroll.\nEditing Background Object\nSelect a background object from the list.",
+      "activeGreenButtons": [
+        "Background"
+      ],
+      "hasPlaceholder": false
+    },
+    "NPC": {
+      "display": "block",
+      "textSample": "Level\nPlayer\nObjects\nBackground\nNPC\nCutscenes\nLogic\nStop game\nGame speed\nx: 0, y: 192\nUnsaved\nUnsaved\nSave\nClear Draft\nExport JSON\nImport JSON\nReload Page\nDiag OFF\nNPCs\nCount: 0\nAdd NPCDelete Selected NPC\nNo NPCs in this level.\nNPC Inspector\nSelect an NPC to inspect.",
+      "activeGreenButtons": [
+        "NPC"
+      ],
+      "hasPlaceholder": false
+    },
+    "Cutscenes": {
+      "display": "block",
+      "textSample": "Level\nPlayer\nObjects\nBackground\nNPC\nCutscenes\nLogic\nStop game\nGame speed\nx: 0, y: 192\nUnsaved\nUnsaved\nSave\nClear Draft\nExport JSON\nImport JSON\nReload Page\nDiag OFF\nCutscenes\nCount: 2\nobserver_manual_cutscene_test\nmode: in_level\nsteps: 9\nSelect\nobserver_smoke_cutscene_v1\nmode: in_level\nsteps: 11\nSelect\nCutscene Inspector\nSelect a cutscene to inspect.",
+      "activeGreenButtons": [
+        "Cutscenes"
+      ],
+      "hasPlaceholder": false
+    },
+    "Logic": {
+      "display": "block",
+      "textSample": "Level\nPlayer\nObjects\nBackground\nNPC\nCutscenes\nLogic\nStop game\nGame speed\nx: 0, y: 192\nUnsaved\nUnsaved\nSave\nClear Draft\nExport JSON\nImport JSON\nReload Page\nDiag OFF\nLogic\nRuntime-backed authoring overview\nSummary\nScripts: 0\nScript refs: 0\nBindings: 0\nExternal Script Assets\nExternal scripts are loaded via manifest: src/game/world/runtime/data/logic_scripts.json.\nManifest entries point to script files under src/game/world/runtime/data/scripts/.\nScript content is authored in IDE/project files and inspected here as read-only.\nThis panel is for references/bindings authoring, diagnostics, and preview flows.\nExternal assets: 7\nReload Scripts\nReloaded external scripts: 7 assets.\nObjects Scripts\nMove\nRotate\nAction\nNo object scripts found.\nPlatform Scripts\nMove\nname: External Demo Platform Move\nid: external_demo_platform_move\ncategory: platform.move\ncommand count: 1\nAdd Ref To Level\nRotate\nname: External Demo Platform Rotate\nid: external_demo_platform_rotate\ncategory: platform.rotate\ncommand count: 1\nAdd Ref To Level\nDefault Action\nname: External Demo Platform Default Action\nid: external_demo_platform_default_action\ncategory: platform.defaultAction\ncommand count: 0\nAdd Ref To Level\nAction\nNPC Scripts\nPatrol\nname: External Demo NPC Patrol Ping Pong\nid: external_demo_npc_patrol_ping_pong\ncategory: npc.patrol\ncommand count: 1\nAdd Ref To Level\nAction\nAlt Action\nCutscenes Scripts\nNPC\nCamera\nPlayer\nOther\nNo cutscene scripts found.\nTriggers / World Scripts\nTrigger Action\nWorld Rule\nname: External Demo World Start\nid: external_demo_world_start\ncategory: world.rule\ncommand count: 0\nAdd Ref To Level\nname: External Demo Noop\nid: external_demo_noop\ncategory: world.rule\ncommand count: 1\nAdd Ref To Level\nname: External Demo Flag\nid: external_demo_flag\ncategory: world.rule\ncommand count: 1\nAdd Ref To Level\nLevel Script Refs\nNo external script refs added to this level yet.\nEmbedded Level Scripts (transitional)\nTransitional level script metadata flow. Command content authoring remains in project files.\n+ New Script\nNo logic scripts yet.\nScript Metadata\nSelect a script to inspect metadata.\nLogic Bindings\nScript Inspector\nSelect an external script asset to inspect.\nScript Diagnostics\nSelect an external script asset to inspect diagnostics.\nPreview Sandbox\nPlay\nPause\nStop\nFocus\nPreview runs in a sandbox. It does not execute in live gameplay runtime.\nSelect a script to preview later.\nRuntime world/onStart Trace\nRuntime support: world/onStart executes once after world runtime init.\nOverall",
+      "activeGreenButtons": [
+        "Logic"
+      ],
+      "hasPlaceholder": false
+    }
+  },
+  "messages": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "log",
+      "text": "%c %c %c %c %c Phaser v3.90.0 (WebGL | Web Audio) %c https://phaser.io/v390 background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x2c9401391200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x2c9401391200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x2c9401391200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x2c9401391200]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+    }
+  ]
+}

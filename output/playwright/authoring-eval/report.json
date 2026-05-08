@@ -1,0 +1,76 @@
+{
+  "url": "http://127.0.0.1:8080/?levelId=test_world_level_01&editorOpen=1",
+  "tabs": {
+    "Level": {
+      "textSample": "NO_EDITOR_SHELL_TEXT",
+      "hasPlaceholder": false,
+      "buttonTexts": [],
+      "inputCount": 0,
+      "selectCount": 0
+    },
+    "Player": {
+      "textSample": "NO_EDITOR_SHELL_TEXT",
+      "hasPlaceholder": false,
+      "buttonTexts": [],
+      "inputCount": 0,
+      "selectCount": 0
+    },
+    "Objects": {
+      "textSample": "NO_EDITOR_SHELL_TEXT",
+      "hasPlaceholder": false,
+      "buttonTexts": [],
+      "inputCount": 0,
+      "selectCount": 0
+    },
+    "Background": {
+      "textSample": "NO_EDITOR_SHELL_TEXT",
+      "hasPlaceholder": false,
+      "buttonTexts": [],
+      "inputCount": 0,
+      "selectCount": 0
+    },
+    "NPC": {
+      "textSample": "NO_EDITOR_SHELL_TEXT",
+      "hasPlaceholder": false,
+      "buttonTexts": [],
+      "inputCount": 0,
+      "selectCount": 0
+    },
+    "Cutscenes": {
+      "textSample": "NO_EDITOR_SHELL_TEXT",
+      "hasPlaceholder": false,
+      "buttonTexts": [],
+      "inputCount": 0,
+      "selectCount": 0
+    },
+    "Logic": {
+      "textSample": "NO_EDITOR_SHELL_TEXT",
+      "hasPlaceholder": false,
+      "buttonTexts": [],
+      "inputCount": 0,
+      "selectCount": 0
+    }
+  },
+  "consoleMessages": [
+    {
+      "type": "debug",
+      "text": "[vite] connecting..."
+    },
+    {
+      "type": "debug",
+      "text": "[vite] connected."
+    },
+    {
+      "type": "log",
+      "text": "%c %c %c %c %c Phaser v3.90.0 (WebGL | Web Audio) %c https://phaser.io/v390 background: #ff0000 background: #ffff00 background: #00ff00 background: #00ffff color: #ffffff; background: #000000 background: transparent"
+    },
+    {
+      "type": "warning",
+      "text": "[.WebGL-0x424c0019ec00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+    },
+    {
+      "type": "pageerror",
+      "text": "Unknown campaign level 'test_world_level_01'."
+    }
+  ]
+}
