@@ -3,10 +3,14 @@ import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 import type { ProjectStore } from '../data/ProjectStore';
 import type { EditorPanel } from '../ui/EditorPanel';
 import {
+    createCampaignLevel,
+    deleteCampaignLevel,
     getCampaignLevelConfig,
     getCampaignLevelIds,
+    getCampaignLevelSummaries,
     getCampaignManifestDiagnostics,
-    getInitialCampaignLevelId
+    getInitialCampaignLevelId,
+    updateCampaignLevelConfig
 } from '../../game/world/runtime/test_campaign_registry';
 import {
     cloneTestWorldConfig,
@@ -21,7 +25,9 @@ export class LevelEditorMode implements EditorMode {
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
     private readonly onUiChanged: (() => void) | null;
     private readonly onJumpToLevel: ((levelId: string) => boolean) | null;
-    private levelSizeStatusMessage: string | null = null;
+    private selectedLevelId: string | null = null;
+    private statusMessage: string | null = null;
+    private statusIsError = false;
 
     public constructor(
         projectStore: ProjectStore,
@@ -38,250 +44,247 @@ export class LevelEditorMode implements EditorMode {
     }
 
     public renderLeftInspector(panel: EditorPanel): void {
-        const projectStoreLevel = this.projectStore.getActiveLevel();
-        const runtimeLevelMetaId = this.getRuntimeLevelMetaId() ?? projectStoreLevel.id;
-        const campaignLevelIds = getCampaignLevelIds();
-        const campaignInitialLevelId = getInitialCampaignLevelId();
-        const campaignLevelOrder = campaignLevelIds.length > 0 ? campaignLevelIds.join(' -> ') : '(none)';
-        const manifestDiagnostics = getCampaignManifestDiagnostics();
-        const currentLevelConfig = campaignLevelIds.includes(runtimeLevelMetaId)
-            ? getCampaignLevelConfig(runtimeLevelMetaId)
-            : null;
-        const currentLevelNext = currentLevelConfig?.nextLevelId ?? 'null';
-        const runtimeLevelInManifest = campaignLevelIds.includes(runtimeLevelMetaId) ? 'yes' : 'no';
-        const currentRuntimeConfig = this.getRuntimeLevelConfig(runtimeLevelMetaId);
-        const runtimeCurrentNext = currentRuntimeConfig?.nextLevelId ?? null;
+        const runtimeLevelId = this.getCurrentRuntimeLevelId();
+        const levelSummaries = getCampaignLevelSummaries();
+        const selectedLevelId = this.resolveSelectedLevelId(runtimeLevelId);
 
-        panel.setContent('Level Inspector', [
-            'Campaign/Level Manifest v1.',
-            `Runtime level meta.id: ${runtimeLevelMetaId}`,
-            `Campaign/source level id (active): ${runtimeLevelMetaId}`,
-            `ProjectStore level id (mirror): ${projectStoreLevel.id}`,
-            `Runtime level in manifest: ${runtimeLevelInManifest}`,
-            `Manifest initialLevelId: ${campaignInitialLevelId}`,
-            `Manifest order: ${campaignLevelOrder}`,
-            `Runtime current nextLevelId: ${runtimeCurrentNext ?? 'null'}`,
-            `Manifest level nextLevelId: ${currentLevelNext}`,
-            `Diagnostics: ${manifestDiagnostics.length}`
-        ]);
+        panel.setCustomContent('Levels', (container) => {
+            container.appendChild(this.makeInfoLine(`Current runtime level: ${runtimeLevelId}`));
+
+            const createButton = this.makeButton('Create Level');
+            createButton.addEventListener('click', () => {
+                const created = createCampaignLevel();
+                this.selectedLevelId = created.meta.id;
+                this.statusMessage = `Created ${created.meta.displayName}`;
+                this.statusIsError = false;
+                this.onUiChanged?.();
+            });
+            container.appendChild(createButton);
+
+            const deleteButton = this.makeButton('Delete Level');
+            deleteButton.disabled = levelSummaries.length <= 1 || !selectedLevelId;
+            deleteButton.addEventListener('click', () => {
+                if (!selectedLevelId) {
+                    return;
+                }
+                if (levelSummaries.length <= 1) {
+                    this.setStatus('Cannot delete the last level.', true);
+                    return;
+                }
+                const selectedSummary = levelSummaries.find((entry) => entry.id === selectedLevelId);
+                const confirmed = confirm(`Delete level ${selectedSummary?.displayName ?? selectedLevelId}?`);
+                if (!confirmed) {
+                    return;
+                }
+                const result = deleteCampaignLevel(selectedLevelId);
+                if (!result) {
+                    this.setStatus('Failed to delete level.', true);
+                    return;
+                }
+                this.selectedLevelId = result.switchedToLevelId;
+                this.setStatus(
+                    result.clearedNextLevelRefs.length > 0
+                        ? `Deleted level. Cleared next refs: ${result.clearedNextLevelRefs.join(', ')}`
+                        : 'Deleted level.',
+                    false
+                );
+                if (runtimeLevelId === selectedLevelId) {
+                    this.onJumpToLevel?.(result.switchedToLevelId);
+                }
+                this.onUiChanged?.();
+            });
+            container.appendChild(deleteButton);
+
+            const list = document.createElement('div');
+            list.style.display = 'grid';
+            list.style.gap = '6px';
+            list.style.marginTop = '10px';
+
+            levelSummaries.forEach((level) => {
+                const isSelected = level.id === selectedLevelId;
+                const isRuntime = level.id === runtimeLevelId;
+                const button = this.makeButton(`${level.displayName}\n${level.id}${isRuntime ? ' (open)' : ''}`);
+                button.style.whiteSpace = 'pre-line';
+                button.style.textAlign = 'left';
+                button.style.background = isSelected ? '#70de63' : '#dcdcdc';
+                button.addEventListener('click', () => {
+                    this.selectedLevelId = level.id;
+                    this.statusMessage = null;
+                    this.statusIsError = false;
+                    this.onUiChanged?.();
+                });
+                list.appendChild(button);
+            });
+            container.appendChild(list);
+        });
     }
 
     public renderRightInspector(panel: EditorPanel): void {
-        const projectStoreLevel = this.projectStore.getActiveLevel();
-        const runtimeLevelMetaId = this.getRuntimeLevelMetaId() ?? projectStoreLevel.id;
-        const manifestLevelIds = getCampaignLevelIds();
-        const runtimeConfig = this.getRuntimeLevelConfig(runtimeLevelMetaId);
-        const selectedNextLevelId = runtimeConfig?.nextLevelId ?? null;
-        const diagnostics = this.collectDiagnostics(runtimeLevelMetaId, selectedNextLevelId);
+        const runtimeLevelId = this.getCurrentRuntimeLevelId();
+        const selectedLevelId = this.resolveSelectedLevelId(runtimeLevelId);
+        const selectedConfig = this.getSelectedLevelConfig(selectedLevelId);
+        const runtimeConfig = this.getRuntimeLevelConfig(runtimeLevelId);
+        const diagnostics = this.collectDiagnostics(runtimeLevelId, selectedConfig?.nextLevelId ?? null);
 
         panel.setCustomContent('Level Properties', (container) => {
-            const makeInfo = (text: string): HTMLDivElement => {
-                const line = document.createElement('div');
-                line.textContent = text;
-                line.style.marginBottom = '6px';
-                line.style.wordBreak = 'break-word';
-                return line;
-            };
+            if (!selectedConfig) {
+                container.appendChild(this.makeInfoLine('No level selected.'));
+                return;
+            }
 
-            const makeLabel = (text: string): HTMLLabelElement => {
-                const label = document.createElement('label');
-                label.textContent = text;
-                label.style.display = 'block';
-                label.style.fontWeight = 'bold';
-                label.style.marginBottom = '4px';
-                return label;
-            };
+            const selectedIsRuntime = selectedConfig.meta.id === runtimeLevelId;
+            const manifestLevelIds = getCampaignLevelIds();
 
-            container.appendChild(makeInfo(`Runtime meta.id: ${runtimeLevelMetaId}`));
-            container.appendChild(makeInfo(`ProjectStore mirror id: ${projectStoreLevel.id}`));
-            container.appendChild(makeInfo(`Current runtime nextLevelId: ${selectedNextLevelId ?? 'null (end screen)'}`));
-            container.appendChild(makeInfo(`Manifest levels: ${manifestLevelIds.length > 0 ? manifestLevelIds.join(', ') : '(none)'}`));
+            container.appendChild(this.makeSectionTitle(selectedConfig.meta.displayName));
+            container.appendChild(this.makeInfoLine(`Editing: ${selectedConfig.meta.id}${selectedIsRuntime ? ' (open)' : ''}`));
 
-            const runtimeWorldBounds = runtimeConfig?.worldBounds ?? null;
-            const widthValue = Number.isFinite(runtimeWorldBounds?.width) ? String(Math.round(runtimeWorldBounds.width)) : '';
-            const heightValue = Number.isFinite(runtimeWorldBounds?.height) ? String(Math.round(runtimeWorldBounds.height)) : '';
+            if (this.statusMessage) {
+                const status = this.makeInfoLine(this.statusMessage);
+                status.style.color = this.statusIsError ? '#b00020' : '#145800';
+                container.appendChild(status);
+            }
 
-            const worldSizeTitle = makeLabel('Level size');
-            container.appendChild(worldSizeTitle);
+            const idInput = this.makeTextInput(selectedConfig.meta.id, true);
+            container.appendChild(this.makeField('ID', idInput));
 
-            const worldSizeRow = document.createElement('div');
-            worldSizeRow.style.display = 'flex';
-            worldSizeRow.style.flexDirection = 'column';
-            worldSizeRow.style.gap = '4px';
-            worldSizeRow.style.marginBottom = '8px';
-            worldSizeRow.style.minWidth = '0';
-
-            const widthLabel = makeLabel('Width');
-            widthLabel.htmlFor = 'level-size-width-input';
-            widthLabel.style.marginBottom = '0';
-
-            const widthInput = document.createElement('input');
-            widthInput.id = 'level-size-width-input';
-            widthInput.type = 'number';
-            widthInput.min = '64';
-            widthInput.step = '1';
-            widthInput.value = widthValue;
-            widthInput.disabled = runtimeConfig === null;
-            widthInput.setAttribute('aria-label', 'Level width');
-            widthInput.style.width = '100%';
-            widthInput.style.boxSizing = 'border-box';
-            widthInput.style.minWidth = '0';
-
-            const heightLabel = makeLabel('Height');
-            heightLabel.htmlFor = 'level-size-height-input';
-            heightLabel.style.marginBottom = '0';
-
-            const heightInput = document.createElement('input');
-            heightInput.id = 'level-size-height-input';
-            heightInput.type = 'number';
-            heightInput.min = '64';
-            heightInput.step = '1';
-            heightInput.value = heightValue;
-            heightInput.disabled = runtimeConfig === null;
-            heightInput.setAttribute('aria-label', 'Level height');
-            heightInput.style.width = '100%';
-            heightInput.style.boxSizing = 'border-box';
-            heightInput.style.minWidth = '0';
-
-            worldSizeRow.append(widthLabel, widthInput, heightLabel, heightInput);
-            container.appendChild(worldSizeRow);
-
-            const levelSizeStatusLine = makeInfo(this.levelSizeStatusMessage ?? ' ');
-            levelSizeStatusLine.style.minHeight = '18px';
-            levelSizeStatusLine.style.color = '#9fe870';
-            container.appendChild(levelSizeStatusLine);
-
-            const commitWorldSize = (): void => {
-                if (!runtimeConfig) {
+            const nameInput = this.makeTextInput(selectedConfig.meta.displayName, false);
+            nameInput.addEventListener('change', () => {
+                const nextName = nameInput.value.trim();
+                if (!nextName) {
+                    nameInput.value = selectedConfig.meta.displayName;
+                    this.setStatus('Level name cannot be empty.', true);
                     return;
                 }
-                const parsedWidth = Number(widthInput.value);
-                const parsedHeight = Number(heightInput.value);
-                const nextWidth = Math.round(parsedWidth);
-                const nextHeight = Math.round(parsedHeight);
-                if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight) || nextWidth < 64 || nextHeight < 64) {
-                    this.levelSizeStatusMessage = 'Level size must be finite numbers >= 64.';
-                    levelSizeStatusLine.textContent = this.levelSizeStatusMessage;
-                    levelSizeStatusLine.style.color = '#ff8a80';
-                    widthInput.value = widthValue;
-                    heightInput.value = heightValue;
-                    return;
-                }
-                const applied = this.applyWorldBounds(runtimeLevelMetaId, nextWidth, nextHeight);
-                if (!applied) {
-                    this.levelSizeStatusMessage = 'Unable to update level size in runtime config.';
-                    levelSizeStatusLine.textContent = this.levelSizeStatusMessage;
-                    levelSizeStatusLine.style.color = '#ff8a80';
-                    widthInput.value = widthValue;
-                    heightInput.value = heightValue;
-                    return;
-                }
-                this.levelSizeStatusMessage = `Applied level size: ${nextWidth} x ${nextHeight}`;
-                levelSizeStatusLine.textContent = this.levelSizeStatusMessage;
-                levelSizeStatusLine.style.color = '#9fe870';
-            };
-
-            widthInput.addEventListener('blur', commitWorldSize);
-            heightInput.addEventListener('blur', commitWorldSize);
-            widthInput.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    commitWorldSize();
+                const updated = this.updateSelectedLevel(selectedConfig.meta.id, (draft) => {
+                    draft.meta.displayName = nextName;
+                });
+                if (updated) {
+                    this.setStatus('Level name updated.', false);
                 }
             });
-            heightInput.addEventListener('keydown', (event) => {
-                if (event.key === 'Enter') {
-                    commitWorldSize();
+            container.appendChild(this.makeField('Name', nameInput));
+
+            const widthInput = this.makeNumberInput(selectedConfig.worldBounds.width, 64);
+            const heightInput = this.makeNumberInput(selectedConfig.worldBounds.height, 64);
+            const commitSize = (): void => {
+                const width = Math.round(Number(widthInput.value));
+                const height = Math.round(Number(heightInput.value));
+                if (!Number.isFinite(width) || !Number.isFinite(height) || width < 64 || height < 64) {
+                    widthInput.value = String(Math.round(selectedConfig.worldBounds.width));
+                    heightInput.value = String(Math.round(selectedConfig.worldBounds.height));
+                    this.setStatus('Level size must be finite numbers >= 64.', true);
+                    return;
                 }
-            });
+                const updated = this.updateSelectedLevel(selectedConfig.meta.id, (draft) => {
+                    draft.worldBounds.width = width;
+                    draft.worldBounds.height = height;
+                });
+                if (updated) {
+                    this.setStatus(`Level size updated: ${width} x ${height}.`, false);
+                }
+            };
+            widthInput.addEventListener('change', commitSize);
+            heightInput.addEventListener('change', commitSize);
+            container.appendChild(this.makeField('Width', widthInput));
+            container.appendChild(this.makeField('Height', heightInput));
 
-            const selectLabel = makeLabel('Next level');
-            selectLabel.htmlFor = 'level-next-level-id-select';
-            container.appendChild(selectLabel);
-
-            const select = document.createElement('select');
-            select.id = 'level-next-level-id-select';
-            select.style.width = '100%';
-            select.style.marginBottom = '10px';
-            select.style.boxSizing = 'border-box';
-
+            const nextSelect = document.createElement('select');
+            nextSelect.style.width = '100%';
+            nextSelect.style.boxSizing = 'border-box';
             const endOption = document.createElement('option');
             endOption.value = '';
             endOption.textContent = '(end screen)';
-            select.appendChild(endOption);
-
-            manifestLevelIds.forEach((levelId) => {
+            nextSelect.appendChild(endOption);
+            getCampaignLevelSummaries().forEach((level) => {
                 const option = document.createElement('option');
-                option.value = levelId;
-                option.textContent = levelId;
-                select.appendChild(option);
+                option.value = level.id;
+                option.textContent = `${level.displayName} (${level.id})`;
+                nextSelect.appendChild(option);
             });
-
-            if (selectedNextLevelId && !manifestLevelIds.includes(selectedNextLevelId)) {
+            if (selectedConfig.nextLevelId && !manifestLevelIds.includes(selectedConfig.nextLevelId)) {
                 const staleOption = document.createElement('option');
-                staleOption.value = selectedNextLevelId;
-                staleOption.textContent = `${selectedNextLevelId} (missing in manifest)`;
-                select.appendChild(staleOption);
+                staleOption.value = selectedConfig.nextLevelId;
+                staleOption.textContent = `${selectedConfig.nextLevelId} (missing)`;
+                nextSelect.appendChild(staleOption);
             }
-
-            select.value = selectedNextLevelId ?? '';
-            select.disabled = runtimeConfig === null;
-            select.addEventListener('change', () => {
-                const nextValue = select.value.trim();
-                const nextLevelId = nextValue.length > 0 ? nextValue : null;
-                this.applyNextLevelId(runtimeLevelMetaId, nextLevelId);
+            nextSelect.value = selectedConfig.nextLevelId ?? '';
+            nextSelect.addEventListener('change', () => {
+                const nextLevelId = nextSelect.value.trim().length > 0 ? nextSelect.value.trim() : null;
+                const updated = this.updateSelectedLevel(selectedConfig.meta.id, (draft) => {
+                    draft.nextLevelId = nextLevelId;
+                });
+                if (updated) {
+                    this.setStatus(nextLevelId ? `Next level set to ${nextLevelId}.` : 'Next level set to end screen.', false);
+                }
             });
-            container.appendChild(select);
+            container.appendChild(this.makeField('Next level', nextSelect));
 
-            const jumpLabel = makeLabel('Jump to level');
-            jumpLabel.htmlFor = 'level-jump-level-id-select';
-            container.appendChild(jumpLabel);
-
-            const jumpRow = document.createElement('div');
-            jumpRow.style.display = 'flex';
-            jumpRow.style.gap = '6px';
-            jumpRow.style.marginBottom = '6px';
-
-            const jumpSelect = document.createElement('select');
-            jumpSelect.id = 'level-jump-level-id-select';
-            jumpSelect.style.flex = '1';
-            manifestLevelIds.forEach((levelId) => {
-                const option = document.createElement('option');
-                option.value = levelId;
-                option.textContent = levelId;
-                jumpSelect.appendChild(option);
+            const openRow = document.createElement('div');
+            openRow.style.display = 'flex';
+            openRow.style.gap = '6px';
+            openRow.style.marginTop = '8px';
+            const openButton = this.makeButton('Open Level');
+            openButton.disabled = selectedIsRuntime || this.onJumpToLevel === null;
+            openButton.addEventListener('click', () => {
+                const accepted = this.onJumpToLevel?.(selectedConfig.meta.id) ?? false;
+                if (accepted) {
+                    openButton.disabled = true;
+                    this.setStatus(`Opening ${selectedConfig.meta.id}...`, false);
+                }
             });
-            jumpSelect.value = manifestLevelIds.includes(runtimeLevelMetaId)
-                ? runtimeLevelMetaId
-                : (manifestLevelIds[0] ?? '');
-
-            const jumpButton = document.createElement('button');
-            jumpButton.type = 'button';
-            jumpButton.textContent = 'Load';
-            jumpButton.disabled = manifestLevelIds.length === 0 || this.onJumpToLevel === null;
-            jumpButton.addEventListener('click', () => {
-                const targetLevelId = jumpSelect.value.trim();
-                if (!targetLevelId || !manifestLevelIds.includes(targetLevelId)) {
+            const saveButton = this.makeButton('Save Draft');
+            saveButton.addEventListener('click', () => {
+                const config = selectedIsRuntime ? runtimeConfig : selectedConfig;
+                const result = selectedIsRuntime
+                    ? this.legacyObjectAdapter?.saveRuntimeConfig()
+                    : null;
+                if (selectedIsRuntime && result?.success) {
+                    this.setStatus('Saved open level draft.', false);
+                    this.onUiChanged?.();
                     return;
                 }
-                const accepted = this.onJumpToLevel?.(targetLevelId) ?? false;
-                if (accepted) {
-                    jumpButton.disabled = true;
-                    jumpSelect.disabled = true;
+                if (!selectedIsRuntime) {
+                    this.setStatus('Stored in editor campaign registry. Open level, then Save Draft to write runtime draft.', false);
+                    this.onUiChanged?.();
+                    return;
                 }
+                this.setStatus(config ? 'Save failed.' : 'Runtime config unavailable.', true);
             });
+            openRow.append(openButton, saveButton);
+            container.appendChild(openRow);
 
-            jumpRow.append(jumpSelect, jumpButton);
-            container.appendChild(jumpRow);
-            container.appendChild(makeInfo('Switching level reloads runtime state. Save Draft first to keep unsaved changes.'));
+            const hint = this.makeInfoLine('Created levels are stored in the editor campaign registry and are available in Open Level and Next level selectors.');
+            hint.style.marginTop = '8px';
+            container.appendChild(hint);
 
             if (diagnostics.length > 0) {
+                container.appendChild(this.makeSectionTitle('Diagnostics'));
                 diagnostics.forEach((entry) => {
-                    container.appendChild(makeInfo(entry));
+                    container.appendChild(this.makeInfoLine(entry));
                 });
-            } else {
-                container.appendChild(makeInfo('No campaign manifest diagnostics.'));
             }
         });
+    }
+
+    private getCurrentRuntimeLevelId(): string {
+        return this.getRuntimeLevelMetaId() ?? this.projectStore.getActiveLevel().id;
+    }
+
+    private resolveSelectedLevelId(runtimeLevelId: string): string {
+        const levelIds = getCampaignLevelIds();
+        if (this.selectedLevelId && levelIds.includes(this.selectedLevelId)) {
+            return this.selectedLevelId;
+        }
+        const fallback = levelIds.includes(runtimeLevelId) ? runtimeLevelId : (levelIds[0] ?? runtimeLevelId);
+        this.selectedLevelId = fallback;
+        return fallback;
+    }
+
+    private getSelectedLevelConfig(levelId: string): TestWorldConfig | null {
+        if (!getCampaignLevelIds().includes(levelId)) {
+            return null;
+        }
+        return getCampaignLevelConfig(levelId);
     }
 
     private getRuntimeLevelConfig(runtimeLevelMetaId: string): TestWorldConfig | null {
@@ -295,37 +298,34 @@ export class LevelEditorMode implements EditorMode {
         return runtimeConfig as TestWorldConfig;
     }
 
-    private applyNextLevelId(runtimeLevelMetaId: string, nextLevelId: string | null): void {
-        const runtimeConfig = this.getRuntimeLevelConfig(runtimeLevelMetaId);
-        if (!runtimeConfig || !this.legacyObjectAdapter) {
-            return;
+    private updateSelectedLevel(levelId: string, edit: (draft: TestWorldConfig) => void): TestWorldConfig | null {
+        const runtimeLevelId = this.getCurrentRuntimeLevelId();
+        const runtimeConfig = this.getRuntimeLevelConfig(runtimeLevelId);
+        if (levelId === runtimeLevelId && runtimeConfig && this.legacyObjectAdapter) {
+            const nextConfig = cloneTestWorldConfig(runtimeConfig);
+            edit(nextConfig);
+            const importResult = this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
+            if (!importResult?.success) {
+                this.setStatus(importResult?.reason ?? 'Failed to update open level.', true);
+                return null;
+            }
+            updateCampaignLevelConfig(levelId, (draft) => {
+                draft.meta.displayName = nextConfig.meta.displayName;
+                draft.worldBounds.width = nextConfig.worldBounds.width;
+                draft.worldBounds.height = nextConfig.worldBounds.height;
+                draft.nextLevelId = nextConfig.nextLevelId;
+            });
+            this.onUiChanged?.();
+            return nextConfig;
         }
-        if ((runtimeConfig.nextLevelId ?? null) === nextLevelId) {
-            return;
-        }
-        const nextConfig = cloneTestWorldConfig(runtimeConfig);
-        nextConfig.nextLevelId = nextLevelId;
-        this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
-        this.onUiChanged?.();
-    }
 
-    private applyWorldBounds(runtimeLevelMetaId: string, width: number, height: number): boolean {
-        const runtimeConfig = this.getRuntimeLevelConfig(runtimeLevelMetaId);
-        if (!runtimeConfig || !this.legacyObjectAdapter || !runtimeConfig.worldBounds) {
-            return false;
-        }
-        if (runtimeConfig.worldBounds.width === width && runtimeConfig.worldBounds.height === height) {
-            return true;
-        }
-        const nextConfig = cloneTestWorldConfig(runtimeConfig);
-        nextConfig.worldBounds.width = width;
-        nextConfig.worldBounds.height = height;
-        const result = this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
-        if (!result?.success) {
-            return false;
+        const updated = updateCampaignLevelConfig(levelId, edit);
+        if (!updated) {
+            this.setStatus('Failed to update selected level.', true);
+            return null;
         }
         this.onUiChanged?.();
-        return true;
+        return updated;
     }
 
     private collectDiagnostics(runtimeLevelMetaId: string, nextLevelId: string | null): string[] {
@@ -337,9 +337,78 @@ export class LevelEditorMode implements EditorMode {
         }
         if (nextLevelId && !getCampaignLevelIds().includes(nextLevelId)) {
             diagnostics.unshift(
-                `[warning] runtime_next_level_not_in_manifest: nextLevelId '${nextLevelId}' is not listed in campaign manifest ids.`
+                `[warning] runtime_next_level_not_in_manifest: nextLevelId '${nextLevelId}' is not listed in campaign level ids.`
             );
         }
         return diagnostics;
+    }
+
+    private setStatus(message: string, isError: boolean): void {
+        this.statusMessage = message;
+        this.statusIsError = isError;
+        this.onUiChanged?.();
+    }
+
+    private makeSectionTitle(text: string): HTMLDivElement {
+        const title = document.createElement('div');
+        title.textContent = text;
+        title.style.fontWeight = 'bold';
+        title.style.margin = '10px 0 6px';
+        return title;
+    }
+
+    private makeInfoLine(text: string): HTMLDivElement {
+        const line = document.createElement('div');
+        line.textContent = text;
+        line.style.marginBottom = '6px';
+        line.style.wordBreak = 'break-word';
+        return line;
+    }
+
+    private makeButton(text: string): HTMLButtonElement {
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.textContent = text;
+        button.style.width = '100%';
+        button.style.marginBottom = '6px';
+        button.style.border = '1px solid #707070';
+        button.style.background = '#dcdcdc';
+        button.style.color = '#222';
+        button.style.padding = '6px 8px';
+        button.style.cursor = 'pointer';
+        return button;
+    }
+
+    private makeTextInput(value: string, disabled: boolean): HTMLInputElement {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = value;
+        input.disabled = disabled;
+        input.style.width = '100%';
+        input.style.boxSizing = 'border-box';
+        return input;
+    }
+
+    private makeNumberInput(value: number, min: number): HTMLInputElement {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = String(min);
+        input.step = '1';
+        input.value = String(Math.round(value));
+        input.style.width = '100%';
+        input.style.boxSizing = 'border-box';
+        return input;
+    }
+
+    private makeField(labelText: string, control: HTMLElement): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.marginBottom = '8px';
+        const label = document.createElement('label');
+        label.textContent = labelText;
+        label.style.display = 'block';
+        label.style.fontWeight = 'bold';
+        label.style.marginBottom = '4px';
+        wrap.append(label, control);
+        return wrap;
     }
 }

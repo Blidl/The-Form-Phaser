@@ -217,7 +217,7 @@ restoreEditorCampaignRegistry();
 
 const collectCampaignManifestDiagnostics = (): CampaignManifestDiagnostic[] => {
     const diagnostics: CampaignManifestDiagnostic[] = [...initialCampaignManifestDiagnostics];
-    const levelIds = campaignConfig.levels.map((entry) => entry.id);
+    const levelIds = [...campaignLevelOrder];
     const levelIdSet = new Set(levelIds);
 
     const initialLevelId = campaignConfig.initialLevelId.trim();
@@ -421,6 +421,27 @@ export const syncCampaignLevelHeader = (config: TestWorldConfig): void => {
     existing.meta.displayName = config.meta.displayName;
     existing.nextLevelId = config.nextLevelId;
     persistEditorCampaignRegistry();
+};
+
+export const updateCampaignLevelConfig = (
+    levelId: string,
+    edit: (draft: TestWorldConfig) => void
+): TestWorldConfig | null => {
+    const existing = levelRegistry.get(levelId);
+    if (!existing) {
+        return null;
+    }
+
+    const draft = cloneTestWorldConfig(existing);
+    edit(draft);
+    draft.meta.id = existing.meta.id;
+    const normalized = normalizeTestWorldConfig(draft, {
+        fallbackConfig: existing
+    });
+    normalized.meta.id = existing.meta.id;
+    levelRegistry.set(levelId, normalized);
+    persistEditorCampaignRegistry();
+    return cloneTestWorldConfig(normalized);
 };
 
 export interface DeleteCampaignLevelResult {

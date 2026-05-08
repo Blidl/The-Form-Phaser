@@ -1,5 +1,10 @@
 import type { Scene } from 'phaser';
-import { refreshBaselineFollowCameraLerp } from '../../game/camera/follow_camera';
+import {
+    BASELINE_FOLLOW_CAMERA_OFFSET_X,
+    BASELINE_FOLLOW_CAMERA_OFFSET_Y,
+    refreshBaselineFollowCameraLerp,
+    setupBaselineFollowCamera
+} from '../../game/camera/follow_camera';
 import type { PlayerWorldActor } from '../../game/player/player_runtime_contracts';
 import { getTestCutsceneDefinition } from '../../game/cutscene/test_cutscene_registry';
 import type {
@@ -67,6 +72,7 @@ interface CreateTestCutsceneRuntimeParams {
         | 'dispatchWorldLogicEvent'
         | 'executeCutsceneLogicOnFinish'
         | 'getCutsceneActorSequenceSnapshot'
+        | 'getWorldBounds'
         | 'getNpcCameraFocusObject'
     >;
     eventDebugSink?: CutsceneDebugEventSink;
@@ -82,8 +88,8 @@ const clampDeltaMs = (deltaMs: number): number => {
 const CUTSCENE_CAMERA_PAN_COMPLETE_EPSILON_PX = 1.25;
 const CUTSCENE_CAMERA_FOCUS_COMPLETE_EPSILON_PX = 1.25;
 const CUTSCENE_CAMERA_FOCUS_TRANSITION_DURATION_MS = 280;
-const CUTSCENE_CAMERA_FOLLOW_OFFSET_X = 0;
-const CUTSCENE_CAMERA_FOLLOW_OFFSET_Y = 96;
+const CUTSCENE_CAMERA_FOLLOW_OFFSET_X = BASELINE_FOLLOW_CAMERA_OFFSET_X;
+const CUTSCENE_CAMERA_FOLLOW_OFFSET_Y = BASELINE_FOLLOW_CAMERA_OFFSET_Y;
 
 type CameraPanSnapshot = {
     targetX: number;
@@ -199,12 +205,11 @@ export const createTestCutsceneRuntime = (
     };
 
     const restorePlayerCameraFollow = (): void => {
-        const camera = scene.cameras.main;
-        camera.panEffect.reset();
-        camera.stopFollow();
-        camera.startFollow(player.arcadeBodyObject, true);
-        camera.setFollowOffset(CUTSCENE_CAMERA_FOLLOW_OFFSET_X, CUTSCENE_CAMERA_FOLLOW_OFFSET_Y);
-        refreshBaselineFollowCameraLerp(camera);
+        const worldBounds = worldRuntime.getWorldBounds();
+        setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
+            width: worldBounds.width,
+            height: worldBounds.height
+        });
         cameraOwner = 'player_follow_runtime';
     };
 

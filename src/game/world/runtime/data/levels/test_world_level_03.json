@@ -1,0 +1,96 @@
+{
+  "meta": {
+    "id": "test-world-03",
+    "displayName": "Test World 03"
+  },
+  "worldBounds": {
+    "width": 1600,
+    "height": 960
+  },
+  "background": {
+    "mode": "parallax",
+    "color": 1779504,
+    "layers": []
+  },
+  "playerSpawn": {
+    "x": 120,
+    "y": 780,
+    "width": 32,
+    "height": 64,
+    "fillColor": 8508666,
+    "strokeColor": 161725,
+    "editorLocked": false
+  },
+  "npcs": [],
+  "surfaces": [
+    {
+      "id": "ground",
+      "x": 800,
+      "y": 928,
+      "width": 1600,
+      "height": 64,
+      "fillColor": 4678251,
+      "strokeColor": 13621468,
+      "editorLocked": false
+    },
+    {
+      "id": "left_wall",
+      "x": 16,
+      "y": 480,
+      "width": 32,
+      "height": 960,
+      "fillColor": 4678251,
+      "strokeColor": 13621468,
+      "editorLocked": false
+    },
+    {
+      "id": "right_wall",
+      "x": 1584,
+      "y": 480,
+      "width": 32,
+      "height": 960,
+      "fillColor": 4678251,
+      "strokeColor": 13621468,
+      "editorLocked": false
+    },
+    {
+      "id": "mid_platform",
+      "x": 720,
+      "y": 720,
+      "width": 240,
+      "height": 24,
+      "fillColor": 4678251,
+      "strokeColor": 15527921,
+      "editorLocked": false
+    },
+    {
+      "id": "finish_platform",
+      "x": 1320,
+      "y": 620,
+      "width": 200,
+      "height": 24,
+      "fillColor": 4678251,
+      "strokeColor": 15527921,
+      "editorLocked": false
+    }
+  ],
+  "hazards": [],
+  "checkpoints": [],
+  "finish": {
+    "id": "finish",
+    "x": 1320,
+    "y": 540,
+    "width": 72,
+    "height": 120,
+    "fillColor": 10092441,
+    "strokeColor": 43622,
+    "editorLocked": false
+  },
+  "movingPlatforms": [],
+  "triggerPlatforms": [],
+  "dragBoxes": [],
+  "windZones": [],
+  "triangleFlightBreakWalls": [],
+  "trianglePickups": [],
+  "nextLevelId": null
+}

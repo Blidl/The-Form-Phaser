@@ -2380,7 +2380,16 @@ export const createMinimalTestWorldConfig = (
         surfaces: [],
         hazards: [],
         checkpoints: [],
-        finish: null,
+        finish: {
+            id: 'finish',
+            x: 1488,
+            y: 768,
+            width: 72,
+            height: 120,
+            fillColor: 0x99ff99,
+            strokeColor: 0x00aa66,
+            editorLocked: false
+        },
         movingPlatforms: [],
         triggerPlatforms: [],
         triggerVolumes: [],
