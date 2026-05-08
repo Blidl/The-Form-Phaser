@@ -21,6 +21,14 @@ export interface TestCampaignLevelSummary {
     displayName: string;
 }
 
+export type CampaignManifestDiagnosticSeverity = 'warning' | 'error';
+
+export interface CampaignManifestDiagnostic {
+    code: string;
+    severity: CampaignManifestDiagnosticSeverity;
+    message: string;
+}
+
 export type CampaignLevelConfigSource =
     | 'bundled'
     | 'campaign_registry_override'
@@ -31,11 +39,22 @@ interface TestCampaignConfig {
     levels: TestCampaignLevelReference[];
 }
 
+interface RawLevelConfigEntry {
+    sourceId: string;
+    raw: unknown;
+}
+
 const CAMPAIGN_EDITOR_STORAGE_KEY = 'the-form:test-world:campaign-registry:v1';
 
-const rawLevelConfigs: readonly unknown[] = [
-    level01Json,
-    level02Json
+const rawLevelConfigs: readonly RawLevelConfigEntry[] = [
+    {
+        sourceId: 'test-world-01',
+        raw: level01Json
+    },
+    {
+        sourceId: 'test-world-02',
+        raw: level02Json
+    }
 ];
 
 const parseCampaignConfig = (raw: unknown): TestCampaignConfig => {
@@ -67,14 +86,24 @@ const parseCampaignConfig = (raw: unknown): TestCampaignConfig => {
     };
 };
 
-const buildLevelRegistry = (rawLevels: readonly unknown[]): Map<string, TestWorldConfig> => {
+const buildLevelRegistry = (
+    rawLevels: readonly RawLevelConfigEntry[],
+    diagnostics: CampaignManifestDiagnostic[] = []
+): Map<string, TestWorldConfig> => {
     const registry = new Map<string, TestWorldConfig>();
 
-    rawLevels.forEach((rawLevel, index) => {
-        const normalized = normalizeTestWorldConfig(rawLevel);
+    rawLevels.forEach((entry, index) => {
+        const normalized = normalizeTestWorldConfig(entry.raw);
         const levelId = normalized.meta.id.trim();
         if (!levelId) {
             throw new Error(`Level at index ${index} is missing meta.id.`);
+        }
+        if (entry.sourceId.trim() !== levelId) {
+            diagnostics.push({
+                code: 'bundled_level_meta_id_mismatch',
+                severity: 'warning',
+                message: `Bundled level source '${entry.sourceId}' has meta.id '${levelId}'.`
+            });
         }
         if (registry.has(levelId)) {
             throw new Error(`Duplicate level id '${levelId}' detected.`);
@@ -98,7 +127,8 @@ const buildLevelRegistry = (rawLevels: readonly unknown[]): Map<string, TestWorl
 };
 
 const campaignConfig = parseCampaignConfig(campaignJson);
-const bundledLevelRegistry = buildLevelRegistry(rawLevelConfigs);
+const initialCampaignManifestDiagnostics: CampaignManifestDiagnostic[] = [];
+const bundledLevelRegistry = buildLevelRegistry(rawLevelConfigs, initialCampaignManifestDiagnostics);
 const levelRegistry = new Map<string, TestWorldConfig>(bundledLevelRegistry);
 const campaignLevelOrder = [...campaignConfig.levels.map((entry) => entry.id)];
 
@@ -131,12 +161,18 @@ const restoreEditorCampaignRegistry = (): void => {
                 return bundledIds.has(levelId);
             });
 
-        const nextRegistry = buildLevelRegistry(usesFullSnapshot
-            ? persistedLevels
-            : [
-                ...rawLevelConfigs,
-                ...persistedLevels
-            ]);
+        const persistedLevelEntries: RawLevelConfigEntry[] = persistedLevels.map((level, index) => ({
+            sourceId: `persisted_level_${index}`,
+            raw: level
+        }));
+        const nextRegistry = buildLevelRegistry(
+            usesFullSnapshot
+                ? persistedLevelEntries
+                : [
+                    ...rawLevelConfigs,
+                    ...persistedLevelEntries
+                ]
+        );
         const knownIds = new Set(nextRegistry.keys());
         const nextOrder = usesFullSnapshot
             ? persistedOrder.filter((levelId) => knownIds.has(levelId))
@@ -173,6 +209,90 @@ if (!levelRegistry.has(campaignConfig.initialLevelId)) {
 }
 
 restoreEditorCampaignRegistry();
+
+const collectCampaignManifestDiagnostics = (): CampaignManifestDiagnostic[] => {
+    const diagnostics: CampaignManifestDiagnostic[] = [...initialCampaignManifestDiagnostics];
+    const levelIds = campaignConfig.levels.map((entry) => entry.id);
+    const levelIdSet = new Set(levelIds);
+
+    const initialLevelId = campaignConfig.initialLevelId.trim();
+    if (!initialLevelId) {
+        diagnostics.push({
+            code: 'initial_level_missing',
+            severity: 'error',
+            message: 'Campaign initialLevelId is missing or empty.'
+        });
+    } else {
+        if (!levelIdSet.has(initialLevelId)) {
+            diagnostics.push({
+                code: 'initial_level_not_listed',
+                severity: 'error',
+                message: `Campaign initialLevelId '${initialLevelId}' is not listed in campaign levels.`
+            });
+        }
+        if (!levelRegistry.has(initialLevelId)) {
+            diagnostics.push({
+                code: 'initial_level_not_loadable',
+                severity: 'error',
+                message: `Campaign initialLevelId '${initialLevelId}' is not loadable.`
+            });
+        }
+    }
+
+    const duplicateIds = new Set<string>();
+    levelIds.forEach((levelId, index) => {
+        if (levelIds.indexOf(levelId) !== index) {
+            duplicateIds.add(levelId);
+        }
+        if (!levelRegistry.has(levelId)) {
+            diagnostics.push({
+                code: 'campaign_level_not_loadable',
+                severity: 'error',
+                message: `Campaign level '${levelId}' is not loadable or resolvable.`
+            });
+            return;
+        }
+        const config = levelRegistry.get(levelId);
+        if (config && config.meta.id.trim() !== levelId) {
+            diagnostics.push({
+                code: 'campaign_level_meta_id_mismatch',
+                severity: 'warning',
+                message: `Campaign level '${levelId}' resolved config meta.id '${config.meta.id}'.`
+            });
+        }
+    });
+    duplicateIds.forEach((levelId) => {
+        diagnostics.push({
+            code: 'duplicate_campaign_level_id',
+            severity: 'error',
+            message: `Campaign level id '${levelId}' is duplicated in level order.`
+        });
+    });
+
+    levelIds.forEach((levelId) => {
+        const config = levelRegistry.get(levelId);
+        if (!config || config.nextLevelId === null) {
+            return;
+        }
+        if (config.nextLevelId === levelId) {
+            diagnostics.push({
+                code: 'level_next_self_loop',
+                severity: 'warning',
+                message: `Level '${levelId}' nextLevelId points to itself.`
+            });
+            return;
+        }
+        if (!levelIdSet.has(config.nextLevelId)) {
+            diagnostics.push({
+                code: 'level_next_missing_campaign_ref',
+                severity: 'warning',
+                message: `Level '${levelId}' nextLevelId '${config.nextLevelId}' is not in campaign levels.`
+            });
+        }
+    });
+
+    return diagnostics;
+};
 
 export const getInitialCampaignLevelId = (): string => {
     if (campaignLevelOrder.includes(campaignConfig.initialLevelId)) {
@@ -235,6 +355,10 @@ export const getCampaignLevelSummaries = (): TestCampaignLevelSummary[] => {
             displayName: config.meta.displayName
         };
     });
+};
+
+export const getCampaignManifestDiagnostics = (): CampaignManifestDiagnostic[] => {
+    return collectCampaignManifestDiagnostics().map((entry) => ({ ...entry }));
 };
 
 export const getAdjacentCampaignLevelId = (
