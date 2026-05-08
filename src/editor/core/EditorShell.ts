@@ -25,6 +25,7 @@ import {
     getTestWorldEditorDraftStorageAuditSnapshot
 } from '../../game/world/runtime/test_world_editor_storage';
 import type { TestWorldConfig } from '../../game/world/runtime/test_world_config';
+import { normalizeTestWorldConfig } from '../../game/world/runtime/test_world_config_validation';
 import {
     clearObjectDiagBuffer,
     copyObjectDiagBufferToClipboard,
@@ -594,7 +595,8 @@ export class EditorShell {
         const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig();
         if (runtimeConfig) {
             try {
-                const blob = new Blob([JSON.stringify(runtimeConfig, null, 2)], { type: 'application/json' });
+                const exportConfig = this.createExportableRuntimeConfig(runtimeConfig as TestWorldConfig);
+                const blob = new Blob([JSON.stringify(exportConfig, null, 2)], { type: 'application/json' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
                 link.download = `${levelId}.json`;
@@ -713,7 +715,8 @@ export class EditorShell {
             return;
         }
         try {
-            const blob = new Blob([JSON.stringify(runtimeConfig, null, 2)], { type: 'application/json' });
+            const exportConfig = this.createExportableRuntimeConfig(runtimeConfig as TestWorldConfig);
+            const blob = new Blob([JSON.stringify(exportConfig, null, 2)], { type: 'application/json' });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
             const fileName = `${levelId}.json`;
@@ -847,6 +850,12 @@ export class EditorShell {
             return 'Missing required field: finish';
         }
         return null;
+    }
+
+    private createExportableRuntimeConfig(config: TestWorldConfig): TestWorldConfig {
+        return normalizeTestWorldConfig(config, {
+            fallbackConfig: config
+        });
     }
 
     private refreshDiagnosticsUi(): void {

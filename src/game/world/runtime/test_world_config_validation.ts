@@ -1431,18 +1431,20 @@ const normalizeBackground = (
 
 const normalizeBehaviorScripts = (
     raw: Record<string, unknown> | null,
-    fallback: TestWorldBehaviorScriptsConfig | undefined
+    fallback: TestWorldBehaviorScriptsConfig | undefined,
+    preserveMissingFields: boolean
 ): TestWorldBehaviorScriptsConfig | undefined => {
-    if (!raw && !fallback) {
+    if (!raw && (!fallback || !preserveMissingFields)) {
         return undefined;
     }
     const source = raw ?? {};
-    const move = asOptionalString(source.move) ?? fallback?.move;
-    const rotate = asOptionalString(source.rotate) ?? fallback?.rotate;
-    const defaultAction = asOptionalString(source.defaultAction) ?? fallback?.defaultAction;
+    const fallbackScripts = preserveMissingFields ? fallback : undefined;
+    const move = asOptionalString(source.move) ?? fallbackScripts?.move;
+    const rotate = asOptionalString(source.rotate) ?? fallbackScripts?.rotate;
+    const defaultAction = asOptionalString(source.defaultAction) ?? fallbackScripts?.defaultAction;
     const rawActions = Array.isArray(source.actions)
         ? source.actions
-        : fallback?.actions;
+        : fallbackScripts?.actions;
     const actions = rawActions
         ?.filter((entry): entry is string => typeof entry === 'string')
         .map((entry) => entry.trim())
@@ -1464,7 +1466,8 @@ const normalizeSurface = (
     raw: Record<string, unknown> | null,
     fallback: TestWorldSurfaceConfig,
     usedIds: Set<string>,
-    index: number
+    index: number,
+    preserveMissingBehaviorScriptFields: boolean
 ): TestWorldSurfaceConfig => {
     return {
         id: ensureUniqueId(asString(raw?.id, fallback.id), usedIds, `surface_${index + 1}`),
@@ -1476,7 +1479,11 @@ const normalizeSurface = (
         strokeColor: asColor(raw?.strokeColor, fallback.strokeColor) ?? fallback.strokeColor,
         alpha: clampAlpha(raw?.alpha, fallback.alpha ?? 1),
         collisionMode: raw?.collisionMode === 'visual_only' ? 'visual_only' : 'solid',
-        behaviorScripts: normalizeBehaviorScripts(asObject(raw?.behaviorScripts), fallback.behaviorScripts),
+        behaviorScripts: normalizeBehaviorScripts(
+            asObject(raw?.behaviorScripts),
+            fallback.behaviorScripts,
+            preserveMissingBehaviorScriptFields
+        ),
         editorLocked: asBoolean(raw?.editorLocked, false),
         ...normalizeVisualOrder(raw, fallback)
     };
@@ -2150,6 +2157,7 @@ export interface NormalizeTestWorldConfigOptions {
     fallbackConfig?: TestWorldConfig;
     preserveMissingBackgroundObjectFields?: boolean;
     preserveMissingLogicFields?: boolean;
+    preserveMissingBehaviorScriptFields?: boolean;
 }
 
 export const normalizeTestWorldConfig = (
@@ -2159,6 +2167,7 @@ export const normalizeTestWorldConfig = (
     const defaults = cloneTestWorldConfig(options?.fallbackConfig ?? TEST_WORLD_CONFIG);
     const preserveMissingBackgroundObjectFields = options?.preserveMissingBackgroundObjectFields ?? true;
     const preserveMissingLogicFields = options?.preserveMissingLogicFields ?? true;
+    const preserveMissingBehaviorScriptFields = options?.preserveMissingBehaviorScriptFields ?? true;
     const root = asObject(input);
     const usedIds = new Set<string>();
     const normalized: TestWorldConfig = {
@@ -2178,7 +2187,19 @@ export const normalizeTestWorldConfig = (
         },
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
         npcs: normalizeNpcInstances(root?.npcs, defaults.npcs, usedIds),
-        surfaces: normalizeArray(root?.surfaces, defaults.surfaces, normalizeSurface, usedIds, (entry) => entry.id),
+        surfaces: normalizeArray(
+            root?.surfaces,
+            defaults.surfaces,
+            (raw, fallback, nextUsedIds, index) => normalizeSurface(
+                raw,
+                fallback,
+                nextUsedIds,
+                index,
+                preserveMissingBehaviorScriptFields
+            ),
+            usedIds,
+            (entry) => entry.id
+        ),
         hazards: normalizeArray(root?.hazards, defaults.hazards, normalizeHazard, usedIds, (entry) => entry.id),
         checkpoints: normalizeArray(root?.checkpoints, defaults.checkpoints, normalizeCheckpoint, usedIds, (entry) => entry.id),
         finish: normalizeFinish(root?.finish, defaults.finish, usedIds),
