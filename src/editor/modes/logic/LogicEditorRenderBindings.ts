@@ -1,4 +1,5 @@
 import type { TestWorldLogicBindingConfig } from '../../../game/world/runtime/test_world_config';
+import type { TriggerOnEnterLogicTrace } from '../../../game/world/runtime/test_world_runtime';
 import type { LogicEditorDomHelpers } from './LogicEditorDom';
 
 export interface BindingMetadataDraftView {
@@ -13,12 +14,21 @@ export interface RenderBindingsContext {
     selectedBindingId: string | null;
     selectedBindingDraft: BindingMetadataDraftView | null;
     updateBindingError: string | null;
+    createTriggerBindingError: string | null;
+    triggerBindingTargetOptions: string[];
+    triggerBindingScriptOptions: string[];
+    triggerBindingTargetIdDraft: string;
+    triggerBindingScriptIdDraft: string;
+    runtimeLastTriggerOnEnterTrace?: TriggerOnEnterLogicTrace | null;
     onSelectBinding: (binding: TestWorldLogicBindingConfig) => void;
     onSelectedBindingSlotChanged: (value: string) => void;
     onSelectedBindingEnabledChanged: (value: boolean) => void;
     onApplySelectedBindingChanges: () => void;
     onRevertSelectedBindingChanges: () => void;
     onDeleteSelectedBinding: () => void;
+    onTriggerBindingTargetDraftChanged: (value: string) => void;
+    onTriggerBindingScriptDraftChanged: (value: string) => void;
+    onCreateTriggerBinding: () => void;
 }
 
 const isRuntimeSupportedBindingSlot = (binding: TestWorldLogicBindingConfig): boolean => {
@@ -26,6 +36,7 @@ const isRuntimeSupportedBindingSlot = (binding: TestWorldLogicBindingConfig): bo
     return (binding.targetType === 'world' && slot === 'onStart')
         || (binding.targetType === 'object' && slot === 'onInteract')
         || (binding.targetType === 'npc' && slot === 'onInteract')
+        || (binding.targetType === 'trigger' && slot === 'onEnter')
         || (binding.targetType === 'cutscene' && slot === 'onFinish');
 };
 
@@ -40,16 +51,108 @@ export function renderBindingsSection(
         selectedBindingId,
         selectedBindingDraft,
         updateBindingError,
+        createTriggerBindingError,
+        triggerBindingTargetOptions,
+        triggerBindingScriptOptions,
+        triggerBindingTargetIdDraft,
+        triggerBindingScriptIdDraft,
+        runtimeLastTriggerOnEnterTrace,
         onSelectBinding,
         onSelectedBindingSlotChanged,
         onSelectedBindingEnabledChanged,
         onApplySelectedBindingChanges,
         onRevertSelectedBindingChanges,
-        onDeleteSelectedBinding
+        onDeleteSelectedBinding,
+        onTriggerBindingTargetDraftChanged,
+        onTriggerBindingScriptDraftChanged,
+        onCreateTriggerBinding
     } = context;
 
     container.appendChild(dom.makeSectionTitle('Bindings'));
-    container.appendChild(dom.makeInfoLine('Runtime-supported slots: world/onStart, object/onInteract, npc/onInteract, and cutscene/onFinish.'));
+    container.appendChild(dom.makeInfoLine('Runtime-supported slots: world/onStart, object/onInteract, npc/onInteract, trigger/onEnter, and cutscene/onFinish.'));
+    if (runtimeLastTriggerOnEnterTrace) {
+        container.appendChild(dom.makeInfoLine(
+            `Last trigger/onEnter: ${runtimeLastTriggerOnEnterTrace.triggerId} [${runtimeLastTriggerOnEnterTrace.status}]`
+        ));
+    }
+    container.appendChild(dom.makeSpacer(8));
+    const createBox = document.createElement('div');
+    createBox.style.border = '1px solid #8b8b8b';
+    createBox.style.background = '#ececec';
+    createBox.style.padding = '6px';
+    createBox.style.marginBottom = '8px';
+    dom.applyCardWrap(createBox);
+    createBox.appendChild(dom.makeSectionTitle('Add Trigger Binding'));
+    createBox.appendChild(dom.makeInfoLine('targetType=trigger, slot=onEnter'));
+    createBox.appendChild(dom.makeInfoLine('Selecting an external script asset auto-adds its level script ref when missing.'));
+
+    const targetLabel = dom.makeInfoLine('Trigger targetId');
+    targetLabel.style.marginBottom = '2px';
+    createBox.appendChild(targetLabel);
+
+    const targetSelect = document.createElement('select');
+    targetSelect.style.display = 'block';
+    targetSelect.style.width = '100%';
+    targetSelect.style.boxSizing = 'border-box';
+    targetSelect.style.marginBottom = '6px';
+    dom.bindEditorInputKeyboardGuards(targetSelect);
+    triggerBindingTargetOptions.forEach((targetId) => {
+        const option = document.createElement('option');
+        option.value = targetId;
+        option.textContent = targetId;
+        targetSelect.appendChild(option);
+    });
+    targetSelect.value = triggerBindingTargetIdDraft;
+    targetSelect.addEventListener('change', () => {
+        onTriggerBindingTargetDraftChanged(targetSelect.value);
+    });
+    createBox.appendChild(targetSelect);
+
+    const scriptLabel = dom.makeInfoLine('Script (scriptId/ref)');
+    scriptLabel.style.marginBottom = '2px';
+    createBox.appendChild(scriptLabel);
+
+    const scriptSelect = document.createElement('select');
+    scriptSelect.style.display = 'block';
+    scriptSelect.style.width = '100%';
+    scriptSelect.style.boxSizing = 'border-box';
+    scriptSelect.style.marginBottom = '6px';
+    dom.bindEditorInputKeyboardGuards(scriptSelect);
+    triggerBindingScriptOptions.forEach((scriptId) => {
+        const option = document.createElement('option');
+        option.value = scriptId;
+        option.textContent = scriptId;
+        scriptSelect.appendChild(option);
+    });
+    scriptSelect.value = triggerBindingScriptIdDraft;
+    scriptSelect.addEventListener('change', () => {
+        onTriggerBindingScriptDraftChanged(scriptSelect.value);
+    });
+    createBox.appendChild(scriptSelect);
+
+    const addButton = document.createElement('button');
+    addButton.type = 'button';
+    addButton.textContent = 'Add Trigger Binding';
+    addButton.disabled = triggerBindingTargetOptions.length <= 0 || triggerBindingScriptOptions.length <= 0;
+    addButton.addEventListener('click', () => {
+        onCreateTriggerBinding();
+    });
+    createBox.appendChild(addButton);
+
+    if (createTriggerBindingError) {
+        const errorLine = dom.makeInfoLine(createTriggerBindingError);
+        errorLine.style.color = '#b00020';
+        errorLine.style.marginTop = '6px';
+        createBox.appendChild(errorLine);
+    }
+    if (triggerBindingTargetOptions.length <= 0) {
+        createBox.appendChild(dom.makeInfoLine('No trigger volumes in current level'));
+    }
+    if (triggerBindingScriptOptions.length <= 0) {
+        createBox.appendChild(dom.makeInfoLine('No script refs or external assets available.'));
+    }
+    container.appendChild(createBox);
+
     if (bindings.length <= 0) {
         container.appendChild(dom.makeInfoLine('No logic bindings yet.'));
         return;

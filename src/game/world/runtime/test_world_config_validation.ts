@@ -137,6 +137,7 @@ const isRuntimeSupportedLogicBindingSlot = (targetType: string, slot: string): b
     return (targetType === 'world' && slot === 'onStart')
         || (targetType === 'object' && slot === 'onInteract')
         || (targetType === 'npc' && slot === 'onInteract')
+        || (targetType === 'trigger' && slot === 'onEnter')
         || (targetType === 'cutscene' && slot === 'onFinish');
 };
 
@@ -157,7 +158,10 @@ const getUnsupportedRuntimeBindingSlotMessage = (
     if (targetType === 'cutscene') {
         return `Binding "${bindingLabel}" targets cutscene slot "${slot}", but runtime currently supports only cutscene/onFinish.`;
     }
-    return `Binding "${bindingLabel}" targets ${targetType} slot "${slot}", but runtime currently supports only world/onStart, object/onInteract, npc/onInteract, and cutscene/onFinish.`;
+    if (targetType === 'trigger') {
+        return `Binding "${bindingLabel}" targets trigger slot "${slot}", but runtime currently supports only trigger/onEnter.`;
+    }
+    return `Binding "${bindingLabel}" targets ${targetType} slot "${slot}", but runtime currently supports only world/onStart, object/onInteract, npc/onInteract, trigger/onEnter, and cutscene/onFinish.`;
 };
 
 const asNumber = (value: unknown, fallback: number): number => {
@@ -1683,6 +1687,74 @@ const normalizeTriggerVolume = (
     };
 };
 
+const createTriggerVolumeFallback = (index: number): TestWorldTriggerVolumeConfig => ({
+    id: `trigger_volume_${index + 1}`,
+    triggerX: 0,
+    triggerY: 0,
+    triggerWidth: 112,
+    triggerHeight: 80,
+    deactivateTriggerX: undefined,
+    deactivateTriggerY: undefined,
+    deactivateTriggerWidth: undefined,
+    deactivateTriggerHeight: undefined,
+    activator: 'player',
+    sourceIds: undefined,
+    enterCommand: null,
+    exitCommand: null,
+    onEnter: undefined,
+    onExit: undefined,
+    onStay: undefined,
+    triggerFillColor: DEFAULT_TRIGGER_VOLUME_FILL_COLOR,
+    triggerStrokeColor: DEFAULT_TRIGGER_VOLUME_STROKE_COLOR,
+    deactivateTriggerFillColor: DEFAULT_TRIGGER_VOLUME_DEACTIVATE_FILL_COLOR,
+    deactivateTriggerStrokeColor: DEFAULT_TRIGGER_VOLUME_DEACTIVATE_STROKE_COLOR
+});
+
+const normalizeTriggerVolumeArray = (
+    rawItems: unknown,
+    defaults: readonly TestWorldTriggerVolumeConfig[],
+    usedIds: Set<string>
+): TestWorldTriggerVolumeConfig[] => {
+    if (rawItems === undefined) {
+        return defaults.map((entry, index) => normalizeTriggerVolume({
+            id: entry.id,
+            triggerX: entry.triggerX,
+            triggerY: entry.triggerY,
+            triggerWidth: entry.triggerWidth,
+            triggerHeight: entry.triggerHeight,
+            deactivateTriggerX: entry.deactivateTriggerX,
+            deactivateTriggerY: entry.deactivateTriggerY,
+            deactivateTriggerWidth: entry.deactivateTriggerWidth,
+            deactivateTriggerHeight: entry.deactivateTriggerHeight,
+            activator: entry.activator,
+            sourceIds: entry.sourceIds,
+            enterCommand: entry.enterCommand,
+            exitCommand: entry.exitCommand,
+            onEnter: entry.onEnter,
+            onExit: entry.onExit,
+            onStay: entry.onStay,
+            triggerFillColor: entry.triggerFillColor,
+            triggerStrokeColor: entry.triggerStrokeColor,
+            deactivateTriggerFillColor: entry.deactivateTriggerFillColor,
+            deactivateTriggerStrokeColor: entry.deactivateTriggerStrokeColor,
+            editorLocked: entry.editorLocked,
+            visualLayer: entry.visualLayer,
+            renderOrder: entry.renderOrder
+        }, entry, usedIds, index));
+    }
+
+    return asArray(rawItems).map((entry, index) => {
+        const raw = asObject(entry);
+        const rawId = typeof raw?.id === 'string' && raw.id.trim().length > 0 ? raw.id.trim() : null;
+        const fallback = (
+            rawId
+                ? defaults.find((item) => item.id === rawId)
+                : undefined
+        ) ?? defaults[index] ?? createTriggerVolumeFallback(index);
+        return normalizeTriggerVolume(raw, fallback, usedIds, index);
+    });
+};
+
 const normalizeDragBox = (
     raw: Record<string, unknown> | null,
     fallback: TestWorldDragBoxConfig,
@@ -2205,7 +2277,7 @@ export const normalizeTestWorldConfig = (
         finish: normalizeFinish(root?.finish, defaults.finish, usedIds),
         movingPlatforms: normalizeArray(root?.movingPlatforms, defaults.movingPlatforms, normalizeMovingPlatform, usedIds, (entry) => entry.id),
         triggerPlatforms: normalizeArray(root?.triggerPlatforms, defaults.triggerPlatforms, normalizeTriggerPlatform, usedIds, (entry) => entry.id),
-        triggerVolumes: normalizeArray(root?.triggerVolumes, defaults.triggerVolumes ?? [], normalizeTriggerVolume, usedIds, (entry) => entry.id),
+        triggerVolumes: normalizeTriggerVolumeArray(root?.triggerVolumes, defaults.triggerVolumes ?? [], usedIds),
         dragBoxes: normalizeArray(root?.dragBoxes, defaults.dragBoxes, normalizeDragBox, usedIds, (entry) => entry.id),
         windZones: normalizeArray(root?.windZones, defaults.windZones, normalizeWindZone, usedIds, (entry) => entry.id),
         triangleFlightBreakWalls: normalizeArray(

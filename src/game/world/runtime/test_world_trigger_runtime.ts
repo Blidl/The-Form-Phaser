@@ -51,6 +51,7 @@ interface CreateTestWorldTriggerRuntimeParams {
     dispatchTriggerEvent?: (eventId: string, payload?: Record<string, unknown>) => boolean;
     playSfx?: (sfxId: string) => boolean;
     spawnVfx?: (vfxId: string, actorId?: string, x?: number, y?: number) => boolean;
+    onTriggerEnter?: (triggerId: string, sourceId: string) => void;
 }
 
 interface TriggerSourceRuntime {
@@ -71,11 +72,16 @@ interface TriggerBlockExecutionRecord {
     blockResult: TestEventBlockExecutionResult;
 }
 
+interface TriggerTickExecutionState {
+    enteredTriggerIds: Set<string>;
+}
+
 export const createTestWorldTriggerRuntime = (
     params: CreateTestWorldTriggerRuntimeParams
 ): TestWorldTriggerRuntime => {
     const occupancyByTriggerId = new Map<string, TriggerOccupancyState>();
     const consumedOnceKeys = new Set<string>();
+    let isUpdateInProgress = false;
     const eventRuntimeContext: TestEventRuntimeContext = {
         getWorldFlag,
         setWorldFlag,
@@ -93,71 +99,88 @@ export const createTestWorldTriggerRuntime = (
 
     return {
         update: (): void => {
-            params.triggerPlatformConfigs.forEach((triggerConfig) => {
-                const triggerPlatform = params.getTriggerPlatform(triggerConfig.id);
-                if (!triggerPlatform) {
-                    occupancyByTriggerId.delete(triggerConfig.id);
-                    return;
-                }
+            if (isUpdateInProgress) {
+                return;
+            }
+            isUpdateInProgress = true;
+            const tickExecutionState: TriggerTickExecutionState = {
+                enteredTriggerIds: new Set<string>()
+            };
+            try {
+                const triggerPlatformConfigs = [...params.triggerPlatformConfigs];
+                triggerPlatformConfigs.forEach((triggerConfig) => {
+                    const triggerPlatform = params.getTriggerPlatform(triggerConfig.id);
+                    if (!triggerPlatform) {
+                        occupancyByTriggerId.delete(triggerConfig.id);
+                        return;
+                    }
 
-                const volumeRuntime: TestWorldTriggerVolumeRuntime = {
-                    id: triggerConfig.id,
-                    triggerZone: triggerPlatform.triggerZone,
-                    deactivateTriggerZone: triggerPlatform.deactivateTriggerZone
-                };
-                const sources = resolveSourcesForActivator(
-                    triggerConfig.activator,
-                    undefined,
-                    params.player,
-                    params.dragBoxConfigs,
-                    params.getDragBox
-                );
-                stepTriggerVolume(
-                    params.scene,
-                    triggerConfig.id,
-                    volumeRuntime,
-                    sources,
-                    createLegacyTriggerEnterCommand(triggerConfig),
-                    createLegacyTriggerExitCommand(triggerConfig),
-                    undefined,
-                    undefined,
-                    undefined,
-                    occupancyByTriggerId,
-                    (command) => executeTriggerCommand(command, params),
-                    (_record) => {},
-                    eventRuntimeContext
-                );
-            });
+                    const volumeRuntime: TestWorldTriggerVolumeRuntime = {
+                        id: triggerConfig.id,
+                        triggerZone: triggerPlatform.triggerZone,
+                        deactivateTriggerZone: triggerPlatform.deactivateTriggerZone
+                    };
+                    const sources = resolveSourcesForActivator(
+                        triggerConfig.activator,
+                        undefined,
+                        params.player,
+                        params.dragBoxConfigs,
+                        params.getDragBox
+                    );
+                    stepTriggerVolume(
+                        params.scene,
+                        triggerConfig.id,
+                        volumeRuntime,
+                        sources,
+                        createLegacyTriggerEnterCommand(triggerConfig),
+                        createLegacyTriggerExitCommand(triggerConfig),
+                        undefined,
+                        undefined,
+                        undefined,
+                        occupancyByTriggerId,
+                        (command) => executeTriggerCommand(command, params),
+                        (_record) => {},
+                        eventRuntimeContext,
+                        params.onTriggerEnter,
+                        tickExecutionState
+                    );
+                });
 
-            params.triggerVolumeConfigs.forEach((triggerVolumeConfig) => {
-                const triggerVolume = params.getTriggerVolume(triggerVolumeConfig.id);
-                if (!triggerVolume) {
-                    occupancyByTriggerId.delete(triggerVolumeConfig.id);
-                    return;
-                }
-                const sources = resolveSourcesForActivator(
-                    triggerVolumeConfig.activator,
-                    triggerVolumeConfig.sourceIds,
-                    params.player,
-                    params.dragBoxConfigs,
-                    params.getDragBox
-                );
-                stepTriggerVolume(
-                    params.scene,
-                    triggerVolumeConfig.id,
-                    triggerVolume,
-                    sources,
-                    triggerVolumeConfig.enterCommand ?? null,
-                    triggerVolumeConfig.exitCommand ?? null,
-                    triggerVolumeConfig.onEnter,
-                    triggerVolumeConfig.onExit,
-                    triggerVolumeConfig.onStay,
-                    occupancyByTriggerId,
-                    (command) => executeTriggerCommand(command, params),
-                    (_record) => {},
-                    eventRuntimeContext
-                );
-            });
+                const triggerVolumeConfigs = [...params.triggerVolumeConfigs];
+                triggerVolumeConfigs.forEach((triggerVolumeConfig) => {
+                    const triggerVolume = params.getTriggerVolume(triggerVolumeConfig.id);
+                    if (!triggerVolume) {
+                        occupancyByTriggerId.delete(triggerVolumeConfig.id);
+                        return;
+                    }
+                    const sources = resolveSourcesForActivator(
+                        triggerVolumeConfig.activator,
+                        triggerVolumeConfig.sourceIds,
+                        params.player,
+                        params.dragBoxConfigs,
+                        params.getDragBox
+                    );
+                    stepTriggerVolume(
+                        params.scene,
+                        triggerVolumeConfig.id,
+                        triggerVolume,
+                        sources,
+                        triggerVolumeConfig.enterCommand ?? null,
+                        triggerVolumeConfig.exitCommand ?? null,
+                        triggerVolumeConfig.onEnter,
+                        triggerVolumeConfig.onExit,
+                        triggerVolumeConfig.onStay,
+                        occupancyByTriggerId,
+                        (command) => executeTriggerCommand(command, params),
+                        (_record) => {},
+                        eventRuntimeContext,
+                        params.onTriggerEnter,
+                        tickExecutionState
+                    );
+                });
+            } finally {
+                isUpdateInProgress = false;
+            }
         }
     };
 };
@@ -175,7 +198,9 @@ const stepTriggerVolume = (
     occupancyByTriggerId: Map<string, TriggerOccupancyState>,
     executeCommand: (command: TestWorldTriggerCommandConfig) => void,
     onBlockExecution: (record: TriggerBlockExecutionRecord) => void,
-    eventRuntimeContext: TestEventRuntimeContext
+    eventRuntimeContext: TestEventRuntimeContext,
+    onTriggerEnter: ((triggerId: string, sourceId: string) => void) | undefined,
+    tickExecutionState: TriggerTickExecutionState
 ): void => {
     const previousOccupancy = occupancyByTriggerId.get(triggerId) ?? {
         insideTriggerZone: new Set<string>(),
@@ -185,38 +210,62 @@ const stepTriggerVolume = (
         insideTriggerZone: new Set<string>(),
         insideDeactivateZone: new Set<string>()
     };
+    const enteredTriggerSourceIds: string[] = [];
+    const stayedTriggerSourceIds: string[] = [];
+    const enteredDeactivateSourceIds: string[] = [];
 
     sources.forEach((source) => {
+        const wasInsideTriggerZone = previousOccupancy.insideTriggerZone.has(source.id);
         const isInsideTriggerZone = scene.physics.overlap(source.bodyObject, triggerVolume.triggerZone)
-            || (previousOccupancy.insideTriggerZone.has(source.id) && source.isSettling());
+            || (wasInsideTriggerZone && source.isSettling());
         if (isInsideTriggerZone) {
             nextOccupancy.insideTriggerZone.add(source.id);
-            if (!previousOccupancy.insideTriggerZone.has(source.id) && enterCommand) {
-                executeCommand(enterCommand);
-            }
-            if (!previousOccupancy.insideTriggerZone.has(source.id)) {
-                executeTriggerEventBlocks(triggerId, source.id, 'onEnter', onEnterBlocks, onBlockExecution, eventRuntimeContext);
+            if (!wasInsideTriggerZone) {
+                enteredTriggerSourceIds.push(source.id);
             } else {
-                executeTriggerEventBlocks(triggerId, source.id, 'onStay', onStayBlocks, onBlockExecution, eventRuntimeContext);
+                stayedTriggerSourceIds.push(source.id);
             }
         }
 
+        const wasInsideDeactivateZone = previousOccupancy.insideDeactivateZone.has(source.id);
         const isInsideDeactivateZone = triggerVolume.deactivateTriggerZone !== null && (
             scene.physics.overlap(source.bodyObject, triggerVolume.deactivateTriggerZone)
-            || (previousOccupancy.insideDeactivateZone.has(source.id) && source.isSettling())
+            || (wasInsideDeactivateZone && source.isSettling())
         );
         if (isInsideDeactivateZone) {
             nextOccupancy.insideDeactivateZone.add(source.id);
-            if (!previousOccupancy.insideDeactivateZone.has(source.id) && exitCommand) {
-                executeCommand(exitCommand);
-            }
-            if (!previousOccupancy.insideDeactivateZone.has(source.id)) {
-                executeTriggerEventBlocks(triggerId, source.id, 'onExit', onExitBlocks, onBlockExecution, eventRuntimeContext);
+            if (!wasInsideDeactivateZone) {
+                enteredDeactivateSourceIds.push(source.id);
             }
         }
     });
 
+    // Commit occupancy before executing enter callbacks/commands to avoid re-entry loops.
     occupancyByTriggerId.set(triggerId, nextOccupancy);
+
+    const canRunEnterForTrigger = !tickExecutionState.enteredTriggerIds.has(triggerId);
+    if (enteredTriggerSourceIds.length > 0 && canRunEnterForTrigger) {
+        tickExecutionState.enteredTriggerIds.add(triggerId);
+        if (enterCommand) {
+            executeCommand(enterCommand);
+        }
+        enteredTriggerSourceIds.forEach((sourceId) => {
+            onTriggerEnter?.(triggerId, sourceId);
+            executeTriggerEventBlocks(triggerId, sourceId, 'onEnter', onEnterBlocks, onBlockExecution, eventRuntimeContext);
+        });
+    }
+
+    stayedTriggerSourceIds.forEach((sourceId) => {
+        executeTriggerEventBlocks(triggerId, sourceId, 'onStay', onStayBlocks, onBlockExecution, eventRuntimeContext);
+    });
+    if (enteredDeactivateSourceIds.length > 0) {
+        if (exitCommand) {
+            executeCommand(exitCommand);
+        }
+        enteredDeactivateSourceIds.forEach((sourceId) => {
+            executeTriggerEventBlocks(triggerId, sourceId, 'onExit', onExitBlocks, onBlockExecution, eventRuntimeContext);
+        });
+    }
 };
 
 const executeTriggerEventBlocks = (

@@ -494,10 +494,36 @@ export class LogicAuthoringService {
         });
     }
 
+    public ensureScriptRefForScriptId(
+        scriptId: string,
+        options?: { path?: string; displayName?: string }
+    ): LogicMutationResult {
+        const normalizedScriptId = asOptionalString(scriptId);
+        if (!normalizedScriptId) {
+            return {
+                success: false,
+                reason: 'Script id must be a non-empty string.'
+            };
+        }
+        const script = this.getScript(normalizedScriptId);
+        if (script) {
+            return { success: true };
+        }
+        if (this.hasScriptRef(normalizedScriptId)) {
+            return { success: true };
+        }
+        return this.addScriptRef({
+            id: normalizedScriptId,
+            path: options?.path ?? 'logic_scripts.json',
+            displayName: options?.displayName ?? normalizedScriptId
+        });
+    }
+
     public updateBinding(id: string, patch: UpdateLogicBindingPatch): LogicMutationResult {
         return this.applyConfigEdit((nextConfig) => {
             const logic = this.ensureLogicForWrite(nextConfig);
             const scripts = normalizeScriptList(logic.scripts);
+            const scriptRefs = normalizeScriptRefList(logic.scriptRefs);
             const bindings = normalizeBindingList(logic.bindings);
             const bindingIndex = this.findBindingIndex(bindings, id);
             if (bindingIndex < 0) {
@@ -534,8 +560,14 @@ export class LogicAuthoringService {
 
             if (Object.prototype.hasOwnProperty.call(patch, 'scriptId')) {
                 const nextScriptId = asOptionalString(patch.scriptId);
-                if (!nextScriptId || !scripts.some((entry) => entry.id === nextScriptId)) {
-                    return { success: false, reason: 'Binding scriptId must reference an existing script.' };
+                if (
+                    !nextScriptId
+                    || (
+                        !scripts.some((entry) => entry.id === nextScriptId)
+                        && !scriptRefs.some((entry) => entry.id === nextScriptId)
+                    )
+                ) {
+                    return { success: false, reason: 'Binding scriptId must reference an existing script or script ref.' };
                 }
                 next.scriptId = nextScriptId;
                 changed = true;

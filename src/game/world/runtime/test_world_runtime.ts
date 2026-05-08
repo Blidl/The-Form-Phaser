@@ -203,6 +203,16 @@ export interface CutsceneLogicTrace {
     message: string;
 }
 
+export interface TriggerOnEnterLogicTrace {
+    attemptId: number;
+    triggerId: string;
+    sourceId: string;
+    slot: 'onEnter';
+    status: LogicBindingEventTrace['status'];
+    bindingTrace: LogicBindingEventTrace;
+    message: string;
+}
+
 export interface SurfaceMoveRuntimeDebugEntry {
     surfaceId: string;
     assignedScriptId: string | null;
@@ -283,6 +293,7 @@ export interface TestWorldRuntime {
     getLastObjectInteractionTrace: () => ObjectInteractionTrace;
     getLastNpcInteractionTrace: () => NpcInteractionTrace;
     getLastCutsceneLogicTrace: () => CutsceneLogicTrace | null;
+    getLastTriggerOnEnterLogicTrace: () => TriggerOnEnterLogicTrace | null;
     getSurfaceMoveRuntimeDebugSnapshot: () => SurfaceMoveRuntimeDebugSnapshot;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
@@ -541,6 +552,10 @@ const cloneCutsceneLogicTrace = (
     trace: CutsceneLogicTrace
 ): CutsceneLogicTrace => JSON.parse(JSON.stringify(trace)) as CutsceneLogicTrace;
 
+const cloneTriggerOnEnterLogicTrace = (
+    trace: TriggerOnEnterLogicTrace
+): TriggerOnEnterLogicTrace => JSON.parse(JSON.stringify(trace)) as TriggerOnEnterLogicTrace;
+
 const clamp = (value: number, min: number, max: number): number => {
     return Math.min(max, Math.max(min, value));
 };
@@ -604,18 +619,80 @@ export const createTestWorldRuntime = (
     let lastObjectInteractionTrace: ObjectInteractionTrace = createIdleObjectInteractionTrace();
     let lastNpcInteractionTrace: NpcInteractionTrace = createIdleNpcInteractionTrace();
     let lastCutsceneLogicTrace: CutsceneLogicTrace | null = null;
+    let lastTriggerOnEnterLogicTrace: TriggerOnEnterLogicTrace | null = null;
     let objectInteractionAttemptId = 0;
     let npcInteractionAttemptId = 0;
     let cutsceneLogicAttemptId = 0;
+    let triggerOnEnterLogicAttemptId = 0;
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let editorDebugViewActive = false;
+    const executeTriggerOnEnterLogic = (triggerId: string, sourceId: string): void => {
+        const normalizedTriggerId = triggerId.trim();
+        const normalizedSourceId = sourceId.trim();
+        if (normalizedTriggerId.length <= 0) {
+            return;
+        }
+
+        triggerOnEnterLogicAttemptId += 1;
+        const attemptId = triggerOnEnterLogicAttemptId;
+
+        try {
+            const bindingTrace = executeLogicBindingsForEvent(
+                currentConfig,
+                {
+                    targetType: 'trigger',
+                    targetId: normalizedTriggerId,
+                    slot: 'onEnter'
+                },
+                createLogicScriptRuntimeContext()
+            );
+            const message = bindingTrace.bindings.length <= 0
+                ? `No matching trigger/onEnter bindings for ${normalizedTriggerId}.`
+                : bindingTrace.status === 'success'
+                    ? `Executed trigger/onEnter bindings for ${normalizedTriggerId}.`
+                    : bindingTrace.status === 'error'
+                        ? `Trigger/onEnter binding execution failed for ${normalizedTriggerId}.`
+                        : `Trigger/onEnter binding execution skipped for ${normalizedTriggerId}.`;
+            lastTriggerOnEnterLogicTrace = {
+                attemptId,
+                triggerId: normalizedTriggerId,
+                sourceId: normalizedSourceId,
+                slot: 'onEnter',
+                status: bindingTrace.status,
+                bindingTrace,
+                message
+            };
+        } catch (error) {
+            const errorMessage = error instanceof Error && error.message.trim().length > 0
+                ? error.message
+                : 'Unknown trigger/onEnter runtime error.';
+            const bindingTrace: LogicBindingEventTrace = {
+                targetType: 'trigger',
+                targetId: normalizedTriggerId,
+                slot: 'onEnter',
+                status: 'error',
+                bindings: []
+            };
+            lastTriggerOnEnterLogicTrace = {
+                attemptId,
+                triggerId: normalizedTriggerId,
+                sourceId: normalizedSourceId,
+                slot: 'onEnter',
+                status: 'error',
+                bindingTrace,
+                message: `Trigger/onEnter runtime exception for ${normalizedTriggerId}: ${errorMessage}`
+            };
+        }
+    };
+
     let instance = buildWorldInstance(
         scene,
         player,
         onCheckpointActivated,
         currentConfig,
         useArcadePlatformCollisions,
-        forwardedEventDebugSink
+        forwardedEventDebugSink,
+        executeTriggerOnEnterLogic
     );
 
     const createLogicScriptRuntimeContext = (): LogicScriptWorldOnStartExecutionContext => ({
@@ -696,7 +773,8 @@ export const createTestWorldRuntime = (
             onCheckpointActivated,
             currentConfig,
             useArcadePlatformCollisions,
-            forwardedEventDebugSink
+            forwardedEventDebugSink,
+            executeTriggerOnEnterLogic
         );
         instance.setEditorDebugViewActive(editorDebugViewActive);
     };
@@ -1190,6 +1268,12 @@ export const createTestWorldRuntime = (
             }
             return cloneCutsceneLogicTrace(lastCutsceneLogicTrace);
         },
+        getLastTriggerOnEnterLogicTrace: (): TriggerOnEnterLogicTrace | null => {
+            if (!lastTriggerOnEnterLogicTrace) {
+                return null;
+            }
+            return cloneTriggerOnEnterLogicTrace(lastTriggerOnEnterLogicTrace);
+        },
         getSurfaceMoveRuntimeDebugSnapshot: (): SurfaceMoveRuntimeDebugSnapshot => {
             return instance.getSurfaceMoveRuntimeDebugSnapshot();
         },
@@ -1395,7 +1479,8 @@ const buildWorldInstance = (
     onCheckpointActivated: (point: RespawnPoint) => void,
     config: TestWorldConfig,
     useArcadePlatformCollisions: boolean,
-    eventDebugSink?: TestWorldDebugEventSink
+    eventDebugSink?: TestWorldDebugEventSink,
+    onTriggerEnterLogic?: (triggerId: string, sourceId: string) => void
 ): BuiltWorldInstance => {
     let editorDebugViewActive = false;
     applyWorldBounds(scene, config.worldBounds);
@@ -2889,6 +2974,9 @@ const buildWorldInstance = (
                 y: typeof y === 'number' ? y : null
             });
             return true;
+        },
+        onTriggerEnter: (triggerId, sourceId) => {
+            onTriggerEnterLogic?.(triggerId, sourceId);
         }
     });
 
@@ -2900,7 +2988,9 @@ const buildWorldInstance = (
             dragBoxes.forEach((dragBox) => {
                 dragBox.update(player);
             });
-            triggerRuntime.update();
+            if (deltaMs > 0) {
+                triggerRuntime.update();
+            }
         },
         updateNpcs: (deltaMs: number): void => {
             npcRuntime.update(deltaMs);

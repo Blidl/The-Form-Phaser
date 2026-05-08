@@ -34,7 +34,8 @@ import type {
 } from '../../game/world/runtime/test_world_config';
 import type {
     ObjectInteractionTrace,
-    SurfaceMoveRuntimeDebugSnapshot
+    SurfaceMoveRuntimeDebugSnapshot,
+    TriggerOnEnterLogicTrace
 } from '../../game/world/runtime/test_world_runtime';
 
 interface ObjectsEditorModeOptions {
@@ -84,6 +85,7 @@ const TRANSPARENT_COLOR_VALUE = 'transparent';
 const DEFAULT_AUTHORING_FILL_COLOR = '#ffffff';
 const DEFAULT_AUTHORING_STROKE_COLOR = '#000000';
 const OBJECT_LOGIC_BINDING_DEFAULT_SLOT = 'onInteract';
+const TRIGGER_LOGIC_BINDING_DEFAULT_SLOT = 'onEnter';
 const DEBUG_OBJECT_BRIDGE = false;
 const RESIZE_HANDLE_SIZE = 8;
 const RESIZE_HANDLE_HIT_RADIUS = 6;
@@ -118,6 +120,13 @@ type BehaviorScriptCategory = 'platform.move' | 'platform.rotate' | 'platform.de
 interface BehaviorScriptOption {
     id: string;
     label: string;
+}
+type TriggerScriptOptionSource = 'script_ref' | 'external_asset';
+interface TriggerScriptOption {
+    id: string;
+    label: string;
+    source: TriggerScriptOptionSource;
+    displayName?: string;
 }
 const BEHAVIOR_SCRIPT_CATEGORY_BY_FIELD: Readonly<Record<BehaviorScriptField, BehaviorScriptCategory>> = {
     move: 'platform.move',
@@ -205,6 +214,9 @@ export class ObjectsEditorMode implements EditorMode {
     private objectLogicBindingCreateScriptRefId: string | null = null;
     private objectLogicBindingCreateEnabledDraft = true;
     private objectLogicBindingCreateError: string | null = null;
+    private triggerLogicBindingScriptIdDraft: string | null = null;
+    private triggerLogicBindingEnabledDraft = true;
+    private triggerLogicBindingError: string | null = null;
     private readonly objectLogicBindingEnabledDrafts = new Map<string, boolean>();
     private readonly objectLogicBindingMutationErrors = new Map<string, string>();
     private readonly lastAppliedRuntimeDebugVisibilityByObjectId = new Map<string, boolean>();
@@ -796,6 +808,7 @@ export class ObjectsEditorMode implements EditorMode {
                 return;
             }
             const objectLogicBindings = this.logicAuthoringService.listBindingsForTarget('object', selectedObject.id);
+            const triggerLogicBindings = this.logicAuthoringService.listBindingsForTarget('trigger', selectedObject.id);
             objectDiag('[ObjectVisualSync]', {
                 phase: 'select',
                 objectId: selectedObject.id,
@@ -854,6 +867,12 @@ export class ObjectsEditorMode implements EditorMode {
             container.appendChild(this.makeLabel(`Type: ${selectedObject.settings.type}`));
             container.appendChild(this.makeLabel(`Collision: ${selectedObject.settings.collision}`));
             container.appendChild(this.makeSpacer());
+
+            if (selectedObject.settings.type === 'trigger_volume') {
+                container.appendChild(this.makeSectionTitle('Trigger Actions'));
+                container.appendChild(this.makeTriggerLogicActionsView(selectedObject, triggerLogicBindings));
+                return;
+            }
 
             container.appendChild(this.makeSectionTitle('Behavior Scripts'));
             container.appendChild(this.makeBehaviorScriptsSection(selectedObject));
@@ -2730,6 +2749,9 @@ export class ObjectsEditorMode implements EditorMode {
         if (this.objectLogicBindingCreateFormObjectId === objectId) {
             this.resetObjectLogicBindingCreateForm();
         }
+        this.triggerLogicBindingScriptIdDraft = null;
+        this.triggerLogicBindingEnabledDraft = true;
+        this.triggerLogicBindingError = null;
         this.activePointerButton = null;
     }
 
@@ -3594,6 +3616,252 @@ export class ObjectsEditorMode implements EditorMode {
 
         form.appendChild(actionRow);
         wrap.appendChild(form);
+        return wrap;
+    }
+
+    private makeTriggerLogicActionsView(
+        selectedObject: EditorObjectData,
+        bindings: TestWorldLogicBindingConfig[]
+    ): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'grid';
+        wrap.style.gap = '6px';
+        wrap.style.minWidth = '0';
+        wrap.appendChild(this.makeLabel('Runtime: trigger/onEnter'));
+
+        const onEnterBinding = bindings.find((entry) => entry.slot.trim() === TRIGGER_LOGIC_BINDING_DEFAULT_SLOT) ?? null;
+        const scriptOptions = this.listTriggerScriptOptions();
+        this.syncTriggerLogicBindingDraft(onEnterBinding, scriptOptions);
+
+        const scriptLabel = this.makeLabel('On Enter script');
+        scriptLabel.style.marginBottom = '2px';
+        wrap.appendChild(scriptLabel);
+
+        const scriptSelect = document.createElement('select');
+        scriptSelect.style.display = 'block';
+        scriptSelect.style.width = '100%';
+        scriptSelect.style.boxSizing = 'border-box';
+        scriptSelect.style.marginBottom = '6px';
+        scriptOptions.forEach((option) => {
+            scriptSelect.appendChild(new Option(option.label, option.id));
+        });
+        scriptSelect.disabled = this.isObjectLocked(selectedObject) || scriptOptions.length <= 0;
+        if (this.triggerLogicBindingScriptIdDraft) {
+            scriptSelect.value = this.triggerLogicBindingScriptIdDraft;
+        }
+        this.bindEditorInputKeyboardGuards(scriptSelect);
+        scriptSelect.addEventListener('change', () => {
+            this.triggerLogicBindingScriptIdDraft = scriptSelect.value.trim() || null;
+            this.triggerLogicBindingError = null;
+        });
+        wrap.appendChild(scriptSelect);
+
+        const enabledRow = document.createElement('label');
+        enabledRow.style.display = 'flex';
+        enabledRow.style.alignItems = 'center';
+        enabledRow.style.gap = '6px';
+        enabledRow.style.marginBottom = '6px';
+        const enabledCheckbox = document.createElement('input');
+        enabledCheckbox.type = 'checkbox';
+        enabledCheckbox.checked = this.triggerLogicBindingEnabledDraft;
+        enabledCheckbox.disabled = this.isObjectLocked(selectedObject);
+        this.bindEditorInputKeyboardGuards(enabledCheckbox);
+        enabledCheckbox.addEventListener('change', () => {
+            this.triggerLogicBindingEnabledDraft = enabledCheckbox.checked;
+            this.triggerLogicBindingError = null;
+        });
+        enabledRow.appendChild(enabledCheckbox);
+        const enabledText = document.createElement('span');
+        enabledText.textContent = 'Enabled';
+        enabledRow.appendChild(enabledText);
+        wrap.appendChild(enabledRow);
+
+        const actionRow = document.createElement('div');
+        actionRow.style.display = 'flex';
+        actionRow.style.gap = '6px';
+        actionRow.style.flexWrap = 'wrap';
+        const applyButton = document.createElement('button');
+        applyButton.type = 'button';
+        applyButton.textContent = 'Apply';
+        applyButton.disabled = this.isObjectLocked(selectedObject) || scriptOptions.length <= 0 || !this.triggerLogicBindingScriptIdDraft;
+        this.bindEditorInputKeyboardGuards(applyButton);
+        applyButton.addEventListener('click', () => {
+            this.applyTriggerLogicBinding(selectedObject.id, onEnterBinding);
+        });
+        actionRow.appendChild(applyButton);
+        const clearButton = document.createElement('button');
+        clearButton.type = 'button';
+        clearButton.textContent = 'Clear';
+        clearButton.disabled = this.isObjectLocked(selectedObject) || !onEnterBinding;
+        this.bindEditorInputKeyboardGuards(clearButton);
+        clearButton.addEventListener('click', () => {
+            this.clearTriggerLogicBinding(onEnterBinding);
+        });
+        actionRow.appendChild(clearButton);
+        wrap.appendChild(actionRow);
+
+        if (scriptOptions.length <= 0) {
+            wrap.appendChild(this.makeLabel('No trigger/world script refs or external assets available.'));
+        }
+        if (this.triggerLogicBindingError) {
+            const errorLine = this.makeLabel(this.triggerLogicBindingError);
+            errorLine.style.color = '#b00020';
+            wrap.appendChild(errorLine);
+        }
+        wrap.appendChild(this.makeTriggerOnEnterTraceView(selectedObject.id));
+        return wrap;
+    }
+
+    private listTriggerScriptOptions(): TriggerScriptOption[] {
+        const options: TriggerScriptOption[] = [];
+        const seenIds = new Set<string>();
+        this.logicAuthoringService.listScriptRefs().forEach((scriptRef) => {
+            const id = scriptRef.id.trim();
+            if (!id || seenIds.has(id)) {
+                return;
+            }
+            seenIds.add(id);
+            options.push({
+                id,
+                source: 'script_ref',
+                label: this.formatObjectLogicScriptRefOptionLabel(scriptRef),
+                displayName: scriptRef.displayName?.trim() || undefined
+            });
+        });
+        getAllLogicScriptAssets()
+            .filter((script) => script.category === 'trigger.action' || script.category === 'world.rule')
+            .forEach((script) => {
+                const id = script.id.trim();
+                if (!id || seenIds.has(id)) {
+                    return;
+                }
+                seenIds.add(id);
+                options.push({
+                    id,
+                    source: 'external_asset',
+                    label: `${script.name} (${id}) [asset]`,
+                    displayName: script.name
+                });
+            });
+        return options;
+    }
+
+    private syncTriggerLogicBindingDraft(
+        onEnterBinding: TestWorldLogicBindingConfig | null,
+        scriptOptions: readonly TriggerScriptOption[]
+    ): void {
+        const optionIds = new Set(scriptOptions.map((entry) => entry.id));
+        if (onEnterBinding) {
+            this.triggerLogicBindingEnabledDraft = onEnterBinding.enabled !== false;
+            if (optionIds.has(onEnterBinding.scriptId)) {
+                this.triggerLogicBindingScriptIdDraft = onEnterBinding.scriptId;
+                return;
+            }
+        }
+        const currentDraft = this.triggerLogicBindingScriptIdDraft?.trim() ?? '';
+        if (currentDraft && optionIds.has(currentDraft)) {
+            return;
+        }
+        this.triggerLogicBindingScriptIdDraft = scriptOptions[0]?.id ?? null;
+    }
+
+    private applyTriggerLogicBinding(
+        triggerId: string,
+        existingBinding: TestWorldLogicBindingConfig | null
+    ): void {
+        const scriptId = this.triggerLogicBindingScriptIdDraft?.trim() ?? '';
+        if (!scriptId) {
+            this.triggerLogicBindingError = 'Select an onEnter script.';
+            this.onUiChanged();
+            return;
+        }
+        const scriptOption = this.listTriggerScriptOptions().find((entry) => entry.id === scriptId) ?? null;
+        const ensureRefResult = this.logicAuthoringService.ensureScriptRefForScriptId(scriptId, {
+            path: 'logic_scripts.json',
+            displayName: scriptOption?.displayName ?? scriptId
+        });
+        if (!ensureRefResult.success) {
+            this.triggerLogicBindingError = ensureRefResult.reason ?? 'Failed to resolve script ref for trigger binding.';
+            this.onUiChanged();
+            return;
+        }
+        if (existingBinding) {
+            const updateResult = this.logicAuthoringService.updateBinding(existingBinding.id, {
+                scriptId,
+                slot: TRIGGER_LOGIC_BINDING_DEFAULT_SLOT,
+                enabled: this.triggerLogicBindingEnabledDraft
+            });
+            if (!updateResult.success) {
+                this.triggerLogicBindingError = updateResult.reason ?? 'Failed to update trigger binding.';
+                this.onUiChanged();
+                return;
+            }
+            this.triggerLogicBindingError = null;
+            this.onUiChanged();
+            return;
+        }
+        const createResult = this.logicAuthoringService.createBinding({
+            targetType: 'trigger',
+            targetId: triggerId,
+            slot: TRIGGER_LOGIC_BINDING_DEFAULT_SLOT,
+            scriptId,
+            enabled: this.triggerLogicBindingEnabledDraft
+        });
+        if (!createResult.success) {
+            this.triggerLogicBindingError = createResult.reason ?? 'Failed to create trigger binding.';
+            this.onUiChanged();
+            return;
+        }
+        this.triggerLogicBindingError = null;
+        this.onUiChanged();
+    }
+
+    private clearTriggerLogicBinding(existingBinding: TestWorldLogicBindingConfig | null): void {
+        if (!existingBinding) {
+            return;
+        }
+        const result = this.logicAuthoringService.deleteBinding(existingBinding.id);
+        if (!result.success) {
+            this.triggerLogicBindingError = result.reason ?? 'Failed to clear trigger binding.';
+            this.onUiChanged();
+            return;
+        }
+        this.triggerLogicBindingEnabledDraft = true;
+        this.triggerLogicBindingError = null;
+        this.onUiChanged();
+    }
+
+    private getRuntimeTriggerOnEnterTrace(): TriggerOnEnterLogicTrace | null {
+        const trace = this.legacyObjectAdapter?.getLastTriggerOnEnterLogicTrace() as TriggerOnEnterLogicTrace | null;
+        if (!trace || typeof trace !== 'object') {
+            return null;
+        }
+        if (typeof trace.triggerId !== 'string' || typeof trace.status !== 'string') {
+            return null;
+        }
+        return trace;
+    }
+
+    private makeTriggerOnEnterTraceView(selectedTriggerId: string): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.border = '1px solid #8b8b8b';
+        wrap.style.background = '#ececec';
+        wrap.style.padding = '6px';
+        wrap.style.marginBottom = '6px';
+        wrap.style.minWidth = '0';
+        wrap.style.overflowWrap = 'anywhere';
+        wrap.style.wordBreak = 'break-word';
+        const trace = this.getRuntimeTriggerOnEnterTrace();
+        if (!trace) {
+            wrap.appendChild(this.makeLabel('Last trigger/onEnter: no runtime trace yet.'));
+            return wrap;
+        }
+        const attemptText = Number.isFinite(trace.attemptId) ? `#${trace.attemptId}` : '(unknown)';
+        const triggerMatch = trace.triggerId === selectedTriggerId ? '' : ` (last trigger: ${trace.triggerId})`;
+        wrap.appendChild(this.makeLabel(`Last trigger/onEnter ${attemptText}: ${trace.status}${triggerMatch}`));
+        if (trace.message?.trim()) {
+            wrap.appendChild(this.makeLabel(`Trace: ${trace.message}`));
+        }
         return wrap;
     }
 

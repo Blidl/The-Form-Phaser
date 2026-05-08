@@ -14,6 +14,7 @@ import {
     type LogicScriptExecutionResult,
     type LogicWorldOnStartTrace
 } from '../../game/world/runtime/logic_script_runtime';
+import type { TriggerOnEnterLogicTrace } from '../../game/world/runtime/test_world_runtime';
 import {
     collectTestWorldLogicDiagnosticsWithRegistry,
     getAllLogicScriptAssets,
@@ -96,6 +97,9 @@ export class LogicEditorMode implements EditorMode {
     private selectedBindingId: string | null = null;
     private selectedBindingDraft: BindingMetadataDraft | null = null;
     private updateBindingError: string | null = null;
+    private createTriggerBindingTargetIdDraft = '';
+    private createTriggerBindingScriptIdDraft = '';
+    private createTriggerBindingError: string | null = null;
 
     private readonly scriptCategoryOptions: TestWorldLogicScriptCategory[] = [
         'object.move',
@@ -400,6 +404,10 @@ export class LogicEditorMode implements EditorMode {
             : [];
         const runtimeWorldOnStartTrace = this.getRuntimeWorldOnStartLogicTrace();
         const runtimeWorldFlagsSnapshot = this.getRuntimeWorldFlagsSnapshot();
+        const runtimeLastTriggerOnEnterTrace = this.getRuntimeLastTriggerOnEnterLogicTrace();
+        const triggerBindingTargetOptions = this.getTriggerBindingTargetOptions();
+        const triggerBindingScriptOptions = this.getTriggerBindingScriptOptions(snapshot);
+        this.syncCreateTriggerBindingDrafts(triggerBindingTargetOptions, triggerBindingScriptOptions);
 
         panel.setCustomContent('Logic Bindings', (container) => {
             if (!snapshot) {
@@ -438,6 +446,12 @@ export class LogicEditorMode implements EditorMode {
                 selectedBindingId: this.selectedBindingId,
                 selectedBindingDraft: this.selectedBindingDraft,
                 updateBindingError: this.updateBindingError,
+                createTriggerBindingError: this.createTriggerBindingError,
+                triggerBindingTargetOptions,
+                triggerBindingScriptOptions,
+                triggerBindingTargetIdDraft: this.createTriggerBindingTargetIdDraft,
+                triggerBindingScriptIdDraft: this.createTriggerBindingScriptIdDraft,
+                runtimeLastTriggerOnEnterTrace,
                 onSelectBinding: (binding) => {
                     if (this.selectedBindingId === binding.id) {
                         return;
@@ -527,6 +541,55 @@ export class LogicEditorMode implements EditorMode {
                         this.updateBindingError = error instanceof Error
                             ? error.message
                             : 'Failed to delete binding.';
+                        this.onUiChanged();
+                    }
+                },
+                onTriggerBindingTargetDraftChanged: (value) => {
+                    this.createTriggerBindingTargetIdDraft = value;
+                },
+                onTriggerBindingScriptDraftChanged: (value) => {
+                    this.createTriggerBindingScriptIdDraft = value;
+                },
+                onCreateTriggerBinding: () => {
+                    try {
+                        const selectedScriptId = this.createTriggerBindingScriptIdDraft.trim();
+                        if (!selectedScriptId) {
+                            this.createTriggerBindingError = 'Select a trigger script.';
+                            this.onUiChanged();
+                            return;
+                        }
+                        const externalScript = getAllLogicScriptAssets().find((entry) => entry.id === selectedScriptId);
+                        const ensureRefResult = this.logicAuthoringService.ensureScriptRefForScriptId(selectedScriptId, {
+                            path: 'logic_scripts.json',
+                            displayName: externalScript?.name ?? selectedScriptId
+                        });
+                        if (!ensureRefResult.success) {
+                            this.createTriggerBindingError = ensureRefResult.reason ?? 'Failed to resolve script ref for trigger binding.';
+                            this.onUiChanged();
+                            return;
+                        }
+                        const result = this.logicAuthoringService.createBinding({
+                            targetType: 'trigger',
+                            targetId: this.createTriggerBindingTargetIdDraft,
+                            slot: 'onEnter',
+                            scriptId: selectedScriptId,
+                            enabled: true
+                        });
+                        if (!result.success) {
+                            this.createTriggerBindingError = result.reason ?? 'Failed to create trigger binding.';
+                            this.onUiChanged();
+                            return;
+                        }
+                        this.createTriggerBindingError = null;
+                        if (result.binding) {
+                            this.selectedBindingId = result.binding.id;
+                            this.loadSelectedBindingDraft(result.binding);
+                        }
+                        this.onUiChanged();
+                    } catch (error) {
+                        this.createTriggerBindingError = error instanceof Error
+                            ? error.message
+                            : 'Failed to create trigger binding.';
                         this.onUiChanged();
                     }
                 }
@@ -660,6 +723,53 @@ export class LogicEditorMode implements EditorMode {
             .filter((entry): entry is [string, boolean] => typeof entry[1] === 'boolean')
             .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey));
         return Object.fromEntries(normalizedEntries);
+    }
+
+    private getRuntimeLastTriggerOnEnterLogicTrace(): TriggerOnEnterLogicTrace | null {
+        const trace = this.legacyObjectAdapter?.getLastTriggerOnEnterLogicTrace() as TriggerOnEnterLogicTrace | null;
+        if (!trace || typeof trace !== 'object') {
+            return null;
+        }
+        if (typeof trace.triggerId !== 'string' || typeof trace.status !== 'string') {
+            return null;
+        }
+        return trace;
+    }
+
+    private getTriggerBindingTargetOptions(): string[] {
+        const runtimeConfig = this.getCurrentRuntimeConfig();
+        if (!runtimeConfig) {
+            return [];
+        }
+        return runtimeConfig.triggerVolumes
+            .map((entry) => entry.id.trim())
+            .filter((id) => id.length > 0);
+    }
+
+    private getTriggerBindingScriptOptions(snapshot: LogicSnapshot): string[] {
+        const scriptIds = new Set<string>();
+        snapshot.scriptRefs.forEach((entry) => {
+            const id = entry.id.trim();
+            if (id.length > 0) {
+                scriptIds.add(id);
+            }
+        });
+        getAllLogicScriptAssets().forEach((entry) => {
+            const id = entry.id.trim();
+            if (id.length > 0) {
+                scriptIds.add(id);
+            }
+        });
+        return [...scriptIds];
+    }
+
+    private syncCreateTriggerBindingDrafts(targetOptions: string[], scriptOptions: string[]): void {
+        if (!targetOptions.includes(this.createTriggerBindingTargetIdDraft)) {
+            this.createTriggerBindingTargetIdDraft = targetOptions[0] ?? '';
+        }
+        if (!scriptOptions.includes(this.createTriggerBindingScriptIdDraft)) {
+            this.createTriggerBindingScriptIdDraft = scriptOptions[0] ?? '';
+        }
     }
 
     private getCurrentRuntimeConfig(): TestWorldConfig | null {
