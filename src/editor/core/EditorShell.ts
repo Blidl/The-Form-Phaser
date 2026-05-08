@@ -54,7 +54,12 @@ const createModes = (
     onUiChanged: () => void,
     legacyObjectAdapter: LegacyObjectAdapter | null
 ): Record<EditorModeId, EditorMode> => {
-    const level = new LevelEditorMode(projectStore, () => legacyObjectAdapter?.getLevelId() ?? null);
+    const level = new LevelEditorMode(
+        projectStore,
+        () => legacyObjectAdapter?.getLevelId() ?? null,
+        legacyObjectAdapter,
+        onUiChanged
+    );
     const player = new PlayerEditorMode();
     const objects = new ObjectsEditorMode({
         scene,
