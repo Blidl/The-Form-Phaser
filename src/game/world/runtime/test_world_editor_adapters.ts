@@ -256,6 +256,100 @@ const patchBehaviorScripts = (
     target.behaviorScripts = current;
 };
 
+const cloneNpcBehaviorScripts = (
+    behaviorScripts: TestNpcInstanceConfig['behaviorScripts'] | undefined
+): TestNpcInstanceConfig['behaviorScripts'] | undefined => {
+    if (!behaviorScripts) {
+        return undefined;
+    }
+    return {
+        patrol: behaviorScripts.patrol,
+        defaultAction: behaviorScripts.defaultAction,
+        altActions: behaviorScripts.altActions ? [...behaviorScripts.altActions] : undefined
+    };
+};
+
+const patchNpcBehaviorScripts = (
+    target: TestNpcInstanceConfig,
+    patch: Record<string, unknown>
+): void => {
+    const current = cloneNpcBehaviorScripts(target.behaviorScripts) ?? {};
+    let changed = false;
+    const applyOptionalStringPatch = (
+        patchKey: 'behaviorScriptsPatrol' | 'behaviorScriptsDefaultAction',
+        targetKey: 'patrol' | 'defaultAction'
+    ): void => {
+        if (!(patchKey in patch)) {
+            return;
+        }
+        changed = true;
+        const next = trimOptionalPatchString(patch[patchKey]);
+        if (next) {
+            current[targetKey] = next;
+        } else {
+            delete current[targetKey];
+        }
+    };
+    applyOptionalStringPatch('behaviorScriptsPatrol', 'patrol');
+    applyOptionalStringPatch('behaviorScriptsDefaultAction', 'defaultAction');
+
+    if ('behaviorScriptsAltActions' in patch) {
+        changed = true;
+        const raw = patch.behaviorScriptsAltActions;
+        if (Array.isArray(raw)) {
+            const normalized = raw
+                .filter((entry): entry is string => typeof entry === 'string')
+                .map((entry) => entry.trim())
+                .filter((entry) => entry.length > 0);
+            current.altActions = normalized.length > 0 ? normalized : undefined;
+        } else {
+            delete current.altActions;
+        }
+    }
+
+    const nestedBehaviorPatch = patch.behaviorScripts;
+    if (nestedBehaviorPatch && typeof nestedBehaviorPatch === 'object' && !Array.isArray(nestedBehaviorPatch)) {
+        changed = true;
+        const nested = nestedBehaviorPatch as Record<string, unknown>;
+        if ('patrol' in nested) {
+            const next = trimOptionalPatchString(nested.patrol);
+            if (next) {
+                current.patrol = next;
+            } else {
+                delete current.patrol;
+            }
+        }
+        if ('defaultAction' in nested) {
+            const next = trimOptionalPatchString(nested.defaultAction);
+            if (next) {
+                current.defaultAction = next;
+            } else {
+                delete current.defaultAction;
+            }
+        }
+        if ('altActions' in nested) {
+            if (Array.isArray(nested.altActions)) {
+                const normalized = nested.altActions
+                    .filter((entry): entry is string => typeof entry === 'string')
+                    .map((entry) => entry.trim())
+                    .filter((entry) => entry.length > 0);
+                current.altActions = normalized.length > 0 ? normalized : undefined;
+            } else {
+                delete current.altActions;
+            }
+        }
+    }
+
+    if (!changed) {
+        return;
+    }
+    if (!current.patrol && !current.defaultAction && (!current.altActions || current.altActions.length <= 0)) {
+        target.behaviorScripts = undefined;
+        return;
+    }
+    target.behaviorScripts = current;
+};
+
 const createRectHandle = <TConfig>(
     options: {
         id: string;
@@ -620,7 +714,8 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         sequenceHookOverrides: undefined,
         interactionOverride: undefined,
         playerBodyContactMode: undefined,
-        behavior: {}
+        behavior: {},
+        behaviorScripts: undefined
     }),
     duplicate: (config, id) => ({
         ...config,
@@ -636,7 +731,8 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
                     : config.interactionOverride.outcome
             }
             : undefined,
-        behavior: config.behavior ? { ...config.behavior } : undefined
+        behavior: config.behavior ? { ...config.behavior } : undefined,
+        behaviorScripts: cloneNpcBehaviorScripts(config.behaviorScripts)
     }),
     getId: (config) => config.id,
     setId: (config, id) => {
@@ -793,6 +889,7 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         assignBehaviorNumber('chaseReleaseRadius');
         assignBehaviorNumber('returnSpeed');
         assignBehaviorNumber('postTolerance');
+        patchNpcBehaviorScripts(config, patch);
         patchVisualOrderFields(config, patch);
         config.sequenceHookOverrides = Object.values(hookOverrides).some((value) => value !== undefined)
             ? hookOverrides
@@ -816,7 +913,8 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
                     : config.interactionOverride.outcome
             }
             : undefined,
-        behavior: config.behavior ? { ...config.behavior } : undefined
+        behavior: config.behavior ? { ...config.behavior } : undefined,
+        behaviorScripts: cloneNpcBehaviorScripts(config.behaviorScripts)
     })
 };
 

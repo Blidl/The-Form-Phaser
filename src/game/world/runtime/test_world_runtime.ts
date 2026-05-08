@@ -53,6 +53,8 @@ import {
     createTestNpcRuntime,
     type TestNpcCutsceneSequenceDispatchResult,
     type TestNpcCutsceneSequenceSnapshot,
+    type TestNpcPatrolBehaviorRuntimeAssignment,
+    type TestNpcPatrolBehaviorRuntimeDebugEntry,
     type TestNpcRuntime,
     type TestNpcWorldCollisionRuntime
 } from '../../npc/npc_runtime';
@@ -108,6 +110,11 @@ import {
     type PlatformMovePingPongAxis,
     type PlatformMovePingPongStart
 } from './platform_command_registry';
+import {
+    getNpcPatrolPingPongParams,
+    NPC_PATROL_PING_PONG_COMMAND_TYPE,
+    summarizeNpcPatrolPingPongContract
+} from './npc_command_registry';
 
 export interface TestWorldEditorHandle {
     id: string;
@@ -246,6 +253,29 @@ export interface SurfaceMoveRuntimeDebugSnapshot {
     surfaces: SurfaceMoveRuntimeDebugEntry[];
 }
 
+export interface NpcPatrolRuntimeDebugEntry {
+    npcId: string;
+    assignedScriptId: string | null;
+    scriptFound: boolean;
+    scriptCategory: string | null;
+    commandType: string | null;
+    paramsValid: boolean | null;
+    resolved: boolean;
+    active: boolean;
+    currentX: number;
+    currentY: number;
+    originX: number;
+    originY: number;
+    blockedReason: string | null;
+}
+
+export interface NpcPatrolRuntimeDebugSnapshot {
+    discoveredAssignments: number;
+    resolvedAssignments: number;
+    activeAssignments: number;
+    npcs: NpcPatrolRuntimeDebugEntry[];
+}
+
 export interface TestWorldRuntime {
     hazards: readonly HazardObject[];
     updateMovingPlatforms: (deltaMs: number) => void;
@@ -295,6 +325,7 @@ export interface TestWorldRuntime {
     getLastCutsceneLogicTrace: () => CutsceneLogicTrace | null;
     getLastTriggerOnEnterLogicTrace: () => TriggerOnEnterLogicTrace | null;
     getSurfaceMoveRuntimeDebugSnapshot: () => SurfaceMoveRuntimeDebugSnapshot;
+    getNpcPatrolRuntimeDebugSnapshot: () => NpcPatrolRuntimeDebugSnapshot;
     getConfig: () => TestWorldConfig;
     setConfig: (config: TestWorldConfig) => void;
     replaceConfig: (
@@ -306,6 +337,7 @@ export interface TestWorldRuntime {
     getEditorHandle: (id: string) => TestWorldEditorHandle | null;
     patchObjectBounds: (handleId: string, bounds: TestWorldEditorBounds) => boolean;
     patchObjectFields: (rootId: string, patch: Record<string, unknown>) => boolean;
+    patchNpcFields: (id: string, patch: Record<string, unknown>) => boolean;
     patchObjectColors: (rootId: string, patch: Record<string, unknown>) => boolean;
     patchObjectDebugVisibility: (rootId: string, onlyDebugView: boolean) => boolean;
     setEditorDebugViewActive: (active: boolean) => void;
@@ -384,8 +416,10 @@ interface BuiltWorldInstance {
     };
     getCutsceneActorSequenceSnapshot: (actorId: string) => TestNpcCutsceneSequenceSnapshot | null;
     getNpcCameraFocusObject: (actorId: string) => GameObjects.Container | null;
+    getNpcActorBounds: (actorId: string) => { x: number; y: number; width: number; height: number } | null;
     activatePendingSurfaceMovers: () => number;
     getSurfaceMoveRuntimeDebugSnapshot: () => SurfaceMoveRuntimeDebugSnapshot;
+    getNpcPatrolRuntimeDebugSnapshot: () => NpcPatrolRuntimeDebugSnapshot;
     getEditorHandles: () => readonly TestWorldEditorHandle[];
     getEditorObjects: () => readonly TestWorldEditorObjectSummary[];
     getEditorHandle: (id: string) => TestWorldEditorHandle | null;
@@ -505,6 +539,40 @@ const hasAssignedSurfaceMoveScript = (surfaceConfig: TestWorldSurfaceConfig): bo
         ? surfaceConfig.behaviorScripts.move.trim()
         : '';
     return scriptId.length > 0;
+};
+
+const resolveNpcPatrolRuntimeAssignment = (
+    npcConfig: TestNpcInstanceConfig
+): TestNpcPatrolBehaviorRuntimeAssignment | null => {
+    const scriptId = typeof npcConfig.behaviorScripts?.patrol === 'string'
+        ? npcConfig.behaviorScripts.patrol.trim()
+        : '';
+    if (scriptId.length <= 0) {
+        return null;
+    }
+    const script = getLogicScriptAsset(scriptId);
+    if (!script || script.category !== 'npc.patrol') {
+        return null;
+    }
+    const summary = summarizeNpcPatrolPingPongContract(script.commands);
+    if (!summary.hasExactlyOneValidCommand) {
+        return null;
+    }
+    const command = script.commands[0];
+    if (!command || command.type.trim() !== NPC_PATROL_PING_PONG_COMMAND_TYPE) {
+        return null;
+    }
+    const params = getNpcPatrolPingPongParams(command.params);
+    if (!params) {
+        return null;
+    }
+    return {
+        scriptId,
+        axis: params.axis,
+        distance: params.distance,
+        speed: params.speed,
+        start: params.start
+    };
 };
 
 const NPC_ARCADE_CARRY_SOURCE_DATA_KEY = 'pf_npc_arcade_carry_source';
@@ -1246,6 +1314,9 @@ export const createTestWorldRuntime = (
         getNpcCameraFocusObject: (actorId: string): GameObjects.Container | null => (
             instance.getNpcCameraFocusObject(actorId)
         ),
+        getNpcActorBounds: (actorId: string): { x: number; y: number; width: number; height: number } | null => (
+            instance.getNpcActorBounds(actorId)
+        ),
         executeCutsceneLogicOnFinish,
         getWorldOnStartLogicTrace: (): LogicWorldOnStartTrace | null => {
             if (!lastWorldOnStartLogicTrace) {
@@ -1277,6 +1348,9 @@ export const createTestWorldRuntime = (
         getSurfaceMoveRuntimeDebugSnapshot: (): SurfaceMoveRuntimeDebugSnapshot => {
             return instance.getSurfaceMoveRuntimeDebugSnapshot();
         },
+        getNpcPatrolRuntimeDebugSnapshot: (): NpcPatrolRuntimeDebugSnapshot => {
+            return instance.getNpcPatrolRuntimeDebugSnapshot();
+        },
         getConfig: (): TestWorldConfig => cloneTestWorldConfig(currentConfig),
         setConfig: (config: TestWorldConfig): void => {
             currentConfig = normalizeRuntimeSetConfig(config, currentConfig);
@@ -1302,6 +1376,9 @@ export const createTestWorldRuntime = (
         },
         patchObjectFields: (rootId: string, patch: Record<string, unknown>): boolean => {
             return instance.patchObjectFields(rootId, patch);
+        },
+        patchNpcFields: (id: string, patch: Record<string, unknown>): boolean => {
+            return instance.patchNpcFields(id, patch);
         },
         patchObjectColors: (rootId: string, patch: Record<string, unknown>): boolean => {
             return instance.patchObjectColors(rootId, patch);
@@ -2383,6 +2460,55 @@ const buildWorldInstance = (
         };
     };
 
+    const getNpcPatrolRuntimeDebugSnapshot = (): NpcPatrolRuntimeDebugSnapshot => {
+        const runtimeEntriesById = new Map<string, TestNpcPatrolBehaviorRuntimeDebugEntry>();
+        npcRuntime.getPatrolBehaviorRuntimeDebugEntries().forEach((entry) => {
+            runtimeEntriesById.set(entry.actorId, entry);
+        });
+        const npcsSnapshot: NpcPatrolRuntimeDebugEntry[] = config.npcs.map((npcConfig) => {
+            const assignedScriptId = typeof npcConfig.behaviorScripts?.patrol === 'string'
+                ? npcConfig.behaviorScripts.patrol.trim()
+                : '';
+            const normalizedAssignedScriptId = assignedScriptId.length > 0 ? assignedScriptId : null;
+            const script = normalizedAssignedScriptId ? getLogicScriptAsset(normalizedAssignedScriptId) : null;
+            const command = script?.commands[0];
+            const commandType = command?.type?.trim() ?? null;
+            const params = command ? getNpcPatrolPingPongParams(command.params) : null;
+            const runtimeEntry = runtimeEntriesById.get(npcConfig.id);
+            return {
+                npcId: npcConfig.id,
+                assignedScriptId: normalizedAssignedScriptId,
+                scriptFound: script !== null,
+                scriptCategory: script?.category ?? null,
+                commandType,
+                paramsValid: normalizedAssignedScriptId ? (params !== null) : null,
+                resolved: runtimeEntry?.resolved ?? false,
+                active: runtimeEntry?.active ?? false,
+                currentX: runtimeEntry?.currentX ?? npcConfig.x,
+                currentY: runtimeEntry?.currentY ?? npcConfig.y,
+                originX: runtimeEntry?.originX ?? npcConfig.x,
+                originY: runtimeEntry?.originY ?? npcConfig.y,
+                blockedReason: runtimeEntry?.blockedReason ?? (
+                    normalizedAssignedScriptId
+                        ? (script === null
+                            ? 'missing assigned script'
+                            : (script.category !== 'npc.patrol'
+                                ? `wrong category: ${script.category}`
+                                : (commandType !== NPC_PATROL_PING_PONG_COMMAND_TYPE
+                                    ? `unsupported command: ${commandType ?? 'none'}`
+                                    : (params === null ? 'invalid npc_patrol_ping_pong params' : null))))
+                        : null
+                )
+            };
+        });
+        return {
+            discoveredAssignments: npcsSnapshot.filter((entry) => entry.assignedScriptId !== null).length,
+            resolvedAssignments: npcsSnapshot.filter((entry) => entry.resolved).length,
+            activeAssignments: npcsSnapshot.filter((entry) => entry.active).length,
+            npcs: npcsSnapshot
+        };
+    };
+
     config.surfaces.forEach((surfaceConfig) => {
         const surfaceMoveAssignment = surfaceMoveAssignmentsById.get(surfaceConfig.id) ?? null;
         const surface = createSurface(scene, surfaceConfig);
@@ -2444,7 +2570,13 @@ const buildWorldInstance = (
 
     const rebuildNpcObjects = (): void => {
         npcRuntime.destroy();
-        npcRuntime = createTestNpcRuntime(scene, player, npcWorldCollisionRuntime, config.npcs);
+        npcRuntime = createTestNpcRuntime(
+            scene,
+            player,
+            npcWorldCollisionRuntime,
+            config.npcs,
+            resolveNpcPatrolAssignmentMap()
+        );
         npcInteractionRuntime = createTestNpcInteractionRuntime(player, npcRuntime, config.npcs);
         refreshVisualDepths();
     };
@@ -2867,7 +2999,23 @@ const buildWorldInstance = (
         );
     });
 
-    let npcRuntime: TestNpcRuntime = createTestNpcRuntime(scene, player, npcWorldCollisionRuntime, config.npcs);
+    const resolveNpcPatrolAssignmentMap = (): Map<string, TestNpcPatrolBehaviorRuntimeAssignment> => {
+        const map = new Map<string, TestNpcPatrolBehaviorRuntimeAssignment>();
+        config.npcs.forEach((npcConfig) => {
+            const assignment = resolveNpcPatrolRuntimeAssignment(npcConfig);
+            if (assignment) {
+                map.set(npcConfig.id, assignment);
+            }
+        });
+        return map;
+    };
+    let npcRuntime: TestNpcRuntime = createTestNpcRuntime(
+        scene,
+        player,
+        npcWorldCollisionRuntime,
+        config.npcs,
+        resolveNpcPatrolAssignmentMap()
+    );
     let npcInteractionRuntime: TestNpcInteractionRuntime = createTestNpcInteractionRuntime(
         player,
         npcRuntime,
@@ -3197,11 +3345,17 @@ const buildWorldInstance = (
         getNpcCameraFocusObject: (actorId: string): GameObjects.Container | null => {
             return npcRuntime.getVisualObject(actorId);
         },
+        getNpcActorBounds: (actorId: string): { x: number; y: number; width: number; height: number } | null => {
+            return npcRuntime.getActorBounds(actorId);
+        },
         activatePendingSurfaceMovers: (): number => {
             return activatePendingSurfaceMovers();
         },
         getSurfaceMoveRuntimeDebugSnapshot: (): SurfaceMoveRuntimeDebugSnapshot => {
             return JSON.parse(JSON.stringify(getSurfaceMoveRuntimeDebugSnapshot())) as SurfaceMoveRuntimeDebugSnapshot;
+        },
+        getNpcPatrolRuntimeDebugSnapshot: (): NpcPatrolRuntimeDebugSnapshot => {
+            return JSON.parse(JSON.stringify(getNpcPatrolRuntimeDebugSnapshot())) as NpcPatrolRuntimeDebugSnapshot;
         },
         getEditorHandles: (): readonly TestWorldEditorHandle[] => {
             return [...handleMap.values()].filter((handle) => {
@@ -3269,6 +3423,34 @@ const buildWorldInstance = (
                 }
             }
             binding.patchFields(patch);
+            refreshVisualDepths();
+            return true;
+        },
+        patchNpcFields: (id: string, patch: Record<string, unknown>): boolean => {
+            const binding = bindings.get(id);
+            if (!binding || binding.type !== 'npc' || binding.isLocked()) {
+                return false;
+            }
+            const npcConfig = config.npcs.find((entry) => entry.id === id);
+            if (!npcConfig) {
+                return false;
+            }
+            const onlyPositionPatch = Object.keys(patch).every((key) => key === 'x' || key === 'y');
+            if (!onlyPositionPatch) {
+                binding.patchFields(patch);
+                refreshVisualDepths();
+                return true;
+            }
+            const nextX = typeof patch.x === 'number' && Number.isFinite(patch.x) ? patch.x : npcConfig.x;
+            const nextY = typeof patch.y === 'number' && Number.isFinite(patch.y) ? patch.y : npcConfig.y;
+            if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
+                return false;
+            }
+            TEST_WORLD_EDITOR_ADAPTERS.npc.patchFields(npcConfig, { x: nextX, y: nextY });
+            const patchedRuntimeActor = npcRuntime.patchActorPosition(id, nextX, nextY, { syncPatrolOrigin: true });
+            if (!patchedRuntimeActor) {
+                return false;
+            }
             refreshVisualDepths();
             return true;
         },

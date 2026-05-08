@@ -53,6 +53,8 @@ export interface LegacyObjectSource {
     getLastCutsceneLogicTrace?: () => unknown;
     getLastTriggerOnEnterLogicTrace?: () => unknown;
     getSurfaceMoveRuntimeDebugSnapshot?: () => unknown;
+    getNpcPatrolRuntimeDebugSnapshot?: () => unknown;
+    getNpcActorBounds?: (id: string) => { x: number; y: number; width: number; height: number } | null;
     getGameplayTimeState?: () => { stopped: boolean; speed: number };
     setGameplayStopped?: (stopped: boolean) => void;
     setGameplaySpeed?: (speed: number) => void;
@@ -77,6 +79,7 @@ export interface LegacyObjectSource {
     listHandles: () => readonly LegacyObjectHandle[];
     patchHandleBounds: (handleId: string, bounds: LegacyObjectBounds) => boolean;
     patchObjectFields?: (rootId: string, patch: Record<string, unknown>) => boolean;
+    patchNpcFields?: (id: string, patch: Record<string, unknown>) => boolean;
     patchObjectColors?: (rootId: string, patch: Record<string, unknown>) => boolean;
     patchObjectDebugVisibility?: (rootId: string, onlyDebugView: boolean) => boolean;
     setObjectLocked?: (rootId: string, locked: boolean) => boolean;
@@ -102,6 +105,7 @@ interface LegacyObjectLink {
 }
 
 const LEGACY_TO_EDITOR_TYPE_ID: Record<string, string> = {
+    npc: 'npc',
     surface: 'platform_default',
     movingPlatform: 'moving_platform',
     triggerPlatform: 'trigger_platform',
@@ -117,6 +121,7 @@ const LEGACY_TO_EDITOR_TYPE_ID: Record<string, string> = {
 };
 
 const EDITOR_TO_LEGACY_TYPE: Record<string, string> = {
+    npc: 'npc',
     platform_default: 'surface',
     moving_platform: 'movingPlatform',
     trigger_platform: 'triggerPlatform',
@@ -290,6 +295,35 @@ export class LegacyObjectAdapter {
             return null;
         }
         return JSON.parse(JSON.stringify(snapshot));
+    }
+
+    public getNpcPatrolRuntimeDebugSnapshot(): unknown | null {
+        const snapshot = this.source.getNpcPatrolRuntimeDebugSnapshot?.();
+        if (!snapshot || typeof snapshot !== 'object') {
+            return null;
+        }
+        return JSON.parse(JSON.stringify(snapshot));
+    }
+
+    public getNpcActorBounds(id: string): { x: number; y: number; width: number; height: number } | null {
+        const bounds = this.source.getNpcActorBounds?.(id) ?? null;
+        if (!bounds) {
+            return null;
+        }
+        if (
+            !Number.isFinite(bounds.x)
+            || !Number.isFinite(bounds.y)
+            || !Number.isFinite(bounds.width)
+            || !Number.isFinite(bounds.height)
+        ) {
+            return null;
+        }
+        return {
+            x: bounds.x,
+            y: bounds.y,
+            width: bounds.width,
+            height: bounds.height
+        };
     }
 
     public getGameplayTimeState(): { stopped: boolean; speed: number } | null {
@@ -605,6 +639,17 @@ export class LegacyObjectAdapter {
             return false;
         }
         return this.source.patchObjectFields(link.legacyId, patch);
+    }
+
+    public patchRuntimeNpcFields(npcId: string, patch: Record<string, unknown>): boolean {
+        if (!this.source.patchNpcFields) {
+            return false;
+        }
+        try {
+            return this.source.patchNpcFields(npcId, patch);
+        } catch {
+            return false;
+        }
     }
 
     public patchRuntimeObjectColors(editorObjectId: string, patch: Record<string, unknown>): boolean {

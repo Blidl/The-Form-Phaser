@@ -79,6 +79,7 @@ const createModes = (
         onUiChanged
     });
     const npc = new NpcEditorMode({
+        scene,
         legacyObjectAdapter,
         onUiChanged
     });

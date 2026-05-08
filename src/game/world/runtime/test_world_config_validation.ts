@@ -1963,6 +1963,19 @@ const normalizeNpcInstance = (
                 })()
         }
         : undefined;
+    const behaviorScriptsSource = asObject(raw?.behaviorScripts);
+    const behaviorScripts = behaviorScriptsSource
+        ? {
+            patrol: asOptionalString(behaviorScriptsSource.patrol),
+            defaultAction: asOptionalString(behaviorScriptsSource.defaultAction),
+            altActions: Array.isArray(behaviorScriptsSource.altActions)
+                ? behaviorScriptsSource.altActions
+                    .filter((entry): entry is string => typeof entry === 'string')
+                    .map((entry) => entry.trim())
+                    .filter((entry) => entry.length > 0)
+                : undefined
+        }
+        : undefined;
 
     return {
         id: ensureUniqueId(asString(raw?.id, `npc_${index + 1}`), usedIds, `npc_${index + 1}`),
@@ -1985,7 +1998,14 @@ const normalizeNpcInstance = (
         renderOrder: typeof raw?.renderOrder === 'number' && Number.isFinite(raw.renderOrder)
             ? Math.max(-9999, Math.min(9999, Math.round(raw.renderOrder)))
             : undefined,
-        behavior
+        behavior,
+        behaviorScripts: behaviorScripts && (
+            behaviorScripts.patrol
+            || behaviorScripts.defaultAction
+            || (behaviorScripts.altActions && behaviorScripts.altActions.length > 0)
+        )
+            ? behaviorScripts
+            : undefined
     };
 };
 
@@ -2006,7 +2026,8 @@ const normalizeNpcInstances = (
             sequenceHookOverrides: entry.sequenceHookOverrides,
             interactionOverride: entry.interactionOverride,
             playerBodyContactMode: entry.playerBodyContactMode,
-            behavior: entry.behavior
+            behavior: entry.behavior,
+            behaviorScripts: entry.behaviorScripts
         }, usedIds, index)).filter((entry): entry is TestNpcInstanceConfig => entry !== null);
     }
 

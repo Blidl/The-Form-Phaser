@@ -1,16 +1,21 @@
-import type { EditorMode } from '../core/EditorMode';
+import Phaser from 'phaser';
+import type { EditorMode, EditorModeRuntimeContext, EditorPointerEvent } from '../core/EditorMode';
 import type { LegacyObjectAdapter } from '../bridge/LegacyObjectAdapter';
 import { LogicAuthoringService } from '../logic-authoring/LogicAuthoringService';
 import type { EditorPanel } from '../ui/EditorPanel';
 import type {
     TestWorldConfig,
     TestWorldLogicBindingConfig,
-    TestWorldLogicScriptRefConfig
+    TestWorldLogicScriptRefConfig,
+    TestWorldLogicScriptConfig
 } from '../../game/world/runtime/test_world_config';
 import type { TestNpcInstanceConfig } from '../../game/npc/npc_types';
-import type { NpcInteractionTrace } from '../../game/world/runtime/test_world_runtime';
+import type { NpcInteractionTrace, NpcPatrolRuntimeDebugSnapshot } from '../../game/world/runtime/test_world_runtime';
+import { getAllLogicScriptAssets } from '../../game/world/runtime/logic_script_registry';
+import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
 
 interface NpcEditorModeOptions {
+    scene: Phaser.Scene;
     legacyObjectAdapter: LegacyObjectAdapter | null;
     onUiChanged: () => void;
 }
@@ -24,6 +29,9 @@ export class NpcEditorMode implements EditorMode {
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
     private readonly logicAuthoringService: LogicAuthoringService;
     private readonly onUiChanged: () => void;
+    private readonly scene: Phaser.Scene;
+    private readonly selectionOutline: Phaser.GameObjects.Graphics;
+    private readonly escapeKey: Phaser.Input.Keyboard.Key | null;
     private selectedNpcId: string | null = null;
     private lastSnapshotSignature: string | null = null;
     private npcLogicBindingCreateFormNpcId: string | null = null;
@@ -33,8 +41,44 @@ export class NpcEditorMode implements EditorMode {
     private npcLogicBindingCreateError: string | null = null;
     private readonly npcLogicBindingEnabledDraftById = new Map<string, boolean>();
     private readonly npcLogicBindingErrorById = new Map<string, string>();
+    private readonly npcPositionDraftById = new Map<string, { xText: string; yText: string; error: string | null }>();
+    private placementModeActive = false;
+    private draggingNpcId: string | null = null;
+    private dragCandidateNpcId: string | null = null;
+    private dragCandidatePointerWorldX = 0;
+    private dragCandidatePointerWorldY = 0;
+    private dragThresholdPx = 3;
+    private dragOffsetX = 0;
+    private dragOffsetY = 0;
+    private isNpcPointerDown = false;
+    private lastPointerDownWorldX: number | null = null;
+    private lastPointerDownWorldY: number | null = null;
+    private lastPointerDownHitNpcId: string | null = null;
+    private lastPointerDownUsedRuntimeBounds = false;
+    private pointerDownNpcId: string | null = null;
+    private dragLastDeltaX = 0;
+    private dragLastDeltaY = 0;
+    private lastMoveWorldX: number | null = null;
+    private lastMoveWorldY: number | null = null;
+    private lastPointerScreenX: number | null = null;
+    private lastPointerScreenY: number | null = null;
+    private lastMovePointerButton: number | null = null;
+    private lastRawPointerIsDown = false;
+    private lastPatchX: number | null = null;
+    private lastPatchY: number | null = null;
+    private lastPatchResult: 'ok' | 'fail' | '-' = '-';
+    private context: EditorModeRuntimeContext = {
+        mouseWorldX: null,
+        mouseWorldY: null,
+        grid: { enabled: true, snapEnabled: true, size: 32 }
+    };
 
     public constructor(options: NpcEditorModeOptions) {
+        this.scene = options.scene;
+        this.selectionOutline = this.scene.add.graphics();
+        this.selectionOutline.setDepth(40000);
+        this.selectionOutline.setVisible(false);
+        this.escapeKey = this.scene.input.keyboard?.addKey(Phaser.Input.Keyboard.KeyCodes.ESC) ?? null;
         this.legacyObjectAdapter = options.legacyObjectAdapter;
         this.logicAuthoringService = new LogicAuthoringService(options.legacyObjectAdapter);
         this.onUiChanged = options.onUiChanged;
@@ -42,15 +86,42 @@ export class NpcEditorMode implements EditorMode {
 
     public enter(): void {
         this.lastSnapshotSignature = this.readSnapshotSignature();
+        this.draggingNpcId = null;
+        this.dragCandidateNpcId = null;
+        this.isNpcPointerDown = false;
+        this.syncSelectionOutline();
     }
 
-    public update(): void {
+    public exit(): void {
+        this.draggingNpcId = null;
+        this.dragCandidateNpcId = null;
+        this.isNpcPointerDown = false;
+        this.selectionOutline.clear();
+        this.selectionOutline.setVisible(false);
+    }
+
+    public update(context: EditorModeRuntimeContext): void {
+        this.context = context;
+        if (this.isNpcPointerDown && this.scene.input.activePointer.isDown && context.mouseWorldX !== null && context.mouseWorldY !== null) {
+            this.advanceNpcDrag(context.mouseWorldX, context.mouseWorldY);
+        }
+        if (
+            this.placementModeActive
+            && this.escapeKey
+            && Phaser.Input.Keyboard.JustDown(this.escapeKey)
+            && !isEditorTextInputFocused()
+        ) {
+            this.placementModeActive = false;
+            this.onUiChanged();
+        }
         const nextSignature = this.readSnapshotSignature();
         if (nextSignature === this.lastSnapshotSignature) {
+            this.syncSelectionOutline();
             return;
         }
         this.lastSnapshotSignature = nextSignature;
         this.syncSelectedNpc(this.getCurrentNpcs());
+        this.syncSelectionOutline();
         this.onUiChanged();
     }
 
@@ -66,6 +137,21 @@ export class NpcEditorMode implements EditorMode {
             }
 
             container.appendChild(this.makeInfoLine(`Count: ${npcs.length}`));
+            const createButton = document.createElement('button');
+            createButton.type = 'button';
+            createButton.textContent = this.placementModeActive ? 'Cancel Add NPC' : 'Add NPC';
+            createButton.style.marginTop = '6px';
+            this.bindEditorInputKeyboardGuards(createButton);
+            createButton.addEventListener('click', () => {
+                this.placementModeActive = !this.placementModeActive;
+                this.draggingNpcId = null;
+                this.dragCandidateNpcId = null;
+                this.onUiChanged();
+            });
+            container.appendChild(createButton);
+            if (this.placementModeActive) {
+                container.appendChild(this.makeInfoLine('Click level to place NPC.'));
+            }
             if (npcs.length <= 0) {
                 container.appendChild(this.makeSpacer(8));
                 container.appendChild(this.makeInfoLine('No NPCs in this level.'));
@@ -117,6 +203,84 @@ export class NpcEditorMode implements EditorMode {
         });
     }
 
+    public onPointerDown(event: EditorPointerEvent, context: EditorModeRuntimeContext): void {
+        this.context = context;
+        if (event.button !== 0) {
+            return;
+        }
+        this.lastPointerDownWorldX = event.worldX;
+        this.lastPointerDownWorldY = event.worldY;
+        this.lastPointerDownHitNpcId = null;
+        this.lastPointerDownUsedRuntimeBounds = false;
+        this.pointerDownNpcId = null;
+        this.dragLastDeltaX = 0;
+        this.dragLastDeltaY = 0;
+        this.dragOffsetX = 0;
+        this.dragOffsetY = 0;
+        this.isNpcPointerDown = false;
+        if (this.placementModeActive) {
+            const createdId = this.createNpcAt(event.worldX, event.worldY);
+            if (createdId) {
+                this.selectedNpcId = createdId;
+                this.placementModeActive = false;
+                this.draggingNpcId = null;
+                this.dragCandidateNpcId = null;
+                this.syncSelectionOutline();
+                this.onUiChanged();
+            }
+            return;
+        }
+        const hitNpc = this.findNpcAt(event.worldX, event.worldY, true);
+        if (!hitNpc) {
+            this.draggingNpcId = null;
+            this.dragCandidateNpcId = null;
+            this.pointerDownNpcId = null;
+            this.isNpcPointerDown = false;
+            this.selectedNpcId = null;
+            this.syncSelectionOutline();
+            this.onUiChanged();
+            return;
+        }
+        this.selectedNpcId = hitNpc.id;
+        this.lastPointerDownHitNpcId = hitNpc.id;
+        this.draggingNpcId = null;
+        this.dragCandidateNpcId = hitNpc.id;
+        this.dragCandidatePointerWorldX = event.worldX;
+        this.dragCandidatePointerWorldY = event.worldY;
+        this.pointerDownNpcId = hitNpc.id;
+        this.isNpcPointerDown = true;
+        const runtimeBounds = this.legacyObjectAdapter?.getNpcActorBounds(hitNpc.id) ?? null;
+        this.lastPointerDownUsedRuntimeBounds = !!runtimeBounds;
+        const anchorX = runtimeBounds?.x ?? hitNpc.x;
+        const anchorY = runtimeBounds?.y ?? hitNpc.y;
+        this.dragOffsetX = event.worldX - anchorX;
+        this.dragOffsetY = event.worldY - anchorY;
+        this.syncSelectionOutline();
+        this.onUiChanged();
+    }
+
+    public onPointerMove(event: EditorPointerEvent, context: EditorModeRuntimeContext): void {
+        this.context = context;
+        this.lastMoveWorldX = event.worldX;
+        this.lastMoveWorldY = event.worldY;
+        this.lastPointerScreenX = this.scene.input.activePointer.x;
+        this.lastPointerScreenY = this.scene.input.activePointer.y;
+        this.lastMovePointerButton = event.button;
+        this.lastRawPointerIsDown = this.scene.input.activePointer.isDown;
+        if (!this.isNpcPointerDown || !this.scene.input.activePointer.isDown) {
+            return;
+        }
+        this.advanceNpcDrag(event.worldX, event.worldY);
+    }
+
+    public onPointerUp(_event: EditorPointerEvent): void {
+        this.draggingNpcId = null;
+        this.dragCandidateNpcId = null;
+        this.pointerDownNpcId = null;
+        this.isNpcPointerDown = false;
+        this.syncSelectionOutline();
+    }
+
     public renderRightInspector(panel: EditorPanel): void {
         const runtimeConfig = this.getCurrentRuntimeConfig();
         const npcs = runtimeConfig?.npcs ?? [];
@@ -137,6 +301,9 @@ export class NpcEditorMode implements EditorMode {
             container.appendChild(this.makeKeyValueLine('id', selectedNpc.id));
             container.appendChild(this.makeKeyValueLine('profileId', selectedNpc.profileId));
             container.appendChild(this.makeKeyValueLine('position', `${selectedNpc.x}, ${selectedNpc.y}`));
+            container.appendChild(this.makeKeyValueLine('selection debug', this.getSelectionDebugLine()));
+            container.appendChild(this.makeInfoLine('Drag NPC in scene or apply exact x/y below.'));
+            container.appendChild(this.makeNpcPositionEditor(selectedNpc));
             container.appendChild(this.makeKeyValueLine('facing', selectedNpc.facing ?? '-'));
             container.appendChild(this.makeKeyValueLine('initialManpuEmotionId', this.formatNullableString(selectedNpc.initialManpuEmotionId)));
             container.appendChild(this.makeKeyValueLine('scriptedLoopRef', this.formatNullableString(selectedNpc.scriptedLoopRef)));
@@ -153,6 +320,11 @@ export class NpcEditorMode implements EditorMode {
                     String(Object.keys(selectedNpc.behavior).length)
                 ));
             }
+            container.appendChild(this.makeSpacer(10));
+            container.appendChild(this.makeSectionTitle('NPC Behavior Scripts'));
+            container.appendChild(this.makeNpcBehaviorScriptsSection(selectedNpc));
+            container.appendChild(this.makeSpacer(8));
+            container.appendChild(this.makeNpcPatrolRuntimeStatusSection(selectedNpc.id));
 
             container.appendChild(this.makeSpacer(10));
             container.appendChild(this.makeSectionTitle('Logic Actions'));
@@ -413,6 +585,155 @@ export class NpcEditorMode implements EditorMode {
         return runtimeConfig?.npcs ?? [];
     }
 
+    private getNpcPatrolRuntimeDebugSnapshot(): NpcPatrolRuntimeDebugSnapshot | null {
+        const snapshot = this.legacyObjectAdapter?.getNpcPatrolRuntimeDebugSnapshot() as NpcPatrolRuntimeDebugSnapshot | null;
+        if (!snapshot || typeof snapshot !== 'object' || !Array.isArray(snapshot.npcs)) {
+            return null;
+        }
+        return snapshot;
+    }
+
+    private makeNpcBehaviorScriptsSection(selectedNpc: TestNpcInstanceConfig): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'grid';
+        wrap.style.gap = '6px';
+        const scripts = getAllLogicScriptAssets();
+        const patrolScripts = scripts.filter((entry) => entry.category === 'npc.patrol');
+        const actionScripts = scripts.filter((entry) => entry.category === 'npc.action');
+        wrap.appendChild(this.makeBehaviorScriptSelectRow(selectedNpc, 'Patrol', 'patrol', patrolScripts, selectedNpc.behaviorScripts?.patrol ?? null));
+        wrap.appendChild(this.makeBehaviorScriptSelectRow(selectedNpc, 'Default Action', 'defaultAction', actionScripts, selectedNpc.behaviorScripts?.defaultAction ?? null));
+        const altActions = selectedNpc.behaviorScripts?.altActions ?? [];
+        wrap.appendChild(this.makeKeyValueLine('Alt Actions', altActions.length > 0 ? altActions.join(', ') : '(deferred read-only)'));
+        return wrap;
+    }
+
+    private makeBehaviorScriptSelectRow(
+        selectedNpc: TestNpcInstanceConfig,
+        label: string,
+        field: 'patrol' | 'defaultAction',
+        scripts: TestWorldLogicScriptConfig[],
+        currentValue: string | null
+    ): HTMLDivElement {
+        const row = document.createElement('div');
+        row.style.display = 'grid';
+        row.style.gap = '2px';
+        row.appendChild(this.makeInfoLine(label));
+        const select = document.createElement('select');
+        select.style.width = '100%';
+        select.appendChild(new Option('(none)', ''));
+        scripts.forEach((script) => {
+            select.appendChild(new Option(`${script.name} (${script.id})`, script.id));
+        });
+        const normalizedCurrent = currentValue?.trim() ?? '';
+        select.value = scripts.some((entry) => entry.id === normalizedCurrent) ? normalizedCurrent : '';
+        this.bindEditorInputKeyboardGuards(select);
+        select.addEventListener('change', () => {
+            this.updateNpcBehaviorScriptField(selectedNpc.id, field, select.value.trim() || null);
+        });
+        row.appendChild(select);
+        return row;
+    }
+
+    private updateNpcBehaviorScriptField(
+        npcId: string,
+        field: 'patrol' | 'defaultAction',
+        value: string | null
+    ): void {
+        const runtimeConfig = this.getCurrentRuntimeConfig();
+        if (!runtimeConfig || !this.legacyObjectAdapter) {
+            return;
+        }
+        const nextConfig = JSON.parse(JSON.stringify(runtimeConfig)) as TestWorldConfig;
+        const npc = nextConfig.npcs.find((entry) => entry.id === npcId);
+        if (!npc) {
+            return;
+        }
+        const behaviorScripts = npc.behaviorScripts ?? {};
+        if (field === 'patrol') {
+            behaviorScripts.patrol = value ?? undefined;
+        } else {
+            behaviorScripts.defaultAction = value ?? undefined;
+        }
+        if (!behaviorScripts.patrol && !behaviorScripts.defaultAction && (!behaviorScripts.altActions || behaviorScripts.altActions.length <= 0)) {
+            npc.behaviorScripts = undefined;
+        } else {
+            npc.behaviorScripts = behaviorScripts;
+        }
+        this.legacyObjectAdapter.patchRuntimeNpcFields(npcId, {
+            behaviorScripts: npc.behaviorScripts
+        });
+        this.onUiChanged();
+    }
+
+    private makeNpcPatrolRuntimeStatusSection(selectedNpcId: string): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.border = '1px solid #8b8b8b';
+        wrap.style.background = '#ececec';
+        wrap.style.padding = '6px';
+        const snapshot = this.getNpcPatrolRuntimeDebugSnapshot();
+        const entry = snapshot?.npcs.find((item) => item.npcId === selectedNpcId);
+        if (!entry) {
+            wrap.appendChild(this.makeInfoLine('Patrol runtime: no debug data.'));
+            return wrap;
+        }
+        wrap.appendChild(this.makeInfoLine(`assigned script: ${entry.assignedScriptId ?? '-'}`));
+        wrap.appendChild(this.makeInfoLine(`resolved: ${entry.resolved ? 'yes' : 'no'}`));
+        wrap.appendChild(this.makeInfoLine(`active: ${entry.active ? 'yes' : 'no'}`));
+        wrap.appendChild(this.makeInfoLine(`current position: ${entry.currentX.toFixed(2)}, ${entry.currentY.toFixed(2)}`));
+        wrap.appendChild(this.makeInfoLine(`origin: ${entry.originX.toFixed(2)}, ${entry.originY.toFixed(2)}`));
+        wrap.appendChild(this.makeInfoLine(`blocked reason: ${entry.blockedReason ?? '-'}`));
+        return wrap;
+    }
+
+    private makeNpcPositionEditor(selectedNpc: TestNpcInstanceConfig): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'grid';
+        wrap.style.gap = '6px';
+        wrap.style.border = '1px solid #8b8b8b';
+        wrap.style.background = '#ececec';
+        wrap.style.padding = '6px';
+        const draft = this.getNpcPositionDraft(selectedNpc);
+        wrap.appendChild(this.makeInfoLine('Position'));
+
+        const xInput = document.createElement('input');
+        xInput.type = 'number';
+        xInput.step = '1';
+        xInput.value = draft.xText;
+        this.bindEditorInputKeyboardGuards(xInput);
+        xInput.addEventListener('input', () => {
+            draft.xText = xInput.value;
+            draft.error = null;
+        });
+        wrap.appendChild(this.makeLabeledInput('x', xInput));
+
+        const yInput = document.createElement('input');
+        yInput.type = 'number';
+        yInput.step = '1';
+        yInput.value = draft.yText;
+        this.bindEditorInputKeyboardGuards(yInput);
+        yInput.addEventListener('input', () => {
+            draft.yText = yInput.value;
+            draft.error = null;
+        });
+        wrap.appendChild(this.makeLabeledInput('y', yInput));
+
+        const applyButton = document.createElement('button');
+        applyButton.type = 'button';
+        applyButton.textContent = 'Apply Position';
+        this.bindEditorInputKeyboardGuards(applyButton);
+        applyButton.addEventListener('click', () => {
+            this.applyNpcPosition(selectedNpc.id);
+        });
+        wrap.appendChild(applyButton);
+
+        if (draft.error) {
+            const error = this.makeInfoLine(draft.error);
+            error.style.color = '#b00020';
+            wrap.appendChild(error);
+        }
+        return wrap;
+    }
+
     private listNpcBindings(npcId: string): TestWorldLogicBindingConfig[] {
         return this.logicAuthoringService.listBindingsForTarget('npc', npcId);
     }
@@ -489,7 +810,274 @@ export class NpcEditorMode implements EditorMode {
             return selectedNpc;
         }
         this.selectedNpcId = null;
+        this.syncSelectionOutline();
         return null;
+    }
+
+    private getNpcPositionDraft(selectedNpc: TestNpcInstanceConfig): { xText: string; yText: string; error: string | null } {
+        const existing = this.npcPositionDraftById.get(selectedNpc.id);
+        if (existing) {
+            return existing;
+        }
+        const next = {
+            xText: String(selectedNpc.x),
+            yText: String(selectedNpc.y),
+            error: null
+        };
+        this.npcPositionDraftById.set(selectedNpc.id, next);
+        return next;
+    }
+
+    private applyNpcPosition(npcId: string): void {
+        const runtimeConfig = this.getCurrentRuntimeConfig();
+        if (!runtimeConfig || !this.legacyObjectAdapter) {
+            return;
+        }
+        const selectedNpc = runtimeConfig.npcs.find((entry) => entry.id === npcId);
+        if (!selectedNpc) {
+            return;
+        }
+        const draft = this.getNpcPositionDraft(selectedNpc);
+        const nextX = Number(draft.xText);
+        const nextY = Number(draft.yText);
+        if (!Number.isFinite(nextX) || !Number.isFinite(nextY)) {
+            draft.error = 'x/y must be finite numbers.';
+            this.onUiChanged();
+            return;
+        }
+        draft.error = null;
+        this.patchNpcPosition(npcId, nextX, nextY);
+    }
+
+    private createNpc(): void {
+        const worldX = this.context.mouseWorldX ?? 0;
+        const worldY = this.context.mouseWorldY ?? 0;
+        this.createNpcAt(worldX, worldY);
+    }
+
+    private createNpcAt(worldX: number, worldY: number): string | null {
+        const runtimeConfig = this.getCurrentRuntimeConfig();
+        if (!runtimeConfig || !this.legacyObjectAdapter) {
+            return null;
+        }
+        const ids = new Set(runtimeConfig.npcs.map((entry) => entry.id));
+        let index = 1;
+        let npcId = `npc_${index}`;
+        while (ids.has(npcId)) {
+            index += 1;
+            npcId = `npc_${index}`;
+        }
+        const spawnX = this.snap(worldX, this.context.grid);
+        const spawnY = this.snap(worldY, this.context.grid);
+        const nextNpc: TestNpcInstanceConfig = {
+            id: npcId,
+            profileId: 'passive_observer',
+            x: spawnX,
+            y: spawnY,
+            facing: 'right',
+            scriptedLoopRef: null,
+            sequenceHookOverrides: {
+                onSpawnSequenceRef: null,
+                onPlayerNearSequenceRef: null,
+                onPlayerFarSequenceRef: null
+            },
+            interactionOverride: {
+                outcome: null
+            },
+            behavior: {
+                passiveMode: 'idle',
+                patrolDistance: 0,
+                moveSpeed: 0,
+                patrolPauseMs: 0
+            },
+            behaviorScripts: undefined,
+            playerBodyContactMode: 'block'
+        };
+        const nextConfig = JSON.parse(JSON.stringify(runtimeConfig)) as TestWorldConfig;
+        nextConfig.npcs.push(nextNpc);
+        this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
+        this.selectedNpcId = npcId;
+        this.npcPositionDraftById.set(npcId, { xText: String(spawnX), yText: String(spawnY), error: null });
+        this.onUiChanged();
+        return npcId;
+    }
+
+    private patchNpcPosition(npcId: string, x: number, y: number): boolean {
+        const runtimeConfig = this.getCurrentRuntimeConfig();
+        if (!runtimeConfig || !this.legacyObjectAdapter) {
+            return false;
+        }
+        const currentNpc = runtimeConfig.npcs.find((entry) => entry.id === npcId);
+        if (!currentNpc) {
+            return false;
+        }
+        if (currentNpc.x === x && currentNpc.y === y) {
+            return true;
+        }
+        let patched = this.legacyObjectAdapter.patchRuntimeNpcFields(npcId, { x, y });
+        if (!patched) {
+            const nextConfig = JSON.parse(JSON.stringify(runtimeConfig)) as TestWorldConfig;
+            const npc = nextConfig.npcs.find((entry) => entry.id === npcId);
+            if (npc) {
+                npc.x = x;
+                npc.y = y;
+                const result = this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
+                patched = !!result?.success;
+            }
+        }
+        if (!patched) {
+            this.lastPatchX = x;
+            this.lastPatchY = y;
+            this.lastPatchResult = 'fail';
+            return false;
+        }
+        this.lastPatchX = x;
+        this.lastPatchY = y;
+        this.lastPatchResult = 'ok';
+        const draft = this.npcPositionDraftById.get(npcId);
+        if (draft) {
+            draft.xText = String(x);
+            draft.yText = String(y);
+            draft.error = null;
+        }
+        this.selectedNpcId = npcId;
+        this.syncSelectionOutline();
+        this.onUiChanged();
+        return true;
+    }
+
+    private advanceNpcDrag(worldX: number, worldY: number): void {
+        const candidateId = this.draggingNpcId ?? this.dragCandidateNpcId;
+        if (!candidateId) {
+            return;
+        }
+        if (this.draggingNpcId === null) {
+            const distance = Math.hypot(worldX - this.dragCandidatePointerWorldX, worldY - this.dragCandidatePointerWorldY);
+            if (distance < this.dragThresholdPx) {
+                return;
+            }
+            this.draggingNpcId = candidateId;
+        }
+        const nextX = worldX - this.dragOffsetX;
+        const nextY = worldY - this.dragOffsetY;
+        this.dragLastDeltaX = worldX - this.dragCandidatePointerWorldX;
+        this.dragLastDeltaY = worldY - this.dragCandidatePointerWorldY;
+        this.patchNpcPosition(candidateId, nextX, nextY);
+    }
+
+    private findNpcAt(worldX: number, worldY: number, trackRuntimeUsage = false): TestNpcInstanceConfig | null {
+        const npcs = this.getCurrentNpcs();
+        for (let i = npcs.length - 1; i >= 0; i -= 1) {
+            const npc = npcs[i];
+            const runtimeBounds = this.legacyObjectAdapter?.getNpcActorBounds(npc.id) ?? null;
+            const containsPoint = (
+                centerX: number,
+                centerY: number,
+                width: number,
+                height: number
+            ): boolean => {
+                const halfWidth = Math.max(12, width * 0.5);
+                const halfHeight = Math.max(16, height * 0.5);
+                return Math.abs(worldX - centerX) <= halfWidth && Math.abs(worldY - centerY) <= halfHeight;
+            };
+            const fallbackWidth = Math.max(28, runtimeBounds?.width ?? 32);
+            const fallbackHeight = Math.max(40, runtimeBounds?.height ?? 52);
+            if (runtimeBounds) {
+                if (containsPoint(runtimeBounds.x, runtimeBounds.y, runtimeBounds.width, runtimeBounds.height)) {
+                    if (trackRuntimeUsage) {
+                        this.lastPointerDownUsedRuntimeBounds = true;
+                    }
+                    return npc;
+                }
+            }
+            if (containsPoint(npc.x, npc.y, fallbackWidth, fallbackHeight)) {
+                return npc;
+            }
+            const configFootAnchorY = npc.y - (fallbackHeight * 0.5);
+            if (containsPoint(npc.x, configFootAnchorY, fallbackWidth, fallbackHeight)) {
+                return npc;
+            }
+            if (runtimeBounds) {
+                const midpointY = (runtimeBounds.y + npc.y) * 0.5;
+                if (containsPoint(npc.x, midpointY, fallbackWidth, fallbackHeight)) {
+                    return npc;
+                }
+            }
+            const runtimeDebug = this.getNpcPatrolRuntimeDebugSnapshot()?.npcs.find((entry) => entry.npcId === npc.id) ?? null;
+            if (runtimeDebug && containsPoint(runtimeDebug.currentX, runtimeDebug.currentY, fallbackWidth, fallbackHeight)) {
+                return npc;
+            }
+        }
+        return null;
+    }
+
+    private syncSelectionOutline(): void {
+        this.selectionOutline.clear();
+        const selectedNpc = this.getCurrentNpcs().find((entry) => entry.id === this.selectedNpcId) ?? null;
+        if (!selectedNpc) {
+            this.selectionOutline.setVisible(false);
+            return;
+        }
+        const bounds = this.resolveNpcSelectionBounds(selectedNpc);
+        if (!bounds) {
+            this.selectionOutline.setVisible(false);
+            return;
+        }
+        this.selectionOutline.setVisible(true);
+        const left = bounds.x - (bounds.width * 0.5);
+        const top = bounds.y - (bounds.height * 0.5);
+        this.selectionOutline.lineStyle(2, 0x00e5ff, 0.95);
+        this.selectionOutline.strokeRect(left, top, bounds.width, bounds.height);
+        this.selectionOutline.lineStyle(1, 0xffffff, 0.95);
+        this.selectionOutline.strokeRect(left - 1, top - 1, bounds.width + 2, bounds.height + 2);
+    }
+
+    private resolveNpcSelectionBounds(npc: TestNpcInstanceConfig): { x: number; y: number; width: number; height: number } | null {
+        const runtimeBounds = this.legacyObjectAdapter?.getNpcActorBounds(npc.id) ?? null;
+        if (
+            runtimeBounds
+            && Number.isFinite(runtimeBounds.x)
+            && Number.isFinite(runtimeBounds.y)
+            && Number.isFinite(runtimeBounds.width)
+            && Number.isFinite(runtimeBounds.height)
+        ) {
+            return runtimeBounds;
+        }
+        return {
+            x: npc.x,
+            y: npc.y - 24,
+            width: 32,
+            height: 48
+        };
+    }
+
+    private getSelectionDebugLine(): string {
+        const xText = this.lastPointerDownWorldX === null ? '-' : this.lastPointerDownWorldX.toFixed(1);
+        const yText = this.lastPointerDownWorldY === null ? '-' : this.lastPointerDownWorldY.toFixed(1);
+        const hitId = this.lastPointerDownHitNpcId ?? '-';
+        const selectedId = this.selectedNpcId ?? '-';
+        const runtimeUsed = this.lastPointerDownUsedRuntimeBounds ? 'yes' : 'no';
+        const pointerDownId = this.pointerDownNpcId ?? '-';
+        const pointerDownWorldX = this.lastPointerDownWorldX === null ? '-' : this.lastPointerDownWorldX.toFixed(1);
+        const pointerDownWorldY = this.lastPointerDownWorldY === null ? '-' : this.lastPointerDownWorldY.toFixed(1);
+        const moveWorldX = this.lastMoveWorldX === null ? '-' : this.lastMoveWorldX.toFixed(1);
+        const moveWorldY = this.lastMoveWorldY === null ? '-' : this.lastMoveWorldY.toFixed(1);
+        const screenX = this.lastPointerScreenX === null ? '-' : this.lastPointerScreenX.toFixed(1);
+        const screenY = this.lastPointerScreenY === null ? '-' : this.lastPointerScreenY.toFixed(1);
+        const dragging = this.draggingNpcId ? 'yes' : 'no';
+        const internalDown = this.isNpcPointerDown ? 'yes' : 'no';
+        const rawDown = this.lastRawPointerIsDown ? 'yes' : 'no';
+        const dragDelta = `${this.dragLastDeltaX.toFixed(1)}, ${this.dragLastDeltaY.toFixed(1)}`;
+        const patchX = this.lastPatchX === null ? '-' : this.lastPatchX.toFixed(1);
+        const patchY = this.lastPatchY === null ? '-' : this.lastPatchY.toFixed(1);
+        return `click: ${xText}, ${yText} | hit: ${hitId} | selected: ${selectedId} | pointerDownNpc: ${pointerDownId} | pointerDownWorld: ${pointerDownWorldX}, ${pointerDownWorldY} | lastMoveWorld: ${moveWorldX}, ${moveWorldY} | pointerScreen: ${screenX}, ${screenY} | rawIsDown: ${rawDown} | internalPointerDown: ${internalDown} | dragging: ${dragging} | dragDelta: ${dragDelta} | lastPatch: ${patchX}, ${patchY} (${this.lastPatchResult}) | runtimeBounds: ${runtimeUsed}`;
+    }
+
+    private snap(value: number, grid: EditorModeRuntimeContext['grid']): number {
+        if (!grid.enabled || !grid.snapEnabled || grid.size <= 0) {
+            return value;
+        }
+        return Math.round(value / grid.size) * grid.size;
     }
 
     private readSnapshotSignature(): string | null {
@@ -713,6 +1301,16 @@ export class NpcEditorMode implements EditorMode {
 
         element.append(keyNode, valueNode);
         return element;
+    }
+
+    private makeLabeledInput(label: string, input: HTMLInputElement): HTMLDivElement {
+        const row = document.createElement('div');
+        row.style.display = 'grid';
+        row.style.gap = '2px';
+        row.appendChild(this.makeInfoLine(label));
+        input.style.width = '100%';
+        row.appendChild(input);
+        return row;
     }
 
     private makeSpacer(heightPx: number): HTMLDivElement {

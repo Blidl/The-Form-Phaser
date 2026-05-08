@@ -1,5 +1,6 @@
 import type { TestWorldLogicScriptCommandConfig } from './test_world_config';
 import { EVENT_LOGIC_COMMAND_DEFINITIONS, getEventSetWorldFlagCommandParams, getEventStartCutsceneCommandIdFromParams } from './event_command_registry';
+import { NPC_LOGIC_COMMAND_DEFINITIONS } from './npc_command_registry';
 import { PLATFORM_LOGIC_COMMAND_DEFINITIONS } from './platform_command_registry';
 import { asObject } from './script_command_core';
 import type {
@@ -16,6 +17,7 @@ export type {
 
 const LOGIC_COMMAND_DEFINITIONS: readonly LogicCommandDefinition[] = [
     ...EVENT_LOGIC_COMMAND_DEFINITIONS,
+    ...NPC_LOGIC_COMMAND_DEFINITIONS,
     ...PLATFORM_LOGIC_COMMAND_DEFINITIONS
 ] as const;
 

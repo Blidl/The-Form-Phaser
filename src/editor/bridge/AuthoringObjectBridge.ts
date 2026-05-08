@@ -6,6 +6,7 @@ import type { GameplayTimeController } from '../../scenes/runtime/gameplay_time_
 
 const isCreatableLegacyType = (type: string): boolean => {
     return type === 'surface'
+        || type === 'npc'
         || type === 'movingPlatform'
         || type === 'triggerPlatform'
         || type === 'checkpoint'
@@ -36,6 +37,7 @@ export const createAuthoringObjectBridgeSource = (
     let importInProgress = false;
 
     const countObjects = (config: TestWorldConfig): Record<string, number> => ({
+        npcs: config.npcs.length,
         surfaces: config.surfaces.length,
         dragBoxes: config.dragBoxes.length,
         windZones: config.windZones.length,
@@ -57,6 +59,8 @@ export const createAuthoringObjectBridgeSource = (
         getLastCutsceneLogicTrace: () => worldRuntime.getLastCutsceneLogicTrace(),
         getLastTriggerOnEnterLogicTrace: () => worldRuntime.getLastTriggerOnEnterLogicTrace(),
         getSurfaceMoveRuntimeDebugSnapshot: () => worldRuntime.getSurfaceMoveRuntimeDebugSnapshot(),
+        getNpcPatrolRuntimeDebugSnapshot: () => worldRuntime.getNpcPatrolRuntimeDebugSnapshot(),
+        getNpcActorBounds: (id) => worldRuntime.getNpcActorBounds(id),
         getGameplayTimeState: () => {
             const snapshot = options?.gameplayTimeController?.getSnapshot();
             return snapshot
@@ -188,6 +192,12 @@ export const createAuthoringObjectBridgeSource = (
         },
         patchObjectFields: (rootId, patch) => {
             return worldRuntime.patchObjectFields(rootId, patch);
+        },
+        patchNpcFields: (id, patch) => {
+            if (typeof worldRuntime.patchNpcFields !== 'function') {
+                return false;
+            }
+            return worldRuntime.patchNpcFields(id, patch);
         },
         patchObjectColors: (rootId, patch) => {
             return worldRuntime.patchObjectColors(rootId, patch);

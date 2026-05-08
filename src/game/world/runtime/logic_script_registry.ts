@@ -16,6 +16,11 @@ import {
     validateKnownLogicCommandParams
 } from './logic_command_registry';
 import {
+    getNpcPatrolPingPongParams,
+    NPC_PATROL_PING_PONG_COMMAND_TYPE,
+    summarizeNpcPatrolPingPongContract
+} from './npc_command_registry';
+import {
     PLATFORM_MOVE_PING_PONG_COMMAND_TYPE,
     PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE,
     summarizePlatformMovePingPongContract,
@@ -646,8 +651,10 @@ export const collectLogicScriptAssetDiagnostics = (
 
     registryState.assets.forEach((script) => {
         const shouldCheckCutsceneSceneParticipantDependencies = referencedScriptRefIds?.has(script.id) ?? false;
+        const isNpcPatrolScript = script.category === 'npc.patrol';
         const isPlatformMoveScript = script.category === 'platform.move';
         const isPlatformRotateScript = script.category === 'platform.rotate';
+        let npcPatrolPingPongCount = 0;
         let platformMovePingPongCount = 0;
         let platformRotateConstantCount = 0;
         script.commands.forEach((command, commandIndex) => {
@@ -694,12 +701,38 @@ export const collectLogicScriptAssetDiagnostics = (
                 return;
             }
 
+            if (isNpcPatrolScript && commandType !== NPC_PATROL_PING_PONG_COMMAND_TYPE) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_category'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_category',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is not valid for category "npc.patrol"; expected "${NPC_PATROL_PING_PONG_COMMAND_TYPE}".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`
+                });
+                return;
+            }
+
             if (!isPlatformMoveScript && commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE) {
                 diagnostics.push({
                     id: nextDiagnosticId('invalid_logic_command_category'),
                     severity: 'error',
                     code: 'invalid_logic_command_category',
                     message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is only valid for category "platform.move".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`
+                });
+                return;
+            }
+
+            if (!isNpcPatrolScript && commandType === NPC_PATROL_PING_PONG_COMMAND_TYPE) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_category'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_category',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is only valid for category "npc.patrol".`,
                     scriptId: script.id,
                     commandId,
                     path: `${path}.type`
@@ -720,6 +753,9 @@ export const collectLogicScriptAssetDiagnostics = (
                 return;
             }
 
+            if (commandType === NPC_PATROL_PING_PONG_COMMAND_TYPE) {
+                npcPatrolPingPongCount += 1;
+            }
             if (commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE) {
                 platformMovePingPongCount += 1;
             }
@@ -735,6 +771,8 @@ export const collectLogicScriptAssetDiagnostics = (
                         ? ' (requires non-empty cutsceneId)'
                         : commandType === PLATFORM_MOVE_PING_PONG_COMMAND_TYPE
                             ? ' (requires axis, distance > 0, speed > 0, optional start)'
+                            : commandType === NPC_PATROL_PING_PONG_COMMAND_TYPE
+                                ? ' (requires axis, distance > 0, speed > 0, optional start)'
                             : commandType === PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE
                                 ? ' (requires angularSpeedDeg > 0, optional direction/start)'
                                 : '';
@@ -752,7 +790,7 @@ export const collectLogicScriptAssetDiagnostics = (
                 return;
             }
 
-            if (isPlatformMoveScript || isPlatformRotateScript) {
+            if (isNpcPatrolScript || isPlatformMoveScript || isPlatformRotateScript) {
                 return;
             }
 
@@ -815,6 +853,17 @@ export const collectLogicScriptAssetDiagnostics = (
                 severity: 'error',
                 code: 'invalid_platform_move_script_contract',
                 message: `Script "${script.id}" contains ${platformMovePingPongCount} "${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE}" commands. Exactly one is supported in this XS.`,
+                scriptId: script.id,
+                path: `logicScripts.${script.id}.commands`
+            });
+        }
+
+        if (isNpcPatrolScript && npcPatrolPingPongCount > 1) {
+            diagnostics.push({
+                id: nextDiagnosticId('invalid_logic_command_category'),
+                severity: 'error',
+                code: 'invalid_logic_command_category',
+                message: `Script "${script.id}" contains ${npcPatrolPingPongCount} "${NPC_PATROL_PING_PONG_COMMAND_TYPE}" commands. Exactly one is supported in this XS.`,
                 scriptId: script.id,
                 path: `logicScripts.${script.id}.commands`
             });
@@ -945,6 +994,63 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Surface "${surface.id}" rotate behavior script "${assignedRotateScriptId}" must contain exactly one valid "${PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE}" command (runtime rotation remains deferred in this XS).`,
                     scriptId: rotateScript.id,
                     path: rotatePath
+                });
+            }
+        });
+
+        activeConfig.npcs.forEach((npc, npcIndex) => {
+            const assignedPatrolScriptId = typeof npc.behaviorScripts?.patrol === 'string'
+                ? npc.behaviorScripts.patrol.trim()
+                : '';
+            if (assignedPatrolScriptId.length <= 0) {
+                return;
+            }
+            const path = `npcs[${npcIndex}].behaviorScripts.patrol`;
+            const script = registryState.byId.get(assignedPatrolScriptId);
+            if (!script) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `NPC "${npc.id}" patrol behavior script "${assignedPatrolScriptId}" is assigned but missing from external script assets.`,
+                    scriptId: assignedPatrolScriptId,
+                    path
+                });
+                return;
+            }
+            if (script.category !== 'npc.patrol') {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `NPC "${npc.id}" patrol behavior script "${assignedPatrolScriptId}" has category "${script.category}", expected "npc.patrol".`,
+                    scriptId: script.id,
+                    path
+                });
+                return;
+            }
+            const summary = summarizeNpcPatrolPingPongContract(script.commands);
+            if (!summary.hasExactlyOneValidCommand) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `NPC "${npc.id}" patrol behavior script "${assignedPatrolScriptId}" must contain exactly one valid "${NPC_PATROL_PING_PONG_COMMAND_TYPE}" command.`,
+                    scriptId: script.id,
+                    path
+                });
+                return;
+            }
+            const command = script.commands[0];
+            const params = command ? getNpcPatrolPingPongParams(command.params) : null;
+            if (!command || command.type.trim() !== NPC_PATROL_PING_PONG_COMMAND_TYPE || !params) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_surface_behavior_script_assignment'),
+                    severity: 'error',
+                    code: 'invalid_surface_behavior_script_assignment',
+                    message: `NPC "${npc.id}" patrol behavior script "${assignedPatrolScriptId}" has unsupported patrol command contract.`,
+                    scriptId: script.id,
+                    path
                 });
             }
         });

@@ -124,6 +124,12 @@ export interface TestNpcBehaviorOverrides {
     postTolerance?: number;
 }
 
+export interface TestNpcBehaviorScriptsConfig {
+    patrol?: string;
+    defaultAction?: string;
+    altActions?: string[];
+}
+
 export interface TestNpcInstanceConfig {
     id: string;
     profileId: string;
@@ -138,6 +144,7 @@ export interface TestNpcInstanceConfig {
     visualLayer?: TestNpcVisualLayer;
     renderOrder?: number;
     behavior?: TestNpcBehaviorOverrides;
+    behaviorScripts?: TestNpcBehaviorScriptsConfig;
 }
 
 export interface TestNpcPassiveProfileBehavior {

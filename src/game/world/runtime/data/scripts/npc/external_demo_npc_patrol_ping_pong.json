@@ -1,0 +1,17 @@
+{
+  "id": "external_demo_npc_patrol_ping_pong",
+  "name": "External Demo NPC Patrol Ping Pong",
+  "category": "npc.patrol",
+  "commands": [
+    {
+      "id": "npc_patrol_ping_pong_1",
+      "type": "npc_patrol_ping_pong",
+      "params": {
+        "axis": "horizontal",
+        "distance": 120,
+        "speed": 48,
+        "start": "running_loop"
+      }
+    }
+  ]
+}
