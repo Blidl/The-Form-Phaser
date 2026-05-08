@@ -1463,7 +1463,11 @@ export const createTestNpcRuntime = (
                 return false;
             }
 
-            actor.body.reset(x, y);
+            const nextBodyX = x - (actor.body.width * 0.5);
+            const nextBodyY = y - (actor.body.height * 0.5);
+            actor.body.reset(nextBodyX, nextBodyY);
+            actor.body.setVelocity(0, 0);
+            actor.body.setAcceleration(0, 0);
             actor.bodyObject.setPosition(x, y);
             actor.visual.setPosition(x, y);
             actor.postX = x;
