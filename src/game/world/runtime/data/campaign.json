@@ -1,11 +1,8 @@
 {
   "initialLevelId": "test-world-02",
   "levels": [
-    {
-      "id": "test-world-01"
-    },
-    {
-      "id": "test-world-02"
-    }
+    { "id": "test-world-01" },
+    { "id": "test-world-02" },
+    { "id": "test-world-03" }
   ]
 }

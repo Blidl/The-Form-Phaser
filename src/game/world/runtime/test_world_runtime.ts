@@ -39,7 +39,7 @@ import {
     type TestWorldTriggerVolumeConfig,
     type TestWorldWindZoneConfig
 } from './test_world_config';
-import type { TestNpcInstanceConfig } from '../../npc/npc_types';
+import type { TestNpcControlMode, TestNpcInstanceConfig } from '../../npc/npc_types';
 import { normalizeTestWorldConfig } from './test_world_config_validation';
 import { createTestWorldSurfaceOutlineRenderer } from './test_world_surface_outline_renderer';
 import { createTestWorldMovingPlatformRuntimeController } from './test_world_moving_platform_runtime';
@@ -255,11 +255,17 @@ export interface SurfaceMoveRuntimeDebugSnapshot {
 
 export interface NpcPatrolRuntimeDebugEntry {
     npcId: string;
+    controlMode: TestNpcControlMode;
+    controlledBy: string | null;
     assignedScriptId: string | null;
     scriptFound: boolean;
     scriptCategory: string | null;
     commandType: string | null;
     paramsValid: boolean | null;
+    axis: 'horizontal' | 'vertical' | null;
+    direction: -1 | 0 | 1;
+    velocityX: number;
+    velocityY: number;
     resolved: boolean;
     active: boolean;
     currentX: number;
@@ -295,6 +301,8 @@ export interface TestWorldRuntime {
     getNextLevelId: () => string | null;
     getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
     getNpcInteractionDebugState: () => TestNpcInteractionDebugState;
+    setNpcControlMode: (actorId: string, mode: TestNpcControlMode, controlledBy?: string) => boolean;
+    clearNpcControlMode: (actorId: string) => boolean;
     dispatchWorldLogicEvent: (event: TestWorldLogicEvent) => boolean;
     dispatchCutsceneActorSequenceRef: (
         actorId: string,
@@ -394,6 +402,8 @@ interface BuiltWorldInstance {
     resolveWindInfluenceX: (playerObject: GameObjects.GameObject) => number;
     getNpcDebugEntries: () => readonly TestNpcDebugEntry[];
     getNpcInteractionDebugState: () => TestNpcInteractionDebugState;
+    setNpcControlMode: (actorId: string, mode: TestNpcControlMode, controlledBy?: string) => boolean;
+    clearNpcControlMode: (actorId: string) => boolean;
     dispatchWorldLogicEvent: (event: TestWorldLogicEvent) => boolean;
     dispatchCutsceneActorSequenceRef: (
         actorId: string,
@@ -934,14 +944,9 @@ export const createTestWorldRuntime = (
 
     const collectNpcInteractionCandidateIds = (): string[] => {
         const candidateIds = new Set(
-            currentConfig.logic.bindings
-                .filter((binding) => (
-                    binding.targetType === 'npc'
-                    && binding.slot.trim() === NPC_LOGIC_INTERACTION_SLOT
-                    && typeof binding.targetId === 'string'
-                    && binding.targetId.trim().length > 0
-                ))
-                .map((binding) => binding.targetId!.trim())
+            currentConfig.npcs
+                .map((npc) => npc.id.trim())
+                .filter((npcId) => npcId.length > 0)
         );
         return [...candidateIds];
     };
@@ -1100,7 +1105,7 @@ export const createTestWorldRuntime = (
                 radiusPx: NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX,
                 candidateCount: 0,
                 candidates: [],
-                message: 'No NPC interaction candidates were found for onInteract.'
+                message: 'No NPC instances were found for onInteract.'
             };
             return false;
         }
@@ -1193,7 +1198,7 @@ export const createTestWorldRuntime = (
                 candidateCount: candidateIds.length,
                 candidates,
                 bindingTrace,
-                message: `Target ${selectedTargetId} had no matching onInteract binding at execution time.`
+                message: `Nearest NPC ${selectedTargetId} had no matching onInteract binding; no fallback NPC binding was executed.`
             };
             return false;
         }
@@ -1297,6 +1302,10 @@ export const createTestWorldRuntime = (
         getNextLevelId: (): string | null => currentConfig.nextLevelId,
         getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => instance.getNpcDebugEntries(),
         getNpcInteractionDebugState: (): TestNpcInteractionDebugState => instance.getNpcInteractionDebugState(),
+        setNpcControlMode: (actorId: string, mode: TestNpcControlMode, controlledBy?: string): boolean => (
+            instance.setNpcControlMode(actorId, mode, controlledBy)
+        ),
+        clearNpcControlMode: (actorId: string): boolean => instance.clearNpcControlMode(actorId),
         dispatchWorldLogicEvent: (event: TestWorldLogicEvent): boolean => instance.dispatchWorldLogicEvent(event),
         dispatchCutsceneActorSequenceRef: (
             actorId: string,
@@ -2477,11 +2486,17 @@ const buildWorldInstance = (
             const runtimeEntry = runtimeEntriesById.get(npcConfig.id);
             return {
                 npcId: npcConfig.id,
+                controlMode: runtimeEntry?.controlMode ?? 'behavior',
+                controlledBy: runtimeEntry?.controlledBy ?? null,
                 assignedScriptId: normalizedAssignedScriptId,
                 scriptFound: script !== null,
                 scriptCategory: script?.category ?? null,
                 commandType,
                 paramsValid: normalizedAssignedScriptId ? (params !== null) : null,
+                axis: runtimeEntry?.axis ?? null,
+                direction: runtimeEntry?.direction ?? 0,
+                velocityX: runtimeEntry?.velocityX ?? 0,
+                velocityY: runtimeEntry?.velocityY ?? 0,
                 resolved: runtimeEntry?.resolved ?? false,
                 active: runtimeEntry?.active ?? false,
                 currentX: runtimeEntry?.currentX ?? npcConfig.x,
@@ -3147,7 +3162,9 @@ const buildWorldInstance = (
             npcInteractionRuntime.update();
         },
         tryTriggerNpcInteraction: (): void => {
-            npcInteractionRuntime.tryDispatchCurrentTarget();
+            // Legacy profile/default NPC interactions are disabled by the XS10.10
+            // behavior-script runtime. Explicit npc/onInteract bindings still run
+            // through tryTriggerNpcLogicInteraction before this fallback is reached.
         },
         syncNpcTriangleSupportSurfaces: (): void => {
             npcRuntime.syncTriangleSupportSurfaces();
@@ -3294,6 +3311,10 @@ const buildWorldInstance = (
         },
         getNpcDebugEntries: (): readonly TestNpcDebugEntry[] => npcRuntime.getDebugEntries(),
         getNpcInteractionDebugState: (): TestNpcInteractionDebugState => npcInteractionRuntime.getDebugState(),
+        setNpcControlMode: (actorId: string, mode: TestNpcControlMode, controlledBy?: string): boolean => (
+            npcRuntime.setNpcControlMode(actorId, mode, controlledBy)
+        ),
+        clearNpcControlMode: (actorId: string): boolean => npcRuntime.clearNpcControlMode(actorId),
         dispatchWorldLogicEvent,
         dispatchCutsceneActorSequenceRef: (
             actorId: string,

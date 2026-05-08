@@ -22,6 +22,7 @@ import { describeActorActionTarget } from '../actor_actions/actor_action_types';
 import type {
     TestNpcInteractionDispatchResult,
     TestNpcInteractionOutcome,
+    TestNpcControlMode,
     TestNpcDebugEntry,
     TestNpcEnemyResolvedBehavior,
     TestNpcFacing,
@@ -54,6 +55,7 @@ const NPC_GROUND_TOLERANCE_PX = 2;
 const NPC_PLAYER_DISTANCE_HYSTERESIS_PX = 8;
 const NPC_ARCADE_CARRY_SOURCE_DATA_KEY = 'pf_npc_arcade_carry_source';
 const NPC_ARCADE_CARRY_VELOCITY_X_DATA_KEY = 'pf_npc_arcade_carry_velocity_x';
+const LEGACY_NPC_AUTONOMOUS_BEHAVIOR_ENABLED = false;
 
 interface TestNpcActorRuntime {
     id: string;
@@ -66,6 +68,8 @@ interface TestNpcActorRuntime {
     postX: number;
     facing: -1 | 1;
     state: TestNpcState;
+    controlMode: TestNpcControlMode;
+    controlledBy: string | null;
     stateElapsedMs: number;
     patrolDirection: -1 | 1;
     waitMsRemaining: number;
@@ -125,6 +129,8 @@ interface TestNpcActorRuntime {
     patrolBehaviorDirection: -1 | 1;
     patrolBehaviorOriginX: number;
     patrolBehaviorOriginY: number;
+    patrolBehaviorVelocityX: number;
+    patrolBehaviorVelocityY: number;
     patrolBehaviorBlockedReason: string | null;
     patrolBehaviorLegacySkipReason: string | null;
 }
@@ -163,7 +169,13 @@ export interface TestNpcPatrolBehaviorRuntimeAssignment {
 
 export interface TestNpcPatrolBehaviorRuntimeDebugEntry {
     actorId: string;
+    controlMode: TestNpcControlMode;
+    controlledBy: string | null;
     assignedScriptId: string | null;
+    axis: TestNpcPatrolBehaviorRuntimeAssignment['axis'] | null;
+    direction: -1 | 0 | 1;
+    velocityX: number;
+    velocityY: number;
     resolved: boolean;
     active: boolean;
     currentX: number;
@@ -193,6 +205,8 @@ export interface TestNpcRuntime {
         y: number,
         options?: { syncPatrolOrigin?: boolean }
     ) => boolean;
+    setNpcControlMode: (id: string, mode: TestNpcControlMode, controlledBy?: string) => boolean;
+    clearNpcControlMode: (id: string) => boolean;
     getPatrolBehaviorRuntimeDebugEntries: () => readonly TestNpcPatrolBehaviorRuntimeDebugEntry[];
     getVisualObject: (id: string) => GameObjects.Container | null;
     destroy: () => void;
@@ -218,6 +232,29 @@ const getActorX = (actor: TestNpcActorRuntime): number => actor.bodyObject.x;
 const getActorY = (actor: TestNpcActorRuntime): number => actor.bodyObject.y;
 const shouldNpcBlockPlayerBody = (mode: TestNpcPlayerBodyContactMode): boolean => mode === 'block';
 const shouldNpcExportTriangleSupportSurface = (mode: TestNpcPlayerBodyContactMode): boolean => mode === 'block';
+
+const NPC_CONTROL_MODE_PRIORITY: Record<TestNpcControlMode, number> = {
+    cutscene: 3,
+    forced_action: 2,
+    behavior: 1,
+    disabled: 0
+};
+
+const getNpcControlBlockedReason = (actor: TestNpcActorRuntime): string | null => {
+    if (actor.controlMode === 'behavior') {
+        return null;
+    }
+    return actor.controlledBy
+        ? `controlMode=${actor.controlMode}; controlledBy=${actor.controlledBy}`
+        : `controlMode=${actor.controlMode}`;
+};
+
+const canNpcControlModeOverride = (
+    currentMode: TestNpcControlMode,
+    nextMode: TestNpcControlMode
+): boolean => {
+    return NPC_CONTROL_MODE_PRIORITY[nextMode] >= NPC_CONTROL_MODE_PRIORITY[currentMode];
+};
 
 const resolveIsWithinDistanceBand = (
     distancePx: number,
@@ -250,6 +287,29 @@ const setActorState = (actor: TestNpcActorRuntime, nextState: TestNpcState): voi
 
 const stopHorizontalMovement = (actor: TestNpcActorRuntime): void => {
     actor.body.setVelocityX(0);
+};
+
+const resetActorBodyToCenterPosition = (
+    actor: TestNpcActorRuntime,
+    x: number,
+    y: number
+): void => {
+    actor.body.reset(x, y);
+    actor.body.setVelocity(0, 0);
+    actor.body.setAcceleration(0, 0);
+};
+
+const clampActorCenterXPreservingVerticalPhysics = (
+    actor: TestNpcActorRuntime,
+    x: number,
+    nextVelocityX: number
+): void => {
+    const currentY = actor.bodyObject.y;
+    const currentVelocityY = actor.body.velocity.y;
+    const currentAccelerationY = actor.body.acceleration.y;
+    actor.body.reset(x, currentY);
+    actor.body.setVelocity(nextVelocityX, currentVelocityY);
+    actor.body.setAcceleration(0, currentAccelerationY);
 };
 
 const setPresentationAnimationStub = (
@@ -366,7 +426,11 @@ const tryApplyActorHorizontalMovement = (
             actor.body.y
         );
         if (doesActorContactShapeOverlap(refreshedPlayerShape, refreshedActorShape) && currentSeparationDelta !== null) {
-            actor.body.reset(actor.body.x + currentSeparationDelta.x, actor.body.y);
+            clampActorCenterXPreservingVerticalPhysics(
+                actor,
+                actor.bodyObject.x + currentSeparationDelta.x,
+                0
+            );
             stopHorizontalMovement(actor);
         }
     }
@@ -437,26 +501,39 @@ const updateScriptedLoopActor = (actor: TestNpcActorRuntime): ActorActionSequenc
 
 const updatePatrolBehaviorActor = (
     actor: TestNpcActorRuntime,
-    player: PlayerWorldActor,
     deltaMs: number
 ): void => {
     const assignment = actor.patrolBehaviorAssignment;
     if (!assignment) {
         return;
     }
+    const controlBlockedReason = getNpcControlBlockedReason(actor);
+    if (controlBlockedReason) {
+        actor.patrolBehaviorVelocityX = 0;
+        actor.patrolBehaviorVelocityY = actor.body.velocity.y;
+        actor.body.setAllowGravity(true);
+        stopHorizontalMovement(actor);
+        actor.patrolBehaviorBlockedReason = controlBlockedReason;
+        return;
+    }
     setActorState(actor, 'idle_patrol');
     actor.waitMsRemaining = 0;
     if (assignment.start === 'stopped' || assignment.speed <= 0) {
+        actor.patrolBehaviorVelocityX = 0;
+        actor.patrolBehaviorVelocityY = actor.body.velocity.y;
+        actor.body.setAllowGravity(true);
         stopHorizontalMovement(actor);
         actor.patrolBehaviorBlockedReason = assignment.speed <= 0 ? 'speed<=0' : 'start=stopped';
         return;
     }
+    const deltaSec = deltaMs / 1000;
     if (assignment.axis === 'vertical') {
-        stopHorizontalMovement(actor);
-        const delta = assignment.speed * (deltaMs / 1000) * actor.patrolBehaviorDirection;
+        actor.body.setAllowGravity(false);
+        const travelDelta = assignment.speed * deltaSec * actor.patrolBehaviorDirection;
+        const currentY = actor.bodyObject.y;
         const minY = actor.patrolBehaviorOriginY - assignment.distance;
         const maxY = actor.patrolBehaviorOriginY + assignment.distance;
-        let nextY = actor.bodyObject.y + delta;
+        let nextY = currentY + travelDelta;
         if (nextY > maxY) {
             nextY = maxY;
             actor.patrolBehaviorDirection = -1;
@@ -464,36 +541,50 @@ const updatePatrolBehaviorActor = (
             nextY = minY;
             actor.patrolBehaviorDirection = 1;
         }
-        actor.bodyObject.y = nextY;
-        actor.body.reset(actor.body.x, nextY - (actor.body.height * 0.5));
+        actor.patrolBehaviorVelocityX = 0;
+        actor.patrolBehaviorVelocityY = deltaSec > 0 ? (nextY - currentY) / deltaSec : 0;
+        resetActorBodyToCenterPosition(actor, actor.patrolBehaviorOriginX, nextY);
         actor.patrolBehaviorBlockedReason = null;
         return;
     }
 
-    const velocityX = assignment.speed * actor.patrolBehaviorDirection;
-    const moveResult = tryApplyActorHorizontalMovement(actor, player, velocityX, deltaMs);
-    if (moveResult !== 'applied') {
-        actor.patrolBehaviorDirection *= -1;
-        actor.patrolBehaviorBlockedReason = moveResult;
-    } else {
-        actor.patrolBehaviorBlockedReason = null;
-    }
+    actor.body.setAllowGravity(true);
+    const currentX = actor.bodyObject.x;
     const minX = actor.patrolBehaviorOriginX - assignment.distance;
     const maxX = actor.patrolBehaviorOriginX + assignment.distance;
-    if (actor.bodyObject.x >= maxX) {
-        actor.bodyObject.x = maxX;
-        actor.body.reset(maxX - (actor.body.width * 0.5), actor.body.y);
+    if (currentX >= maxX && actor.patrolBehaviorDirection > 0) {
         actor.patrolBehaviorDirection = -1;
-    } else if (actor.bodyObject.x <= minX) {
-        actor.bodyObject.x = minX;
-        actor.body.reset(minX - (actor.body.width * 0.5), actor.body.y);
-        actor.patrolBehaviorDirection = 1;
+        const nextVelocityX = -assignment.speed;
+        clampActorCenterXPreservingVerticalPhysics(actor, maxX, nextVelocityX);
+        actor.patrolBehaviorVelocityX = nextVelocityX;
+        actor.patrolBehaviorVelocityY = actor.body.velocity.y;
+        actor.patrolBehaviorBlockedReason = null;
+        return;
     }
+    if (currentX <= minX && actor.patrolBehaviorDirection < 0) {
+        actor.patrolBehaviorDirection = 1;
+        const nextVelocityX = assignment.speed;
+        clampActorCenterXPreservingVerticalPhysics(actor, minX, nextVelocityX);
+        actor.patrolBehaviorVelocityX = nextVelocityX;
+        actor.patrolBehaviorVelocityY = actor.body.velocity.y;
+        actor.patrolBehaviorBlockedReason = null;
+        return;
+    }
+    if (isBlockedInDirection(actor, actor.patrolBehaviorDirection)) {
+        actor.patrolBehaviorDirection *= -1;
+    }
+    const velocityX = assignment.speed * actor.patrolBehaviorDirection;
+    actor.body.setVelocityX(velocityX);
+    actor.patrolBehaviorVelocityX = velocityX;
+    actor.patrolBehaviorVelocityY = actor.body.velocity.y;
+    actor.patrolBehaviorBlockedReason = null;
 };
 
 const isLegacyMovementSuppressedByPatrol = (actor: TestNpcActorRuntime): boolean => {
     if (!actor.patrolBehaviorAssignment) {
-        actor.patrolBehaviorLegacySkipReason = null;
+        actor.patrolBehaviorLegacySkipReason = LEGACY_NPC_AUTONOMOUS_BEHAVIOR_ENABLED
+            ? null
+            : 'legacy_behavior_disabled';
         return false;
     }
     actor.patrolBehaviorLegacySkipReason = 'legacy_behavior_skipped:behaviorScripts.patrol';
@@ -524,7 +615,12 @@ const clearCompletedInteraction = (actor: TestNpcActorRuntime): void => {
 
     const snapshot = actor.actionRuntime.getSnapshot();
     if (snapshot.sequenceId !== actor.activeInteraction.sequenceId || snapshot.sequenceStatus !== 'running') {
+        const controlledBy = `interaction:${actor.activeInteraction.outcomeRef}`;
         actor.activeInteraction = null;
+        if (actor.controlMode === 'forced_action' && actor.controlledBy === controlledBy) {
+            actor.controlMode = 'behavior';
+            actor.controlledBy = null;
+        }
     }
 };
 
@@ -535,6 +631,7 @@ const clearCompletedCutscene = (actor: TestNpcActorRuntime): void => {
 
     const snapshot = actor.actionRuntime.getSnapshot();
     if (snapshot.sequenceId !== actor.activeCutscene.sequenceId || snapshot.sequenceStatus !== 'running') {
+        const controlledBy = `cutscene:${actor.activeCutscene.cutsceneRef}`;
         actor.lastCutsceneCompletion = {
             cutsceneRef: actor.activeCutscene.cutsceneRef,
             stepRef: actor.activeCutscene.stepRef,
@@ -547,6 +644,10 @@ const clearCompletedCutscene = (actor: TestNpcActorRuntime): void => {
                 : 'sequence replaced before completion'
         };
         actor.activeCutscene = null;
+        if (actor.controlMode === 'cutscene' && actor.controlledBy === controlledBy) {
+            actor.controlMode = 'behavior';
+            actor.controlledBy = null;
+        }
     }
 };
 
@@ -1007,11 +1108,7 @@ export const createTestNpcRuntime = (
             const patrolBehaviorAssignment = patrolAssignmentsByNpcId?.get(resolved.instance.id) ?? null;
             const initialState: TestNpcState = patrolBehaviorAssignment
                 ? 'idle_patrol'
-                : resolved.scriptedLoopRef
-                ? 'scripted_loop'
-                : (resolved.profile.archetype === 'enemy'
-                    ? 'patrol'
-                    : (resolved.passiveBehavior?.mode === 'idle_patrol' ? 'idle_patrol' : 'idle'));
+                : 'idle';
             const exportsTriangleSupportSurface = shouldNpcExportTriangleSupportSurface(resolved.playerBodyContactMode);
             let actor!: TestNpcActorRuntime;
             actor = {
@@ -1025,6 +1122,8 @@ export const createTestNpcRuntime = (
                 postX: resolved.instance.x,
                 facing,
                 state: initialState,
+                controlMode: 'behavior',
+                controlledBy: null,
                 stateElapsedMs: 0,
                 patrolDirection: facing,
                 waitMsRemaining: resolved.passiveBehavior?.idleDurationMs ?? 0,
@@ -1079,6 +1178,8 @@ export const createTestNpcRuntime = (
                 patrolBehaviorDirection: facing,
                 patrolBehaviorOriginX: resolved.instance.x,
                 patrolBehaviorOriginY: resolved.instance.y,
+                patrolBehaviorVelocityX: 0,
+                patrolBehaviorVelocityY: 0,
                 patrolBehaviorBlockedReason: patrolBehaviorAssignment && patrolBehaviorAssignment.start === 'stopped'
                     ? 'start=stopped'
                     : null,
@@ -1145,8 +1246,15 @@ export const createTestNpcRuntime = (
                 actor.stateElapsedMs += safeDeltaMs;
                 clearCompletedInteraction(actor);
                 clearCompletedCutscene(actor);
+                const controlBlockedReason = getNpcControlBlockedReason(actor);
                 const suppressLegacyBehavior = isLegacyMovementSuppressedByPatrol(actor);
-                if (!actor.activeInteraction && !actor.activeCutscene && !suppressLegacyBehavior) {
+                if (
+                    LEGACY_NPC_AUTONOMOUS_BEHAVIOR_ENABLED
+                    && !actor.activeInteraction
+                    && !actor.activeCutscene
+                    && !suppressLegacyBehavior
+                    && !controlBlockedReason
+                ) {
                     clearCompletedHook(actor);
                     updateSpawnHook(actor);
                     updatePlayerDistanceHooks(actor, player);
@@ -1159,18 +1267,30 @@ export const createTestNpcRuntime = (
                     setActorState(actor, 'cutscene_sequence');
                 } else if (actor.activeInteraction) {
                     setActorState(actor, 'interaction_sequence');
+                } else if (controlBlockedReason) {
+                    actor.actionRuntime.ensureSequence(null);
+                    actor.body.setAllowGravity(true);
+                    stopHorizontalMovement(actor);
+                    actor.patrolBehaviorBlockedReason = actor.patrolBehaviorAssignment
+                        ? controlBlockedReason
+                        : actor.patrolBehaviorBlockedReason;
                 } else if (actor.patrolBehaviorAssignment) {
                     actor.actionRuntime.ensureSequence(null);
-                    updatePatrolBehaviorActor(actor, player, safeDeltaMs);
-                } else if (!actor.activeHook) {
+                    updatePatrolBehaviorActor(actor, safeDeltaMs);
+                } else if (LEGACY_NPC_AUTONOMOUS_BEHAVIOR_ENABLED && !actor.activeHook) {
                     const desiredSequence = actor.scriptedLoopRef
                         ? updateScriptedLoopActor(actor)
                         : (actor.archetype === 'enemy'
                             ? updateEnemyActor(actor, player)
                             : updatePassiveActor(actor, safeDeltaMs));
                     actor.actionRuntime.ensureSequence(desiredSequence);
-                } else {
+                } else if (actor.activeHook) {
                     setActorState(actor, 'hook_sequence');
+                } else {
+                    actor.actionRuntime.ensureSequence(null);
+                    actor.body.setAllowGravity(true);
+                    stopHorizontalMovement(actor);
+                    setActorState(actor, 'idle');
                 }
                 actor.actionRuntime.update(safeDeltaMs);
                 clearCompletedInteraction(actor);
@@ -1213,6 +1333,15 @@ export const createTestNpcRuntime = (
                 };
             }
 
+            if (actor.controlMode !== 'behavior') {
+                return {
+                    actorId,
+                    outcomeKind: outcome.kind,
+                    result: 'busy',
+                    detail: `npc control mode is ${actor.controlMode}`
+                };
+            }
+
             if (outcome.kind === 'run_sequence_ref') {
                 const nextSequence = createInteractionSequence(actor.id, outcome.sequenceRef);
                 if (!nextSequence) {
@@ -1232,6 +1361,8 @@ export const createTestNpcRuntime = (
                 };
                 actor.nextInteractionActivationNonce += 1;
                 actor.waitMsRemaining = 0;
+                actor.controlMode = 'forced_action';
+                actor.controlledBy = `interaction:${outcome.sequenceRef}`;
                 setActorState(actor, 'interaction_sequence');
                 actor.actionRuntime.startSequence(nextSequence);
                 return {
@@ -1318,6 +1449,15 @@ export const createTestNpcRuntime = (
                 };
             }
 
+            if (!canNpcControlModeOverride(actor.controlMode, 'cutscene')) {
+                return {
+                    actorId,
+                    result: 'busy',
+                    detail: `npc control mode is ${actor.controlMode}`,
+                    sequenceId: null
+                };
+            }
+
             actor.activeCutscene = {
                 cutsceneRef,
                 stepRef,
@@ -1325,6 +1465,8 @@ export const createTestNpcRuntime = (
             };
             actor.lastCutsceneCompletion = null;
             actor.waitMsRemaining = 0;
+            actor.controlMode = 'cutscene';
+            actor.controlledBy = `cutscene:${cutsceneRef}`;
             setActorState(actor, 'cutscene_sequence');
             actor.actionRuntime.startSequence(sequence);
             return {
@@ -1400,6 +1542,11 @@ export const createTestNpcRuntime = (
                     id: actor.id,
                     archetype: actor.archetype,
                     state: actor.state,
+                    controlMode: actor.controlMode,
+                    controlledBy: actor.controlledBy,
+                    patrolBlockedReason: getNpcControlBlockedReason(actor)
+                        ?? actor.patrolBehaviorBlockedReason
+                        ?? actor.patrolBehaviorLegacySkipReason,
                     playerBodyContactMode: actor.playerBodyContactMode,
                     exportsTriangleSupportSurface: actor.exportsTriangleSupportSurface,
                     locomotion: contactSnapshot?.locomotion ?? (isActorGrounded(actor) ? 'grounded' : 'airborne'),
@@ -1462,13 +1609,10 @@ export const createTestNpcRuntime = (
             if (!actor || !Number.isFinite(x) || !Number.isFinite(y)) {
                 return false;
             }
-
-            const nextBodyX = x - (actor.body.width * 0.5);
-            const nextBodyY = y - (actor.body.height * 0.5);
-            actor.body.reset(nextBodyX, nextBodyY);
+            actor.body.setAllowGravity(true);
+            actor.body.reset(x, y);
             actor.body.setVelocity(0, 0);
             actor.body.setAcceleration(0, 0);
-            actor.bodyObject.setPosition(x, y);
             actor.visual.setPosition(x, y);
             actor.postX = x;
             actor.frameCarryVelocityX = 0;
@@ -1486,19 +1630,57 @@ export const createTestNpcRuntime = (
             actor.bodyObject.setData(NPC_ARCADE_CARRY_VELOCITY_X_DATA_KEY, 0);
             return true;
         },
+        setNpcControlMode: (id: string, mode: TestNpcControlMode, controlledBy?: string): boolean => {
+            const actor = actors.find((entry) => entry.id === id) ?? null;
+            if (!actor) {
+                return false;
+            }
+            if (mode === 'behavior') {
+                actor.controlMode = 'behavior';
+                actor.controlledBy = null;
+                return true;
+            }
+            if (actor.controlMode !== 'behavior' && !canNpcControlModeOverride(actor.controlMode, mode)) {
+                return false;
+            }
+            actor.controlMode = mode;
+            actor.controlledBy = controlledBy?.trim() || null;
+            stopHorizontalMovement(actor);
+            actor.patrolBehaviorBlockedReason = actor.patrolBehaviorAssignment
+                ? getNpcControlBlockedReason(actor)
+                : actor.patrolBehaviorBlockedReason;
+            return true;
+        },
+        clearNpcControlMode: (id: string): boolean => {
+            const actor = actors.find((entry) => entry.id === id) ?? null;
+            if (!actor) {
+                return false;
+            }
+            actor.controlMode = 'behavior';
+            actor.controlledBy = null;
+            return true;
+        },
         getPatrolBehaviorRuntimeDebugEntries: (): readonly TestNpcPatrolBehaviorRuntimeDebugEntry[] => {
             return actors.map((actor) => ({
                 actorId: actor.id,
+                controlMode: actor.controlMode,
+                controlledBy: actor.controlledBy,
                 assignedScriptId: actor.patrolBehaviorAssignment?.scriptId ?? null,
+                axis: actor.patrolBehaviorAssignment?.axis ?? null,
+                direction: actor.patrolBehaviorAssignment ? actor.patrolBehaviorDirection : 0,
+                velocityX: actor.patrolBehaviorVelocityX,
+                velocityY: actor.patrolBehaviorVelocityY,
                 resolved: actor.patrolBehaviorAssignment !== null,
                 active: actor.patrolBehaviorAssignment !== null
+                    && actor.controlMode === 'behavior'
                     && actor.patrolBehaviorAssignment.start !== 'stopped'
                     && actor.patrolBehaviorAssignment.speed > 0,
                 currentX: actor.bodyObject.x,
                 currentY: actor.bodyObject.y,
                 originX: actor.patrolBehaviorOriginX,
                 originY: actor.patrolBehaviorOriginY,
-                blockedReason: actor.patrolBehaviorBlockedReason
+                blockedReason: getNpcControlBlockedReason(actor)
+                    ?? actor.patrolBehaviorBlockedReason
                     ?? actor.patrolBehaviorLegacySkipReason
             }));
         },

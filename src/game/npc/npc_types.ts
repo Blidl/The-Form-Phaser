@@ -5,6 +5,7 @@ export type TestNpcPlayerBodyContactMode = 'block' | 'overlap' | 'ignore';
 export type TestNpcPassiveState = 'idle' | 'idle_patrol' | 'scripted_loop' | 'hook_sequence' | 'interaction_sequence' | 'cutscene_sequence';
 export type TestNpcEnemyState = 'patrol' | 'alert' | 'chase' | 'return_to_post' | 'scripted_loop' | 'hook_sequence' | 'interaction_sequence' | 'cutscene_sequence';
 export type TestNpcState = TestNpcPassiveState | TestNpcEnemyState;
+export type TestNpcControlMode = 'behavior' | 'cutscene' | 'forced_action' | 'disabled';
 export type TestNpcVisualLayer = 'layer_1' | 'layer_2' | 'layer_3' | 'layer_4' | 'layer_5';
 export type TestNpcPresentationEmotion = string;
 export type TestNpcPresentationAnimation = string;
@@ -214,6 +215,9 @@ export interface TestNpcDebugEntry {
     id: string;
     archetype: TestNpcArchetype;
     state: TestNpcState;
+    controlMode: TestNpcControlMode;
+    controlledBy: string | null;
+    patrolBlockedReason: string | null;
     playerBodyContactMode: TestNpcPlayerBodyContactMode;
     exportsTriangleSupportSurface: boolean;
     locomotion: 'grounded' | 'airborne';

@@ -1,6 +1,7 @@
 import campaignJson from './data/campaign.json';
 import level01Json from './data/levels/test_world_level_01.json';
 import level02Json from './data/levels/test_world_level_02.json';
+import level03Json from './data/levels/test_world_level_03.json';
 import {
     cloneTestWorldConfig,
     type TestWorldConfig
@@ -54,6 +55,10 @@ const rawLevelConfigs: readonly RawLevelConfigEntry[] = [
     {
         sourceId: 'test-world-02',
         raw: level02Json
+    },
+    {
+        sourceId: 'test-world-03',
+        raw: level03Json
     }
 ];
 

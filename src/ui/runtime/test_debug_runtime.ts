@@ -386,6 +386,7 @@ export const createTestDebugRuntime = (params: CreateTestDebugRuntimeParams): Te
         const hookLabel = entry.activeHookId ?? '-';
         return [
             `${entry.id} | ${entry.archetype} | ${entry.state} | ${entry.locomotion}`,
+            `  control:${entry.controlMode} | by:${entry.controlledBy ?? '-'} | patrol block:${entry.patrolBlockedReason ?? '-'}`,
             `  loop:${entry.scriptedLoopRef ?? '-'} | src:${entry.scriptedLoopSource} | hook:${hookLabel} | override:${formatScriptedOverride(entry.scriptedLoopInstanceOverride)}`,
             `  seq:${entry.actionSequenceStatus ?? 'none'} | action:${actionLabel} | target:${targetLabel}`,
             `  body:${entry.playerBodyContactMode} tri:${entry.exportsTriangleSupportSurface ? '1' : '0'} touch:P${entry.touchingPlayer ? '1' : '0'} A:${entry.touchingOtherActor ? '1' : '0'}`

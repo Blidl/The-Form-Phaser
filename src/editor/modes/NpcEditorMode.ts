@@ -13,6 +13,7 @@ import type { TestNpcInstanceConfig } from '../../game/npc/npc_types';
 import type { NpcInteractionTrace, NpcPatrolRuntimeDebugSnapshot } from '../../game/world/runtime/test_world_runtime';
 import { getAllLogicScriptAssets } from '../../game/world/runtime/logic_script_registry';
 import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
+import { getTestNpcProfile } from '../../game/npc/npc_profiles';
 
 interface NpcEditorModeOptions {
     scene: Phaser.Scene;
@@ -21,6 +22,13 @@ interface NpcEditorModeOptions {
 }
 
 const NPC_LOGIC_BINDING_DEFAULT_SLOT = 'onInteract';
+
+interface NpcGroundSnapResult {
+    x: number;
+    y: number;
+    surfaceId: string;
+    surfaceTopY: number;
+}
 
 export class NpcEditorMode implements EditorMode {
     public readonly id = 'npc';
@@ -693,9 +701,13 @@ export class NpcEditorMode implements EditorMode {
             wrap.appendChild(this.makeInfoLine('Patrol runtime: no debug data.'));
             return wrap;
         }
+        wrap.appendChild(this.makeInfoLine(`controlMode: ${entry.controlMode ?? 'behavior'}`));
+        wrap.appendChild(this.makeInfoLine(`controlledBy: ${entry.controlledBy ?? '-'}`));
         wrap.appendChild(this.makeInfoLine(`assigned script: ${entry.assignedScriptId ?? '-'}`));
         wrap.appendChild(this.makeInfoLine(`resolved: ${entry.resolved ? 'yes' : 'no'}`));
         wrap.appendChild(this.makeInfoLine(`active: ${entry.active ? 'yes' : 'no'}`));
+        wrap.appendChild(this.makeInfoLine(`axis/dir: ${entry.axis ?? '-'} / ${entry.direction ?? 0}`));
+        wrap.appendChild(this.makeInfoLine(`patrol velocity: ${entry.velocityX.toFixed(2)}, ${entry.velocityY.toFixed(2)}`));
         wrap.appendChild(this.makeInfoLine(`current position: ${entry.currentX.toFixed(2)}, ${entry.currentY.toFixed(2)}`));
         wrap.appendChild(this.makeInfoLine(`origin: ${entry.originX.toFixed(2)}, ${entry.originY.toFixed(2)}`));
         wrap.appendChild(this.makeInfoLine(`blocked reason: ${entry.blockedReason ?? '-'}`));
@@ -743,6 +755,15 @@ export class NpcEditorMode implements EditorMode {
         });
         wrap.appendChild(applyButton);
 
+        const snapButton = document.createElement('button');
+        snapButton.type = 'button';
+        snapButton.textContent = 'Snap to Ground';
+        this.bindEditorInputKeyboardGuards(snapButton);
+        snapButton.addEventListener('click', () => {
+            this.snapNpcToGround(selectedNpc.id);
+        });
+        wrap.appendChild(snapButton);
+
         if (draft.error) {
             const error = this.makeInfoLine(draft.error);
             error.style.color = '#b00020';
@@ -779,15 +800,27 @@ export class NpcEditorMode implements EditorMode {
         }
         const attemptText = Number.isFinite(trace.attemptId) ? `#${trace.attemptId}` : '(unknown)';
         const selectedTargetId = typeof trace.selectedTargetId === 'string' ? trace.selectedTargetId : null;
-        wrap.appendChild(this.makeInfoLine(`Last attempt ${attemptText}: status ${trace.status}.`));
-        if (selectedTargetId) {
-            wrap.appendChild(this.makeInfoLine(`targetType: npc`));
-            wrap.appendChild(this.makeInfoLine(`targetId: ${selectedTargetId}`));
-            wrap.appendChild(this.makeInfoLine(`slot: onInteract`));
-            if (selectedTargetId !== selectedNpcId) {
-                wrap.appendChild(this.makeInfoLine(`Last target differs from selected NPC (${selectedNpcId}).`));
-            }
+        if (!selectedTargetId) {
+            wrap.appendChild(this.makeInfoLine('No interaction attempted for this NPC.'));
+            wrap.appendChild(this.makeInfoLine(`selectedNpcId: ${selectedNpcId}`));
+            wrap.appendChild(this.makeInfoLine('lastTraceTargetId: -'));
+            wrap.appendChild(this.makeInfoLine('traceShownForSelected: no'));
+            return wrap;
         }
+        if (selectedTargetId !== selectedNpcId) {
+            wrap.appendChild(this.makeInfoLine(`Last interaction was for ${selectedTargetId}, not selected ${selectedNpcId}.`));
+            wrap.appendChild(this.makeInfoLine(`selectedNpcId: ${selectedNpcId}`));
+            wrap.appendChild(this.makeInfoLine(`lastTraceTargetId: ${selectedTargetId}`));
+            wrap.appendChild(this.makeInfoLine('traceShownForSelected: no'));
+            return wrap;
+        }
+        wrap.appendChild(this.makeInfoLine(`Last attempt ${attemptText}: status ${trace.status}.`));
+        wrap.appendChild(this.makeInfoLine(`targetType: npc`));
+        wrap.appendChild(this.makeInfoLine(`targetId: ${selectedTargetId}`));
+        wrap.appendChild(this.makeInfoLine(`slot: onInteract`));
+        wrap.appendChild(this.makeInfoLine(`selectedNpcId: ${selectedNpcId}`));
+        wrap.appendChild(this.makeInfoLine(`lastTraceTargetId: ${selectedTargetId}`));
+        wrap.appendChild(this.makeInfoLine('traceShownForSelected: yes'));
         if (trace.message?.trim()) {
             wrap.appendChild(this.makeInfoLine(`Trace: ${trace.message}`));
         }
@@ -885,7 +918,9 @@ export class NpcEditorMode implements EditorMode {
             npcId = `npc_${index}`;
         }
         const spawnX = this.snap(worldX, this.context.grid);
-        const spawnY = this.snap(worldY, this.context.grid);
+        const rawSpawnY = this.snap(worldY, this.context.grid);
+        const snappedSpawn = this.resolveNpcGroundSnap('passive_observer', spawnX, rawSpawnY, runtimeConfig);
+        const spawnY = snappedSpawn?.y ?? rawSpawnY;
         const nextNpc: TestNpcInstanceConfig = {
             id: npcId,
             profileId: 'passive_observer',
@@ -917,6 +952,92 @@ export class NpcEditorMode implements EditorMode {
         this.npcPositionDraftById.set(npcId, { xText: String(spawnX), yText: String(spawnY), error: null });
         this.onUiChanged();
         return npcId;
+    }
+
+    private snapNpcToGround(npcId: string): void {
+        const runtimeConfig = this.getCurrentRuntimeConfig();
+        if (!runtimeConfig || !this.legacyObjectAdapter) {
+            return;
+        }
+        const npc = runtimeConfig.npcs.find((entry) => entry.id === npcId);
+        if (!npc) {
+            return;
+        }
+        const runtimeBounds = this.legacyObjectAdapter.getNpcActorBounds(npcId);
+        const sourceX = runtimeBounds?.x ?? npc.x;
+        const sourceY = runtimeBounds?.y ?? npc.y;
+        const draft = this.getNpcPositionDraft(npc);
+        const snapResult = this.resolveNpcGroundSnap(npc.profileId, sourceX, sourceY, runtimeConfig);
+        if (!snapResult) {
+            draft.error = 'No solid static surface found below this NPC.';
+            this.onUiChanged();
+            return;
+        }
+        draft.error = null;
+        if (!this.patchNpcPosition(npcId, snapResult.x, snapResult.y)) {
+            draft.error = `Failed to snap NPC to ${snapResult.surfaceId}.`;
+            this.onUiChanged();
+        }
+    }
+
+    private resolveNpcGroundSnap(
+        profileId: string,
+        x: number,
+        y: number,
+        runtimeConfig: TestWorldConfig
+    ): NpcGroundSnapResult | null {
+        if (!Number.isFinite(x) || !Number.isFinite(y)) {
+            return null;
+        }
+        const bodyHeight = this.getNpcBodyDimensions(profileId).height;
+        let best: NpcGroundSnapResult | null = null;
+        let bestDistance = Number.POSITIVE_INFINITY;
+        runtimeConfig.surfaces.forEach((surface) => {
+            if (surface.collisionMode === 'visual_only') {
+                return;
+            }
+            if (
+                !Number.isFinite(surface.x)
+                || !Number.isFinite(surface.y)
+                || !Number.isFinite(surface.width)
+                || !Number.isFinite(surface.height)
+                || surface.width <= 0
+                || surface.height <= 0
+            ) {
+                return;
+            }
+            const left = surface.x - (surface.width * 0.5);
+            const right = surface.x + (surface.width * 0.5);
+            if (x < left || x > right) {
+                return;
+            }
+            const top = surface.y - (surface.height * 0.5);
+            const bottom = surface.y + (surface.height * 0.5);
+            const isBelowOrContainingPoint = top >= y || (y >= top && y <= bottom);
+            if (!isBelowOrContainingPoint) {
+                return;
+            }
+            const distance = top >= y ? top - y : 0;
+            if (distance >= bestDistance) {
+                return;
+            }
+            bestDistance = distance;
+            best = {
+                x,
+                y: top - (bodyHeight * 0.5),
+                surfaceId: surface.id,
+                surfaceTopY: top
+            };
+        });
+        return best;
+    }
+
+    private getNpcBodyDimensions(profileId: string): { width: number; height: number } {
+        const profile = getTestNpcProfile(profileId);
+        return {
+            width: profile?.visual.bodyWidth ?? 28,
+            height: profile?.visual.bodyHeight ?? 40
+        };
     }
 
     private patchNpcPosition(npcId: string, x: number, y: number): boolean {
@@ -1060,11 +1181,12 @@ export class NpcEditorMode implements EditorMode {
         ) {
             return runtimeBounds;
         }
+        const dimensions = this.getNpcBodyDimensions(npc.profileId);
         return {
             x: npc.x,
-            y: npc.y - 24,
-            width: 32,
-            height: 48
+            y: npc.y,
+            width: dimensions.width,
+            height: dimensions.height
         };
     }
 
