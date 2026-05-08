@@ -20,17 +20,20 @@ export class LevelEditorMode implements EditorMode {
     private readonly getRuntimeLevelMetaId: () => string | null;
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
     private readonly onUiChanged: (() => void) | null;
+    private readonly onJumpToLevel: ((levelId: string) => boolean) | null;
 
     public constructor(
         projectStore: ProjectStore,
         getRuntimeLevelMetaId?: () => string | null,
         legacyObjectAdapter?: LegacyObjectAdapter | null,
-        onUiChanged?: () => void
+        onUiChanged?: () => void,
+        onJumpToLevel?: (levelId: string) => boolean
     ) {
         this.projectStore = projectStore;
         this.getRuntimeLevelMetaId = getRuntimeLevelMetaId ?? (() => null);
         this.legacyObjectAdapter = legacyObjectAdapter ?? null;
         this.onUiChanged = onUiChanged ?? null;
+        this.onJumpToLevel = onJumpToLevel ?? null;
     }
 
     public renderLeftInspector(panel: EditorPanel): void {
@@ -130,6 +133,48 @@ export class LevelEditorMode implements EditorMode {
                 this.applyNextLevelId(runtimeLevelMetaId, nextLevelId);
             });
             container.appendChild(select);
+
+            const jumpLabel = makeLabel('Jump to level');
+            jumpLabel.htmlFor = 'level-jump-level-id-select';
+            container.appendChild(jumpLabel);
+
+            const jumpRow = document.createElement('div');
+            jumpRow.style.display = 'flex';
+            jumpRow.style.gap = '6px';
+            jumpRow.style.marginBottom = '6px';
+
+            const jumpSelect = document.createElement('select');
+            jumpSelect.id = 'level-jump-level-id-select';
+            jumpSelect.style.flex = '1';
+            manifestLevelIds.forEach((levelId) => {
+                const option = document.createElement('option');
+                option.value = levelId;
+                option.textContent = levelId;
+                jumpSelect.appendChild(option);
+            });
+            jumpSelect.value = manifestLevelIds.includes(runtimeLevelMetaId)
+                ? runtimeLevelMetaId
+                : (manifestLevelIds[0] ?? '');
+
+            const jumpButton = document.createElement('button');
+            jumpButton.type = 'button';
+            jumpButton.textContent = 'Load';
+            jumpButton.disabled = manifestLevelIds.length === 0 || this.onJumpToLevel === null;
+            jumpButton.addEventListener('click', () => {
+                const targetLevelId = jumpSelect.value.trim();
+                if (!targetLevelId || !manifestLevelIds.includes(targetLevelId)) {
+                    return;
+                }
+                const accepted = this.onJumpToLevel?.(targetLevelId) ?? false;
+                if (accepted) {
+                    jumpButton.disabled = true;
+                    jumpSelect.disabled = true;
+                }
+            });
+
+            jumpRow.append(jumpSelect, jumpButton);
+            container.appendChild(jumpRow);
+            container.appendChild(makeInfo('Switching level reloads runtime state. Save Draft first to keep unsaved changes.'));
 
             if (diagnostics.length > 0) {
                 diagnostics.forEach((entry) => {

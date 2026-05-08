@@ -36,6 +36,7 @@ import {
 } from '../debug/ObjectEditorDiagnostics';
 import { isEditorTextInputFocused } from '../../shared/dom_input_focus';
 import type { GameplayTimeController } from '../../scenes/runtime/gameplay_time_controller';
+import { startLevelScene } from '../../scenes/demo_flow';
 
 interface EditorShellOptions {
     scene: Scene;
@@ -52,13 +53,17 @@ const createModes = (
     scene: Scene,
     projectStore: ProjectStore,
     onUiChanged: () => void,
-    legacyObjectAdapter: LegacyObjectAdapter | null
+    legacyObjectAdapter: LegacyObjectAdapter | null,
+    onLevelSwitchRequested: (levelId: string) => boolean
 ): Record<EditorModeId, EditorMode> => {
     const level = new LevelEditorMode(
         projectStore,
         () => legacyObjectAdapter?.getLevelId() ?? null,
         legacyObjectAdapter,
-        onUiChanged
+        onUiChanged,
+        (levelId) => {
+            return onLevelSwitchRequested(levelId);
+        }
     );
     const player = new PlayerEditorMode();
     const objects = new ObjectsEditorMode({
@@ -132,6 +137,7 @@ export class EditorShell {
     private saveNoteMessage: string | null = null;
     private lastObservedRuntimeConfigSignature: string | null = null;
     private lastSavedRuntimeConfigSignature: string | null = null;
+    private pendingLevelSwitchId: string | null = null;
 
     public constructor(options: EditorShellOptions) {
         this.scene = options.scene;
@@ -143,9 +149,15 @@ export class EditorShell {
             ? new LegacyObjectAdapter(options.legacyObjectSource, this.projectStore.getObjectTypeRegistry())
             : null;
         this.legacyObjectAdapter = legacyObjectAdapter;
-        this.modes = createModes(this.scene, this.projectStore, () => {
-            this.renderActiveModeInspectors();
-        }, legacyObjectAdapter);
+        this.modes = createModes(
+            this.scene,
+            this.projectStore,
+            () => {
+                this.renderActiveModeInspectors();
+            },
+            legacyObjectAdapter,
+            (levelId) => this.requestLevelSwitch(levelId)
+        );
 
         this.rootElement = document.createElement('div');
         this.rootElement.setAttribute('data-editor-shell', 'true');
@@ -411,6 +423,19 @@ export class EditorShell {
     }
 
     public update(): void {
+        if (this.pendingLevelSwitchId) {
+            const targetLevelId = this.pendingLevelSwitchId;
+            this.pendingLevelSwitchId = null;
+            if (this.state.isOpen) {
+                this.close();
+            }
+            startLevelScene(this.scene, {
+                levelId: targetLevelId,
+                editorOpen: false
+            });
+            return;
+        }
+
         if (!this.state.isOpen) {
             return;
         }
@@ -861,6 +886,21 @@ export class EditorShell {
         return normalizeTestWorldConfig(config, {
             fallbackConfig: config
         });
+    }
+
+    private requestLevelSwitch(levelId: string): boolean {
+        const normalizedLevelId = levelId.trim();
+        if (!normalizedLevelId) {
+            return false;
+        }
+        if (this.pendingLevelSwitchId !== null) {
+            return false;
+        }
+        if (this.legacyObjectAdapter?.getLevelId() === normalizedLevelId) {
+            return false;
+        }
+        this.pendingLevelSwitchId = normalizedLevelId;
+        return true;
     }
 
     private refreshDiagnosticsUi(): void {
