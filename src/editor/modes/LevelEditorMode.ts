@@ -21,6 +21,7 @@ export class LevelEditorMode implements EditorMode {
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
     private readonly onUiChanged: (() => void) | null;
     private readonly onJumpToLevel: ((levelId: string) => boolean) | null;
+    private levelSizeStatusMessage: string | null = null;
 
     public constructor(
         projectStore: ProjectStore,
@@ -95,6 +96,103 @@ export class LevelEditorMode implements EditorMode {
             container.appendChild(makeInfo(`ProjectStore mirror id: ${projectStoreLevel.id}`));
             container.appendChild(makeInfo(`Current runtime nextLevelId: ${selectedNextLevelId ?? 'null (end screen)'}`));
             container.appendChild(makeInfo(`Manifest levels: ${manifestLevelIds.length > 0 ? manifestLevelIds.join(', ') : '(none)'}`));
+
+            const runtimeWorldBounds = runtimeConfig?.worldBounds ?? null;
+            const widthValue = Number.isFinite(runtimeWorldBounds?.width) ? String(Math.round(runtimeWorldBounds.width)) : '';
+            const heightValue = Number.isFinite(runtimeWorldBounds?.height) ? String(Math.round(runtimeWorldBounds.height)) : '';
+
+            const worldSizeTitle = makeLabel('Level size');
+            container.appendChild(worldSizeTitle);
+
+            const worldSizeRow = document.createElement('div');
+            worldSizeRow.style.display = 'flex';
+            worldSizeRow.style.flexDirection = 'column';
+            worldSizeRow.style.gap = '4px';
+            worldSizeRow.style.marginBottom = '8px';
+            worldSizeRow.style.minWidth = '0';
+
+            const widthLabel = makeLabel('Width');
+            widthLabel.htmlFor = 'level-size-width-input';
+            widthLabel.style.marginBottom = '0';
+
+            const widthInput = document.createElement('input');
+            widthInput.id = 'level-size-width-input';
+            widthInput.type = 'number';
+            widthInput.min = '64';
+            widthInput.step = '1';
+            widthInput.value = widthValue;
+            widthInput.disabled = runtimeConfig === null;
+            widthInput.setAttribute('aria-label', 'Level width');
+            widthInput.style.width = '100%';
+            widthInput.style.boxSizing = 'border-box';
+            widthInput.style.minWidth = '0';
+
+            const heightLabel = makeLabel('Height');
+            heightLabel.htmlFor = 'level-size-height-input';
+            heightLabel.style.marginBottom = '0';
+
+            const heightInput = document.createElement('input');
+            heightInput.id = 'level-size-height-input';
+            heightInput.type = 'number';
+            heightInput.min = '64';
+            heightInput.step = '1';
+            heightInput.value = heightValue;
+            heightInput.disabled = runtimeConfig === null;
+            heightInput.setAttribute('aria-label', 'Level height');
+            heightInput.style.width = '100%';
+            heightInput.style.boxSizing = 'border-box';
+            heightInput.style.minWidth = '0';
+
+            worldSizeRow.append(widthLabel, widthInput, heightLabel, heightInput);
+            container.appendChild(worldSizeRow);
+
+            const levelSizeStatusLine = makeInfo(this.levelSizeStatusMessage ?? ' ');
+            levelSizeStatusLine.style.minHeight = '18px';
+            levelSizeStatusLine.style.color = '#9fe870';
+            container.appendChild(levelSizeStatusLine);
+
+            const commitWorldSize = (): void => {
+                if (!runtimeConfig) {
+                    return;
+                }
+                const parsedWidth = Number(widthInput.value);
+                const parsedHeight = Number(heightInput.value);
+                const nextWidth = Math.round(parsedWidth);
+                const nextHeight = Math.round(parsedHeight);
+                if (!Number.isFinite(nextWidth) || !Number.isFinite(nextHeight) || nextWidth < 64 || nextHeight < 64) {
+                    this.levelSizeStatusMessage = 'Level size must be finite numbers >= 64.';
+                    levelSizeStatusLine.textContent = this.levelSizeStatusMessage;
+                    levelSizeStatusLine.style.color = '#ff8a80';
+                    widthInput.value = widthValue;
+                    heightInput.value = heightValue;
+                    return;
+                }
+                const applied = this.applyWorldBounds(runtimeLevelMetaId, nextWidth, nextHeight);
+                if (!applied) {
+                    this.levelSizeStatusMessage = 'Unable to update level size in runtime config.';
+                    levelSizeStatusLine.textContent = this.levelSizeStatusMessage;
+                    levelSizeStatusLine.style.color = '#ff8a80';
+                    widthInput.value = widthValue;
+                    heightInput.value = heightValue;
+                    return;
+                }
+                this.levelSizeStatusMessage = `Applied level size: ${nextWidth} x ${nextHeight}`;
+                levelSizeStatusLine.textContent = this.levelSizeStatusMessage;
+                levelSizeStatusLine.style.color = '#9fe870';
+            };
+
+            widthInput.addEventListener('blur', commitWorldSize);
+            heightInput.addEventListener('blur', commitWorldSize);
+            widthInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    commitWorldSize();
+                }
+            });
+            heightInput.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter') {
+                    commitWorldSize();
+                }
+            });
 
             const selectLabel = makeLabel('Next level');
             selectLabel.htmlFor = 'level-next-level-id-select';
@@ -209,6 +307,25 @@ export class LevelEditorMode implements EditorMode {
         nextConfig.nextLevelId = nextLevelId;
         this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
         this.onUiChanged?.();
+    }
+
+    private applyWorldBounds(runtimeLevelMetaId: string, width: number, height: number): boolean {
+        const runtimeConfig = this.getRuntimeLevelConfig(runtimeLevelMetaId);
+        if (!runtimeConfig || !this.legacyObjectAdapter || !runtimeConfig.worldBounds) {
+            return false;
+        }
+        if (runtimeConfig.worldBounds.width === width && runtimeConfig.worldBounds.height === height) {
+            return true;
+        }
+        const nextConfig = cloneTestWorldConfig(runtimeConfig);
+        nextConfig.worldBounds.width = width;
+        nextConfig.worldBounds.height = height;
+        const result = this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
+        if (!result?.success) {
+            return false;
+        }
+        this.onUiChanged?.();
+        return true;
     }
 
     private collectDiagnostics(runtimeLevelMetaId: string, nextLevelId: string | null): string[] {

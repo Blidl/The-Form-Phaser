@@ -121,6 +121,7 @@ export class EditorShell {
     private readonly rightPanel: EditorPanel;
     private readonly cameraController: EditorCameraController;
     private readonly grid: EditorGrid;
+    private readonly levelBoundsOverlay: Phaser.GameObjects.Graphics;
     private readonly mouseWorldInfo: EditorMouseWorldInfo;
     private readonly projectStore: ProjectStore;
     private readonly legacyObjectAdapter: LegacyObjectAdapter | null;
@@ -138,6 +139,7 @@ export class EditorShell {
     private lastObservedRuntimeConfigSignature: string | null = null;
     private lastSavedRuntimeConfigSignature: string | null = null;
     private pendingLevelSwitchId: string | null = null;
+    private lastAppliedCameraBoundsSignature: string | null = null;
 
     public constructor(options: EditorShellOptions) {
         this.scene = options.scene;
@@ -229,6 +231,9 @@ export class EditorShell {
         });
         this.grid = new EditorGrid(this.scene);
         this.grid.setGridSize(32);
+        this.levelBoundsOverlay = this.scene.add.graphics();
+        this.levelBoundsOverlay.setDepth(4390);
+        this.levelBoundsOverlay.setVisible(false);
         this.mouseWorldInfo = new EditorMouseWorldInfo(this.scene, this.camera);
         this.scene.input.on('pointerdown', this.handlePointerDown, this);
         this.scene.input.on('pointermove', this.handlePointerMove, this);
@@ -356,6 +361,7 @@ export class EditorShell {
         this.grid.setVisible(gridSettings.enabled);
         this.cameraController.open();
         this.legacyObjectAdapter?.setEditorDebugViewActive(true);
+        this.levelBoundsOverlay.setVisible(true);
         objectDiag('[EditorActive]', {
             layer: 'src/editor EditorShell',
             editorOpen: true,
@@ -396,6 +402,8 @@ export class EditorShell {
 
         this.topTabs.setMouseWorldPosition(null, null);
         this.grid.setVisible(false);
+        this.levelBoundsOverlay.clear();
+        this.levelBoundsOverlay.setVisible(false);
         this.cameraController.close();
         this.legacyObjectAdapter?.setEditorDebugViewActive(false);
 
@@ -444,7 +452,9 @@ export class EditorShell {
         const gridSettings = this.projectStore.getGridSettings();
         this.grid.setGridSize(gridSettings.size);
         this.grid.setVisible(gridSettings.enabled);
+        this.syncMainCameraBoundsFromRuntimeConfig();
         this.grid.update(this.camera);
+        this.refreshLevelBoundsOverlay();
 
         const mouseWorld = this.mouseWorldInfo.read();
         if (!mouseWorld) {
@@ -468,6 +478,7 @@ export class EditorShell {
         this.close();
         this.cameraController.destroy();
         this.grid.destroy();
+        this.levelBoundsOverlay.destroy();
         this.scene.input.off('pointerdown', this.handlePointerDown, this);
         this.scene.input.off('pointermove', this.handlePointerMove, this);
         this.scene.input.off('pointerup', this.handlePointerUp, this);
@@ -597,6 +608,41 @@ export class EditorShell {
     private syncGameplayTimeUi(): void {
         const snapshot = this.gameplayTimeController.getSnapshot();
         this.topTabs.setGameplayTimeState(snapshot.stopped, snapshot.speed);
+    }
+
+    private refreshLevelBoundsOverlay(): void {
+        this.levelBoundsOverlay.clear();
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
+        const worldBounds = runtimeConfig?.worldBounds;
+        const width = Number.isFinite(worldBounds?.width) ? worldBounds.width : 0;
+        const height = Number.isFinite(worldBounds?.height) ? worldBounds.height : 0;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        this.levelBoundsOverlay.lineStyle(3, 0x00e676, 0.9);
+        this.levelBoundsOverlay.strokeRect(0, 0, width, height);
+        this.levelBoundsOverlay.lineStyle(1, 0xdcedc8, 0.9);
+        this.levelBoundsOverlay.strokeRect(2, 2, Math.max(0, width - 4), Math.max(0, height - 4));
+    }
+
+    private syncMainCameraBoundsFromRuntimeConfig(): void {
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
+        const worldBounds = runtimeConfig?.worldBounds;
+        const width = Number.isFinite(worldBounds?.width) ? worldBounds.width : 0;
+        const height = Number.isFinite(worldBounds?.height) ? worldBounds.height : 0;
+        if (width <= 0 || height <= 0) {
+            return;
+        }
+        const signature = `${width}x${height}`;
+        if (this.lastAppliedCameraBoundsSignature === signature) {
+            return;
+        }
+        this.camera.setBounds(0, 0, width, height);
+        const maxScrollX = Math.max(0, width - (this.camera.width / this.camera.zoom));
+        const maxScrollY = Math.max(0, height - (this.camera.height / this.camera.zoom));
+        this.camera.scrollX = Phaser.Math.Clamp(this.camera.scrollX, 0, maxScrollX);
+        this.camera.scrollY = Phaser.Math.Clamp(this.camera.scrollY, 0, maxScrollY);
+        this.lastAppliedCameraBoundsSignature = signature;
     }
 
     private handleSaveRequested(): void {
@@ -829,6 +875,7 @@ export class EditorShell {
                     onRuntimeConfigImported?: () => void;
                 };
                 backgroundMode.onRuntimeConfigImported?.();
+                this.renderActiveModeInspectors();
                 objectDiag('[EditorImport]', {
                     phase: 'success',
                     fileName,
