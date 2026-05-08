@@ -32,6 +32,8 @@ export class NpcEditorMode implements EditorMode {
     private readonly scene: Phaser.Scene;
     private readonly selectionOutline: Phaser.GameObjects.Graphics;
     private readonly escapeKey: Phaser.Input.Keyboard.Key | null;
+    private readonly handleShortcutKeyDown: (event: KeyboardEvent) => void;
+    private shortcutsAttached = false;
     private selectedNpcId: string | null = null;
     private lastSnapshotSignature: string | null = null;
     private npcLogicBindingCreateFormNpcId: string | null = null;
@@ -82,9 +84,13 @@ export class NpcEditorMode implements EditorMode {
         this.legacyObjectAdapter = options.legacyObjectAdapter;
         this.logicAuthoringService = new LogicAuthoringService(options.legacyObjectAdapter);
         this.onUiChanged = options.onUiChanged;
+        this.handleShortcutKeyDown = (event: KeyboardEvent) => {
+            this.handleKeyboardShortcuts(event);
+        };
     }
 
     public enter(): void {
+        this.attachShortcutListener();
         this.lastSnapshotSignature = this.readSnapshotSignature();
         this.draggingNpcId = null;
         this.dragCandidateNpcId = null;
@@ -93,6 +99,7 @@ export class NpcEditorMode implements EditorMode {
     }
 
     public exit(): void {
+        this.detachShortcutListener();
         this.draggingNpcId = null;
         this.dragCandidateNpcId = null;
         this.isNpcPointerDown = false;
@@ -128,7 +135,7 @@ export class NpcEditorMode implements EditorMode {
     public renderLeftInspector(panel: EditorPanel): void {
         const runtimeConfig = this.getCurrentRuntimeConfig();
         const npcs = runtimeConfig?.npcs ?? [];
-        this.syncSelectedNpc(npcs);
+        const selectedNpc = this.syncSelectedNpc(npcs);
 
         panel.setCustomContent('NPCs', (container) => {
             if (!runtimeConfig) {
@@ -149,6 +156,16 @@ export class NpcEditorMode implements EditorMode {
                 this.onUiChanged();
             });
             container.appendChild(createButton);
+            const deleteButton = document.createElement('button');
+            deleteButton.type = 'button';
+            deleteButton.textContent = 'Delete Selected NPC';
+            deleteButton.style.marginTop = '6px';
+            deleteButton.disabled = !selectedNpc;
+            this.bindEditorInputKeyboardGuards(deleteButton);
+            deleteButton.addEventListener('click', () => {
+                this.deleteSelectedNpc();
+            });
+            container.appendChild(deleteButton);
             if (this.placementModeActive) {
                 container.appendChild(this.makeInfoLine('Click level to place NPC.'));
             }
@@ -1252,6 +1269,69 @@ export class NpcEditorMode implements EditorMode {
         this.npcLogicBindingEnabledDraftById.delete(bindingId);
         this.npcLogicBindingErrorById.delete(bindingId);
         this.onUiChanged();
+    }
+
+    private handleKeyboardShortcuts(event: KeyboardEvent): void {
+        if (isEditorTextInputFocused()) {
+            return;
+        }
+        if (event.repeat) {
+            return;
+        }
+        if (event.key !== 'Delete' && event.key !== 'Del') {
+            return;
+        }
+        if (this.deleteSelectedNpc()) {
+            event.preventDefault();
+        }
+    }
+
+    private attachShortcutListener(): void {
+        if (this.shortcutsAttached || typeof document === 'undefined') {
+            return;
+        }
+        document.addEventListener('keydown', this.handleShortcutKeyDown, { capture: true });
+        this.shortcutsAttached = true;
+    }
+
+    private detachShortcutListener(): void {
+        if (!this.shortcutsAttached || typeof document === 'undefined') {
+            return;
+        }
+        document.removeEventListener('keydown', this.handleShortcutKeyDown, { capture: true });
+        this.shortcutsAttached = false;
+    }
+
+    private deleteSelectedNpc(): boolean {
+        const runtimeConfig = this.getCurrentRuntimeConfig();
+        const selectedNpcId = this.selectedNpcId?.trim() ?? '';
+        if (!runtimeConfig || !this.legacyObjectAdapter || !selectedNpcId) {
+            return false;
+        }
+        const deletedIndex = runtimeConfig.npcs.findIndex((entry) => entry.id === selectedNpcId);
+        if (deletedIndex < 0) {
+            return false;
+        }
+        const nextConfig = JSON.parse(JSON.stringify(runtimeConfig)) as TestWorldConfig;
+        nextConfig.npcs = nextConfig.npcs.filter((entry) => entry.id !== selectedNpcId);
+        if (nextConfig.logic?.bindings) {
+            nextConfig.logic.bindings = nextConfig.logic.bindings.filter((binding) => {
+                return !(binding.targetType === 'npc' && binding.targetId === selectedNpcId);
+            });
+        }
+        const importResult = this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
+        if (!importResult?.success) {
+            return false;
+        }
+        this.npcPositionDraftById.delete(selectedNpcId);
+        this.npcLogicBindingCreateError = null;
+        this.resetNpcLogicBindingCreateForm();
+        const nextNpcs = nextConfig.npcs;
+        const nextIndex = deletedIndex >= nextNpcs.length ? nextNpcs.length - 1 : deletedIndex;
+        this.selectedNpcId = nextIndex >= 0 ? nextNpcs[nextIndex]?.id ?? null : null;
+        this.syncSelectionOutline();
+        this.onUiChanged();
+        return true;
     }
 
     private bindEditorInputKeyboardGuards(input: HTMLElement): void {
