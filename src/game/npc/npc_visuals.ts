@@ -8,6 +8,13 @@ import type {
     TestNpcVisualShape
 } from './npc_types';
 import { resolveTestNpcManpuEmotion } from './npc_manpu';
+import {
+    PLAYER_MARKER_ACTIVE_ALPHA,
+    PLAYER_MARKER_FILL_COLOR,
+    PLAYER_MARKER_RADIUS,
+    PLAYER_MARKER_STROKE_COLOR,
+    PLAYER_MARKER_STROKE_WIDTH
+} from '../player/player_constants';
 
 export interface TestNpcVisualRuntime {
     rootObject: Phaser.GameObjects.Container;
@@ -61,8 +68,13 @@ export const createTestNpcVisualRuntime = (
         }
     };
     drawBody();
-    const accent = scene.add.rectangle(0, -visual.bodyHeight * 0.16, visual.bodyWidth * 0.52, 8, visual.accentColor ?? visual.strokeColor, 0.9);
-    const eye = scene.add.circle(0, -visual.bodyHeight * 0.12, 4, 0xffffff, 0.95);
+    const marker = scene.add.circle(
+        0,
+        -visual.bodyHeight * 0.16,
+        PLAYER_MARKER_RADIUS,
+        PLAYER_MARKER_FILL_COLOR,
+        PLAYER_MARKER_ACTIVE_ALPHA
+    ).setStrokeStyle(PLAYER_MARKER_STROKE_WIDTH, PLAYER_MARKER_STROKE_COLOR, PLAYER_MARKER_ACTIVE_ALPHA);
     const label = scene.add.text(0, -(visual.bodyHeight * 0.5) - 14, visual.label, {
         fontFamily: 'monospace',
         fontSize: '10px',
@@ -71,7 +83,7 @@ export const createTestNpcVisualRuntime = (
     const manpuContainer = scene.add.container(0, 0).setVisible(false);
     const manpuGraphics = scene.add.graphics();
     manpuContainer.add(manpuGraphics);
-    const container = scene.add.container(x, y, [body, accent, eye, label, manpuContainer]).setDepth(archetype === 'enemy' ? 4248 : 4244);
+    const container = scene.add.container(x, y, [body, marker, label, manpuContainer]).setDepth(archetype === 'enemy' ? 4248 : 4244);
     const scaleX = (visual as TestNpcVisualConfig & { scaleX?: number }).scaleX ?? 1;
     const scaleY = (visual as TestNpcVisualConfig & { scaleY?: number }).scaleY ?? 1;
     container.setScale(scaleX, scaleY);
@@ -84,39 +96,34 @@ export const createTestNpcVisualRuntime = (
         if (state === 'chase') {
             body.clear();
             drawBody();
-            accent.setFillStyle(0xffe082, 1);
-            eye.setFillStyle(0xffffff, 1);
+            marker.setFillStyle(0xffe082, 1);
             return;
         }
 
         if (state === 'alert') {
             body.clear();
             drawBody();
-            accent.setFillStyle(0xfff59d, 0.95);
-            eye.setFillStyle(0xffffff, 0.95);
+            marker.setFillStyle(0xfff59d, 0.95);
             return;
         }
 
         if (state === 'return_to_post') {
             body.clear();
             drawBody();
-            accent.setFillStyle(0xffd89a, 0.9);
-            eye.setFillStyle(0xf8fff4, 0.9);
+            marker.setFillStyle(0xffd89a, 0.9);
             return;
         }
 
         if (state === 'idle_patrol' || state === 'patrol') {
             body.clear();
             drawBody();
-            accent.setFillStyle(visual.accentColor ?? visual.strokeColor, 0.92);
-            eye.setFillStyle(0xffffff, 0.95);
+            marker.setFillStyle(visual.accentColor ?? visual.strokeColor, 0.92);
             return;
         }
 
         body.clear();
         drawBody();
-        accent.setFillStyle(visual.accentColor ?? visual.strokeColor, 0.82);
-        eye.setFillStyle(0xf5f5f5, 0.88);
+        marker.setFillStyle(visual.accentColor ?? visual.strokeColor, 0.82);
     };
 
     const stopManpuTweens = (): void => {
@@ -212,20 +219,12 @@ export const createTestNpcVisualRuntime = (
     };
 
     const applyPresentationStyle = (): void => {
-        if (presentationEmotion === 'alert') {
-            eye.setScale(1.2);
-        } else if (presentationEmotion === 'calm') {
-            eye.setScale(0.9);
-        } else {
-            eye.setScale(1);
-        }
-
         if (presentationAnimation === 'wave') {
-            accent.setScale(1.15, 1);
+            marker.setScale(1.15, 1);
         } else if (presentationAnimation === 'shake') {
-            accent.setScale(0.9, 1);
+            marker.setScale(0.9, 1);
         } else {
-            accent.setScale(1);
+            marker.setScale(1);
         }
         applyManpuStyle();
     };
@@ -240,8 +239,7 @@ export const createTestNpcVisualRuntime = (
         },
         setFacing: (nextFacing): void => {
             facing = nextFacing;
-            eye.setX(nextFacing * 4);
-            accent.setX(nextFacing * 2);
+            marker.setX(nextFacing * 2);
             applyManpuPlacement();
         },
         setState: (state): void => {
