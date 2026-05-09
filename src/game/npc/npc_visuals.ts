@@ -4,7 +4,8 @@ import type {
     TestNpcPresentationAnimation,
     TestNpcPresentationEmotion,
     TestNpcState,
-    TestNpcVisualConfig
+    TestNpcVisualConfig,
+    TestNpcVisualShape
 } from './npc_types';
 import { resolveTestNpcManpuEmotion } from './npc_manpu';
 
@@ -27,8 +28,39 @@ export const createTestNpcVisualRuntime = (
     archetype: TestNpcArchetype,
     visual: TestNpcVisualConfig
 ): TestNpcVisualRuntime => {
-    const body = scene.add.rectangle(0, 0, visual.bodyWidth, visual.bodyHeight, visual.fillColor, 0.95)
-        .setStrokeStyle(2, visual.strokeColor);
+    const resolvedShape = ((visual as TestNpcVisualConfig & { shape?: TestNpcVisualShape }).shape ?? 'rectangle');
+    const resolvedStrokeWidth = (visual as TestNpcVisualConfig & { strokeWidth?: number }).strokeWidth ?? 2;
+    const resolvedAlpha = (visual as TestNpcVisualConfig & { alpha?: number }).alpha ?? 0.95;
+    const body = scene.add.graphics();
+    const drawBody = (): void => {
+        body.clear();
+        body.fillStyle(visual.fillColor, resolvedAlpha);
+        if (resolvedStrokeWidth > 0) {
+            body.lineStyle(resolvedStrokeWidth, visual.strokeColor, Math.max(0.15, resolvedAlpha));
+        }
+        const halfW = visual.bodyWidth * 0.5;
+        const halfH = visual.bodyHeight * 0.5;
+        if (resolvedShape === 'circle' || resolvedShape === 'ball') {
+            const radius = Math.max(6, Math.min(halfW, halfH));
+            body.fillCircle(0, 0, radius);
+            if (resolvedStrokeWidth > 0) {
+                body.strokeCircle(0, 0, radius);
+            }
+            return;
+        }
+        if (resolvedShape === 'triangle') {
+            body.fillTriangle(0, -halfH, halfW, halfH, -halfW, halfH);
+            if (resolvedStrokeWidth > 0) {
+                body.strokeTriangle(0, -halfH, halfW, halfH, -halfW, halfH);
+            }
+            return;
+        }
+        body.fillRect(-halfW, -halfH, visual.bodyWidth, visual.bodyHeight);
+        if (resolvedStrokeWidth > 0) {
+            body.strokeRect(-halfW, -halfH, visual.bodyWidth, visual.bodyHeight);
+        }
+    };
+    drawBody();
     const accent = scene.add.rectangle(0, -visual.bodyHeight * 0.16, visual.bodyWidth * 0.52, 8, visual.accentColor ?? visual.strokeColor, 0.9);
     const eye = scene.add.circle(0, -visual.bodyHeight * 0.12, 4, 0xffffff, 0.95);
     const label = scene.add.text(0, -(visual.bodyHeight * 0.5) - 14, visual.label, {
@@ -40,6 +72,9 @@ export const createTestNpcVisualRuntime = (
     const manpuGraphics = scene.add.graphics();
     manpuContainer.add(manpuGraphics);
     const container = scene.add.container(x, y, [body, accent, eye, label, manpuContainer]).setDepth(archetype === 'enemy' ? 4248 : 4244);
+    const scaleX = (visual as TestNpcVisualConfig & { scaleX?: number }).scaleX ?? 1;
+    const scaleY = (visual as TestNpcVisualConfig & { scaleY?: number }).scaleY ?? 1;
+    container.setScale(scaleX, scaleY);
     let presentationAnimation: TestNpcPresentationAnimation | null = null;
     let presentationEmotion: TestNpcPresentationEmotion | null = null;
     let facing: -1 | 1 = 1;
@@ -47,34 +82,39 @@ export const createTestNpcVisualRuntime = (
 
     const applyStateStyle = (state: TestNpcState): void => {
         if (state === 'chase') {
-            body.setFillStyle(0xff7868, 1);
+            body.clear();
+            drawBody();
             accent.setFillStyle(0xffe082, 1);
             eye.setFillStyle(0xffffff, 1);
             return;
         }
 
         if (state === 'alert') {
-            body.setFillStyle(0xffc65c, 0.98);
+            body.clear();
+            drawBody();
             accent.setFillStyle(0xfff59d, 0.95);
             eye.setFillStyle(0xffffff, 0.95);
             return;
         }
 
         if (state === 'return_to_post') {
-            body.setFillStyle(0xe59b65, 0.95);
+            body.clear();
+            drawBody();
             accent.setFillStyle(0xffd89a, 0.9);
             eye.setFillStyle(0xf8fff4, 0.9);
             return;
         }
 
         if (state === 'idle_patrol' || state === 'patrol') {
-            body.setFillStyle(visual.fillColor, 0.95);
+            body.clear();
+            drawBody();
             accent.setFillStyle(visual.accentColor ?? visual.strokeColor, 0.92);
             eye.setFillStyle(0xffffff, 0.95);
             return;
         }
 
-        body.setFillStyle(visual.fillColor, 0.82);
+        body.clear();
+        drawBody();
         accent.setFillStyle(visual.accentColor ?? visual.strokeColor, 0.82);
         eye.setFillStyle(0xf5f5f5, 0.88);
     };

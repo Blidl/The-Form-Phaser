@@ -327,6 +327,12 @@ export class NpcEditorMode implements EditorMode {
             container.appendChild(this.makeKeyValueLine('profileId', selectedNpc.profileId));
             container.appendChild(this.makeKeyValueLine('position', `${selectedNpc.x}, ${selectedNpc.y}`));
             container.appendChild(this.makeKeyValueLine('selection debug', this.getSelectionDebugLine()));
+            container.appendChild(this.makeSpacer(8));
+            container.appendChild(this.makeSectionTitle('Settings'));
+            container.appendChild(this.makeNpcSettingsEditor(selectedNpc));
+            container.appendChild(this.makeSpacer(8));
+            container.appendChild(this.makeSectionTitle('Visual'));
+            container.appendChild(this.makeNpcVisualEditor(selectedNpc));
             container.appendChild(this.makeInfoLine('Drag NPC in scene or apply exact x/y below.'));
             container.appendChild(this.makeNpcPositionEditor(selectedNpc));
             container.appendChild(this.makeKeyValueLine('facing', selectedNpc.facing ?? '-'));
@@ -720,6 +726,156 @@ export class NpcEditorMode implements EditorMode {
         wrap.appendChild(this.makeInfoLine(`origin: ${entry.originX.toFixed(2)}, ${entry.originY.toFixed(2)}`));
         wrap.appendChild(this.makeInfoLine(`blocked reason: ${entry.blockedReason ?? '-'}`));
         return wrap;
+    }
+
+    private makeNpcSettingsEditor(selectedNpc: TestNpcInstanceConfig): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'grid';
+        wrap.style.gap = '6px';
+        const nameInput = document.createElement('input');
+        nameInput.type = 'text';
+        nameInput.value = selectedNpc.displayName ?? '';
+        this.bindEditorInputKeyboardGuards(nameInput);
+        nameInput.addEventListener('change', () => {
+            this.patchNpcConfigFields(selectedNpc.id, { displayName: nameInput.value });
+        });
+        wrap.appendChild(this.makeLabeledInput('Name', nameInput));
+
+        const shapeSelect = document.createElement('select');
+        shapeSelect.appendChild(new Option('Profile Default', ''));
+        ['ball', 'circle', 'square', 'triangle', 'rectangle'].forEach((value) => {
+            shapeSelect.appendChild(new Option(value, value));
+        });
+        shapeSelect.value = selectedNpc.visualOverrides?.shape ?? '';
+        this.bindEditorInputKeyboardGuards(shapeSelect);
+        shapeSelect.addEventListener('change', () => {
+            this.patchNpcConfigFields(selectedNpc.id, { shape: shapeSelect.value });
+        });
+        wrap.appendChild(this.makeLabeledInput('Type / Shape', shapeSelect));
+
+        const contactSelect = document.createElement('select');
+        contactSelect.appendChild(new Option('Profile Default', ''));
+        contactSelect.appendChild(new Option('Block', 'block'));
+        contactSelect.appendChild(new Option('Overlap', 'overlap'));
+        contactSelect.appendChild(new Option('Ignore', 'ignore'));
+        contactSelect.value = selectedNpc.playerBodyContactMode ?? '';
+        this.bindEditorInputKeyboardGuards(contactSelect);
+        contactSelect.addEventListener('change', () => {
+            this.patchNpcConfigFields(selectedNpc.id, { playerBodyContactMode: contactSelect.value });
+        });
+        wrap.appendChild(this.makeLabeledInput('Player Contact', contactSelect));
+        return wrap;
+    }
+
+    private makeNpcVisualEditor(selectedNpc: TestNpcInstanceConfig): HTMLDivElement {
+        const wrap = document.createElement('div');
+        wrap.style.display = 'grid';
+        wrap.style.gap = '6px';
+        const visual = selectedNpc.visualOverrides ?? {};
+        wrap.appendChild(this.makeNpcHexField(selectedNpc.id, 'Fill Color', visual.fillColor, 'fillColor'));
+        wrap.appendChild(this.makeNpcHexField(selectedNpc.id, 'Stroke Color', visual.strokeColor, 'strokeColor'));
+        wrap.appendChild(this.makeNpcNumberField(selectedNpc.id, 'Stroke Width', visual.strokeWidth, 'strokeWidth', 0.25));
+        wrap.appendChild(this.makeNpcNumberField(selectedNpc.id, 'Alpha', visual.alpha, 'alpha', 0.05));
+        wrap.appendChild(this.makeNpcNumberField(selectedNpc.id, 'Scale X', visual.scaleX, 'scaleX', 0.1));
+        wrap.appendChild(this.makeNpcNumberField(selectedNpc.id, 'Scale Y', visual.scaleY, 'scaleY', 0.1));
+        wrap.appendChild(this.makeNpcTextField(selectedNpc.id, 'Texture Key', visual.textureKey ?? '', 'textureKey'));
+        wrap.appendChild(this.makeNpcTextField(selectedNpc.id, 'Frame', visual.frame ?? '', 'frame'));
+        wrap.appendChild(this.makeNpcFacingField(selectedNpc));
+        wrap.appendChild(this.makeNpcVisualLayerField(selectedNpc));
+        wrap.appendChild(this.makeNpcRenderOrderField(selectedNpc));
+        return wrap;
+    }
+
+    private makeNpcFacingField(selectedNpc: TestNpcInstanceConfig): HTMLDivElement {
+        const select = document.createElement('select');
+        select.appendChild(new Option('Right', 'right'));
+        select.appendChild(new Option('Left', 'left'));
+        select.value = selectedNpc.facing ?? 'right';
+        this.bindEditorInputKeyboardGuards(select);
+        select.addEventListener('change', () => this.patchNpcConfigFields(selectedNpc.id, { facing: select.value }));
+        return this.makeLabeledInput('Facing', select);
+    }
+
+    private makeNpcVisualLayerField(selectedNpc: TestNpcInstanceConfig): HTMLDivElement {
+        const select = document.createElement('select');
+        select.appendChild(new Option('Default', ''));
+        ['layer_1', 'layer_2', 'layer_3', 'layer_4', 'layer_5'].forEach((layer) => select.appendChild(new Option(layer, layer)));
+        select.value = selectedNpc.visualLayer ?? '';
+        this.bindEditorInputKeyboardGuards(select);
+        select.addEventListener('change', () => this.patchNpcConfigFields(selectedNpc.id, { visualLayer: select.value }));
+        return this.makeLabeledInput('Visual Layer', select);
+    }
+
+    private makeNpcRenderOrderField(selectedNpc: TestNpcInstanceConfig): HTMLDivElement {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = '1';
+        input.value = Number.isFinite(selectedNpc.renderOrder) ? String(selectedNpc.renderOrder) : '';
+        this.bindEditorInputKeyboardGuards(input);
+        input.addEventListener('change', () => {
+            this.patchNpcConfigFields(selectedNpc.id, {
+                renderOrder: input.value.trim().length > 0 ? Number(input.value) : undefined
+            });
+        });
+        return this.makeLabeledInput('Render Order', input);
+    }
+
+    private makeNpcNumberField(
+        npcId: string,
+        label: string,
+        value: number | undefined,
+        patchKey: string,
+        step: number
+    ): HTMLDivElement {
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = String(step);
+        input.value = Number.isFinite(value) ? String(value) : '';
+        this.bindEditorInputKeyboardGuards(input);
+        input.addEventListener('change', () => {
+            this.patchNpcConfigFields(npcId, {
+                [patchKey]: input.value.trim().length > 0 ? Number(input.value) : undefined
+            });
+        });
+        return this.makeLabeledInput(label, input);
+    }
+
+    private makeNpcTextField(npcId: string, label: string, value: string, patchKey: string): HTMLDivElement {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = value;
+        this.bindEditorInputKeyboardGuards(input);
+        input.addEventListener('change', () => this.patchNpcConfigFields(npcId, { [patchKey]: input.value }));
+        return this.makeLabeledInput(label, input);
+    }
+
+    private makeNpcHexField(
+        npcId: string,
+        label: string,
+        value: number | undefined,
+        patchKey: string
+    ): HTMLDivElement {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = Number.isFinite(value) ? `#${Math.max(0, Math.min(0xffffff, Math.round(value))).toString(16).padStart(6, '0')}` : '';
+        this.bindEditorInputKeyboardGuards(input);
+        input.addEventListener('change', () => {
+            const raw = input.value.trim();
+            const parsed = raw.startsWith('#') ? Number.parseInt(raw.slice(1), 16) : Number.parseInt(raw, 16);
+            if (!Number.isFinite(parsed)) {
+                return;
+            }
+            this.patchNpcConfigFields(npcId, { [patchKey]: Math.max(0, Math.min(0xffffff, Math.round(parsed))) });
+        });
+        return this.makeLabeledInput(label, input);
+    }
+
+    private patchNpcConfigFields(npcId: string, patch: Record<string, unknown>): void {
+        if (!this.legacyObjectAdapter) {
+            return;
+        }
+        this.legacyObjectAdapter.patchRuntimeNpcFields(npcId, patch);
+        this.onUiChanged();
     }
 
     private makeNpcPositionEditor(selectedNpc: TestNpcInstanceConfig): HTMLDivElement {
@@ -1533,7 +1689,7 @@ export class NpcEditorMode implements EditorMode {
         return element;
     }
 
-    private makeLabeledInput(label: string, input: HTMLInputElement): HTMLDivElement {
+    private makeLabeledInput(label: string, input: HTMLElement): HTMLDivElement {
         const row = document.createElement('div');
         row.style.display = 'grid';
         row.style.gap = '2px';

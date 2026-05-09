@@ -131,8 +131,23 @@ export interface TestNpcBehaviorScriptsConfig {
     altActions?: string[];
 }
 
+export type TestNpcVisualShape = 'circle' | 'ball' | 'square' | 'triangle' | 'rectangle';
+
+export interface TestNpcVisualOverridesConfig {
+    shape?: TestNpcVisualShape;
+    textureKey?: string;
+    frame?: string;
+    fillColor?: number;
+    strokeColor?: number;
+    strokeWidth?: number;
+    alpha?: number;
+    scaleX?: number;
+    scaleY?: number;
+}
+
 export interface TestNpcInstanceConfig {
     id: string;
+    displayName?: string;
     profileId: string;
     x: number;
     y: number;
@@ -144,6 +159,7 @@ export interface TestNpcInstanceConfig {
     playerBodyContactMode?: TestNpcPlayerBodyContactMode;
     visualLayer?: TestNpcVisualLayer;
     renderOrder?: number;
+    visualOverrides?: TestNpcVisualOverridesConfig;
     behavior?: TestNpcBehaviorOverrides;
     behaviorScripts?: TestNpcBehaviorScriptsConfig;
 }
@@ -202,6 +218,7 @@ export interface TestNpcEnemyResolvedBehavior {
 export interface TestNpcResolvedConfig {
     instance: TestNpcInstanceConfig;
     profile: TestNpcProfile;
+    visual: TestNpcVisualConfig & TestNpcVisualOverridesConfig;
     facing: TestNpcFacing;
     scriptedLoopRef: string | null;
     sequenceHooks: TestNpcResolvedSequenceHooks;

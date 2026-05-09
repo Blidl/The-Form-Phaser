@@ -12,6 +12,7 @@ import type {
     TestNpcPlayerBodyContactMode,
     TestNpcProfile,
     TestNpcResolvedConfig,
+    TestNpcVisualShape,
     TestNpcInstanceConfig,
     TestNpcSequenceHookRestartPolicy,
     TestNpcSequenceHookRoute,
@@ -64,6 +65,16 @@ const asObject = (value: unknown): Record<string, unknown> | null => {
     return typeof value === 'object' && value !== null && !Array.isArray(value)
         ? value as Record<string, unknown>
         : null;
+};
+
+const asNpcVisualShape = (value: unknown): TestNpcVisualShape | undefined => {
+    return value === 'circle'
+        || value === 'ball'
+        || value === 'square'
+        || value === 'triangle'
+        || value === 'rectangle'
+        ? value
+        : undefined;
 };
 
 const asRestartPolicy = (
@@ -319,9 +330,36 @@ export const resolveTestNpcConfig = (instance: TestNpcInstanceConfig): TestNpcRe
             } satisfies TestNpcInteractionConfig;
         })();
 
+    const visualOverrides = instance.visualOverrides;
+    const visual = {
+        ...profile.visual,
+        shape: asNpcVisualShape(visualOverrides?.shape),
+        textureKey: asTrimmedString(visualOverrides?.textureKey) ?? undefined,
+        frame: asTrimmedString(visualOverrides?.frame) ?? undefined,
+        fillColor: typeof visualOverrides?.fillColor === 'number' && Number.isFinite(visualOverrides.fillColor)
+            ? Math.max(0, Math.min(0xffffff, Math.round(visualOverrides.fillColor)))
+            : profile.visual.fillColor,
+        strokeColor: typeof visualOverrides?.strokeColor === 'number' && Number.isFinite(visualOverrides.strokeColor)
+            ? Math.max(0, Math.min(0xffffff, Math.round(visualOverrides.strokeColor)))
+            : profile.visual.strokeColor,
+        strokeWidth: typeof visualOverrides?.strokeWidth === 'number' && Number.isFinite(visualOverrides.strokeWidth)
+            ? Math.max(0, Math.min(12, visualOverrides.strokeWidth))
+            : undefined,
+        alpha: typeof visualOverrides?.alpha === 'number' && Number.isFinite(visualOverrides.alpha)
+            ? Math.max(0, Math.min(1, visualOverrides.alpha))
+            : undefined,
+        scaleX: typeof visualOverrides?.scaleX === 'number' && Number.isFinite(visualOverrides.scaleX)
+            ? Math.max(0.1, Math.min(8, visualOverrides.scaleX))
+            : undefined,
+        scaleY: typeof visualOverrides?.scaleY === 'number' && Number.isFinite(visualOverrides.scaleY)
+            ? Math.max(0.1, Math.min(8, visualOverrides.scaleY))
+            : undefined
+    };
+
     return {
         instance,
         profile,
+        visual,
         facing: instance.facing === 'left' ? 'left' : 'right',
         scriptedLoopRef: instance.scriptedLoopRef === null
             ? null

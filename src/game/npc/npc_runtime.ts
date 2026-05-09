@@ -1067,8 +1067,8 @@ export const createTestNpcRuntime = (
             const bodyObject = scene.add.rectangle(
                 resolved.instance.x,
                 resolved.instance.y,
-                resolved.profile.visual.bodyWidth,
-                resolved.profile.visual.bodyHeight,
+                resolved.visual.bodyWidth,
+                resolved.visual.bodyHeight,
                 0xffffff,
                 0
             )
@@ -1076,7 +1076,7 @@ export const createTestNpcRuntime = (
                 .setActive(true);
             scene.physics.add.existing(bodyObject);
             const body = bodyObject.body as Physics.Arcade.Body;
-            body.setSize(resolved.profile.visual.bodyWidth, resolved.profile.visual.bodyHeight, true);
+            body.setSize(resolved.visual.bodyWidth, resolved.visual.bodyHeight, true);
             body.setCollideWorldBounds(true);
             body.setAllowGravity(true);
             body.setGravityY(NPC_GRAVITY_Y);
@@ -1098,8 +1098,8 @@ export const createTestNpcRuntime = (
             const supportMatterBody = scene.matter.add.rectangle(
                 resolved.instance.x,
                 resolved.instance.y,
-                resolved.profile.visual.bodyWidth,
-                resolved.profile.visual.bodyHeight,
+                resolved.visual.bodyWidth,
+                resolved.visual.bodyHeight,
                 { isStatic: true }
             );
             (supportMatterBody as MatterJS.BodyType & { pfCarryDeltaX?: number; pfCarryDeltaY?: number }).pfCarryDeltaX = 0;
@@ -1132,7 +1132,7 @@ export const createTestNpcRuntime = (
                     resolved.instance.x,
                     resolved.instance.y,
                     resolved.profile.archetype,
-                    resolved.profile.visual
+                    resolved.visual
                 ),
                 presentationAnimation: null,
                 presentationEmotion: null,

@@ -1986,9 +1986,38 @@ const normalizeNpcInstance = (
                 : undefined
         }
         : undefined;
+    const visualOverridesSource = asObject(raw?.visualOverrides);
+    const visualOverrides = visualOverridesSource
+        ? {
+            shape: visualOverridesSource.shape === 'circle'
+                || visualOverridesSource.shape === 'ball'
+                || visualOverridesSource.shape === 'square'
+                || visualOverridesSource.shape === 'triangle'
+                || visualOverridesSource.shape === 'rectangle'
+                ? visualOverridesSource.shape
+                : undefined,
+            textureKey: asOptionalString(visualOverridesSource.textureKey),
+            frame: asOptionalString(visualOverridesSource.frame),
+            fillColor: asColor(visualOverridesSource.fillColor, undefined),
+            strokeColor: asColor(visualOverridesSource.strokeColor, undefined),
+            strokeWidth: typeof visualOverridesSource.strokeWidth === 'number' && Number.isFinite(visualOverridesSource.strokeWidth)
+                ? Math.max(0, Math.min(12, visualOverridesSource.strokeWidth))
+                : undefined,
+            alpha: typeof visualOverridesSource.alpha === 'number' && Number.isFinite(visualOverridesSource.alpha)
+                ? Math.max(0, Math.min(1, visualOverridesSource.alpha))
+                : undefined,
+            scaleX: typeof visualOverridesSource.scaleX === 'number' && Number.isFinite(visualOverridesSource.scaleX)
+                ? clampScale(visualOverridesSource.scaleX, 1)
+                : undefined,
+            scaleY: typeof visualOverridesSource.scaleY === 'number' && Number.isFinite(visualOverridesSource.scaleY)
+                ? clampScale(visualOverridesSource.scaleY, 1)
+                : undefined
+        }
+        : undefined;
 
     return {
         id: ensureUniqueId(asString(raw?.id, `npc_${index + 1}`), usedIds, `npc_${index + 1}`),
+        displayName: asOptionalString(raw?.displayName),
         profileId,
         x: asNumber(raw?.x, 0),
         y: asNumber(raw?.y, 0),
@@ -2007,6 +2036,9 @@ const normalizeNpcInstance = (
         visualLayer: asVisualLayer(raw?.visualLayer, undefined),
         renderOrder: typeof raw?.renderOrder === 'number' && Number.isFinite(raw.renderOrder)
             ? Math.max(-9999, Math.min(9999, Math.round(raw.renderOrder)))
+            : undefined,
+        visualOverrides: visualOverrides && Object.values(visualOverrides).some((value) => value !== undefined)
+            ? visualOverrides
             : undefined,
         behavior,
         behaviorScripts: behaviorScripts && (
@@ -2030,12 +2062,14 @@ const normalizeNpcInstances = (
             profileId: entry.profileId,
             x: entry.x,
             y: entry.y,
+            displayName: entry.displayName,
             initialManpuEmotionId: entry.initialManpuEmotionId,
             facing: entry.facing,
             scriptedLoopRef: entry.scriptedLoopRef,
             sequenceHookOverrides: entry.sequenceHookOverrides,
             interactionOverride: entry.interactionOverride,
             playerBodyContactMode: entry.playerBodyContactMode,
+            visualOverrides: entry.visualOverrides,
             behavior: entry.behavior,
             behaviorScripts: entry.behaviorScripts
         }, usedIds, index)).filter((entry): entry is TestNpcInstanceConfig => entry !== null);

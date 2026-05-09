@@ -720,6 +720,7 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
     duplicate: (config, id) => ({
         ...config,
         id,
+        displayName: config.displayName,
         sequenceHookOverrides: config.sequenceHookOverrides
             ? { ...config.sequenceHookOverrides }
             : undefined,
@@ -731,6 +732,7 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
                     : config.interactionOverride.outcome
             }
             : undefined,
+        visualOverrides: config.visualOverrides ? { ...config.visualOverrides } : undefined,
         behavior: config.behavior ? { ...config.behavior } : undefined,
         behaviorScripts: cloneNpcBehaviorScripts(config.behaviorScripts)
     }),
@@ -750,6 +752,14 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         }
         if (typeof patch.profileId === 'string' && patch.profileId.trim().length > 0) {
             config.profileId = patch.profileId.trim();
+        }
+        if ('displayName' in patch) {
+            if (typeof patch.displayName === 'string') {
+                const nextDisplayName = patch.displayName.trim();
+                config.displayName = nextDisplayName.length > 0 ? nextDisplayName : undefined;
+            } else if (patch.displayName === null || patch.displayName === undefined) {
+                config.displayName = undefined;
+            }
         }
         if (typeof patch.initialManpuEmotionId === 'string') {
             const nextEmotionId = patch.initialManpuEmotionId.trim();
@@ -775,6 +785,52 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
             || patch.playerBodyContactMode === 'ignore'
         ) {
             config.playerBodyContactMode = patch.playerBodyContactMode;
+        }
+        const visualOverrides = config.visualOverrides ?? {};
+        if (patch.shape === '' || patch.shape === 'profile_default') {
+            visualOverrides.shape = undefined;
+        } else if (
+            patch.shape === 'circle'
+            || patch.shape === 'ball'
+            || patch.shape === 'square'
+            || patch.shape === 'triangle'
+            || patch.shape === 'rectangle'
+        ) {
+            visualOverrides.shape = patch.shape;
+        }
+        if (typeof patch.fillColor === 'number' && Number.isFinite(patch.fillColor)) {
+            visualOverrides.fillColor = Math.max(0, Math.min(0xffffff, Math.round(patch.fillColor)));
+        }
+        if (typeof patch.strokeColor === 'number' && Number.isFinite(patch.strokeColor)) {
+            visualOverrides.strokeColor = Math.max(0, Math.min(0xffffff, Math.round(patch.strokeColor)));
+        }
+        if (typeof patch.strokeWidth === 'number' && Number.isFinite(patch.strokeWidth)) {
+            visualOverrides.strokeWidth = Math.max(0, Math.min(12, patch.strokeWidth));
+        }
+        if (typeof patch.alpha === 'number' && Number.isFinite(patch.alpha)) {
+            visualOverrides.alpha = Math.max(0, Math.min(1, patch.alpha));
+        }
+        if (typeof patch.scaleX === 'number' && Number.isFinite(patch.scaleX)) {
+            visualOverrides.scaleX = Math.max(0.1, Math.min(8, patch.scaleX));
+        }
+        if (typeof patch.scaleY === 'number' && Number.isFinite(patch.scaleY)) {
+            visualOverrides.scaleY = Math.max(0.1, Math.min(8, patch.scaleY));
+        }
+        if ('textureKey' in patch) {
+            if (typeof patch.textureKey === 'string') {
+                const nextTextureKey = patch.textureKey.trim();
+                visualOverrides.textureKey = nextTextureKey.length > 0 ? nextTextureKey : undefined;
+            } else if (patch.textureKey === null || patch.textureKey === undefined) {
+                visualOverrides.textureKey = undefined;
+            }
+        }
+        if ('frame' in patch) {
+            if (typeof patch.frame === 'string') {
+                const nextFrame = patch.frame.trim();
+                visualOverrides.frame = nextFrame.length > 0 ? nextFrame : undefined;
+            } else if (patch.frame === null || patch.frame === undefined) {
+                visualOverrides.frame = undefined;
+            }
         }
         if (patch.scriptedLoopRef === '' || patch.scriptedLoopRef === 'profile_default') {
             config.scriptedLoopRef = undefined;
@@ -897,6 +953,9 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
         config.interactionOverride = interactionOverride.distancePx !== undefined || interactionOverride.outcome !== undefined
             ? interactionOverride
             : undefined;
+        config.visualOverrides = Object.values(visualOverrides).some((value) => value !== undefined)
+            ? visualOverrides
+            : undefined;
         config.behavior = behavior;
     },
     patchColors: () => undefined,
@@ -913,6 +972,7 @@ const npcAdapter: TestWorldEditorAdapter<TestNpcInstanceConfig> = {
                     : config.interactionOverride.outcome
             }
             : undefined,
+        visualOverrides: config.visualOverrides ? { ...config.visualOverrides } : undefined,
         behavior: config.behavior ? { ...config.behavior } : undefined,
         behaviorScripts: cloneNpcBehaviorScripts(config.behaviorScripts)
     })
