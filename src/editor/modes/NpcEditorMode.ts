@@ -668,12 +668,22 @@ export class NpcEditorMode implements EditorMode {
         if (!runtimeConfig || !this.legacyObjectAdapter) {
             return;
         }
+        const npcIndex = runtimeConfig.npcs.findIndex((entry) => entry.id === npcId);
+        if (npcIndex < 0) {
+            return;
+        }
         const nextConfig = JSON.parse(JSON.stringify(runtimeConfig)) as TestWorldConfig;
-        const npc = nextConfig.npcs.find((entry) => entry.id === npcId);
+        const npc = nextConfig.npcs[npcIndex];
         if (!npc) {
             return;
         }
-        const behaviorScripts = npc.behaviorScripts ?? {};
+        const behaviorScripts = npc.behaviorScripts
+            ? {
+                patrol: npc.behaviorScripts.patrol,
+                defaultAction: npc.behaviorScripts.defaultAction,
+                altActions: npc.behaviorScripts.altActions ? [...npc.behaviorScripts.altActions] : undefined
+            }
+            : {};
         if (field === 'patrol') {
             behaviorScripts.patrol = value ?? undefined;
         } else {
@@ -684,9 +694,7 @@ export class NpcEditorMode implements EditorMode {
         } else {
             npc.behaviorScripts = behaviorScripts;
         }
-        this.legacyObjectAdapter.patchRuntimeNpcFields(npcId, {
-            behaviorScripts: npc.behaviorScripts
-        });
+        this.legacyObjectAdapter.importRuntimeConfig(nextConfig, { mode: 'runtime_patch' });
         this.onUiChanged();
     }
 
@@ -847,6 +855,26 @@ export class NpcEditorMode implements EditorMode {
                     }
                 });
             });
+        }
+        if (trace.defaultActionTrace) {
+            wrap.appendChild(this.makeInfoLine('Default Action result:'));
+            wrap.appendChild(this.makeInfoLine(`  scriptId: ${trace.defaultActionTrace.scriptId ?? '-'}`));
+            wrap.appendChild(this.makeInfoLine(`  status: ${trace.defaultActionTrace.status}`));
+            if (trace.defaultActionTrace.reason?.trim()) {
+                wrap.appendChild(this.makeInfoLine(`  reason: ${trace.defaultActionTrace.reason}`));
+            }
+            if (trace.defaultActionTrace.commands.length <= 0) {
+                wrap.appendChild(this.makeInfoLine('  Command results: none'));
+            } else {
+                trace.defaultActionTrace.commands.forEach((command) => {
+                    wrap.appendChild(this.makeInfoLine(`  - command id: ${command.commandId}`));
+                    wrap.appendChild(this.makeInfoLine(`    type: ${command.type}`));
+                    wrap.appendChild(this.makeInfoLine(`    status: ${command.status}`));
+                    if (command.message?.trim()) {
+                        wrap.appendChild(this.makeInfoLine(`    message: ${command.message}`));
+                    }
+                });
+            }
         }
         return wrap;
     }

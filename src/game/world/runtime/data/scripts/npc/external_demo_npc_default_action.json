@@ -1,0 +1,27 @@
+{
+  "id": "external_demo_npc_default_action",
+  "name": "External Demo NPC Default Action",
+  "category": "npc.action",
+  "commands": [
+    {
+      "id": "npc_default_action_noop_01",
+      "type": "noop",
+      "params": {}
+    },
+    {
+      "id": "npc_default_action_set_flag_01",
+      "type": "set_world_flag",
+      "params": {
+        "key": "demo_npc_default_action",
+        "value": true
+      }
+    }
+  ],
+  "editor": {
+    "rawLines": [
+      "noop",
+      "set_world_flag demo_npc_default_action=true"
+    ],
+    "locked": false
+  }
+}

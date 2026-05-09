@@ -999,6 +999,33 @@ export const collectLogicScriptAssetDiagnostics = (
         });
 
         activeConfig.npcs.forEach((npc, npcIndex) => {
+            const assignedDefaultActionScriptId = typeof npc.behaviorScripts?.defaultAction === 'string'
+                ? npc.behaviorScripts.defaultAction.trim()
+                : '';
+            if (assignedDefaultActionScriptId.length > 0) {
+                const defaultActionPath = `npcs[${npcIndex}].behaviorScripts.defaultAction`;
+                const defaultActionScript = registryState.byId.get(assignedDefaultActionScriptId);
+                if (!defaultActionScript) {
+                    diagnostics.push({
+                        id: nextDiagnosticId('invalid_npc_behavior_script_assignment'),
+                        severity: 'error',
+                        code: 'invalid_surface_behavior_script_assignment',
+                        message: `NPC "${npc.id}" defaultAction behavior script "${assignedDefaultActionScriptId}" is assigned but missing from external script assets.`,
+                        scriptId: assignedDefaultActionScriptId,
+                        path: defaultActionPath
+                    });
+                } else if (defaultActionScript.category !== 'npc.action') {
+                    diagnostics.push({
+                        id: nextDiagnosticId('invalid_npc_behavior_script_assignment'),
+                        severity: 'error',
+                        code: 'invalid_surface_behavior_script_assignment',
+                        message: `NPC "${npc.id}" defaultAction behavior script "${assignedDefaultActionScriptId}" has category "${defaultActionScript.category}", expected "npc.action".`,
+                        scriptId: defaultActionScript.id,
+                        path: defaultActionPath
+                    });
+                }
+            }
+
             const assignedPatrolScriptId = typeof npc.behaviorScripts?.patrol === 'string'
                 ? npc.behaviorScripts.patrol.trim()
                 : '';

@@ -86,7 +86,11 @@ import type {
 } from '../../debug/event_debug_types';
 import {
     executeLogicBindingsForEvent,
+    executeLogicScriptForWorldOnStart,
     type LogicBindingEventTrace,
+    type LogicScriptCommandExecutionResult,
+    type LogicScriptRuntimeStatus,
+    type LogicScriptExecutionResult,
     type LogicScriptWorldOnStartExecutionContext,
     type LogicWorldOnStartTrace
 } from './logic_script_runtime';
@@ -188,6 +192,13 @@ export interface NpcInteractionCandidateTrace {
     inRange: boolean;
 }
 
+export interface NpcDefaultActionTrace {
+    scriptId: string | null;
+    status: LogicScriptRuntimeStatus;
+    reason?: string;
+    commands: LogicScriptCommandExecutionResult[];
+}
+
 export interface NpcInteractionTrace {
     attempted: boolean;
     attemptId: number;
@@ -198,6 +209,7 @@ export interface NpcInteractionTrace {
     candidateCount: number;
     candidates: NpcInteractionCandidateTrace[];
     bindingTrace?: LogicBindingEventTrace;
+    defaultActionTrace?: NpcDefaultActionTrace;
     message: string;
 }
 
@@ -1178,6 +1190,55 @@ export const createTestWorldRuntime = (
             return false;
         }
 
+        const executeNpcDefaultAction = (targetId: string): NpcDefaultActionTrace => {
+            const selectedNpc = currentConfig.npcs.find((entry) => entry.id === targetId) ?? null;
+            const scriptId = typeof selectedNpc?.behaviorScripts?.defaultAction === 'string'
+                ? selectedNpc.behaviorScripts.defaultAction.trim()
+                : '';
+            if (scriptId.length <= 0) {
+                return {
+                    scriptId: null,
+                    status: 'skipped',
+                    reason: 'no behaviorScripts.defaultAction assigned',
+                    commands: []
+                };
+            }
+
+            const script = getLogicScriptAsset(scriptId);
+            if (!script) {
+                return {
+                    scriptId,
+                    status: 'error',
+                    reason: `missing defaultAction script "${scriptId}"`,
+                    commands: []
+                };
+            }
+
+            if (script.category !== 'npc.action') {
+                return {
+                    scriptId,
+                    status: 'error',
+                    reason: `defaultAction script "${scriptId}" has category "${script.category}", expected "npc.action"`,
+                    commands: []
+                };
+            }
+
+            const result: LogicScriptExecutionResult = executeLogicScriptForWorldOnStart(
+                script,
+                createLogicScriptRuntimeContext()
+            );
+            return {
+                scriptId,
+                status: result.status,
+                reason: result.status === 'error'
+                    ? 'script execution error'
+                    : result.status === 'skipped'
+                        ? 'script execution skipped'
+                        : undefined,
+                commands: result.commands
+            };
+        };
+
         const bindingTrace = executeLogicBindingsForEvent(
             currentConfig,
             {
@@ -1187,7 +1248,38 @@ export const createTestWorldRuntime = (
             },
             createLogicScriptRuntimeContext()
         );
-        if (bindingTrace.bindings.length <= 0) {
+        if (bindingTrace.bindings.length > 0) {
+            const interactionStatus: NpcInteractionTraceStatus = bindingTrace.status === 'success'
+                ? 'executed'
+                : bindingTrace.status;
+            const selectedNpc = currentConfig.npcs.find((entry) => entry.id === selectedTargetId) ?? null;
+            const assignedDefaultAction = typeof selectedNpc?.behaviorScripts?.defaultAction === 'string'
+                ? selectedNpc.behaviorScripts.defaultAction.trim()
+                : '';
+            const statusMessage = interactionStatus === 'executed'
+                ? (assignedDefaultAction.length > 0
+                    ? `Executed explicit npc/onInteract for ${selectedTargetId}; behaviorScripts.defaultAction "${assignedDefaultAction}" was not run.`
+                    : `Executed explicit npc/onInteract for ${selectedTargetId}.`)
+                : interactionStatus === 'skipped'
+                    ? `Explicit npc/onInteract skipped for ${selectedTargetId}; behaviorScripts.defaultAction was not run because explicit binding takes precedence.`
+                    : `Explicit npc/onInteract execution error for ${selectedTargetId}; behaviorScripts.defaultAction was not run because explicit binding takes precedence.`;
+            lastNpcInteractionTrace = {
+                attempted: true,
+                attemptId,
+                status: interactionStatus,
+                selectedTargetId,
+                selectedDistancePx: roundDistance(selectedDistancePx),
+                radiusPx: NPC_LOGIC_INTERACTION_MAX_DISTANCE_PX,
+                candidateCount: candidateIds.length,
+                candidates,
+                bindingTrace,
+                message: statusMessage
+            };
+            return true;
+        }
+
+        const defaultActionTrace = executeNpcDefaultAction(selectedTargetId);
+        if (defaultActionTrace.scriptId === null) {
             lastNpcInteractionTrace = {
                 attempted: true,
                 attemptId,
@@ -1198,19 +1290,20 @@ export const createTestWorldRuntime = (
                 candidateCount: candidateIds.length,
                 candidates,
                 bindingTrace,
-                message: `Nearest NPC ${selectedTargetId} had no matching onInteract binding; no fallback NPC binding was executed.`
+                defaultActionTrace,
+                message: `Nearest NPC ${selectedTargetId} had no explicit npc/onInteract binding or behaviorScripts.defaultAction.`
             };
             return false;
         }
 
-        const interactionStatus: NpcInteractionTraceStatus = bindingTrace.status === 'success'
+        const interactionStatus: NpcInteractionTraceStatus = defaultActionTrace.status === 'success'
             ? 'executed'
-            : bindingTrace.status;
+            : defaultActionTrace.status;
         const statusMessage = interactionStatus === 'executed'
-            ? `Executed npc/onInteract for ${selectedTargetId}.`
+            ? `Executed behaviorScripts.defaultAction "${defaultActionTrace.scriptId}" for ${selectedTargetId}.`
             : interactionStatus === 'skipped'
-                ? `NPC interaction skipped for ${selectedTargetId}.`
-                : `NPC interaction execution error for ${selectedTargetId}.`;
+                ? `behaviorScripts.defaultAction "${defaultActionTrace.scriptId}" skipped for ${selectedTargetId}.`
+                : `behaviorScripts.defaultAction "${defaultActionTrace.scriptId}" execution error for ${selectedTargetId}.`;
         lastNpcInteractionTrace = {
             attempted: true,
             attemptId,
@@ -1221,6 +1314,7 @@ export const createTestWorldRuntime = (
             candidateCount: candidateIds.length,
             candidates,
             bindingTrace,
+            defaultActionTrace,
             message: statusMessage
         };
         return true;
