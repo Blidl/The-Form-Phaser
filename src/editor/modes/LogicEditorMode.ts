@@ -621,11 +621,13 @@ export class LogicEditorMode implements EditorMode {
     }
 
     private collectRegistryDiagnostics(): {
+        severity: 'warning' | 'error';
         code: string;
         message: string;
         scriptId?: string;
         commandId?: string;
         path?: string;
+        field?: string;
         cutsceneId?: string;
         missingParticipantId?: string;
     }[] {
@@ -634,11 +636,13 @@ export class LogicEditorMode implements EditorMode {
             return [];
         }
         const diagnostics = collectTestWorldLogicDiagnosticsWithRegistry(runtimeConfig).map((entry) => ({
+            severity: entry.severity,
             code: entry.code,
             message: entry.message,
             scriptId: entry.scriptId,
             commandId: entry.commandId,
             path: entry.path,
+            field: entry.field,
             cutsceneId: entry.cutsceneId,
             missingParticipantId: entry.missingParticipantId
         }));

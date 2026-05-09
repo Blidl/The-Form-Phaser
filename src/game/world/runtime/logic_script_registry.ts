@@ -11,6 +11,7 @@ import {
     isTestCutsceneRef
 } from '../../cutscene/test_cutscene_registry';
 import {
+    getLogicCommandDefinition,
     getStartCutsceneCommandIdFromParams,
     isKnownLogicCommandType,
     validateKnownLogicCommandParams
@@ -62,6 +63,12 @@ type LogicScriptRegistryReloadResult = {
 
 type NormalizeLogicScriptAssetsOptions = {
     scriptFileLookup?: ReadonlyMap<string, unknown>;
+};
+
+type RawLogicScriptEntry = {
+    raw: unknown;
+    manifestIndex: number;
+    path: string;
 };
 
 interface LogicScriptRegistryState {
@@ -215,7 +222,9 @@ const createRegistryLoadDiagnostic = (
         code: TestWorldLogicDiagnostic['code'];
         message: string;
         path?: string;
+        field?: string;
         scriptId?: string;
+        commandId?: string;
     }
 ): TestWorldLogicDiagnostic => {
     return {
@@ -224,8 +233,170 @@ const createRegistryLoadDiagnostic = (
         code: options.code,
         message: options.message,
         path: options.path,
-        scriptId: options.scriptId
+        field: options.field,
+        scriptId: options.scriptId,
+        commandId: options.commandId
     };
+};
+
+const isValidManifestScriptPath = (value: string): boolean => {
+    if (value.length <= 0) {
+        return false;
+    }
+    if (/^[a-zA-Z]:\//.test(value) || value.startsWith('//')) {
+        return false;
+    }
+    if (value.split('/').some((part) => part === '..')) {
+        return false;
+    }
+    return value.startsWith('scripts/') && value.endsWith('.json');
+};
+
+const isEventCommandType = (commandType: string): boolean => {
+    return commandType === 'noop'
+        || commandType === 'set_world_flag'
+        || commandType === 'start_cutscene';
+};
+
+const isEventScriptCategory = (category: TestWorldLogicScriptCategory): boolean => {
+    return category === 'object.action'
+        || category === 'platform.defaultAction'
+        || category === 'platform.action'
+        || category === 'npc.action'
+        || category === 'npc.altAction'
+        || category === 'cutscene.npc'
+        || category === 'cutscene.camera'
+        || category === 'cutscene.player'
+        || category === 'cutscene.other'
+        || category === 'trigger.action'
+        || category === 'world.rule';
+};
+
+const validateRawLogicScriptAsset = (
+    entry: RawLogicScriptEntry,
+    nextDiagnosticIndex: () => number
+): TestWorldLogicDiagnostic[] => {
+    const diagnostics: TestWorldLogicDiagnostic[] = [];
+    const raw = asObject(entry.raw);
+    const basePath = entry.path || `logic_scripts.json.scriptFiles[${entry.manifestIndex}]`;
+    const pushDiagnostic = (options: Parameters<typeof createRegistryLoadDiagnostic>[1]): void => {
+        diagnostics.push(createRegistryLoadDiagnostic(nextDiagnosticIndex(), options));
+    };
+
+    if (!raw) {
+        pushDiagnostic({
+            code: 'invalid_logic_script_shape',
+            message: `External script file "${basePath}" must contain a JSON object.`,
+            path: basePath
+        });
+        return diagnostics;
+    }
+
+    const scriptId = asOptionalString(raw.id);
+    const scriptIdForPath = scriptId ?? `script_file_${entry.manifestIndex + 1}`;
+    const scriptPath = `logicScripts.${scriptIdForPath}`;
+    if (!scriptId) {
+        pushDiagnostic({
+            code: 'invalid_logic_script_shape',
+            message: `External script file "${basePath}" is missing a non-empty script id.`,
+            path: `${basePath}.id`,
+            field: 'id'
+        });
+    }
+
+    if (!asOptionalString(raw.name)) {
+        pushDiagnostic({
+            code: 'invalid_logic_script_name',
+            message: `External script "${scriptIdForPath}" must have a non-empty name.`,
+            scriptId,
+            path: `${scriptPath}.name`,
+            field: 'name'
+        });
+    }
+
+    const category = normalizeLogicScriptCategory(raw.category);
+    if (!category) {
+        pushDiagnostic({
+            code: 'invalid_logic_script_category',
+            message: `External script "${scriptIdForPath}" has invalid category "${String(raw.category)}".`,
+            scriptId,
+            path: `${scriptPath}.category`,
+            field: 'category'
+        });
+    }
+
+    if (!Array.isArray(raw.commands)) {
+        pushDiagnostic({
+            code: 'invalid_logic_script_commands',
+            message: `External script "${scriptIdForPath}" must have a commands array.`,
+            scriptId,
+            path: `${scriptPath}.commands`,
+            field: 'commands'
+        });
+        return diagnostics;
+    }
+
+    const usedCommandIds = new Set<string>();
+    raw.commands.forEach((commandValue, commandIndex) => {
+        const commandPath = `${scriptPath}.commands[${commandIndex}]`;
+        const command = asObject(commandValue);
+        if (!command) {
+            pushDiagnostic({
+                code: 'invalid_logic_command_shape',
+                message: `External script "${scriptIdForPath}" command ${commandIndex + 1} must be an object.`,
+                scriptId,
+                path: commandPath
+            });
+            return;
+        }
+
+        const commandId = asOptionalString(command.id);
+        if (!commandId) {
+            pushDiagnostic({
+                code: 'invalid_logic_command_id',
+                message: `External script "${scriptIdForPath}" command ${commandIndex + 1} is missing a non-empty id.`,
+                scriptId,
+                path: `${commandPath}.id`,
+                field: 'id'
+            });
+        } else if (usedCommandIds.has(commandId)) {
+            pushDiagnostic({
+                code: 'duplicate_logic_command_id',
+                message: `External script "${scriptIdForPath}" has duplicate command id "${commandId}".`,
+                scriptId,
+                commandId,
+                path: `${commandPath}.id`,
+                field: 'id'
+            });
+        } else {
+            usedCommandIds.add(commandId);
+        }
+
+        const commandType = asOptionalString(command.type);
+        if (!commandType) {
+            pushDiagnostic({
+                code: 'unknown_logic_command_type',
+                message: `External script "${scriptIdForPath}" command "${commandId ?? `command_${commandIndex + 1}`}" is missing a non-empty type.`,
+                scriptId,
+                commandId,
+                path: `${commandPath}.type`,
+                field: 'type'
+            });
+        }
+
+        if (command.params !== undefined && !asObject(command.params)) {
+            pushDiagnostic({
+                code: 'invalid_logic_command_params',
+                message: `External script "${scriptIdForPath}" command "${commandId ?? `command_${commandIndex + 1}`}" params must be an object when present.`,
+                scriptId,
+                commandId,
+                path: `${commandPath}.params`,
+                field: 'params'
+            });
+        }
+    });
+
+    return diagnostics;
 };
 
 const normalizeLogicScriptAssets = (
@@ -249,12 +420,20 @@ const normalizeLogicScriptAssets = (
     const hasManifestShape = Array.isArray(rawRoot.scriptFiles);
     const hasLegacyShape = Array.isArray(rawRoot.scripts);
 
-    if (!hasManifestShape && !hasLegacyShape) {
-        return {
-            assets: [],
-            diagnostics,
-            error: 'Registry payload must be an object with a scripts or scriptFiles array.'
-        };
+    if (!hasManifestShape) {
+        diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
+            code: 'invalid_logic_manifest',
+            message: `${LOGIC_SCRIPT_REGISTRY_MANIFEST_PATH} must define scriptFiles as an array.`,
+            path: 'logic_scripts.json.scriptFiles',
+            field: 'scriptFiles'
+        }));
+        if (!hasLegacyShape) {
+            return {
+                assets: [],
+                diagnostics,
+                error: null
+            };
+        }
     }
 
     if (hasManifestShape && hasLegacyShape) {
@@ -266,7 +445,7 @@ const normalizeLogicScriptAssets = (
         }));
     }
 
-    const rawScriptEntries: unknown[] = [];
+    const rawScriptEntries: RawLogicScriptEntry[] = [];
 
     if (hasManifestShape) {
         const scriptFileLookup = options?.scriptFileLookup;
@@ -292,21 +471,22 @@ const normalizeLogicScriptAssets = (
             }
 
             const manifestPath = normalizeManifestScriptPath(scriptPath);
-            if (manifestPath.length <= 0) {
+            if (!isValidManifestScriptPath(manifestPath)) {
                 diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
-                    code: 'missing_logic_script_asset',
-                    message: `Manifest entry "${scriptPath}" is not a valid script file path.`,
-                    path: diagnosticPath
+                    code: 'invalid_logic_manifest_path',
+                    message: `Manifest entry "${scriptPath}" is not a valid script file path. Expected a relative scripts/*.json path.`,
+                    path: diagnosticPath,
+                    field: 'scriptFiles'
                 }));
                 return;
             }
 
             if (usedManifestPaths.has(manifestPath)) {
                 diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
-                    severity: 'warning',
                     code: 'duplicate_logic_script_ref',
                     message: `Manifest contains duplicate script file path "${manifestPath}".`,
-                    path: diagnosticPath
+                    path: diagnosticPath,
+                    field: 'scriptFiles'
                 }));
                 return;
             }
@@ -317,27 +497,39 @@ const normalizeLogicScriptAssets = (
                 diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
                     code: 'missing_logic_script_asset',
                     message: `Manifest path "${manifestPath}" does not resolve to a bundled script JSON module under ${LOGIC_SCRIPT_REGISTRY_DATA_PREFIX}scripts/.`,
-                    path: diagnosticPath
+                    path: diagnosticPath,
+                    field: 'scriptFiles'
                 }));
                 return;
             }
-            rawScriptEntries.push(rawScript);
+            rawScriptEntries.push({
+                raw: rawScript,
+                manifestIndex: entryIndex,
+                path: manifestPath
+            });
         });
     } else if (hasLegacyShape) {
-        rawScriptEntries.push(...rawRoot.scripts);
+        rawRoot.scripts.forEach((rawScript, index) => {
+            rawScriptEntries.push({
+                raw: rawScript,
+                manifestIndex: index,
+                path: `logic_scripts.json.scripts[${index}]`
+            });
+        });
     }
 
     const usedIds = new Set<string>();
     const normalized: TestWorldLogicScriptConfig[] = [];
+    const nextRawDiagnosticIndex = (): number => diagnostics.length + 1;
     rawScriptEntries.forEach((entry, entryIndex) => {
-        const script = normalizeLogicScript(entry);
+        diagnostics.push(...validateRawLogicScriptAsset(entry, nextRawDiagnosticIndex));
+
+        const script = normalizeLogicScript(entry.raw);
         if (!script) {
             diagnostics.push(createRegistryLoadDiagnostic(diagnostics.length + 1, {
                 code: 'missing_logic_script_asset',
-                message: `External script asset at index ${entryIndex} has invalid shape.`,
-                path: hasManifestShape
-                    ? `logic_scripts.json.scriptFiles[${entryIndex}]`
-                    : `logic_scripts.json.scripts[${entryIndex}]`
+                message: `External script asset "${entry.path}" has invalid shape and was not loaded.`,
+                path: entry.path
             }));
             return;
         }
@@ -347,9 +539,8 @@ const normalizeLogicScriptAssets = (
                 code: 'duplicate_logic_script_id',
                 message: `Duplicate external script id "${script.id}" detected while loading ${LOGIC_SCRIPT_REGISTRY_MANIFEST_PATH}.`,
                 scriptId: script.id,
-                path: hasManifestShape
-                    ? `logic_scripts.json.scriptFiles[${entryIndex}]`
-                    : `logic_scripts.json.scripts[${entryIndex}]`
+                path: entry.path,
+                field: 'id'
             }));
             return;
         }
@@ -647,6 +838,15 @@ export const collectLogicScriptAssetDiagnostics = (
         ? collectReferencedScriptRefIds(activeConfig)
         : null;
 
+    if (registryState.lastError) {
+        diagnostics.push({
+            id: nextDiagnosticId('invalid_logic_manifest'),
+            severity: 'error',
+            code: 'invalid_logic_manifest',
+            message: registryState.lastError,
+            path: 'logic_scripts.json'
+        });
+    }
     diagnostics.push(...registryState.loadDiagnostics.map((entry) => cloneLogicScriptDiagnostic(entry)));
 
     registryState.assets.forEach((script) => {
@@ -670,7 +870,41 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has unknown command type "${commandType}".`,
                     scriptId: script.id,
                     commandId,
-                    path: `${path}.type`
+                    path: `${path}.type`,
+                    field: 'type'
+                });
+                return;
+            }
+
+            const commandDefinition = getLogicCommandDefinition(commandType);
+            if (
+                commandDefinition
+                && commandDefinition.supportedScriptCategories
+                && !commandDefinition.supportedScriptCategories.includes(script.category)
+            ) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_category'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_category',
+                    message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is not valid for category "${script.category}".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`,
+                    field: 'type'
+                });
+                return;
+            }
+
+            if (isEventScriptCategory(script.category) && !isEventCommandType(commandType)) {
+                diagnostics.push({
+                    id: nextDiagnosticId('invalid_logic_command_category'),
+                    severity: 'error',
+                    code: 'invalid_logic_command_category',
+                    message: `Script "${script.id}" category "${script.category}" accepts event commands only for now; command "${commandId ?? `command_${commandIndex + 1}`}" uses "${commandType}".`,
+                    scriptId: script.id,
+                    commandId,
+                    path: `${path}.type`,
+                    field: 'type'
                 });
                 return;
             }
@@ -683,7 +917,8 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is not valid for category "platform.move"; expected "${PLATFORM_MOVE_PING_PONG_COMMAND_TYPE}".`,
                     scriptId: script.id,
                     commandId,
-                    path: `${path}.type`
+                    path: `${path}.type`,
+                    field: 'type'
                 });
                 return;
             }
@@ -696,7 +931,8 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is not valid for category "platform.rotate"; expected "${PLATFORM_ROTATE_CONSTANT_COMMAND_TYPE}".`,
                     scriptId: script.id,
                     commandId,
-                    path: `${path}.type`
+                    path: `${path}.type`,
+                    field: 'type'
                 });
                 return;
             }
@@ -709,7 +945,8 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is not valid for category "npc.patrol"; expected "${NPC_PATROL_PING_PONG_COMMAND_TYPE}".`,
                     scriptId: script.id,
                     commandId,
-                    path: `${path}.type`
+                    path: `${path}.type`,
+                    field: 'type'
                 });
                 return;
             }
@@ -722,7 +959,8 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is only valid for category "platform.move".`,
                     scriptId: script.id,
                     commandId,
-                    path: `${path}.type`
+                    path: `${path}.type`,
+                    field: 'type'
                 });
                 return;
             }
@@ -735,7 +973,8 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is only valid for category "npc.patrol".`,
                     scriptId: script.id,
                     commandId,
-                    path: `${path}.type`
+                    path: `${path}.type`,
+                    field: 'type'
                 });
                 return;
             }
@@ -748,7 +987,8 @@ export const collectLogicScriptAssetDiagnostics = (
                     message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" type "${commandType}" is only valid for category "platform.rotate".`,
                     scriptId: script.id,
                     commandId,
-                    path: `${path}.type`
+                    path: `${path}.type`,
+                    field: 'type'
                 });
                 return;
             }
@@ -785,7 +1025,8 @@ export const collectLogicScriptAssetDiagnostics = (
                     commandId,
                     path: paramsValidation.fieldPath
                         ? `${path}.${paramsValidation.fieldPath}`
-                        : `${path}.params`
+                        : `${path}.params`,
+                    field: paramsValidation.fieldPath ?? 'params'
                 });
                 return;
             }
@@ -804,7 +1045,8 @@ export const collectLogicScriptAssetDiagnostics = (
                         message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" has invalid params for "${commandType}" (requires non-empty cutsceneId).`,
                         scriptId: script.id,
                         commandId,
-                        path: `${path}.params.cutsceneId`
+                        path: `${path}.params.cutsceneId`,
+                        field: 'params.cutsceneId'
                     });
                     return;
                 }
@@ -817,7 +1059,8 @@ export const collectLogicScriptAssetDiagnostics = (
                         message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" references unknown cutscene "${cutsceneId}".`,
                         scriptId: script.id,
                         commandId,
-                        path: `${path}.params.cutsceneId`
+                        path: `${path}.params.cutsceneId`,
+                        field: 'params.cutsceneId'
                     });
                     return;
                 }
@@ -839,6 +1082,7 @@ export const collectLogicScriptAssetDiagnostics = (
                             scriptId: script.id,
                             commandId,
                             path: `${path}.params.cutsceneId`,
+                            field: 'params.cutsceneId',
                             cutsceneId,
                             missingParticipantId: participantId
                         });

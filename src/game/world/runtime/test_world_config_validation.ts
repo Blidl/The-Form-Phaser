@@ -102,6 +102,15 @@ const TEST_WORLD_LOGIC_BINDING_TARGET_TYPES = new Set<TestWorldLogicBindingTarge
 export type TestWorldLogicDiagnosticSeverity = 'warning' | 'error';
 
 export type TestWorldLogicDiagnosticCode =
+    | 'invalid_logic_manifest'
+    | 'invalid_logic_manifest_path'
+    | 'invalid_logic_script_shape'
+    | 'invalid_logic_script_name'
+    | 'invalid_logic_script_category'
+    | 'invalid_logic_script_commands'
+    | 'invalid_logic_command_shape'
+    | 'invalid_logic_command_id'
+    | 'duplicate_logic_command_id'
     | 'missing_logic_script_ref'
     | 'missing_logic_script_asset'
     | 'duplicate_logic_script_id'
@@ -129,6 +138,7 @@ export interface TestWorldLogicDiagnostic {
     targetId?: string;
     slot?: string;
     path?: string;
+    field?: string;
     cutsceneId?: string;
     missingParticipantId?: string;
 }

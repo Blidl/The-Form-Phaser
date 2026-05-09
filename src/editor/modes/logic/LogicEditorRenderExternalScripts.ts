@@ -11,11 +11,13 @@ export interface RenderExternalScriptsContext {
     externalAssets: TestWorldLogicScriptConfig[];
     referencedScriptRefIds: Set<string>;
     diagnostics: {
+        severity: 'warning' | 'error';
         code: string;
         message: string;
         scriptId?: string;
         commandId?: string;
         path?: string;
+        field?: string;
         cutsceneId?: string;
         missingParticipantId?: string;
     }[];
@@ -182,12 +184,15 @@ export function renderExternalScriptsSection(
         warningBox.appendChild(dom.makeInfoLine(`Diagnostics: ${diagnostics.length}`));
         warningBox.appendChild(dom.makeInfoLine('Includes unsupported runtime slot checks (world/onStart, object/onInteract, npc/onInteract, cutscene/onFinish).'));
         diagnostics.forEach((diagnostic) => {
-            warningBox.appendChild(dom.makeInfoLine(`[${diagnostic.code}] ${diagnostic.message}`));
+            warningBox.appendChild(dom.makeInfoLine(`[${diagnostic.severity}] [${diagnostic.code}] ${diagnostic.message}`));
             if (diagnostic.scriptId) {
                 warningBox.appendChild(dom.makeInfoLine(`script: ${diagnostic.scriptId}`));
             }
             if (diagnostic.commandId) {
                 warningBox.appendChild(dom.makeInfoLine(`command: ${diagnostic.commandId}`));
+            }
+            if (diagnostic.field) {
+                warningBox.appendChild(dom.makeInfoLine(`field: ${diagnostic.field}`));
             }
             if (diagnostic.path) {
                 warningBox.appendChild(dom.makeInfoLine(`path: ${diagnostic.path}`));

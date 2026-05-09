@@ -19,11 +19,13 @@ export interface RenderScriptDetailsContext {
     selectedExternalScript: TestWorldLogicScriptConfig | null;
     bindings: LogicSnapshot['bindings'];
     selectedScriptDiagnostics: {
+        severity: 'warning' | 'error';
         code: string;
         message: string;
         scriptId?: string;
         commandId?: string;
         path?: string;
+        field?: string;
         cutsceneId?: string;
         missingParticipantId?: string;
     }[];
@@ -260,9 +262,12 @@ export function renderScriptDetailsSection(
 
         diagnosticsBox.appendChild(dom.makeInfoLine(`Diagnostics: ${selectedScriptDiagnostics.length}`));
         selectedScriptDiagnostics.forEach((diagnostic) => {
-            diagnosticsBox.appendChild(dom.makeInfoLine(`[${diagnostic.code}] ${diagnostic.message}`));
+            diagnosticsBox.appendChild(dom.makeInfoLine(`[${diagnostic.severity}] [${diagnostic.code}] ${diagnostic.message}`));
             if (diagnostic.commandId) {
                 diagnosticsBox.appendChild(dom.makeInfoLine(`command: ${diagnostic.commandId}`));
+            }
+            if (diagnostic.field) {
+                diagnosticsBox.appendChild(dom.makeInfoLine(`field: ${diagnostic.field}`));
             }
             if (diagnostic.cutsceneId) {
                 diagnosticsBox.appendChild(dom.makeInfoLine(`cutsceneId: ${diagnostic.cutsceneId}`));
