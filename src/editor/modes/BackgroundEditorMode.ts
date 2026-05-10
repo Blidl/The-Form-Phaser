@@ -79,6 +79,7 @@ const BACKGROUND_SELECTION_OUTLINE_LOCKED_COLOR = 0xff5555;
 const BACKGROUND_RESIZE_HANDLE_SIZE = 8;
 const BACKGROUND_RESIZE_HANDLE_HIT_RADIUS = 6;
 const BACKGROUND_MIN_RESIZE_SIZE = 8;
+const DEFAULT_BACKGROUND_COLOR = '#263238';
 
 const clamp = (value: number, min: number, max: number): number => {
     return Math.max(min, Math.min(max, value));
@@ -196,6 +197,11 @@ export class BackgroundEditorMode implements EditorMode {
     private selectedAssetPresetId = DEFAULT_BACKGROUND_ASSET_PRESET_ID;
     private readonly handleShortcutKeyDown: (event: KeyboardEvent) => void;
     private shortcutsAttached = false;
+    private backgroundColorPaletteRoot: HTMLDivElement | null = null;
+    private backgroundColorPaletteHue = 0;
+    private backgroundColorPaletteSaturation = 1;
+    private backgroundColorPaletteValue = 1;
+    private readonly handleDocumentPointerDownForBackgroundColorPalette: (event: PointerEvent) => void;
 
     public constructor(options: BackgroundEditorModeOptions) {
         this.scene = options.scene;
@@ -206,6 +212,16 @@ export class BackgroundEditorMode implements EditorMode {
         this.selectionOutline.setVisible(false);
         this.handleShortcutKeyDown = (event: KeyboardEvent) => {
             this.handleKeyboardShortcuts(event);
+        };
+        this.handleDocumentPointerDownForBackgroundColorPalette = (event: PointerEvent) => {
+            if (!this.backgroundColorPaletteRoot) {
+                return;
+            }
+            const target = event.target instanceof Node ? event.target : null;
+            if (target && this.backgroundColorPaletteRoot.contains(target)) {
+                return;
+            }
+            this.closeBackgroundColorPalette();
         };
     }
 
@@ -220,6 +236,7 @@ export class BackgroundEditorMode implements EditorMode {
     }
 
     public exit(): void {
+        this.closeBackgroundColorPalette();
         this.detachShortcutListener();
         this.clearDragState();
         this.clearResizeState();
@@ -461,7 +478,7 @@ export class BackgroundEditorMode implements EditorMode {
             return;
         }
 
-        container.appendChild(this.makeTextField({
+        container.appendChild(this.makeGradientColorField({
             label: 'Color',
             value: colorToText(snapshot.backgroundColor ?? this.backgroundObjectAuthoringService.getBackgroundColor()),
             fieldKey: 'global.background.color',
@@ -661,7 +678,7 @@ export class BackgroundEditorMode implements EditorMode {
                 { textureAsset: value }
             ))
         }));
-        container.appendChild(this.makeTextField({
+        container.appendChild(this.makeGradientColorField({
             label: 'fillColor',
             value: colorToText(selectedObject.visual.fillColor),
             fieldKey: `object.${selectedObject.id}.visual.fillColor`,
@@ -1049,6 +1066,351 @@ export class BackgroundEditorMode implements EditorMode {
         title.style.fontWeight = 'bold';
         title.style.marginBottom = '4px';
         return title;
+    }
+
+    private makeGradientColorField(options: {
+        label: string;
+        value: string;
+        fieldKey: string;
+        disabled?: boolean;
+        onCommit: (value: string) => CommitResult;
+    }): HTMLDivElement {
+        const row = document.createElement('div');
+        row.style.marginBottom = '8px';
+        const label = this.makeLine(options.label);
+        label.style.marginBottom = '2px';
+        row.appendChild(label);
+
+        const controls = document.createElement('div');
+        controls.style.display = 'flex';
+        controls.style.gap = '6px';
+        controls.style.alignItems = 'center';
+
+        const swatch = document.createElement('button');
+        swatch.type = 'button';
+        swatch.style.width = '24px';
+        swatch.style.height = '24px';
+        swatch.style.border = '1px solid #5f5f5f';
+        swatch.style.background = options.value || DEFAULT_BACKGROUND_COLOR;
+        swatch.style.cursor = options.disabled ? 'not-allowed' : 'pointer';
+        swatch.disabled = options.disabled ?? false;
+        swatch.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (swatch.disabled) {
+                return;
+            }
+            this.toggleBackgroundColorPalette(swatch, options);
+        });
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = options.value;
+        input.style.flex = '1';
+        input.style.boxSizing = 'border-box';
+        input.style.border = '1px solid #777';
+        input.style.padding = '2px 4px';
+        input.disabled = options.disabled ?? false;
+        let lastCommittedValue = options.value;
+
+        const commit = (): void => {
+            if (input.disabled) {
+                return;
+            }
+            const nextValue = input.value;
+            if (nextValue === lastCommittedValue) {
+                if (this.fieldErrors.has(options.fieldKey)) {
+                    this.clearFieldError(options.fieldKey);
+                    this.onUiChanged();
+                }
+                return;
+            }
+            const result = options.onCommit(nextValue);
+            if (!result.success) {
+                this.setFieldError(options.fieldKey, result.error ?? 'Failed to apply value.');
+                this.onUiChanged();
+                return;
+            }
+            lastCommittedValue = nextValue;
+            swatch.style.background = nextValue || DEFAULT_BACKGROUND_COLOR;
+            this.clearFieldError(options.fieldKey);
+        };
+
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                commit();
+            }
+        });
+        input.addEventListener('change', commit);
+        input.addEventListener('blur', commit);
+        controls.appendChild(swatch);
+        controls.appendChild(input);
+        row.appendChild(controls);
+        const error = this.fieldErrors.get(options.fieldKey);
+        if (error) {
+            row.appendChild(this.makeErrorLine(error));
+        }
+        return row;
+    }
+
+    private toggleBackgroundColorPalette(anchor: HTMLElement, options: {
+        fieldKey: string;
+        value: string;
+        onCommit: (value: string) => CommitResult;
+    }): void {
+        if (this.backgroundColorPaletteRoot) {
+            this.closeBackgroundColorPalette();
+            return;
+        }
+        this.openBackgroundColorPalette(anchor, options);
+    }
+
+    private openBackgroundColorPalette(anchor: HTMLElement, options: {
+        fieldKey: string;
+        value: string;
+        onCommit: (value: string) => CommitResult;
+    }): void {
+        this.closeBackgroundColorPalette();
+        const normalized = colorToText(parseColorInput(options.value).value ?? 0x263238) || DEFAULT_BACKGROUND_COLOR;
+        const hsv = this.hexToHsv(normalized);
+        this.backgroundColorPaletteHue = hsv.h;
+        this.backgroundColorPaletteSaturation = hsv.s;
+        this.backgroundColorPaletteValue = hsv.v;
+
+        const palette = document.createElement('div');
+        palette.style.position = 'fixed';
+        palette.style.zIndex = '20000';
+        palette.style.width = '244px';
+        palette.style.border = '1px solid #5f5f5f';
+        palette.style.background = '#efefef';
+        palette.style.padding = '8px';
+        palette.style.boxSizing = 'border-box';
+        palette.style.boxShadow = '0 6px 14px rgba(0, 0, 0, 0.2)';
+
+        const title = document.createElement('div');
+        title.textContent = 'Color Palette';
+        title.style.fontSize = '11px';
+        title.style.marginBottom = '6px';
+        title.style.fontWeight = 'bold';
+        palette.appendChild(title);
+
+        const svArea = document.createElement('div');
+        svArea.style.width = '100%';
+        svArea.style.height = '124px';
+        svArea.style.position = 'relative';
+        svArea.style.cursor = 'crosshair';
+        svArea.style.marginBottom = '8px';
+        svArea.style.border = '1px solid #5f5f5f';
+        svArea.style.backgroundColor = '#ff0000';
+        svArea.style.backgroundImage = 'linear-gradient(to top, #000, transparent), linear-gradient(to right, #fff, transparent)';
+        const svHandle = document.createElement('div');
+        svHandle.style.position = 'absolute';
+        svHandle.style.width = '8px';
+        svHandle.style.height = '8px';
+        svHandle.style.border = '1px solid #ffffff';
+        svHandle.style.boxShadow = '0 0 0 1px #000000';
+        svHandle.style.borderRadius = '50%';
+        svHandle.style.pointerEvents = 'none';
+        svArea.appendChild(svHandle);
+        palette.appendChild(svArea);
+
+        const hueStrip = document.createElement('div');
+        hueStrip.style.width = '100%';
+        hueStrip.style.height = '14px';
+        hueStrip.style.border = '1px solid #5f5f5f';
+        hueStrip.style.cursor = 'ew-resize';
+        hueStrip.style.background = 'linear-gradient(to right, #ff0000 0%, #ffff00 17%, #00ff00 33%, #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%)';
+        hueStrip.style.position = 'relative';
+        hueStrip.style.marginBottom = '8px';
+        const hueHandle = document.createElement('div');
+        hueHandle.style.position = 'absolute';
+        hueHandle.style.top = '-2px';
+        hueHandle.style.width = '4px';
+        hueHandle.style.height = '18px';
+        hueHandle.style.background = '#ffffff';
+        hueHandle.style.border = '1px solid #000000';
+        hueHandle.style.pointerEvents = 'none';
+        hueStrip.appendChild(hueHandle);
+        palette.appendChild(hueStrip);
+
+        const hexInput = document.createElement('input');
+        hexInput.type = 'text';
+        hexInput.style.width = '100%';
+        hexInput.style.padding = '2px 4px';
+        hexInput.style.border = '1px solid #5f5f5f';
+        hexInput.style.boxSizing = 'border-box';
+        palette.appendChild(hexInput);
+
+        document.body.appendChild(palette);
+        this.backgroundColorPaletteRoot = palette;
+        const rect = anchor.getBoundingClientRect();
+        palette.style.left = `${Math.max(8, rect.left)}px`;
+        palette.style.top = `${Math.min(window.innerHeight - palette.offsetHeight - 8, rect.bottom + 4)}px`;
+
+        let draggingSv = false;
+        let draggingHue = false;
+        const updateUi = (): void => {
+            const hueColor = this.hsvToHex({ h: this.backgroundColorPaletteHue, s: 1, v: 1 });
+            svArea.style.backgroundColor = hueColor;
+            const x = Math.round(this.backgroundColorPaletteSaturation * (svArea.clientWidth - 1));
+            const y = Math.round((1 - this.backgroundColorPaletteValue) * (svArea.clientHeight - 1));
+            svHandle.style.left = `${Math.max(0, Math.min(svArea.clientWidth - 1, x)) - 4}px`;
+            svHandle.style.top = `${Math.max(0, Math.min(svArea.clientHeight - 1, y)) - 4}px`;
+            const hueX = Math.round((this.backgroundColorPaletteHue / 360) * (hueStrip.clientWidth - 1));
+            hueHandle.style.left = `${Math.max(0, Math.min(hueStrip.clientWidth - 1, hueX)) - 2}px`;
+            hexInput.value = this.hsvToHex({
+                h: this.backgroundColorPaletteHue,
+                s: this.backgroundColorPaletteSaturation,
+                v: this.backgroundColorPaletteValue
+            });
+        };
+        const commitColor = (): void => {
+            const hex = this.hsvToHex({
+                h: this.backgroundColorPaletteHue,
+                s: this.backgroundColorPaletteSaturation,
+                v: this.backgroundColorPaletteValue
+            });
+            const result = options.onCommit(hex);
+            if (!result.success) {
+                this.setFieldError(options.fieldKey, result.error ?? 'Failed to apply value.');
+            } else {
+                this.clearFieldError(options.fieldKey);
+            }
+            this.onUiChanged();
+        };
+        const updateSvFromEvent = (event: PointerEvent): void => {
+            const svRect = svArea.getBoundingClientRect();
+            const x = Phaser.Math.Clamp(event.clientX - svRect.left, 0, svRect.width);
+            const y = Phaser.Math.Clamp(event.clientY - svRect.top, 0, svRect.height);
+            this.backgroundColorPaletteSaturation = svRect.width <= 0 ? 1 : x / svRect.width;
+            this.backgroundColorPaletteValue = svRect.height <= 0 ? 1 : 1 - (y / svRect.height);
+            updateUi();
+            commitColor();
+        };
+        const updateHueFromEvent = (event: PointerEvent): void => {
+            const hueRect = hueStrip.getBoundingClientRect();
+            const x = Phaser.Math.Clamp(event.clientX - hueRect.left, 0, hueRect.width);
+            const nextHue = hueRect.width <= 0 ? 0 : (x / hueRect.width) * 360;
+            this.backgroundColorPaletteHue = nextHue >= 360 ? 359.999 : nextHue;
+            updateUi();
+            commitColor();
+        };
+
+        const pointerMove = (event: PointerEvent): void => {
+            if (draggingSv) {
+                updateSvFromEvent(event);
+            } else if (draggingHue) {
+                updateHueFromEvent(event);
+            }
+        };
+        const pointerUp = (): void => {
+            draggingSv = false;
+            draggingHue = false;
+            document.removeEventListener('pointermove', pointerMove, true);
+            document.removeEventListener('pointerup', pointerUp, true);
+        };
+
+        svArea.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            draggingSv = true;
+            updateSvFromEvent(event);
+            document.addEventListener('pointermove', pointerMove, true);
+            document.addEventListener('pointerup', pointerUp, true);
+        });
+        hueStrip.addEventListener('pointerdown', (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            draggingHue = true;
+            updateHueFromEvent(event);
+            document.addEventListener('pointermove', pointerMove, true);
+            document.addEventListener('pointerup', pointerUp, true);
+        });
+
+        hexInput.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter') {
+                return;
+            }
+            const parsed = parseColorInput(hexInput.value);
+            if (parsed.value === null || parsed.error) {
+                this.setFieldError(options.fieldKey, parsed.error ?? 'Invalid color.');
+                this.onUiChanged();
+                return;
+            }
+            const nextHex = colorToText(parsed.value) ?? DEFAULT_BACKGROUND_COLOR;
+            const nextHsv = this.hexToHsv(nextHex);
+            this.backgroundColorPaletteHue = nextHsv.h;
+            this.backgroundColorPaletteSaturation = nextHsv.s;
+            this.backgroundColorPaletteValue = nextHsv.v;
+            updateUi();
+            commitColor();
+        });
+
+        document.addEventListener('pointerdown', this.handleDocumentPointerDownForBackgroundColorPalette, true);
+        updateUi();
+    }
+
+    private closeBackgroundColorPalette(): void {
+        if (!this.backgroundColorPaletteRoot) {
+            return;
+        }
+        document.removeEventListener('pointerdown', this.handleDocumentPointerDownForBackgroundColorPalette, true);
+        this.backgroundColorPaletteRoot.remove();
+        this.backgroundColorPaletteRoot = null;
+    }
+
+    private hexToHsv(hex: string): { h: number; s: number; v: number } {
+        const normalized = parseColorInput(hex).value ?? 0xffffff;
+        const r = ((normalized >> 16) & 0xff) / 255;
+        const g = ((normalized >> 8) & 0xff) / 255;
+        const b = (normalized & 0xff) / 255;
+        const max = Math.max(r, g, b);
+        const min = Math.min(r, g, b);
+        const delta = max - min;
+        let h = 0;
+        if (delta > 0) {
+            if (max === r) {
+                h = ((g - b) / delta) % 6;
+            } else if (max === g) {
+                h = ((b - r) / delta) + 2;
+            } else {
+                h = ((r - g) / delta) + 4;
+            }
+            h *= 60;
+            if (h < 0) {
+                h += 360;
+            }
+        }
+        const s = max === 0 ? 0 : delta / max;
+        return { h, s, v: max };
+    }
+
+    private hsvToHex(hsv: { h: number; s: number; v: number }): string {
+        const h = ((hsv.h % 360) + 360) % 360;
+        const s = clamp(hsv.s, 0, 1);
+        const v = clamp(hsv.v, 0, 1);
+        const c = v * s;
+        const x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+        const m = v - c;
+        let r = 0;
+        let g = 0;
+        let b = 0;
+        if (h < 60) {
+            r = c; g = x; b = 0;
+        } else if (h < 120) {
+            r = x; g = c; b = 0;
+        } else if (h < 180) {
+            r = 0; g = c; b = x;
+        } else if (h < 240) {
+            r = 0; g = x; b = c;
+        } else if (h < 300) {
+            r = x; g = 0; b = c;
+        } else {
+            r = c; g = 0; b = x;
+        }
+        const toInt = (value: number): number => Math.round((value + m) * 255);
+        const hex = ((toInt(r) << 16) | (toInt(g) << 8) | toInt(b)).toString(16).padStart(6, '0');
+        return `#${hex}`;
     }
 
     private makeLine(text: string): HTMLDivElement {
