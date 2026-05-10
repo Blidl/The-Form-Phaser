@@ -927,6 +927,45 @@ export class EditorShell {
         if (!('finish' in candidate)) {
             return 'Missing required field: finish';
         }
+        const cutsceneValidationError = this.validateImportedCutscenes(candidate.cutscenes);
+        if (cutsceneValidationError) {
+            return cutsceneValidationError;
+        }
+        return null;
+    }
+
+    private validateImportedCutscenes(value: unknown): string | null {
+        if (value === undefined) {
+            return null;
+        }
+        if (!Array.isArray(value)) {
+            return 'Invalid cutscenes field: expected an array.';
+        }
+        const ids = new Set<string>();
+        for (let index = 0; index < value.length; index += 1) {
+            const entry = value[index];
+            if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+                return `Invalid cutscenes[${index}]: expected an object.`;
+            }
+            const raw = entry as Record<string, unknown>;
+            const id = typeof raw.id === 'string' ? raw.id.trim() : '';
+            if (!id) {
+                return `Invalid cutscenes[${index}].id: missing or empty string.`;
+            }
+            if (ids.has(id)) {
+                return `Duplicate cutscene id: ${id}`;
+            }
+            ids.add(id);
+            if (raw.name !== undefined && (typeof raw.name !== 'string' || raw.name.trim().length <= 0)) {
+                return `Invalid cutscenes[${index}].name: expected non-empty string.`;
+            }
+            if (raw.type !== undefined && raw.type !== 'interactive' && raw.type !== 'overlay') {
+                return `Invalid cutscenes[${index}].type: expected "interactive" or "overlay".`;
+            }
+            if (raw.durationMs !== undefined && (typeof raw.durationMs !== 'number' || !Number.isFinite(raw.durationMs) || raw.durationMs < 0)) {
+                return `Invalid cutscenes[${index}].durationMs: expected finite number >= 0.`;
+            }
+        }
         return null;
     }
 

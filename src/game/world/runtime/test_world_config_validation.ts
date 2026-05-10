@@ -21,6 +21,8 @@ import {
     type TestWorldMetaConfig,
     type TestWorldLogicBindingConfig,
     type TestWorldLogicBindingTargetType,
+    type TestWorldCutsceneConfig,
+    type TestWorldCutsceneStartConditionConfig,
     type TestWorldLogicConfig,
     type TestWorldLogicScriptCategory,
     type TestWorldLogicScriptCommandConfig,
@@ -250,6 +252,59 @@ const normalizeCameraConfig = (
 
 const asArray = (value: unknown): unknown[] => {
     return Array.isArray(value) ? value : [];
+};
+
+const normalizeCutsceneStartCondition = (
+    raw: Record<string, unknown> | null
+): TestWorldCutsceneStartConditionConfig | undefined => {
+    if (!raw) {
+        return undefined;
+    }
+    const triggerId = asOptionalString(raw.triggerId);
+    const scriptId = asOptionalString(raw.scriptId);
+    if (!triggerId && !scriptId) {
+        return undefined;
+    }
+    return {
+        triggerId,
+        scriptId
+    };
+};
+
+const normalizeCutscene = (
+    raw: Record<string, unknown> | null,
+    usedIds: Set<string>,
+    index: number
+): TestWorldCutsceneConfig => {
+    const fallbackId = `cutscene_${index + 1}`;
+    const id = ensureUniqueId(asString(raw?.id, fallbackId), usedIds, fallbackId);
+    const name = asString(raw?.name, `Cutscene ${index + 1}`);
+    const type = raw?.type === 'overlay' ? 'overlay' : 'interactive';
+    const durationMsRaw = typeof raw?.durationMs === 'number' && Number.isFinite(raw.durationMs)
+        ? raw.durationMs
+        : 1000;
+    const durationMs = Math.max(0, Math.round(durationMsRaw));
+    const startCondition = normalizeCutsceneStartCondition(asObject(raw?.startCondition));
+    const actors = Array.isArray(raw?.actors) ? [...raw.actors] : [];
+    const timeline = Array.isArray(raw?.timeline) ? [...raw.timeline] : [];
+    return {
+        id,
+        name,
+        type,
+        durationMs,
+        startCondition,
+        actors,
+        timeline
+    };
+};
+
+const normalizeCutscenes = (
+    rawItems: unknown,
+    defaults: readonly TestWorldCutsceneConfig[]
+): TestWorldCutsceneConfig[] => {
+    const source = rawItems === undefined ? defaults : asArray(rawItems);
+    const usedIds = new Set<string>();
+    return source.map((entry, index) => normalizeCutscene(asObject(entry), usedIds, index));
 };
 
 const clampRectSize = (value: number): number => {
@@ -2369,6 +2424,7 @@ export const normalizeTestWorldConfig = (
             scriptRefs: [],
             bindings: []
         },
+        cutscenes: normalizeCutscenes(root?.cutscenes, defaults.cutscenes ?? []),
         playerSpawn: normalizePlayerSpawn(asObject(root?.playerSpawn)),
         npcs: normalizeNpcInstances(root?.npcs, defaults.npcs, usedIds),
         surfaces: normalizeArray(
@@ -2469,6 +2525,7 @@ export const createMinimalTestWorldConfig = (
             scriptRefs: [],
             bindings: []
         },
+        cutscenes: [],
         playerSpawn: {
             x: 128,
             y: 128,

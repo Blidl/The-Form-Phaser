@@ -361,6 +361,21 @@ export interface TestWorldLogicConfig {
     bindings: TestWorldLogicBindingConfig[];
 }
 
+export interface TestWorldCutsceneStartConditionConfig {
+    triggerId?: string;
+    scriptId?: string;
+}
+
+export interface TestWorldCutsceneConfig {
+    id: string;
+    name: string;
+    type: 'interactive' | 'overlay';
+    durationMs: number;
+    startCondition?: TestWorldCutsceneStartConditionConfig;
+    actors?: unknown[];
+    timeline?: unknown[];
+}
+
 export interface TestWorldConfig {
     meta: TestWorldMetaConfig;
     worldBounds: TestWorldBoundsConfig;
@@ -369,6 +384,7 @@ export interface TestWorldConfig {
     worldFlags?: Record<string, boolean>;
     worldLogicRules?: TestWorldLogicRule[];
     logic: TestWorldLogicConfig;
+    cutscenes: TestWorldCutsceneConfig[];
     playerSpawn: TestWorldPlayerSpawnConfig;
     npcs: TestNpcInstanceConfig[];
     surfaces: TestWorldSurfaceConfig[];
