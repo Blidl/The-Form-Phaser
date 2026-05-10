@@ -46,6 +46,7 @@ interface RawLevelConfigEntry {
 }
 
 const CAMPAIGN_EDITOR_STORAGE_KEY = 'the-form:test-world:campaign-registry:v1';
+const CAMPAIGN_EDITOR_INITIAL_LEVEL_STORAGE_KEY = 'the-form:test-world:campaign-initial-level:v1';
 
 const rawLevelConfigs: readonly RawLevelConfigEntry[] = [
     {
@@ -136,6 +137,7 @@ const initialCampaignManifestDiagnostics: CampaignManifestDiagnostic[] = [];
 const bundledLevelRegistry = buildLevelRegistry(rawLevelConfigs, initialCampaignManifestDiagnostics);
 const levelRegistry = new Map<string, TestWorldConfig>(bundledLevelRegistry);
 const campaignLevelOrder = [...campaignConfig.levels.map((entry) => entry.id)];
+let campaignInitialLevelId = campaignConfig.initialLevelId;
 
 const canUseStorage = (): boolean => {
     return typeof window !== 'undefined' && typeof window.localStorage !== 'undefined';
@@ -147,16 +149,26 @@ const restoreEditorCampaignRegistry = (): void => {
     }
 
     const raw = window.localStorage.getItem(CAMPAIGN_EDITOR_STORAGE_KEY);
+    const persistedInitialLevelOverrideRaw = window.localStorage.getItem(CAMPAIGN_EDITOR_INITIAL_LEVEL_STORAGE_KEY);
+    const persistedInitialLevelOverride = typeof persistedInitialLevelOverrideRaw === 'string'
+        ? persistedInitialLevelOverrideRaw.trim()
+        : '';
     if (!raw) {
+        if (persistedInitialLevelOverride && campaignLevelOrder.includes(persistedInitialLevelOverride)) {
+            campaignInitialLevelId = persistedInitialLevelOverride;
+        }
         return;
     }
 
     try {
-        const parsed = JSON.parse(raw) as { levelOrder?: unknown; levels?: unknown };
+        const parsed = JSON.parse(raw) as { levelOrder?: unknown; levels?: unknown; initialLevelId?: unknown };
         const persistedLevels = Array.isArray(parsed.levels) ? parsed.levels : [];
         const persistedOrder = Array.isArray(parsed.levelOrder)
             ? parsed.levelOrder.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
             : [];
+        const persistedInitialLevelId = typeof parsed.initialLevelId === 'string'
+            ? parsed.initialLevelId.trim()
+            : '';
         const bundledIds = new Set(campaignConfig.levels.map((entry) => entry.id));
         const usesFullSnapshot = persistedOrder.some((levelId) => bundledIds.has(levelId))
             || persistedLevels.some((entry) => {
@@ -198,8 +210,17 @@ const restoreEditorCampaignRegistry = (): void => {
             }
         });
         campaignLevelOrder.splice(0, campaignLevelOrder.length, ...nextOrder.filter((levelId) => levelRegistry.has(levelId)));
+        if (persistedInitialLevelId && campaignLevelOrder.includes(persistedInitialLevelId)) {
+            campaignInitialLevelId = persistedInitialLevelId;
+        }
+        if (persistedInitialLevelOverride && campaignLevelOrder.includes(persistedInitialLevelOverride)) {
+            campaignInitialLevelId = persistedInitialLevelOverride;
+        }
     } catch {
         // Ignore malformed editor-only campaign registry data.
+        if (persistedInitialLevelOverride && campaignLevelOrder.includes(persistedInitialLevelOverride)) {
+            campaignInitialLevelId = persistedInitialLevelOverride;
+        }
     }
 };
 
@@ -220,7 +241,7 @@ const collectCampaignManifestDiagnostics = (): CampaignManifestDiagnostic[] => {
     const levelIds = [...campaignLevelOrder];
     const levelIdSet = new Set(levelIds);
 
-    const initialLevelId = campaignConfig.initialLevelId.trim();
+    const initialLevelId = campaignInitialLevelId.trim();
     if (!initialLevelId) {
         diagnostics.push({
             code: 'initial_level_missing',
@@ -300,8 +321,8 @@ const collectCampaignManifestDiagnostics = (): CampaignManifestDiagnostic[] => {
 };
 
 export const getInitialCampaignLevelId = (): string => {
-    if (campaignLevelOrder.includes(campaignConfig.initialLevelId)) {
-        return campaignConfig.initialLevelId;
+    if (campaignLevelOrder.includes(campaignInitialLevelId)) {
+        return campaignInitialLevelId;
     }
 
     const fallbackLevelId = campaignLevelOrder[0];
@@ -310,6 +331,19 @@ export const getInitialCampaignLevelId = (): string => {
     }
 
     return fallbackLevelId;
+};
+
+export const setInitialCampaignLevelId = (levelId: string): boolean => {
+    const trimmedLevelId = levelId.trim();
+    if (!trimmedLevelId || !campaignLevelOrder.includes(trimmedLevelId) || !levelRegistry.has(trimmedLevelId)) {
+        return false;
+    }
+    if (campaignInitialLevelId === trimmedLevelId) {
+        return true;
+    }
+    campaignInitialLevelId = trimmedLevelId;
+    persistEditorCampaignRegistry();
+    return true;
 };
 
 export const getCampaignLevelConfig = (levelId: string): TestWorldConfig => {
@@ -383,6 +417,7 @@ const persistEditorCampaignRegistry = (): void => {
         return;
     }
     const payload = JSON.stringify({
+        initialLevelId: campaignInitialLevelId,
         levelOrder: [...campaignLevelOrder],
         levels: campaignLevelOrder.map((levelId) => {
             const config = levelRegistry.get(levelId);
@@ -390,6 +425,7 @@ const persistEditorCampaignRegistry = (): void => {
         }).filter((entry) => entry !== null)
     });
     window.localStorage.setItem(CAMPAIGN_EDITOR_STORAGE_KEY, payload);
+    window.localStorage.setItem(CAMPAIGN_EDITOR_INITIAL_LEVEL_STORAGE_KEY, campaignInitialLevelId);
 };
 
 export const createCampaignLevel = (): TestWorldConfig => {
@@ -482,6 +518,9 @@ export const deleteCampaignLevel = (levelId: string): DeleteCampaignLevelResult 
 
     levelRegistry.delete(levelId);
     campaignLevelOrder.splice(0, campaignLevelOrder.length, ...nextOrder);
+    if (campaignInitialLevelId === levelId) {
+        campaignInitialLevelId = switchedToLevelId;
+    }
     clearTestWorldEditorDraft(levelId);
     persistEditorCampaignRegistry();
 

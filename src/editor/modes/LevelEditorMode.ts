@@ -10,6 +10,7 @@ import {
     getCampaignLevelSummaries,
     getCampaignManifestDiagnostics,
     getInitialCampaignLevelId,
+    setInitialCampaignLevelId,
     updateCampaignLevelConfig
 } from '../../game/world/runtime/test_campaign_registry';
 import {
@@ -218,6 +219,37 @@ export class LevelEditorMode implements EditorMode {
                 }
             });
             container.appendChild(this.makeField('Next level', nextSelect));
+
+            const initialSelect = document.createElement('select');
+            initialSelect.style.width = '100%';
+            initialSelect.style.boxSizing = 'border-box';
+            getCampaignLevelSummaries().forEach((level) => {
+                const option = document.createElement('option');
+                option.value = level.id;
+                option.textContent = `${level.displayName} (${level.id})`;
+                initialSelect.appendChild(option);
+            });
+            const currentInitialLevelId = getInitialCampaignLevelId();
+            if (!manifestLevelIds.includes(currentInitialLevelId)) {
+                const staleOption = document.createElement('option');
+                staleOption.value = currentInitialLevelId;
+                staleOption.textContent = `${currentInitialLevelId} (missing)`;
+                initialSelect.appendChild(staleOption);
+            }
+            initialSelect.value = currentInitialLevelId;
+            initialSelect.addEventListener('change', () => {
+                const nextInitialLevelId = initialSelect.value.trim();
+                if (!nextInitialLevelId) {
+                    return;
+                }
+                const updated = setInitialCampaignLevelId(nextInitialLevelId);
+                if (!updated) {
+                    this.setStatus(`Failed to set initial level to ${nextInitialLevelId}.`, true);
+                    return;
+                }
+                this.setStatus(`Initial level set to ${nextInitialLevelId}.`, false);
+            });
+            container.appendChild(this.makeField('Initial level', initialSelect));
 
             const openRow = document.createElement('div');
             openRow.style.display = 'flex';

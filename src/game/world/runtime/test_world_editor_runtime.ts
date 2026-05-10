@@ -43,6 +43,8 @@ import {
     createCampaignLevel,
     deleteCampaignLevel,
     getCampaignLevelSummaries,
+    getInitialCampaignLevelId,
+    setInitialCampaignLevelId,
     syncCampaignLevelHeader,
     type CampaignLevelConfigSource
 } from './test_campaign_registry';
@@ -1443,7 +1445,7 @@ export const createTestWorldEditorRuntime = (
             canRedo: redoStack.length > 0,
             levelId,
             pendingPlacementType,
-            levelSections: buildLevelSections(config, getCampaignLevelSummaries(), sourceAudit),
+            levelSections: buildLevelSections(config, getCampaignLevelSummaries(), getInitialCampaignLevelId(), sourceAudit),
             backgroundSections: buildBackgroundSections(config),
             palette: TEST_WORLD_EDITOR_PALETTE,
             objectItems: worldRuntime.getEditorObjects()
@@ -2006,6 +2008,17 @@ export const createTestWorldEditorRuntime = (
                 redoStack.length = 0;
                 onLevelConfigChanged?.(worldRuntime.getConfig());
                 markConfigDirty();
+                return;
+            }
+            if (key === 'initialLevelId') {
+                const nextInitialLevelId = String(value).trim();
+                if (!nextInitialLevelId) {
+                    return;
+                }
+                if (setInitialCampaignLevelId(nextInitialLevelId)) {
+                    setStatus(`initial level set: ${nextInitialLevelId}`);
+                    syncSidebar();
+                }
                 return;
             }
             if ((key === 'worldWidth' || key === 'worldHeight') && typeof value === 'number') {
@@ -4610,6 +4623,7 @@ interface TestWorldLevelSourceAuditView {
 const buildLevelSections = (
     config: TestWorldConfig,
     campaignLevels: ReadonlyArray<{ id: string; displayName: string }>,
+    initialLevelId: string,
     sourceAudit: TestWorldLevelSourceAuditView
 ): TestWorldEditorSidebarSection[] => {
     const nextLevelOptions = [
@@ -4625,12 +4639,17 @@ const buildLevelSections = (
         value: entry.id,
         label: `${entry.id} - ${entry.displayName}`
     }));
+    const initialLevelOptions = campaignLevels.map((entry) => ({
+        value: entry.id,
+        label: `${entry.id} - ${entry.displayName}`
+    }));
 
     return [
         {
             title: 'Metadata',
             fields: [
                 { key: 'displayName', label: 'Display Name', input: 'text', value: config.meta.displayName },
+                { key: 'initialLevelId', label: 'Initial Level', input: 'select', value: initialLevelId, options: initialLevelOptions },
                 { key: 'nextLevelId', label: 'Next Level', input: 'select', value: config.nextLevelId ?? '', options: nextLevelOptions },
                 { key: 'switchLevelId', label: 'Open Level', input: 'select', value: config.meta.id, options: switchLevelOptions }
             ]

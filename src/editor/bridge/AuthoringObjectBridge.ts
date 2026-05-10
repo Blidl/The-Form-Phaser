@@ -3,6 +3,7 @@ import type { LegacyObjectSource } from './LegacyObjectAdapter';
 import { saveTestWorldEditorDraft } from '../../game/world/runtime/test_world_editor_storage';
 import type { TestWorldConfig } from '../../game/world/runtime/test_world_config';
 import type { GameplayTimeController } from '../../scenes/runtime/gameplay_time_controller';
+import { updateCampaignLevelConfig } from '../../game/world/runtime/test_campaign_registry';
 
 const isCreatableLegacyType = (type: string): boolean => {
     return type === 'surface'
@@ -78,6 +79,30 @@ export const createAuthoringObjectBridgeSource = (
             const config = worldRuntime.getConfig();
             try {
                 saveTestWorldEditorDraft(levelId, config);
+                updateCampaignLevelConfig(levelId, (draft) => {
+                    draft.meta.displayName = config.meta.displayName;
+                    draft.worldBounds = { ...config.worldBounds };
+                    draft.background = config.background ? JSON.parse(JSON.stringify(config.background)) : null;
+                    draft.worldFlags = config.worldFlags ? { ...config.worldFlags } : undefined;
+                    draft.worldLogicRules = config.worldLogicRules
+                        ? JSON.parse(JSON.stringify(config.worldLogicRules))
+                        : undefined;
+                    draft.logic = config.logic ? JSON.parse(JSON.stringify(config.logic)) : undefined;
+                    draft.playerSpawn = { ...config.playerSpawn };
+                    draft.npcs = config.npcs.map((entry) => JSON.parse(JSON.stringify(entry)));
+                    draft.surfaces = config.surfaces.map((entry) => ({ ...entry }));
+                    draft.hazards = config.hazards.map((entry) => ({ ...entry }));
+                    draft.checkpoints = config.checkpoints.map((entry) => ({ ...entry }));
+                    draft.finish = config.finish ? { ...config.finish } : null;
+                    draft.movingPlatforms = config.movingPlatforms.map((entry) => ({ ...entry }));
+                    draft.triggerPlatforms = config.triggerPlatforms.map((entry) => ({ ...entry }));
+                    draft.triggerVolumes = config.triggerVolumes.map((entry) => JSON.parse(JSON.stringify(entry)));
+                    draft.dragBoxes = config.dragBoxes.map((entry) => ({ ...entry }));
+                    draft.windZones = config.windZones.map((entry) => ({ ...entry }));
+                    draft.triangleFlightBreakWalls = config.triangleFlightBreakWalls.map((entry) => ({ ...entry }));
+                    draft.trianglePickups = config.trianglePickups.map((entry) => ({ ...entry }));
+                    draft.nextLevelId = config.nextLevelId;
+                });
                 return {
                     success: true,
                     source: 'localStorage' as const,
