@@ -22,6 +22,7 @@ import {
     type TestWorldLogicBindingConfig,
     type TestWorldLogicBindingTargetType,
     type TestWorldCutsceneConfig,
+    type TestWorldCutsceneActorConfig,
     type TestWorldCutsceneStartConditionConfig,
     type TestWorldLogicConfig,
     type TestWorldLogicScriptCategory,
@@ -271,6 +272,36 @@ const normalizeCutsceneStartCondition = (
     };
 };
 
+const normalizeCutsceneActor = (
+    raw: Record<string, unknown> | null,
+    usedIds: Set<string>,
+    index: number
+): TestWorldCutsceneActorConfig => {
+    const fallbackId = `actor_${index + 1}`;
+    const id = ensureUniqueId(asString(raw?.id, fallbackId), usedIds, fallbackId);
+    const type = raw?.type === 'camera'
+        || raw?.type === 'player'
+        || raw?.type === 'npc'
+        || raw?.type === 'object'
+        ? raw.type
+        : 'camera';
+    const name = asString(raw?.name, type === 'camera' ? 'Camera' : `Actor ${index + 1}`);
+    const targetId = type === 'camera' ? undefined : asOptionalString(raw?.targetId);
+    return {
+        id,
+        name,
+        type,
+        targetId
+    };
+};
+
+const normalizeCutsceneActors = (rawItems: unknown): TestWorldCutsceneActorConfig[] => {
+    const actorEntries = asArray(rawItems);
+    const usedIds = new Set<string>();
+    return actorEntries
+        .map((entry, index) => normalizeCutsceneActor(asObject(entry), usedIds, index));
+};
+
 const normalizeCutscene = (
     raw: Record<string, unknown> | null,
     usedIds: Set<string>,
@@ -285,7 +316,7 @@ const normalizeCutscene = (
         : 1000;
     const durationMs = Math.max(0, Math.round(durationMsRaw));
     const startCondition = normalizeCutsceneStartCondition(asObject(raw?.startCondition));
-    const actors = Array.isArray(raw?.actors) ? [...raw.actors] : [];
+    const actors = normalizeCutsceneActors(raw?.actors);
     const timeline = Array.isArray(raw?.timeline) ? [...raw.timeline] : [];
     return {
         id,

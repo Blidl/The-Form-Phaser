@@ -927,14 +927,14 @@ export class EditorShell {
         if (!('finish' in candidate)) {
             return 'Missing required field: finish';
         }
-        const cutsceneValidationError = this.validateImportedCutscenes(candidate.cutscenes);
+        const cutsceneValidationError = this.validateImportedCutscenes(candidate.cutscenes, candidate);
         if (cutsceneValidationError) {
             return cutsceneValidationError;
         }
         return null;
     }
 
-    private validateImportedCutscenes(value: unknown): string | null {
+    private validateImportedCutscenes(value: unknown, root: Record<string, unknown>): string | null {
         if (value === undefined) {
             return null;
         }
@@ -942,6 +942,27 @@ export class EditorShell {
             return 'Invalid cutscenes field: expected an array.';
         }
         const ids = new Set<string>();
+        const npcIds = new Set(
+            Array.isArray(root.npcs)
+                ? root.npcs
+                    .map((entry) => (entry && typeof entry === 'object' ? (entry as Record<string, unknown>).id : null))
+                    .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+                    .map((entry) => entry.trim())
+                : []
+        );
+        const objectIds = new Set<string>([
+            ...this.collectImportedEntityIds(root.surfaces),
+            ...this.collectImportedEntityIds(root.hazards),
+            ...this.collectImportedEntityIds(root.checkpoints),
+            ...this.collectImportedEntityIds(root.movingPlatforms),
+            ...this.collectImportedEntityIds(root.triggerPlatforms),
+            ...this.collectImportedEntityIds(root.triggerVolumes),
+            ...this.collectImportedEntityIds(root.dragBoxes),
+            ...this.collectImportedEntityIds(root.windZones),
+            ...this.collectImportedEntityIds(root.triangleFlightBreakWalls),
+            ...this.collectImportedEntityIds(root.trianglePickups),
+            ...this.collectImportedEntityIds(Array.isArray(root.finish) ? [] : [root.finish])
+        ]);
         for (let index = 0; index < value.length; index += 1) {
             const entry = value[index];
             if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
@@ -965,8 +986,56 @@ export class EditorShell {
             if (raw.durationMs !== undefined && (typeof raw.durationMs !== 'number' || !Number.isFinite(raw.durationMs) || raw.durationMs < 0)) {
                 return `Invalid cutscenes[${index}].durationMs: expected finite number >= 0.`;
             }
+            if (raw.actors !== undefined) {
+                if (!Array.isArray(raw.actors)) {
+                    return `Invalid cutscenes[${index}].actors: expected an array.`;
+                }
+                const actorIds = new Set<string>();
+                for (let actorIndex = 0; actorIndex < raw.actors.length; actorIndex += 1) {
+                    const actor = raw.actors[actorIndex];
+                    if (!actor || typeof actor !== 'object' || Array.isArray(actor)) {
+                        return `Invalid cutscenes[${index}].actors[${actorIndex}]: expected an object.`;
+                    }
+                    const actorRaw = actor as Record<string, unknown>;
+                    const actorId = typeof actorRaw.id === 'string' ? actorRaw.id.trim() : '';
+                    if (!actorId) {
+                        return `Invalid cutscenes[${index}].actors[${actorIndex}].id: missing or empty string.`;
+                    }
+                    if (actorIds.has(actorId)) {
+                        return `Duplicate actor id "${actorId}" in cutscene "${id}".`;
+                    }
+                    actorIds.add(actorId);
+                    const actorType = actorRaw.type;
+                    if (actorType !== 'camera' && actorType !== 'player' && actorType !== 'npc' && actorType !== 'object') {
+                        return `Invalid cutscenes[${index}].actors[${actorIndex}].type: expected "camera", "player", "npc", or "object".`;
+                    }
+                    const targetId = typeof actorRaw.targetId === 'string' ? actorRaw.targetId.trim() : '';
+                    if (actorType !== 'camera' && !targetId) {
+                        return `Invalid cutscenes[${index}].actors[${actorIndex}].targetId: required for type "${actorType}".`;
+                    }
+                    if (actorType === 'player' && targetId && targetId !== 'player') {
+                        return `Invalid cutscenes[${index}].actors[${actorIndex}].targetId: player actor target must be "player".`;
+                    }
+                    if (actorType === 'npc' && targetId && !npcIds.has(targetId)) {
+                        return `Invalid cutscenes[${index}].actors[${actorIndex}].targetId: npc "${targetId}" not found.`;
+                    }
+                    if (actorType === 'object' && targetId && !objectIds.has(targetId)) {
+                        return `Invalid cutscenes[${index}].actors[${actorIndex}].targetId: object "${targetId}" not found.`;
+                    }
+                }
+            }
         }
         return null;
+    }
+
+    private collectImportedEntityIds(value: unknown): string[] {
+        if (!Array.isArray(value)) {
+            return [];
+        }
+        return value
+            .map((entry) => (entry && typeof entry === 'object' ? (entry as Record<string, unknown>).id : null))
+            .filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+            .map((entry) => entry.trim());
     }
 
     private createExportableRuntimeConfig(config: TestWorldConfig): TestWorldConfig {

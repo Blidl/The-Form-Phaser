@@ -366,13 +366,22 @@ export interface TestWorldCutsceneStartConditionConfig {
     scriptId?: string;
 }
 
+export type TestWorldCutsceneActorType = 'camera' | 'player' | 'npc' | 'object';
+
+export interface TestWorldCutsceneActorConfig {
+    id: string;
+    name: string;
+    type: TestWorldCutsceneActorType;
+    targetId?: string;
+}
+
 export interface TestWorldCutsceneConfig {
     id: string;
     name: string;
     type: 'interactive' | 'overlay';
     durationMs: number;
     startCondition?: TestWorldCutsceneStartConditionConfig;
-    actors?: unknown[];
+    actors?: TestWorldCutsceneActorConfig[];
     timeline?: unknown[];
 }
 
