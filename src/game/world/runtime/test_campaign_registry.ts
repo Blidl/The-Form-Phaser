@@ -472,7 +472,7 @@ export const updateCampaignLevelConfig = (
     edit(draft);
     draft.meta.id = existing.meta.id;
     const normalized = normalizeTestWorldConfig(draft, {
-        fallbackConfig: existing
+        fallbackConfig: draft
     });
     normalized.meta.id = existing.meta.id;
     levelRegistry.set(levelId, normalized);

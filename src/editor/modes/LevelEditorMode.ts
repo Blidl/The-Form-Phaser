@@ -426,11 +426,10 @@ export class LevelEditorMode implements EditorMode {
                 return null;
             }
             updateCampaignLevelConfig(levelId, (draft) => {
-                draft.meta.displayName = nextConfig.meta.displayName;
-                draft.worldBounds.width = nextConfig.worldBounds.width;
-                draft.worldBounds.height = nextConfig.worldBounds.height;
-                draft.camera = nextConfig.camera ? { ...nextConfig.camera } : undefined;
-                draft.nextLevelId = nextConfig.nextLevelId;
+                const synced = cloneTestWorldConfig(nextConfig);
+                synced.meta.id = draft.meta.id;
+                Object.assign(draft, synced);
+                draft.meta.id = levelId;
             });
             this.onUiChanged?.();
             return nextConfig;
