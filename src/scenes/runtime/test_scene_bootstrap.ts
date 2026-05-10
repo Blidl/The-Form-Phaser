@@ -38,6 +38,7 @@ import {
 } from '../../game/world/runtime/test_world_runtime';
 import type { RespawnPoint } from '../../game/world/runtime/world_runtime_types';
 import {
+    applyFollowCameraProfile,
     refreshBaselineFollowCameraLerp,
     setupBaselineFollowCamera
 } from '../../game/camera/follow_camera';
@@ -162,7 +163,7 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
     const camera = setupBaselineFollowCamera(scene, player.arcadeBodyObject, {
         width: initialWorldLoad.config.worldBounds.width,
         height: initialWorldLoad.config.worldBounds.height
-    });
+    }, initialWorldLoad.config.camera);
 
     const hudRuntime = createTestHudRuntime({
         scene,
@@ -214,6 +215,15 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
         },
         (config) => {
             backgroundRuntime.applyConfig(config);
+            applyFollowCameraProfile(
+                camera,
+                player.arcadeBodyObject,
+                {
+                    width: config.worldBounds.width,
+                    height: config.worldBounds.height
+                },
+                config.camera
+            );
         },
         (basis) => {
             backgroundRuntime.setEditorPreviewCameraBasis(basis);
@@ -241,7 +251,11 @@ export const createTestSceneBootstrapRuntime = (scene: Scene, levelId?: string, 
     });
     const tuningRuntime = createPlayerTuningRuntime();
     tuningRuntime.subscribe(() => {
-        refreshBaselineFollowCameraLerp(camera);
+        const cameraConfig = worldRuntime.getConfig().camera;
+        refreshBaselineFollowCameraLerp(camera, {
+            lerpX: cameraConfig?.lerpX,
+            lerpY: cameraConfig?.lerpY
+        });
     });
     const tuningPanelRuntime = createPlayerTuningPanelRuntime({
         scene,

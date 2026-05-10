@@ -2047,6 +2047,52 @@ export const createTestWorldEditorRuntime = (
                 markConfigDirty();
                 return;
             }
+            if (
+                key === 'cameraEnabled'
+                || key === 'cameraZoom'
+                || key === 'cameraLerpX'
+                || key === 'cameraLerpY'
+                || key === 'cameraOffsetX'
+                || key === 'cameraOffsetY'
+                || key === 'cameraDeadzoneWidth'
+                || key === 'cameraDeadzoneHeight'
+            ) {
+                pushUndoSnapshot();
+                config.camera = config.camera ?? {
+                    enabled: true,
+                    zoom: 1,
+                    lerpX: 0.18,
+                    lerpY: 0.18,
+                    offsetX: 0,
+                    offsetY: 96,
+                    deadzoneWidth: 0,
+                    deadzoneHeight: 0
+                };
+                if (key === 'cameraEnabled' && typeof value === 'boolean') {
+                    config.camera.enabled = value;
+                } else if (key === 'cameraZoom' && typeof value === 'number') {
+                    config.camera.zoom = Math.max(0.2, Math.min(4, value));
+                } else if (key === 'cameraLerpX' && typeof value === 'number') {
+                    config.camera.lerpX = Math.max(0, Math.min(1, value));
+                } else if (key === 'cameraLerpY' && typeof value === 'number') {
+                    config.camera.lerpY = Math.max(0, Math.min(1, value));
+                } else if (key === 'cameraOffsetX' && typeof value === 'number') {
+                    config.camera.offsetX = value;
+                } else if (key === 'cameraOffsetY' && typeof value === 'number') {
+                    config.camera.offsetY = value;
+                } else if (key === 'cameraDeadzoneWidth' && typeof value === 'number') {
+                    config.camera.deadzoneWidth = Math.max(0, value);
+                } else if (key === 'cameraDeadzoneHeight' && typeof value === 'number') {
+                    config.camera.deadzoneHeight = Math.max(0, value);
+                }
+                worldRuntime.setConfig(config);
+                syncCampaignLevelHeader(config);
+                redoStack.length = 0;
+                onLevelConfigChanged?.(worldRuntime.getConfig());
+                markConfigDirty();
+                setStatus('camera updated');
+                return;
+            }
             pushUndoSnapshot();
             if (applyBackgroundLevelField(config, key as BackgroundLevelFieldKey, value)) {
                 worldRuntime.setConfig(config);
@@ -4659,6 +4705,19 @@ const buildLevelSections = (
             fields: [
                 { key: 'worldWidth', label: 'Width', input: 'number', value: config.worldBounds.width, min: 64, step: 1 },
                 { key: 'worldHeight', label: 'Height', input: 'number', value: config.worldBounds.height, min: 64, step: 1 }
+            ]
+        },
+        {
+            title: 'Camera',
+            fields: [
+                { key: 'cameraEnabled', label: 'Use Level Camera', input: 'checkbox', value: config.camera?.enabled ?? true },
+                { key: 'cameraZoom', label: 'Zoom', input: 'number', value: config.camera?.zoom ?? 1, min: 0.2, step: 0.05 },
+                { key: 'cameraLerpX', label: 'Lerp X (Inertia)', input: 'number', value: config.camera?.lerpX ?? 0.18, min: 0, step: 0.01 },
+                { key: 'cameraLerpY', label: 'Lerp Y (Inertia)', input: 'number', value: config.camera?.lerpY ?? 0.18, min: 0, step: 0.01 },
+                { key: 'cameraOffsetX', label: 'Offset X', input: 'number', value: config.camera?.offsetX ?? 0, step: 1 },
+                { key: 'cameraOffsetY', label: 'Offset Y', input: 'number', value: config.camera?.offsetY ?? 96, step: 1 },
+                { key: 'cameraDeadzoneWidth', label: 'Free Window Width', input: 'number', value: config.camera?.deadzoneWidth ?? 0, min: 0, step: 1 },
+                { key: 'cameraDeadzoneHeight', label: 'Free Window Height', input: 'number', value: config.camera?.deadzoneHeight ?? 0, min: 0, step: 1 }
             ]
         },
         {

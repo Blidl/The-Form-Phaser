@@ -1,4 +1,5 @@
 import Phaser, { type Scene } from 'phaser';
+import { PLAYER_CAMERA_FOLLOW_LERP } from '../../game/player/player_constants';
 
 interface EditorCameraControllerOptions {
     scene: Scene;
@@ -17,7 +18,6 @@ export class EditorCameraController {
     private readonly scene: Scene;
     private readonly camera: Phaser.Cameras.Scene2D.Camera;
     private readonly followTarget: Phaser.GameObjects.GameObject;
-    private readonly defaultZoom: number;
     private active: boolean;
     private dragState: DragState | null;
 
@@ -25,7 +25,6 @@ export class EditorCameraController {
         this.scene = options.scene;
         this.camera = options.camera;
         this.followTarget = options.followTarget;
-        this.defaultZoom = options.camera.zoom;
         this.active = false;
         this.dragState = null;
 
@@ -49,8 +48,7 @@ export class EditorCameraController {
         }
         this.active = false;
         this.dragState = null;
-        this.camera.setZoom(this.defaultZoom);
-        this.camera.startFollow(this.followTarget, true);
+        this.camera.startFollow(this.followTarget, true, PLAYER_CAMERA_FOLLOW_LERP, PLAYER_CAMERA_FOLLOW_LERP);
     }
 
     public destroy(): void {

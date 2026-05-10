@@ -18,6 +18,17 @@ import {
     type TestWorldConfig
 } from '../../game/world/runtime/test_world_config';
 
+const DEFAULT_LEVEL_CAMERA = {
+    enabled: true,
+    zoom: 1,
+    lerpX: 0.05,
+    lerpY: 0.05,
+    offsetX: 0,
+    offsetY: 96,
+    deadzoneWidth: 0,
+    deadzoneHeight: 0
+} as const;
+
 export class LevelEditorMode implements EditorMode {
     public readonly id = 'level';
     public readonly label = 'Level';
@@ -189,6 +200,79 @@ export class LevelEditorMode implements EditorMode {
             container.appendChild(this.makeField('Width', widthInput));
             container.appendChild(this.makeField('Height', heightInput));
 
+            const cameraConfig = selectedConfig.camera ?? DEFAULT_LEVEL_CAMERA;
+            container.appendChild(this.makeSectionTitle('Camera'));
+
+            const cameraEnabledInput = document.createElement('input');
+            cameraEnabledInput.type = 'checkbox';
+            cameraEnabledInput.checked = cameraConfig.enabled ?? true;
+            cameraEnabledInput.addEventListener('change', () => {
+                const updated = this.updateSelectedLevel(selectedConfig.meta.id, (draft) => {
+                    draft.camera = {
+                        ...(draft.camera ?? DEFAULT_LEVEL_CAMERA),
+                        enabled: cameraEnabledInput.checked
+                    };
+                });
+                if (updated) {
+                    this.setStatus('Camera usage updated.', false);
+                }
+            });
+            container.appendChild(this.makeField('Use level camera', cameraEnabledInput));
+
+            const makeCameraNumberField = (
+                label: string,
+                initialValue: number,
+                min: number,
+                step: string,
+                apply: (draft: TestWorldConfig, value: number) => void,
+                statusLabel: string
+            ): void => {
+                const input = document.createElement('input');
+                input.type = 'number';
+                input.min = String(min);
+                input.step = step;
+                input.value = String(initialValue);
+                input.style.width = '100%';
+                input.style.boxSizing = 'border-box';
+                input.addEventListener('change', () => {
+                    const value = Number(input.value);
+                    if (!Number.isFinite(value)) {
+                        input.value = String(initialValue);
+                        this.setStatus(`${label} must be a finite number.`, true);
+                        return;
+                    }
+                    const updated = this.updateSelectedLevel(selectedConfig.meta.id, (draft) => {
+                        apply(draft, value);
+                    });
+                    if (updated) {
+                        this.setStatus(statusLabel, false);
+                    }
+                });
+                container.appendChild(this.makeField(label, input));
+            };
+
+            makeCameraNumberField('Zoom', cameraConfig.zoom ?? 1, 0.2, '0.05', (draft, value) => {
+                draft.camera = { ...(draft.camera ?? DEFAULT_LEVEL_CAMERA), zoom: Math.max(0.2, Math.min(4, value)) };
+            }, 'Camera zoom updated.');
+            makeCameraNumberField('Lerp X (inertia)', cameraConfig.lerpX ?? 0.18, 0, '0.01', (draft, value) => {
+                draft.camera = { ...(draft.camera ?? DEFAULT_LEVEL_CAMERA), lerpX: Math.max(0, Math.min(1, value)) };
+            }, 'Camera lerp X updated.');
+            makeCameraNumberField('Lerp Y (inertia)', cameraConfig.lerpY ?? 0.18, 0, '0.01', (draft, value) => {
+                draft.camera = { ...(draft.camera ?? DEFAULT_LEVEL_CAMERA), lerpY: Math.max(0, Math.min(1, value)) };
+            }, 'Camera lerp Y updated.');
+            makeCameraNumberField('Offset X', cameraConfig.offsetX ?? 0, -100000, '1', (draft, value) => {
+                draft.camera = { ...(draft.camera ?? DEFAULT_LEVEL_CAMERA), offsetX: value };
+            }, 'Camera offset X updated.');
+            makeCameraNumberField('Offset Y', cameraConfig.offsetY ?? 96, -100000, '1', (draft, value) => {
+                draft.camera = { ...(draft.camera ?? DEFAULT_LEVEL_CAMERA), offsetY: value };
+            }, 'Camera offset Y updated.');
+            makeCameraNumberField('Free Move Window Width', cameraConfig.deadzoneWidth ?? 0, 0, '1', (draft, value) => {
+                draft.camera = { ...(draft.camera ?? DEFAULT_LEVEL_CAMERA), deadzoneWidth: Math.max(0, value) };
+            }, 'Camera free-move window width updated.');
+            makeCameraNumberField('Free Move Window Height', cameraConfig.deadzoneHeight ?? 0, 0, '1', (draft, value) => {
+                draft.camera = { ...(draft.camera ?? DEFAULT_LEVEL_CAMERA), deadzoneHeight: Math.max(0, value) };
+            }, 'Camera free-move window height updated.');
+
             const nextSelect = document.createElement('select');
             nextSelect.style.width = '100%';
             nextSelect.style.boxSizing = 'border-box';
@@ -345,6 +429,7 @@ export class LevelEditorMode implements EditorMode {
                 draft.meta.displayName = nextConfig.meta.displayName;
                 draft.worldBounds.width = nextConfig.worldBounds.width;
                 draft.worldBounds.height = nextConfig.worldBounds.height;
+                draft.camera = nextConfig.camera ? { ...nextConfig.camera } : undefined;
                 draft.nextLevelId = nextConfig.nextLevelId;
             });
             this.onUiChanged?.();

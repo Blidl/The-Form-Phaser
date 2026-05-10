@@ -7,6 +7,16 @@
     "width": 1600,
     "height": 960
   },
+  "camera": {
+    "enabled": true,
+    "zoom": 1,
+    "lerpX": 0.05,
+    "lerpY": 0.05,
+    "offsetX": 0,
+    "offsetY": 96,
+    "deadzoneWidth": 0,
+    "deadzoneHeight": 0
+  },
   "background": {
     "mode": "parallax",
     "color": 1779504,

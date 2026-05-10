@@ -12,6 +12,7 @@ import {
     type TestWorldParallaxLayerConfig,
     cloneTestWorldConfig,
     type TestWorldBoundsConfig,
+    type TestWorldCameraConfig,
     type TestWorldCheckpointConfig,
     type TestWorldConfig,
     type TestWorldDragBoxConfig,
@@ -200,6 +201,51 @@ const asString = (value: unknown, fallback: string): string => {
 
 const asObject = (value: unknown): Record<string, unknown> | null => {
     return typeof value === 'object' && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+};
+
+const normalizeCameraConfig = (
+    raw: Record<string, unknown> | null,
+    fallback: TestWorldCameraConfig | undefined
+): TestWorldCameraConfig | undefined => {
+    const source = raw ?? (fallback ? { ...fallback } as Record<string, unknown> : null);
+    if (!source) {
+        return undefined;
+    }
+    const enabled = typeof source.enabled === 'boolean'
+        ? source.enabled
+        : (typeof fallback?.enabled === 'boolean' ? fallback.enabled : true);
+    const zoom = typeof source.zoom === 'number' && Number.isFinite(source.zoom)
+        ? Math.max(0.2, Math.min(4, source.zoom))
+        : (typeof fallback?.zoom === 'number' ? Math.max(0.2, Math.min(4, fallback.zoom)) : 1);
+    const lerpX = typeof source.lerpX === 'number' && Number.isFinite(source.lerpX)
+        ? Math.max(0, Math.min(1, source.lerpX))
+        : (typeof fallback?.lerpX === 'number' ? Math.max(0, Math.min(1, fallback.lerpX)) : 0.18);
+    const lerpY = typeof source.lerpY === 'number' && Number.isFinite(source.lerpY)
+        ? Math.max(0, Math.min(1, source.lerpY))
+        : (typeof fallback?.lerpY === 'number' ? Math.max(0, Math.min(1, fallback.lerpY)) : lerpX);
+    const offsetX = typeof source.offsetX === 'number' && Number.isFinite(source.offsetX)
+        ? source.offsetX
+        : (typeof fallback?.offsetX === 'number' ? fallback.offsetX : 0);
+    const offsetY = typeof source.offsetY === 'number' && Number.isFinite(source.offsetY)
+        ? source.offsetY
+        : (typeof fallback?.offsetY === 'number' ? fallback.offsetY : 96);
+    const deadzoneWidth = typeof source.deadzoneWidth === 'number' && Number.isFinite(source.deadzoneWidth)
+        ? Math.max(0, source.deadzoneWidth)
+        : (typeof fallback?.deadzoneWidth === 'number' ? Math.max(0, fallback.deadzoneWidth) : 0);
+    const deadzoneHeight = typeof source.deadzoneHeight === 'number' && Number.isFinite(source.deadzoneHeight)
+        ? Math.max(0, source.deadzoneHeight)
+        : (typeof fallback?.deadzoneHeight === 'number' ? Math.max(0, fallback.deadzoneHeight) : 0);
+
+    return {
+        enabled,
+        zoom,
+        lerpX,
+        lerpY,
+        offsetX,
+        offsetY,
+        deadzoneWidth,
+        deadzoneHeight
+    };
 };
 
 const asArray = (value: unknown): unknown[] => {
@@ -2310,6 +2356,7 @@ export const normalizeTestWorldConfig = (
     const normalized: TestWorldConfig = {
         meta: normalizeMeta(asObject(root?.meta), defaults.meta),
         worldBounds: normalizeWorldBounds(asObject(root?.worldBounds), defaults.worldBounds),
+        camera: normalizeCameraConfig(asObject(root?.camera), defaults.camera),
         background: normalizeBackground(
             root?.background,
             defaults.background,
@@ -2404,6 +2451,16 @@ export const createMinimalTestWorldConfig = (
         worldBounds: {
             width: 1600,
             height: 900
+        },
+        camera: {
+            enabled: true,
+            zoom: 1,
+            lerpX: 0.18,
+            lerpY: 0.18,
+            offsetX: 0,
+            offsetY: 96,
+            deadzoneWidth: 0,
+            deadzoneHeight: 0
         },
         background: null,
         worldLogicRules: [],

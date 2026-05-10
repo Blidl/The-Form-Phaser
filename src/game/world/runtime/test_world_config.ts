@@ -26,6 +26,17 @@ export interface TestWorldBoundsConfig {
     height: number;
 }
 
+export interface TestWorldCameraConfig {
+    enabled?: boolean;
+    zoom?: number;
+    lerpX?: number;
+    lerpY?: number;
+    offsetX?: number;
+    offsetY?: number;
+    deadzoneWidth?: number;
+    deadzoneHeight?: number;
+}
+
 export interface TestWorldBackgroundImageConfig {
     textureKey: string;
     textureAsset?: string;
@@ -353,6 +364,7 @@ export interface TestWorldLogicConfig {
 export interface TestWorldConfig {
     meta: TestWorldMetaConfig;
     worldBounds: TestWorldBoundsConfig;
+    camera?: TestWorldCameraConfig;
     background: TestWorldBackgroundConfig | null;
     worldFlags?: Record<string, boolean>;
     worldLogicRules?: TestWorldLogicRule[];
