@@ -30,7 +30,8 @@ import type {
     TestWorldConfig,
     TestWorldLogicBindingConfig,
     TestWorldLogicScriptConfig,
-    TestWorldLogicScriptRefConfig
+    TestWorldLogicScriptRefConfig,
+    TestWorldTriggerVolumeConfig
 } from '../../game/world/runtime/test_world_config';
 import type {
     ObjectInteractionTrace,
@@ -217,6 +218,7 @@ export class ObjectsEditorMode implements EditorMode {
     private triggerLogicBindingScriptIdDraft: string | null = null;
     private triggerLogicBindingEnabledDraft = true;
     private triggerLogicBindingError: string | null = null;
+    private triggerOnEnterCutsceneError: string | null = null;
     private readonly objectLogicBindingEnabledDrafts = new Map<string, boolean>();
     private readonly objectLogicBindingMutationErrors = new Map<string, string>();
     private readonly lastAppliedRuntimeDebugVisibilityByObjectId = new Map<string, boolean>();
@@ -2752,6 +2754,7 @@ export class ObjectsEditorMode implements EditorMode {
         this.triggerLogicBindingScriptIdDraft = null;
         this.triggerLogicBindingEnabledDraft = true;
         this.triggerLogicBindingError = null;
+        this.triggerOnEnterCutsceneError = null;
         this.activePointerButton = null;
     }
 
@@ -3300,6 +3303,34 @@ export class ObjectsEditorMode implements EditorMode {
         return null;
     }
 
+    private getRuntimeTriggerVolumeConfig(triggerId: string): TestWorldTriggerVolumeConfig | null {
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
+        if (!runtimeConfig || !Array.isArray(runtimeConfig.triggerVolumes)) {
+            return null;
+        }
+        return runtimeConfig.triggerVolumes.find((entry) => entry.id === triggerId) ?? null;
+    }
+
+    private getRuntimeCutscenePickerOptions(): Array<{ id: string; label: string }> {
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
+        if (!runtimeConfig || !Array.isArray(runtimeConfig.cutscenes)) {
+            return [];
+        }
+        return runtimeConfig.cutscenes
+            .map((entry) => {
+                const id = typeof entry.id === 'string' ? entry.id.trim() : '';
+                if (id.length <= 0) {
+                    return null;
+                }
+                const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+                return {
+                    id,
+                    label: name.length > 0 && name !== id ? `${name} (${id})` : id
+                };
+            })
+            .filter((entry): entry is { id: string; label: string } => entry !== null);
+    }
+
     private getSurfaceMoveRuntimeDebugSnapshot(): SurfaceMoveRuntimeDebugSnapshot | null {
         const snapshot = this.legacyObjectAdapter?.getSurfaceMoveRuntimeDebugSnapshot() as SurfaceMoveRuntimeDebugSnapshot | null;
         if (!snapshot || typeof snapshot !== 'object') {
@@ -3700,6 +3731,43 @@ export class ObjectsEditorMode implements EditorMode {
         actionRow.appendChild(clearButton);
         wrap.appendChild(actionRow);
 
+        const triggerRuntimeConfig = this.getRuntimeTriggerVolumeConfig(selectedObject.id);
+        const cutsceneOptions = this.getRuntimeCutscenePickerOptions();
+        const selectedCutsceneId = triggerRuntimeConfig?.onEnterCutsceneId?.trim() ?? '';
+        const selectedCutscene = selectedCutsceneId.length > 0
+            ? cutsceneOptions.find((entry) => entry.id === selectedCutsceneId) ?? null
+            : null;
+        const hasMissingCutsceneRef = selectedCutsceneId.length > 0 && !selectedCutscene;
+
+        const cutsceneLabel = this.makeLabel('On Enter cutscene');
+        cutsceneLabel.style.marginBottom = '2px';
+        wrap.appendChild(cutsceneLabel);
+
+        const cutsceneSelect = document.createElement('select');
+        cutsceneSelect.style.display = 'block';
+        cutsceneSelect.style.width = '100%';
+        cutsceneSelect.style.boxSizing = 'border-box';
+        cutsceneSelect.style.marginBottom = '6px';
+        cutsceneSelect.appendChild(new Option('(none)', ''));
+        cutsceneOptions.forEach((entry) => {
+            cutsceneSelect.appendChild(new Option(entry.label, entry.id));
+        });
+        cutsceneSelect.disabled = this.isObjectLocked(selectedObject);
+        cutsceneSelect.value = selectedCutsceneId;
+        this.bindEditorInputKeyboardGuards(cutsceneSelect);
+        cutsceneSelect.addEventListener('change', () => {
+            this.applyTriggerOnEnterCutsceneSelection(selectedObject.id, cutsceneSelect.value);
+        });
+        wrap.appendChild(cutsceneSelect);
+
+        if (selectedCutscene) {
+            wrap.appendChild(this.makeLabel(`Selected cutscene: ${selectedCutscene.label}`));
+        } else if (selectedCutsceneId.length > 0) {
+            const missingLine = this.makeLabel(`Missing cutscene reference: ${selectedCutsceneId}`);
+            missingLine.style.color = '#b00020';
+            wrap.appendChild(missingLine);
+        }
+
         if (scriptOptions.length <= 0) {
             wrap.appendChild(this.makeLabel('No trigger/world script refs or external assets available.'));
         }
@@ -3707,6 +3775,14 @@ export class ObjectsEditorMode implements EditorMode {
             const errorLine = this.makeLabel(this.triggerLogicBindingError);
             errorLine.style.color = '#b00020';
             wrap.appendChild(errorLine);
+        }
+        if (this.triggerOnEnterCutsceneError) {
+            const errorLine = this.makeLabel(this.triggerOnEnterCutsceneError);
+            errorLine.style.color = '#b00020';
+            wrap.appendChild(errorLine);
+        }
+        if (hasMissingCutsceneRef) {
+            wrap.appendChild(this.makeLabel('Trigger will not request/start the selected cutscene until this reference is fixed.'));
         }
         wrap.appendChild(this.makeTriggerOnEnterTraceView(selectedObject.id));
         return wrap;
@@ -3828,6 +3904,31 @@ export class ObjectsEditorMode implements EditorMode {
         }
         this.triggerLogicBindingEnabledDraft = true;
         this.triggerLogicBindingError = null;
+        this.onUiChanged();
+    }
+
+    private applyTriggerOnEnterCutsceneSelection(triggerId: string, nextCutsceneId: string): void {
+        const runtimeConfig = this.legacyObjectAdapter?.getRuntimeConfig() as TestWorldConfig | null;
+        if (!runtimeConfig) {
+            this.triggerOnEnterCutsceneError = 'Runtime config unavailable.';
+            this.onUiChanged();
+            return;
+        }
+        const normalizedId = nextCutsceneId.trim();
+        if (normalizedId.length > 0 && !runtimeConfig.cutscenes.some((entry) => entry.id.trim() === normalizedId)) {
+            this.triggerOnEnterCutsceneError = `Unknown cutscene id: ${normalizedId}`;
+            this.onUiChanged();
+            return;
+        }
+        const applied = this.legacyObjectAdapter?.patchRuntimeObjectFields(triggerId, {
+            onEnterCutsceneId: normalizedId
+        }) ?? false;
+        if (!applied) {
+            this.triggerOnEnterCutsceneError = 'Failed to update trigger cutscene selection.';
+            this.onUiChanged();
+            return;
+        }
+        this.triggerOnEnterCutsceneError = null;
         this.onUiChanged();
     }
 

@@ -48,6 +48,14 @@ const KNOWN_COMMANDS = new Set([
   'npc_patrol_ping_pong'
 ]);
 
+const getStartCutsceneId = (params) => {
+  const raw = asObject(params);
+  if (!raw) {
+    return null;
+  }
+  return asNonEmptyString(raw.cutsceneId) ?? asNonEmptyString(raw.cutsceneRef);
+};
+
 const diagnostics = [];
 
 const asObject = (value) => (
@@ -142,10 +150,10 @@ const validateParams = (scriptId, command, commandPath) => {
   }
 
   if (command.type === 'start_cutscene') {
-    if (!params || !asNonEmptyString(params.cutsceneId)) {
+    if (!getStartCutsceneId(params)) {
       pushDiagnostic({
         code: 'invalid_logic_command_params',
-        message: `Command "${command.id}" start_cutscene requires non-empty cutsceneId.`,
+        message: `Command "${command.id}" start_cutscene requires non-empty cutsceneId (or compatible cutsceneRef).`,
         scriptId,
         commandId: command.id,
         path: `${commandPath}.params.cutsceneId`,

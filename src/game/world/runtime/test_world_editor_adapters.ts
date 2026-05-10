@@ -1174,6 +1174,12 @@ const triggerPlatformAdapter: TestWorldEditorAdapter<TestWorldTriggerPlatformCon
         if (patch.activator === 'player' || patch.activator === 'drag_box') {
             config.activator = patch.activator;
         }
+        if (typeof patch.onEnterCutsceneId === 'string' || patch.onEnterCutsceneId === '') {
+            const trimmed = typeof patch.onEnterCutsceneId === 'string'
+                ? patch.onEnterCutsceneId.trim()
+                : '';
+            config.onEnterCutsceneId = trimmed.length > 0 ? trimmed : undefined;
+        }
         if (patch.triggerAction === 'activate' || patch.triggerAction === 'deactivate') {
             config.triggerAction = patch.triggerAction;
         }

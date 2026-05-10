@@ -69,7 +69,6 @@ import {
     cloneTestNpcScriptedSequenceAction,
     getTestNpcScriptedSequenceDefinition
 } from '../../npc/npc_scripted_sequences';
-import { isTestCutsceneRef } from '../../cutscene/test_cutscene_registry';
 import {
     getWorldFlag,
     getWorldFlagsDebugSnapshot,
@@ -716,6 +715,18 @@ export const createTestWorldRuntime = (
     let triggerOnEnterLogicAttemptId = 0;
     let useArcadePlatformCollisions = player.currentForm !== 'triangle';
     let editorDebugViewActive = false;
+    const isKnownConfigCutsceneId = (cutsceneRef: string): boolean => {
+        const cutscenes = Array.isArray(currentConfig.cutscenes) ? currentConfig.cutscenes : [];
+        return cutscenes.some((entry) => entry.id.trim() === cutsceneRef);
+    };
+    const hasBindingTraceCutsceneRequest = (bindingTrace: LogicBindingEventTrace, cutsceneId: string): boolean => {
+        return bindingTrace.bindings.some((binding) => binding.commands.some((command) => {
+            return command.type === 'start_cutscene'
+                && command.status === 'success'
+                && command.message.includes(`"${cutsceneId}"`)
+                && command.message.includes('requested');
+        }));
+    };
     const executeTriggerOnEnterLogic = (triggerId: string, sourceId: string): void => {
         const normalizedTriggerId = triggerId.trim();
         const normalizedSourceId = sourceId.trim();
@@ -736,19 +747,37 @@ export const createTestWorldRuntime = (
                 },
                 createLogicScriptRuntimeContext()
             );
-            const message = bindingTrace.bindings.length <= 0
+            const triggerConfig = currentConfig.triggerVolumes.find((entry) => entry.id === normalizedTriggerId) ?? null;
+            const directCutsceneId = triggerConfig?.onEnterCutsceneId?.trim() ?? '';
+            let directCutsceneStatusMessage = '';
+            let traceStatus: LogicBindingEventTrace['status'] = bindingTrace.status;
+            if (directCutsceneId.length > 0) {
+                if (!isKnownConfigCutsceneId(directCutsceneId)) {
+                    directCutsceneStatusMessage = ` Direct cutscene "${directCutsceneId}" is missing in current level cutscenes.`;
+                    traceStatus = 'error';
+                } else if (hasBindingTraceCutsceneRequest(bindingTrace, directCutsceneId)) {
+                    directCutsceneStatusMessage = ` Direct cutscene "${directCutsceneId}" skipped (already requested by onEnter script).`;
+                } else {
+                    scene.events.emit('pf:npc_interaction_cutscene_request', {
+                        actorId: `trigger_on_enter:${normalizedTriggerId}`,
+                        cutsceneRef: directCutsceneId
+                    });
+                    directCutsceneStatusMessage = ` Direct cutscene "${directCutsceneId}" requested by trigger ${normalizedTriggerId}.`;
+                }
+            }
+            const message = (bindingTrace.bindings.length <= 0
                 ? `No matching trigger/onEnter bindings for ${normalizedTriggerId}.`
                 : bindingTrace.status === 'success'
                     ? `Executed trigger/onEnter bindings for ${normalizedTriggerId}.`
                     : bindingTrace.status === 'error'
                         ? `Trigger/onEnter binding execution failed for ${normalizedTriggerId}.`
-                        : `Trigger/onEnter binding execution skipped for ${normalizedTriggerId}.`;
+                        : `Trigger/onEnter binding execution skipped for ${normalizedTriggerId}.`) + directCutsceneStatusMessage;
             lastTriggerOnEnterLogicTrace = {
                 attemptId,
                 triggerId: normalizedTriggerId,
                 sourceId: normalizedSourceId,
                 slot: 'onEnter',
-                status: bindingTrace.status,
+                status: traceStatus,
                 bindingTrace,
                 message
             };
@@ -791,7 +820,7 @@ export const createTestWorldRuntime = (
         },
         startCutscene: (cutsceneRef) => {
             const normalizedCutsceneRef = cutsceneRef.trim();
-            if (normalizedCutsceneRef.length <= 0 || !isTestCutsceneRef(normalizedCutsceneRef)) {
+            if (normalizedCutsceneRef.length <= 0 || !isKnownConfigCutsceneId(normalizedCutsceneRef)) {
                 return false;
             }
             scene.events.emit('pf:npc_interaction_cutscene_request', {
@@ -1768,7 +1797,7 @@ const buildWorldInstance = (
             },
             startCutscene: (cutsceneRef) => {
                 const normalizedCutsceneRef = cutsceneRef.trim();
-                if (normalizedCutsceneRef.length <= 0 || !isTestCutsceneRef(normalizedCutsceneRef)) {
+                if (normalizedCutsceneRef.length <= 0 || !isKnownConfigCutsceneId(normalizedCutsceneRef)) {
                     return false;
                 }
                 scene.events.emit('pf:npc_interaction_cutscene_request', {
@@ -3195,7 +3224,7 @@ const buildWorldInstance = (
         },
         startCutscene: (cutsceneRef) => {
             const normalizedCutsceneRef = cutsceneRef.trim();
-            if (normalizedCutsceneRef.length <= 0 || !isTestCutsceneRef(normalizedCutsceneRef)) {
+            if (normalizedCutsceneRef.length <= 0 || !isKnownConfigCutsceneId(normalizedCutsceneRef)) {
                 return false;
             }
             scene.events.emit('pf:npc_interaction_cutscene_request', {

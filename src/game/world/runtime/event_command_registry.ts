@@ -62,11 +62,12 @@ const validateStartCutsceneParams = (params: unknown): LogicCommandParamValidati
         };
     }
 
-    const cutsceneId = asNonEmptyTrimmedString(raw.cutsceneId);
+    const cutsceneId = asNonEmptyTrimmedString(raw.cutsceneId)
+        ?? asNonEmptyTrimmedString(raw.cutsceneRef);
     if (!cutsceneId) {
         return {
             valid: false,
-            message: 'requires non-empty cutsceneId',
+            message: 'requires non-empty cutsceneId (or compatible cutsceneRef)',
             fieldPath: 'params.cutsceneId'
         };
     }
@@ -83,7 +84,9 @@ const getSetWorldFlagDisplay = (command: TestWorldLogicScriptCommandConfig): str
 
 const getStartCutsceneDisplay = (command: TestWorldLogicScriptCommandConfig): string => {
     const raw = asObject(command.params);
-    const cutsceneId = asNonEmptyTrimmedString(raw?.cutsceneId) ?? '<invalid-cutsceneId>';
+    const cutsceneId = asNonEmptyTrimmedString(raw?.cutsceneId)
+        ?? asNonEmptyTrimmedString(raw?.cutsceneRef)
+        ?? '<invalid-cutsceneId>';
     return `start_cutscene ${cutsceneId}`;
 };
 
@@ -172,7 +175,8 @@ export const getEventStartCutsceneCommandIdFromParams = (params: unknown): strin
         return null;
     }
     const raw = asObject(params);
-    return asNonEmptyTrimmedString(raw?.cutsceneId);
+    return asNonEmptyTrimmedString(raw?.cutsceneId)
+        ?? asNonEmptyTrimmedString(raw?.cutsceneRef);
 };
 
 export const getEventSetWorldFlagCommandParams = (

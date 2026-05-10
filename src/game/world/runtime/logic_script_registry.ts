@@ -8,7 +8,6 @@ import logicScriptsRegistryJson from './data/logic_scripts.json';
 import { collectTestWorldLogicDiagnostics, type TestWorldLogicDiagnostic } from './test_world_config_validation';
 import {
     getTestCutsceneRequiredSceneParticipantIds,
-    isTestCutsceneRef
 } from '../../cutscene/test_cutscene_registry';
 import {
     getLogicCommandDefinition,
@@ -837,6 +836,13 @@ export const collectLogicScriptAssetDiagnostics = (
     const referencedScriptRefIds = activeConfig
         ? collectReferencedScriptRefIds(activeConfig)
         : null;
+    const knownConfigCutsceneIds = activeConfig
+        ? new Set(
+            (Array.isArray(activeConfig.cutscenes) ? activeConfig.cutscenes : [])
+                .map((cutscene) => cutscene.id.trim())
+                .filter((id) => id.length > 0)
+        )
+        : null;
 
     if (registryState.lastError) {
         diagnostics.push({
@@ -1051,12 +1057,12 @@ export const collectLogicScriptAssetDiagnostics = (
                     return;
                 }
 
-                if (!isTestCutsceneRef(cutsceneId)) {
+                if (knownConfigCutsceneIds && !knownConfigCutsceneIds.has(cutsceneId)) {
                     diagnostics.push({
                         id: nextDiagnosticId('invalid_logic_command_ref'),
                         severity: 'error',
                         code: 'invalid_logic_command_ref',
-                        message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" references unknown cutscene "${cutsceneId}".`,
+                        message: `Script "${script.id}" command "${commandId ?? `command_${commandIndex + 1}`}" references unknown cutscene "${cutsceneId}" for this level config.`,
                         scriptId: script.id,
                         commandId,
                         path: `${path}.params.cutsceneId`,

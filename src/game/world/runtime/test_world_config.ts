@@ -238,6 +238,7 @@ export interface TestWorldTriggerVolumeConfig extends TestWorldEditorLockable, T
     deactivateTriggerHeight?: number;
     activator: TestWorldTriggerPlatformActivator;
     sourceIds?: string[];
+    onEnterCutsceneId?: string;
     enterCommand?: TestWorldTriggerCommandConfig | null;
     exitCommand?: TestWorldTriggerCommandConfig | null;
     onEnter?: TestEventBlock[];

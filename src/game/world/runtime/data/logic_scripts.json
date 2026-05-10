@@ -7,6 +7,7 @@
     "scripts/platform/external_demo_platform_rotate.json",
     "scripts/platform/external_demo_platform_default_action.json",
     "scripts/npc/external_demo_npc_patrol_ping_pong.json",
-    "scripts/npc/external_demo_npc_default_action.json"
+    "scripts/npc/external_demo_npc_default_action.json",
+    "scripts/trigger/external_demo_trigger_start_cutscene.json"
   ]
 }
